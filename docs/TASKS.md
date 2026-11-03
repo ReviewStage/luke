@@ -8,16 +8,17 @@ comments cite it by section heading.
 ## The Tasks tab
 
 Tasks are the window's first place, `Tasks`, beside `Settings`, and the
-one the window opens on. The tab draws in the work column beside the
+one the window opens on, on Home. The tab draws in the work column beside the
 sidebar, one page at a time:
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Tasks ]   Settings                                        │
- │  ‹  Teammate invitations                 [ ▶ Start ▾ ] [ ⋯ ]   │
- │     acme/relay                                               │
+ │  [ Plan ]  Inbox  Comments  +                         [ ⋯ ]  │
  │ ──────────────────────────────────────────────────────────── │
+ │  acme/relay  ›  ACME-42                                      │
  │  # Teammate invitations                          (scrolls)   │
+ │  ( In progress )  ( High )  ( Ada )                          │
  │  ## Context                                                  │
  │  Only an admin can add someone to a workspace...             │
  │  ## Goal                                                     │
@@ -31,15 +32,22 @@ sidebar, one page at a time:
  └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Resting page**: whenever no task is open the window shows what the
-  sidebar does not list: the Inbox beside the task list. An account with
-  nothing yet sees a welcome with New task's composer instead
-  (`resting-page.ts`). There is no empty page in between.
+- **Home** (`desktop/desktop-home.tsx`): whenever no task is open the
+  window rests on Home, which the sidebar's Home row and ⇧⌘H open too: a
+  greeting over New task's composer, then the Inbox's items waiting on the
+  developer, then Recent, the tasks worked on latest. An account with
+  nothing yet, no task and nothing an agent waits on it for
+  (`tasks/fresh-account.ts`), sees a welcome with the composer instead
+  (`desktop/desktop-welcome.tsx`). There is no empty page in between. The
+  sidebar's rows over its sections are New task, Search, Home, Inbox, Tasks,
+  Automations, and, for an admin, Admin.
 - **Document page**: the open task's saved document. Its header holds
   still, and only the document scrolls beneath it.
 
-Escape unwinds one page at a time: the document page back to the
-resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
+Escape on the document page is Back: one step back through the window's
+history, to wherever the task was opened from, or to Home where nothing
+stands behind it, which leaves the task; on Home it closes nothing. Escape
+on any Settings page leaves Settings.
 
 ### Opening and leaving
 
@@ -49,8 +57,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   none stands, the column's "+" offering **New agent**.
 - A task stays open while the developer turns to Settings or closes the
   window.
-- A task is left by Back (`‹`) or Escape on its document page, by opening
-  another task, or by a sign-out.
+- A task is left by Back or Escape, by opening another task or page, or by
+  a sign-out.
 - Nothing polls. An agent's saves reach the open task through its tab: once
   the transcript the tab reads shows an `edit_plan` answered, the task is
   read again (`tasks/agent-tab.tsx`).
@@ -61,31 +69,33 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 
 ### Task list
 
-- Every named task the account owns, newest started first. Opening a task
-  moves no row, so a new task stands at the head and nothing else moves.
-  The tasks stand in the **Tasks** section, whose head's **View options**
-  (the Inbox's sliders) chooses how they are drawn, remembered for each
-  workspace on this Mac: Group by Repository (the default), Creator (in a
-  shared workspace: You first, then each teammate), or None; Order by Last
-  updated (the default), Created, or Name, which orders the groups too; and,
-  in a shared workspace, Created by Anyone (the default), Me, or a teammate,
-  which while it names someone stands as a chip under the head whose ×
-  lifts it, the button wearing a dot. Under Repository, the groups stand
-  under their repositories' headers, the repository's name with its owner on
-  hover (or `owner/name` where two share a name), "No repository" last. A
-  header's chevron folds the group, remembered on this Mac, and a
-  repository's + (shown on hover or focus) opens the new-task page with that
-  repository already chosen. Each row shows the task's name and, muted at its
-  end, the time the order chooses (its last activity, the later of its plan's
-  last save and its agents' last turn, or under Created when it was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
-  minute, the full moment on hover. A row says what its group does not: a
-  teammate's face under a repository's header, its repository's name under a
-  creator's, and both in one run.
+- The tasks stand in the **Tasks** section, the work under way: the
+  reader's own tasks, those assigned to them and those no one is on that
+  they created, to do and in progress alone, newest updated first
+  (`@repo/ui/task-list-model`). Opening a task moves no row. The backlog and
+  the settled tasks are left to the Tasks page, which a quiet line under the
+  list opens, saying how many it leaves out. The head's **View options**
+  (the Inbox's sliders) chooses how the list is drawn, remembered for each
+  workspace on this Mac (`desktop/sidebar-task-view.tsx`): Group by
+  Repository (the default) or None, and, in a shared workspace, Assigned to
+  Me (the default), Anyone, or a teammate. The head says whose tasks the list
+  holds, "My tasks", "Everyone's tasks", or a teammate's name, and while it
+  holds anything but the reader's own the button wears a dot. Under
+  Repository, the groups stand under their repositories' headers, the
+  repository's name with its owner on hover (or `owner/name` where two share
+  a name), "No repository" last. A header's chevron folds the group,
+  remembered on this Mac, and a repository's + (shown on hover or focus)
+  opens New task with that repository already chosen. Each row shows the
+  task's name and, muted at its end, its last activity, the later of its
+  plan's last save and its agents' last turn ("now", "5m", "3h", "2d", "3w",
+  then the date), moved on each minute, the full moment on hover. A row
+  wears its assignee's face, but in a list of one teammate's tasks, and its
+  repository's name where the list is not grouped by repository.
 - A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
-  account is a member of, the listed one checked, then "New workspace…",
-  which asks a name and lists the workspace made, and "Workspace settings…",
+  account is a member of, the listed one checked, then "New workspace",
+  which asks a name and lists the workspace made, and "Workspace settings",
   which opens Settings' Workspace page on the listed workspace; nothing else
   stands in it. That page (`settings/workspace-page.tsx`) has a picker of
   the account's workspaces, the workspace's name and the account's role,
@@ -99,20 +109,20 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   opens the GitHub page where accounts are added and repositories chosen;
   a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@repo/settings/settings-views`: a page, a section, a workspace),
-  followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
+  followed by `settings-link.ts`. The list, Pinned, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
   lists only the repositories its GitHub reaches (none, read "No repository",
   where it has no GitHub connected, and the task starts with none), and the
   choice is remembered on this Mac. A task whose repository its own
   workspace cannot reach but another of the account's can, one stranded by
-  #2524, says so in a banner over every tab of the task, "This plan's
+  #2524, says so in a banner over every tab of the task, "This task's
   repository belongs to <workspace> · Move to <workspace>", whose press opens
   Move to workspace on that workspace; nothing moves it without that press,
   since a move shares the task with the other workspace's members.
 - An agent an automation started with no task stands among the tasks, not
-  in a group of its own: under its repository, under whoever started it, or
-  in the one run, ordered with the tasks by its last activity, filtered by
-  Created by, and, archived, under Archived tasks. Its row leads with the
+  in a group of its own: under its repository or in the one run, as the
+  reader's where the reader started it, and ordered with the tasks by its
+  last activity. Its row leads with the
   agent's harness mark, as its tab does, giving way to the working mark while
   it works, ends with its automation's clock and its time, and reads in
   semibold while its end is unseen; a press opens the agent's own page, and a
@@ -121,9 +131,13 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   them; ⌘K offers Pin agent or Unpin agent on the agent's own page. An
   archived agent offers no pin.
 - Clicking a row opens that task on the document page.
-- `New task` at the head of the list leaves any open task for the new-task
-  page and focuses its name field. It is drawn as a row of the list, and is
-  the selected row whenever the new-task page shows.
+- `New task`, the first of the sidebar's rows (`NewTaskButton` in
+  `desktop/desktop-sidebar.tsx`), or ⌘N, opens New task in a dialog over the
+  window (`tasks/new-task-dialog.tsx`), leaving whatever stands open in
+  place, with the focus in its composer; on Home, which holds the same
+  composer, it hands that composer the focus instead. Escape, or a press on
+  the dimmed window, puts the dialog away, its words and files kept as New
+  task's draft, which Home's composer shares.
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
   while any task is pinned, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
@@ -136,19 +150,12 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   pin. A task's or an agent's place is the account's own, beside its pin, and
   follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
   A folded Pinned is not dragged. ⌘K offers Pin task or
-  Unpin task for the task on screen, through its row menu's own Pin, and
-  none for an archived task.
-- An archived task leaves the list. View options' **Archived tasks** turns
-  the Tasks section to the archived tasks, grouped and ordered as the view
-  says, the pins standing aside, with an Archived chip whose × goes back; it
-  is not remembered, so another workspace or the next launch opens on the
-  tasks.
-  Archiving the open task leaves it for the new-task page, as deleting it
-  does, and back and forward pass archived tasks over. A pin is the account's
-  own and an archive the workspace's (`PATCH /api/plans/{id}`), so a task of
-  a shared workspace one member pinned stands under Pinned for them alone,
-  both follow the account to every Mac, and a Pin, an Archive, or the way back from either is drawn at once and
-  put back, with a quiet note under the task's row, when the service refuses.
+  Unpin task for the task on screen, through its row menu's own Pin.
+- A pin is the account's own (`PATCH /api/plans/{id}`), so a task of a
+  shared workspace one member pinned stands under Pinned for them alone, the
+  pin follows the account to every Mac, and a Pin or Unpin is drawn at once
+  and put back, with a quiet note under the task's row, when the service
+  refuses.
   An agent's pin is the account's own too (`agent_pin`, through
   `PATCH /api/agents/{id}`), drawn at once and put back with a toast when the
   service refuses.
@@ -161,7 +168,7 @@ Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
-   on the task (`plan.repository`). It starts on the repository of the newest
+   on the task (`task.repository`). It starts on the repository of the newest
    started task that has one, and its menu is the app's searchable picker,
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
@@ -174,40 +181,38 @@ Dictate, and Start.
 
 ### Header
 
-- `‹`, back to the list, which leaves the task.
-- The task's name. The toolbar is one row, the side panel's bar's height
-  exactly (`--desktop-bar-height`, the one token both take), so their bottom
-  borders are one line across the window.
-- The task's repository is the sidebar's to name: by the group it stands in,
-  or on its row where the list's view groups by creator or not at all.
-  A task with none yet shows a compact `Choose a repository` chip in the toolbar's actions row, left
-  of Start, with the composer's menu: a pick is saved through
-  `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
-  used without a repository.
-- **The task's menu**, from the toolbar's ⋯ (drawn while the task's own tab
-  is chosen, not on an agent's tab or the Inbox) and from a right-click on the
-  task in the sidebar alike: Copy plan (the open task's alone), Rename, Pin or
-  Unpin and Archive (an archived task offers Unarchive alone), Change
-  repository… (opens the repository picker, hung from the toolbar, opening
-  the task first where it is not the open one), and Permanently delete, last and red, which asks first in a dialog that points
-  a task not yet archived at Archive instead. ⇧⌘A archives the open task and
-  ⌘⌫ asks to delete it, from any of its tabs.
-- An archived task opened from Archived tasks reads and works as any other,
-  under a quiet line, "This task is archived", with Unarchive beside it.
-- **Start**, a split button (`desktop/desktop-tasks.tsx`), drawn
-  while the task's own tab is chosen, as the ⋯ is. Its main
-  part starts an agent on the plan with the account's default model and
-  effort; its chevron drops the searchable picker over the models the service
-  offers, grouped by provider with the newest first, each under its provider's
-  mark and the default checked, with the efforts the chosen model lists and
-  "Start with <model> · <effort>" pinned under the scrolling list. What the
-  chevron picks is what the main part starts on while the plan's tab stays open, and
-  never the account's default, which only Settings changes. A task with no repository has Start unavailable, saying why on
-  hover. Each press mints a key of its own, and a press asked again after
-  the service did not answer carries the same key, so one press is one agent
-  ("From a plan to a pull request" below).
-- **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
-  toolbar's, heard on every tab of the task. It is always enabled, however much of the plan is written, and
+- In a wide window the task's column has no head of its own: its toolbar
+  is its agents' tab strip ("Agent tabs" below), whose actions are the
+  chosen agent's ⋯ and the summary's toggle, with no Back and no task name
+  (`desktop/desktop-tasks.tsx`). A narrow window draws a head over it
+  (`TaskHead`), with Back, the task's name, and one ⋯. The toolbar is one
+  row, the side panel's bar's height exactly (`--desktop-bar-height`, the
+  one token both take), so their bottom borders are one line across the
+  window.
+- The plan says the rest around its title (`tasks/task-standing.tsx`). Over
+  it stands the task's path: its repository, or "Choose a repository" while
+  it has none, then its parent task where it has one, then its key. The
+  repository's crumb drops the composer's searchable menu, as ⌘K's Change
+  repository does: a pick is saved through `PATCH /api/plans/{id}`, and a
+  refusal is said under the path. A task can be used without a repository.
+  Under the title stand the status, priority, and assignee chips.
+- **The task's menu**, from the ⋯ in the side panel's bar while the Plan tab
+  is chosen and from that tab's right-click, and from a right-click on the
+  task's row in the sidebar alike (`desktop/task-actions.tsx`): Copy plan
+  (the open task's alone) and Copy link, Rename, Version history, Mark as
+  unread, the task's relations, Pin or Unpin, Move to workspace, and
+  Permanently delete, last and red. The Plan tab's menu leaves out the
+  task's status, priority, assignee, and repository, which its chips and
+  path change; a row's menu, with no chips beside it, holds Status,
+  Priority, and Assignee as submenus, and Change repository. Permanently
+  delete asks first in a dialog that offers Mark done instead, and ⌘⌫ asks
+  to delete the open task from any of its tabs. A task is not archived but
+  settled: Mark done, on a sidebar row's hover or in the menu bar, sets it
+  Done as Status's Done does.
+- **Copy plan** stands in the ⋯ menu, with its chord ⌥⌘C, "Copy plan or
+  transcript", which copies what the focused pane shows: the plan where the
+  plan is focused, an agent's transcript where its tab is. ⇧⌘C is Copy link.
+  Copy plan is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
@@ -235,8 +240,8 @@ Dictate, and Start.
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
   Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
-  A look is the task held open three seconds: from then on every save while
-  it stays open counts as seen, so an agent's save landing while the task
+  A look is the plan opened, whichever of its column's tabs it opens on:
+  from then on every save while it stays open counts as seen, so an agent's save landing while the task
   is open never lights anything. What is kept is the newest save's instant,
   on the
   service's clock, by task id in the renderer's own storage; a task never
@@ -294,7 +299,9 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   drawn as it is now, and one not on that branch, or not read at all, says so
   in its place. A File tab opened from a code block of an Inbox thread is
   read at the commit the agent named instead. File tabs are kept nowhere.
-  The strip scrolls where the agents overflow it, and no tab closes.
+  The strip scrolls where its tabs overflow it. Every tab closes, Plan,
+  Inbox, and Comments among them, by its ×, Delete, ⌘W, or Close and Close
+  others; the "+" opens one again, and closing the last shuts the panel.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   It opens only when the developer opens something into it (a tab from its
   "+", a file, a page, a worker, or a pull request pressed elsewhere) or
@@ -306,8 +313,9 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   the window opens the tab it names. An open panel keeps its tab, and an
   arrival on another tab sets that tab's label in semibold until it is
   shown. Its left edge
-  drags it between 280 and 720 pixels wide, and the arrow keys move it once
-  it has the focus.
+  drags it from 280 pixels wide to as wide as leaves the document its room
+  (`--document-reserve`), with no greatest width of its own, and the arrow
+  keys move it once it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
   anything main holds. A kept tab the open task does not have reads as its
@@ -320,16 +328,16 @@ The task's column leads with its Overview, which shows the plan's
 document and never closes nor moves. Each agent started on the task has a
 tab of its own after it (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`,
 `tasks/agent-tab.tsx`, `tasks/use-agents.ts`), opened and selected the
-moment its Start lands, and showing its transcript and its composer. The column's
+moment its start lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
-sidebar. A column whose last tab closes is back on the plan. The tab each
+sidebar. A column whose last tab closes is back on a new agent's draft. The tab each
 task last showed is kept, so a task opens as it was left. ⌘T and ⌘W answer the column
 holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
 
 - **A new agent from the "+".** The column's "+" offers New agent,
-  unavailable with Start's own reason while Start could not run, then each
+  unavailable with the reason while no agent could start, then each
   of the task's agents, picking one opening its tab again. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
@@ -338,18 +346,23 @@ subagent's tab stays in the side panel.
   it with nothing in its composer, for another tab, task, or place; a task
   never opens a draft by itself.
 
-- **The head.** The model · the effort · the status, which the tab's glyph
-  wears (`state-glyph.tsx`): the mark of the harness the model runs in
-  (Claude Code or Codex), giving way to the working mark while the agent is
-  starting or running, and an alert in the danger colour once it failed. A Stop
-  stands while the agent may still write; it asks the service to cancel the
-  turn, and anything the agent pushed stays.
-- **What it published.** Once the agent has pushed, the head wears a pill
-  for its pull request (`tasks/agent-published.tsx`), coloured by where the
-  pull request stands with a dot for its checks, which opens it in the
-  browser, or a chip naming the branch pushed with no pull request yet. The
-  window reads `GET /api/agents/{id}/pull-request` as the tab comes on
-  screen, as pages of the transcript land, and the moment the agent ends.
+- **No head.** The tab has no head over its transcript
+  (`tasks/agent-tab.tsx`): the model chip stands at the composer's foot, and
+  the Stop is the composer's, standing while the agent may still write; it
+  asks the service to cancel the turn, and anything the agent pushed stays.
+  The status is the tab's glyph (`state-glyph.tsx`): the mark of the harness
+  the model runs in (Claude Code or Codex), giving way to the working mark
+  while the agent is starting or running, with a failed mark at the tab's
+  end once it failed.
+- **What it published.** Once the agent has opened a pull request, its row
+  is pinned over the composer (`tasks/agent-published.tsx`): its mark, its
+  number and title, "checks failed" while its checks fail, and the lines it
+  adds and removes. A press opens its Pull request tab in the side panel. A
+  branch pushed with no pull request yet is a chip at the composer's foot,
+  which opens the branch compared on GitHub. The window reads
+  `GET /api/agents/{id}/pull-request` as the tab comes on screen, as pages
+  of the transcript land, and the moment the agent ends
+  (`tasks/use-agent-pull-request.ts`).
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
   Elements components: the plan or prompt it was handed, the developer's
   messages, and each of its turns with its text as Markdown, its reasoning
@@ -370,19 +383,19 @@ subagent's tab stays in the side panel.
 
 The model and effort every agent starts on are
 the account's one default, kept on the service with the account preferences
-(`/api/account/preferences`'s `codingAgent` part) and shown on the Agents
+(`/api/account/preferences`'s `agent` part) and shown on the Agents
 page of Settings (`settings/agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
 Codex's for OpenAI's), the efforts the chosen model lists, and, for a
 model that offers two context windows (one whose provider prices prompts
 past a boundary apart, such as OpenAI's 272K), the two windows with what the
 whole one costs past the boundary. The whole window is the default; the
-smaller standard one is the opt-in. The Start menu and an agent's chip offer
+smaller standard one is the opt-in. New task's model chip and an agent's chip offer
 the same choice as a Context row beside Effort, and the chip says the window
 after the effort only where it is the opted-in smaller one ("GPT-5.5 High
 272K"). The page
 reads the default as it opens, and it is the one place the default changes:
-a model chosen from Start's chevron, an agent's chip, a draft, a fork, or by
+a model chosen from New task's chip, an agent's chip, a draft, a fork, or by
 another agent runs that agent alone. A first-time
 account starts on Claude Opus 5.5 at high.
 
@@ -461,7 +474,7 @@ into another, and saves nothing of the call, whose result hands the plan as it
 then stands.
 
 Each save is written into
-the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
+the task's journal (`task.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken, a deletion kept as a `remove` and a
 replaced text cut to 500 characters. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
@@ -513,9 +526,13 @@ The service lays each save over what others wrote meanwhile
   it. Where it does not, the developer's change is laid over what it holds
   now as a patch, line by line, so a point an agent added meanwhile stays. A
   change to a line someone else also changed is a conflict: nothing is
-  saved, and under the editor it says "Vespin changed this section while you
-  were editing." with **Keep mine**, which saves the developer's words over
-  theirs, and **Use Vespin's**, which closes the editor on theirs. Each save
+  saved, and under the editor it says who wrote it (`tasks/edit-ref.tsx`),
+  "<writer> changed this section while you were editing." with **Keep
+  mine**, which saves the developer's words over theirs, and **Use
+  <writer>'s**, which closes the editor on theirs; with no name, "This
+  section changed while you were editing." with **Use theirs**; and for the
+  developer's own edit from elsewhere, "You changed this section elsewhere
+  while you were editing." with **Use the other**. Each save
   that lands answers with the text merged with what was written since its
   base; the editor takes that part block by block, in place of only the
   blocks it changed where the developer has not changed them since, so the
@@ -524,8 +541,7 @@ The service lays each save over what others wrote meanwhile
   place on each save that lands.
 - **Failures.** A save that fails keeps the words and says why under the
   editor ("Not saved: the service did not answer.", "Not saved: this task no
-  longer exists.", "Not saved: this task is archived.", or "Not saved: the
-  plan would be longer than a plan may be."), with Retry; it is tried again
+  longer exists.", or "Not saved: the plan is too long."), with Retry; it is tried again
   when the developer asks or types on, and the editor stays open until it
   saves. Words not yet saved are sent to their task when the developer
   leaves it or opens another. Unsaved words live in the window's memory
@@ -615,7 +631,7 @@ leaving redraws no other section.
 ### The plan's text
 
 A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
-the row's `plan.document`), with no title line, since the task's name is its
+the row's `task.document`), with no title line, since the task's name is its
 own, and its assumptions an ordinary section of the text. Every plan starts
 empty, and its sections are whatever headings the developer and the agents
 write into it.
@@ -665,14 +681,15 @@ instead on a prompt the developer wrote, it is handed that prompt as its first
 message and never the plan, and works in the task's repository the same way. How it runs,
 its routes, and what it is told are described in
 `packages/service/README.md` under "The agent service" and "The
-agent routes"; the desktop's Start button ("The Tasks tab" above),
-the column's New agent and the agent tabs ("Agent tabs" above), and Settings › Agents are how the
+agent routes"; New task ("The Tasks tab" above), the column's New agent,
+the terminal picker's Start an agent, and the agent tabs ("Agent tabs"
+above), and Settings › Agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## Copy
 
-The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
-toolbar reads `Copied`. The
+The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
+plan, and the window's toast says "Plan copied". The
 clipboard holds the current document as readable Markdown: the task's name
 as a `#` title over its document exactly as saved, whose assumptions are a
 section like any other (`packages/features/src/plan-markdown.ts`), here for
@@ -694,7 +711,7 @@ a task named "Teammate invitations":
 This is direct formatting of the saved document, not a second model step.
 There is no separate handoff prompt: the plan is what the agent
 reads. The developer pastes it into the agent of their choice, or
-presses `Start` instead, and an agent of Vespin's own checks the
+starts an agent on it instead, and an agent of Vespin's own checks the
 repository out in a sandbox, implements the plan, and decides on a pull
 request, watched from its tab in the task's column ("From a plan to a pull
 request" above). When an agent or the developer changes the plan later,
@@ -707,12 +724,14 @@ Copy copies the new document.
   keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the agent as
   such, so it never describes unread code as read. If access is revoked, the
-  reads fail the same way. Starting a new task shows the reason on the
-  new-task page.
+  reads fail the same way. Starting a new task shows the reason under New
+  task's composer, which stays open.
 - **Loading a task.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
   `unavailable` where the agent's session could not be started; the reason is said
-  beside the button until the next press. An agent that ends `failed` or
-  `cancelled` says so in its tab's head, and anything it pushed stays.
+  under the composer that sent it, or on the window's toast for a start from
+  the terminal picker. An agent that ends `failed` or
+  `cancelled` says so at the end of its transcript, and anything it pushed
+  stays.

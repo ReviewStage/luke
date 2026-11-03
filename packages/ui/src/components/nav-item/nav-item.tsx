@@ -1,11 +1,9 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
-import { DisclosureChevron, type DisclosureState } from "../disclosure/disclosure.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
-import { Skeleton } from "../skeleton/skeleton.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -16,7 +14,7 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * is announced as the page (`aria-current="page"`), or as the spot within
  * one (`location`) for a search's result. Two looks, by what it is:
  *
- * - `row`, a place: a page, a channel, a way back. One control's height,
+ * - `row`, a place: a page, a way back. One control's height,
  *   its glyph and its name in the body's voice and the sidebar's ink, a
  *   step under the primary, as the task rows it heads are, until it is
  *   hovered or shown.
@@ -56,19 +54,6 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
  *
- * A row heading rows that fold under it, as the Inbox heads its channels,
- * takes that fold (`fold`): its glyph gives way to the fold's chevron while
- * the row is hovered or holds the keyboard, as a group's head's does
- * (`group-header.tsx`), and a press on the chevron folds or unfolds the rows
- * while a press on the rest of the row still goes to its place. The chevron
- * is a press of its own beside the row's, named for what it folds and saying
- * whether it stands open, and on a screen with no hover it stands in the
- * glyph's place at rest.
- *
- * A NavItemSkeleton stands a row while the places it lists are read: the
- * row's own box, its glyph's cell holding the glyph every row of the list
- * wears, and a block where its name will stand, so the rows land where the
- * blocks stood; a step's stands a second block where its meta line will. It is no press; the region around it says what is read.
  */
 
 /**
@@ -139,15 +124,6 @@ export interface NavMenuTrigger {
   readonly onClick: (event: MouseEvent<HTMLElement>) => void;
 }
 
-/** The rows a row heads that fold under it: the fold's state (`useDisclosureFold`), and what it folds as a reader hears it. */
-export interface NavFold {
-  readonly state: DisclosureState;
-  /** What the chevron folds, "Channels", which names it. */
-  readonly label: string;
-  /** The id of the rows it folds, while they are drawn. */
-  readonly controls?: string | undefined;
-}
-
 /** What an app's hint hands the item it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -179,8 +155,6 @@ export type NavItemProps = HintProps & {
   contextMenu?: ContextMenuProps | undefined;
   /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
   actions?: ReactNode;
-  /** The rows it heads that fold under it, whose chevron takes its glyph's place while it is hovered or reached for. */
-  fold?: NavFold | undefined;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -249,48 +223,6 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   );
 }
 
-/**
- * The fold's chevron, standing over the glyph's cell and the row's inset
- * before it, so the whole lead of the row is the press that folds. Note that
- * it is the row's sibling, never inside it, because a press inside a press
- * is no control a reader can reach.
- */
-const FOLD =
-  "ui-nav-item-fold absolute inset-y-0 start-0 m-0 flex cursor-press items-center border-0 bg-transparent p-0 ps-row-inset pe-icon-gap";
-
-/** The chevron that folds and unfolds the rows a row heads. */
-function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className={FOLD}
-      aria-label={fold.label}
-      aria-expanded={fold.state.open}
-      aria-controls={fold.controls}
-      // Note that a pointer's press leaves the focus where it was, so the chevron and the ⋯ go with the pointer rather than standing on a focus the press left behind.
-      onMouseDown={preventFocusMove}
-      onClick={fold.state.toggle}
-    >
-      <DisclosureChevron open={fold.state.open} />
-    </button>
-  );
-}
-
-/** A row's box of `variant` with nothing to press, which a skeleton stands its blocks in. */
-function StillRow({
-  variant,
-  children,
-}: {
-  variant: NavItemVariant;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className={ROW} data-variant={variant} aria-hidden="true">
-      {children}
-    </div>
-  );
-}
-
 /** A step's name over its meta line, the meta line left out where it says nothing. */
 function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): React.JSX.Element {
   return (
@@ -298,37 +230,6 @@ function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): Re
       <span className={STEP_NAME}>{name}</span>
       {said(detail) ? <span className="ui-nav-item-detail">{detail}</span> : null}
     </span>
-  );
-}
-
-/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand; a step's, a block `detailWidth` wide under it where its meta line will. */
-export function NavItemSkeleton({
-  variant = NAV_ITEM_VARIANT.ROW,
-  icon,
-  width,
-  detailWidth,
-}: {
-  variant?: NavItemVariant | undefined;
-  icon?: ReactNode;
-  /** How wide its name's block stands, a share of the row's room. */
-  width: string;
-  /** How wide a step's meta line's block stands, a share of the row's room; none where its rows draw no meta line. */
-  detailWidth?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <StillRow variant={variant}>
-      {said(icon) ? <Glyph icon={icon} /> : null}
-      {variant === NAV_ITEM_VARIANT.STEP ? (
-        <StepWords
-          name={<Skeleton width={width} />}
-          detail={detailWidth === undefined ? undefined : <Skeleton width={detailWidth} />}
-        />
-      ) : (
-        <Name>
-          <Skeleton width={width} />
-        </Name>
-      )}
-    </StillRow>
   );
 }
 
@@ -393,11 +294,10 @@ export function NavItem({
   keepFocus,
   roving,
   actions,
-  fold,
   ...props
 }: NavItemProps): React.JSX.Element {
-  // Note that a row standing in a frame beside its ⋯ or its chevron carries its menu on the frame, so a right-click on either opens it too.
-  const framed = said(actions) || fold !== undefined;
+  // Note that a row standing in a frame beside its ⋯ carries its menu on the frame, so a right-click on either opens it too.
+  const framed = said(actions);
   const press = (
     <button
       type="button"
@@ -443,12 +343,10 @@ export function NavItem({
   return (
     <div
       className="ui-nav-item-frame relative flex min-w-0"
-      data-folds={fold === undefined ? undefined : "true"}
       data-actions={said(actions) ? "true" : undefined}
       {...withContextMenu<HTMLDivElement>(props.contextMenu, {})}
     >
       {press}
-      {fold === undefined ? null : <FoldToggle fold={fold} />}
       {said(actions) ? (
         <span className="ui-nav-item-actions absolute inset-y-0 end-ui-4 flex items-center">
           {actions}

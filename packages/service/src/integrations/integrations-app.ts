@@ -113,7 +113,7 @@ export function mintIntegrationState(): string {
 
 /** A subject for another account's grant as production mints it: 24 random bytes, url-safe, prefixed so it reads as our own. */
 export function mintIntegrationSubject(): string {
-  return `luke_acct_${randomBytes(SUBJECT_BYTES).toString("base64url")}`;
+  return `app_acct_${randomBytes(SUBJECT_BYTES).toString("base64url")}`;
 }
 
 /** Whether a sign-in begun at this instant may still settle. */

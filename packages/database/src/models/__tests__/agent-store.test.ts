@@ -12,6 +12,7 @@ import {
   type PullRequestState,
 } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
@@ -31,6 +32,7 @@ import { Database } from "../../core/query.js";
 import { agentDelegationTable, agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
+import { inboxItem } from "../../schemas/inbox.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import {
@@ -38,7 +40,7 @@ import {
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, leaveWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, openInboxItem } from "../../testing/index.js";
 import {
   type Agent,
   type AgentLine,
@@ -782,7 +784,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's archive of an agent left as it was read", (it) => {
   it.effect(
-    "an agent whose conversation's lines moved on since it was read stands, as does one whose pull request opened since, and one whose did not is archived, once",
+    "an agent whose conversation's lines moved on since it was read stands, as does one whose pull request or inbox item opened since, and one whose did not is archived, once",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -816,10 +818,20 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
         yield* pullRequest(PULL_REQUEST_STATE.OPEN);
         const reopened = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
         yield* pullRequest(PULL_REQUEST_STATE.MERGED);
+        // A question it posted after the read, which moves no line of its conversation either.
+        const asked = yield* openInboxItem(starter, workspace, null, agentId, true);
+        const waiting = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
+        yield* db
+          .update(inboxItem)
+          .set({ status: INBOX_STATUS.CLOSED })
+          .where(eq(inboxItem.id, asked));
         const current = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
         const again = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
 
-        assert.deepEqual([stale, reopened, current, again], [false, false, true, false]);
+        assert.deepEqual(
+          [stale, reopened, waiting, current, again],
+          [false, false, false, true, false],
+        );
         assert.ok(Option.getOrThrow(yield* readAgent(starter, agentId)).archivedAt !== null);
       }),
   );

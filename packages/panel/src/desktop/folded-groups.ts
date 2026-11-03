@@ -19,15 +19,13 @@ import { keptKey, useKept } from "../use-kept.js";
  * task goes leaves its entry behind: it is a few bytes, and a task on it
  * later comes back folded as it was left. Pinned is kept under a key of
  * its own, since it is no repository, and so are the account's own
- * sections, each by its id. The Inbox's channels fold under its row, kept
- * under a key of their own as Pinned is. A task's child tasks nested under
+ * sections, each by its id. A task's child tasks nested under
  * its row stand folded until it is opened, so the tasks opened are kept,
  * each by its id, under a key of their own. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's view choices are kept on the same terms, the scope it shows and
  * whom the items it lists are addressed to, a teammate by their account's
- * id, and so is its list's width, a channel listing under the same
- * choices; a task's own Inbox lists every item it holds, and keeps no
+ * id, and so is its list's width; a task's own Inbox lists every item it holds, and keeps no
  * choice. A choice kept before its scope was is read
  * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
  * Unread, as Open, and All open or Everything as All; and the Needs you
@@ -36,8 +34,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * scope kept as To do reads as Open. A grouping or a sort kept before the
  * list was always one run, the latest first, is left where it was and
  * read by nothing, and so is the scope a task's own Inbox kept before it
- * listed everything, and the one the channels kept apart before they
- * shared the Inbox's. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
+ * listed everything, and so are the folds and scopes kept for the Inbox's
+ * channels before they were removed. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.
@@ -47,7 +45,6 @@ import { keptKey, useKept } from "../use-kept.js";
 const STORAGE_KEY = {
   GROUPS: "app.sidebarFoldedGroups",
   PINNED: "app.sidebarPinnedFolded",
-  CHANNELS: "app.sidebarChannelsFolded",
   SECTIONS: "app.sidebarFoldedSections",
   OPENED_TASKS: "app.sidebarOpenedTasks",
   INBOX_SHOW: "app.inboxShow",
@@ -93,7 +90,7 @@ export const INBOX_LIST_WIDTH = {
 /** The folded groups, each by its repository, its creator, or its assignee, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
-/** Whether Pinned or the Inbox's channels are folded. */
+/** Whether Pinned is folded. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The account's sections folded, or the tasks opened, by id. */
@@ -171,7 +168,6 @@ const KEPT = {
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   PINNED_FOLDED: keptKey(STORAGE_KEY.PINNED, storedFlag),
-  CHANNELS_FOLDED: keptKey(STORAGE_KEY.CHANNELS, storedFlag),
   FOLDED_SECTIONS: keptKey(STORAGE_KEY.SECTIONS, storedTasks),
   OPENED_TASKS: keptKey(STORAGE_KEY.OPENED_TASKS, storedTasks),
   INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
@@ -183,8 +179,6 @@ const KEPT = {
 interface Folds {
   readonly groups: readonly (string | null)[];
   readonly pinned: boolean;
-  /** Whether the Inbox's channels are folded under its row. */
-  readonly channels: boolean;
   /** The account's own sections folded, by id. */
   readonly sections: readonly string[];
   /** The tasks whose child tasks stand open under them, by id. */
@@ -194,7 +188,6 @@ interface Folds {
 const OPEN: Folds = {
   groups: [],
   pinned: false,
-  channels: false,
   sections: [],
   openedTasks: [],
 };
@@ -210,9 +203,6 @@ export interface FoldedGroups {
   toggle: (repository: string | null) => void;
   pinnedFolded: boolean;
   togglePinned: () => void;
-  /** Whether the Inbox's channels are folded under its row. */
-  channelsFolded: boolean;
-  toggleChannels: () => void;
   /** Whether one of the account's sections is folded, by its id. */
   sectionFolded: (sectionId: string) => boolean;
   toggleSection: (sectionId: string) => void;
@@ -228,11 +218,10 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   // kept folds were read, as `sidebar-collapse.ts` says of its own.
   const [groups, keepGroups] = useKept(KEPT.FOLDED_GROUPS, OPEN.groups);
   const [pinned, keepPinned] = useKept(KEPT.PINNED_FOLDED, OPEN.pinned);
-  const [channels, keepChannels] = useKept(KEPT.CHANNELS_FOLDED, OPEN.channels);
   const [sections, keepSections] = useKept(KEPT.FOLDED_SECTIONS, OPEN.sections);
   const [openedTasks, keepOpenedTasks] = useKept(KEPT.OPENED_TASKS, OPEN.openedTasks);
   const [stagedFolds, setStagedFolds] = useState<Folds>(OPEN);
-  const folds = staged ? stagedFolds : { groups, pinned, channels, sections, openedTasks };
+  const folds = staged ? stagedFolds : { groups, pinned, sections, openedTasks };
   const fold = (next: Partial<Folds>) => {
     if (staged) {
       setStagedFolds({ ...stagedFolds, ...next });
@@ -240,7 +229,6 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     }
     if (next.groups !== undefined) keepGroups(next.groups);
     if (next.pinned !== undefined) keepPinned(next.pinned);
-    if (next.channels !== undefined) keepChannels(next.channels);
     if (next.sections !== undefined) keepSections(next.sections);
     if (next.openedTasks !== undefined) keepOpenedTasks(next.openedTasks);
   };
@@ -250,8 +238,6 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     toggle,
     pinnedFolded: folds.pinned,
     togglePinned: () => fold({ pinned: !folds.pinned }),
-    channelsFolded: folds.channels,
-    toggleChannels: () => fold({ channels: !folds.channels }),
     sectionFolded: (sectionId) => folds.sections.includes(sectionId),
     toggleSection: (sectionId) => fold({ sections: toggled(folds.sections, sectionId) }),
     taskOpened: (taskId) => folds.openedTasks.includes(taskId),

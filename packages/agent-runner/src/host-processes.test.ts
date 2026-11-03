@@ -34,15 +34,15 @@ const row = (pid: number, parent: number, group: number, command: string): Row =
 /** What a box runs beside the runner: init, the host, and another agent's runner with a server of its own, each in a group of its own. */
 const BESIDE = [
   row(1, 0, 1, "/sbin/init"),
-  row(HOST, 1, HOST, "/opt/luke-host/node/bin/node /opt/luke-host/lib/luke-host.mjs run"),
-  row(5100, HOST, 5100, "/opt/luke-host/node/bin/node /opt/luke-host/lib/agent-runner.mjs"),
+  row(HOST, 1, HOST, "/opt/vespin-host/node/bin/node /opt/vespin-host/lib/vespin-host.mjs run"),
+  row(5100, HOST, 5100, "/opt/vespin-host/node/bin/node /opt/vespin-host/lib/agent-runner.mjs"),
   row(5101, 5100, 5100, "/state/agent-tools/claude/0.3.304/claude"),
   row(5102, 5101, 5100, "node server.js"),
 ];
 
 /** The runner, its harness, and the harness's command-sandbox bridge, none of them the agent's. */
 const LAUNCH = [
-  row(RUNNER, HOST, RUNNER, "/opt/luke-host/node/bin/node /opt/luke-host/lib/agent-runner.mjs"),
+  row(RUNNER, HOST, RUNNER, "/opt/vespin-host/node/bin/node /opt/vespin-host/lib/agent-runner.mjs"),
   row(HARNESS, RUNNER, RUNNER, "/state/agent-tools/claude/0.3.304/claude --output-format"),
   row(4102, HARNESS, RUNNER, "socat UNIX-LISTEN:/tmp/claude-http-3fa9.sock,fork TCP:localhost:5"),
 ];
@@ -55,7 +55,7 @@ const agentRuns = (sources: { readonly proc: string; readonly ps: string }) =>
   }).pipe(Effect.provide(hostProcessTable(RUNNER, sources)));
 
 /** A folder of the test's own, gone once it finishes. */
-const folderOf = (ctx: TestContext) => Effect.promise(() => temporaryDirectory(ctx, "luke-ps-"));
+const folderOf = (ctx: TestContext) => Effect.promise(() => temporaryDirectory(ctx, "vespin-ps-"));
 
 /** A `ps` of the test's own, as a Mac lists its processes: a script printing the rows given as `ps -o pid=,ppid=,pgid=,command=` does, and exiting as told. */
 const fakePs = (ctx: TestContext, rows: readonly Row[], exitCode = 0) =>

@@ -44,8 +44,16 @@ write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
 because a workspace is adopted by its slug, and a session free to create an
 organization or rename its own could take a team's slug first. That covers
 create, update, delete, check-slug, set-active, member removal, role changes,
-leave, every invitation endpoint (Vespin sends no invitation mail), and the
-team and role endpoints this deployment does not mount. `disabledPaths` is
+leave, every invitation endpoint but the invitee's own `get-invitation` and
+`accept-invitation`, which the plugin answers only to an account whose
+provider verified the invited address
+(`requireEmailVerificationOnInvitation`), and the
+team and role endpoints this deployment does not mount. An owner or admin
+makes, lists, and cancels invitations through Vespin's own procedures
+(`src/accounts/workspace-invitations-procedures.ts`), which call the plugin
+server-side and mail the invitee the link through Resend where
+`RESEND_API_KEY` and `INVITE_FROM` are set (`src/accounts/invitation-mail.ts`),
+or leave the owner to copy it where they are not. `disabledPaths` is
 read by the HTTP router alone, so the server-only `auth.api` calls a hosted
 route makes still run, and a create that names a `userId` and carries no
 session passes the creation rule as a system action.
@@ -90,22 +98,36 @@ reads `GET /app/installations/{id}` with, so an id GitHub hands the Setup URL
 is confirmed as this App's own or answered as none, and what every
 installation token is minted under (`POST
 /app/installations/{id}/access_tokens`). `userToken(userId)` is the signed-in
-user's token off the row, unsealed, read for one caller alone, GitHub's MCP
-server (`src/integrations/github-integration.ts`); a token within a minute of its expiry
-is refreshed first at GitHub's token endpoint on the App's client, and the
+user's token off the row, unsealed, read wherever Vespin acts on GitHub as
+the developer: GitHub's MCP server (`src/integrations/github-integration.ts`),
+the check that the developer may push and the co-author line on their agent's
+commits (`src/agents/coder-host/checkout.ts`), the pull request an agent opens
+as them (`src/agents/coder-host/pull-request.ts`), and the pull-request
+changes a member presses (`src/agents/pull-request-write.ts`); a token
+within a minute of its expiry is refreshed first at GitHub's token endpoint on the App's client, and the
 fresh pair is re-sealed in place, inside one transaction under `FOR UPDATE`
 on the row, because GitHub retires a refresh token the moment it is used.
 GitHub answers a refused refresh with status 200 and an `error` body, which
 is read as `GitHubSignInRequired`, as is a row with no GitHub account, a row
 from before the App, an expired refresh token, or a token that will not open
-under this deployment's secret. No repository read takes that token.
+under this deployment's secret. No checkout, listing, or task's reach of a
+repository takes that token: those are an installation's, or a member's own
+personal access token's, below.
 
 A workspace's repositories are those of the installations of the App
 connected to it (`src/github/github-installations.ts`), one per GitHub
-account, and nothing else: nobody's own GitHub account is asked what it
+account, and those its members added on their own GitHub personal access
+token (`github_personal_token`). No member's sign-in is asked what it
 reaches, so a member who never signed in with GitHub reads, plans, and starts
-agents on the workspace's repositories all the same, and a workspace with
-nothing connected has none. `workspaceRepositories(organizationId)` reads
+agents on the installations' repositories all the same. Where no
+installation reaches a repository, the acting member's own token may
+(`src/github/workspace-repository.ts`): an agent acts as its starter only
+where it recorded the token's access (`GITHUB_ACCESS.TOKEN`), so one on the
+App never falls back to anyone's token, and an automation acts as no member.
+`/api/github/token-repositories` (`src/github/github-procedures.ts`) lists
+the repositories added that way, adds one only where the member's token may
+push to it, and removes one for whoever added it or a workspace owner or
+admin. A workspace with nothing connected and nothing added has none. `workspaceRepositories(organizationId)` reads
 every installation the workspace holds from GitHub, mending each stored
 status, skips one GitHub no longer knows or its account suspended, mints a
 token for each listing alone (`metadata: read`), and pages `GET
@@ -115,23 +137,34 @@ repository once however GitHub cases its name. One listing GitHub does not
 answer, or is still answering full pages of at the bound (`PAGING`, fifty
 pages), fails the whole read as unavailable or unreadable rather than
 answering the rest; none where no installation is running.
-`workspaceRepository(organizationId, "owner/name")` is the check a task's
-repository passes before it is kept: only the workspace's own installation
-on the owner can reach it, found by its stored login first and then by
+`workspaceRepository(organizationId, "owner/name", member)` is the check a
+task's repository passes before it is kept: the workspace's own installation
+on the owner reaches it first, found by its stored login first and then by
 GitHub's own reading of the rest, so the listing is paged only
 for that one and only as far as the page the repository is on, the name is
 matched the way GitHub folds case, and what is answered is the full name as
-GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
-same check followed by the one token the App mints for that repository:
-naming it alone and `contents: read`, answered sealed beside the repository
-as GitHub spells it, or none where the installation does not reach it. It is
+GitHub spells it, with the access that reached it, the App's or the token's.
+Only where no installation reaches it is the member's own token read
+(`GET /repos/{owner}/{name}`), which reaches a repository that token may push
+to, and a refusal then says whether GitHub refused the token, wants it
+authorized for SSO, does not show it the repository, or does not let it push.
+`repositoryReadToken(organizationId, "owner/name", member)` is the
+same check followed by one token for that repository: the App's, naming it
+alone and `contents: read`, or the member's own where only their token
+reaches it, answered sealed beside the repository as GitHub spells it, or
+none where neither does. It is
 what the checkout in Vespin's sandbox reads through
 (`src/agents/repository-shell.ts`), and the File tab, the tree, and the skills
 beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 `repositoryWriteToken` cuts contents and pull requests write, each with CI
 read beside it where the installation grants it; `appBot(token)` reads the
-App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
-is who an agent's commits are by. A task's repository is reached
+App's bot user (`GET /users/<slug>[bot]`) on a token, which is who an
+agent's commits are by where the App is their author. An agent whose author
+is `AGENT_AUTHOR.DEVELOPER` (the developer's sign-in may push) or
+`AGENT_AUTHOR.TOKEN` (their own token reached the repository)
+(`@repo/features/agent-wire`) commits as the developer, and the bot is
+only its `Co-authored-by` line (`agentCoAuthor` in
+`src/agents/coder-host/checkout.ts`). A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
@@ -140,8 +173,12 @@ hosted oRPC router) is that
 listing under the account bearer, answered as
 `packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
-name, full name, default branch, private, and when GitHub last saw it
-change), and `installationUrl`. Nothing is stored. A `workspaceId` query
+name, full name, default branch, private, when GitHub last saw it change,
+and `access`, `app` or `token`: the installations' listing, then the
+repositories added on a token that the member's own token also lists),
+`addable` (the repositories the member's own token may push to that the
+workspace lists nowhere yet, which Settings › Workspace's Add repository
+offers), and `installationUrl`. Nothing is stored. A `workspaceId` query
 names the workspace the listing is for, to a member of it; none named is the
 account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
@@ -232,15 +269,21 @@ open. GitHub signs every delivery with the App's webhook secret,
 against the HMAC-SHA256 of the body's own bytes in constant time before it
 reads anything; a deployment without the secret answers every delivery
 `unavailable` (503), and a signature that does not hold is `invalid-token`
-(401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
-ready_for_review, converted_to_draft), `check_suite`, a completed
-`check_run`, and `status` are read, for the repository's full name and the branches they
-name, and nothing of a delivery is kept or logged: the branch finds the agents
+(401). For what an agent published, only `pull_request` (opened, reopened,
+closed, edited, synchronize, ready_for_review, converted_to_draft, enqueued,
+dequeued), `check_suite`, a completed `check_run`, and `status` are read, for
+the repository's full name and the branches they name, and nothing of a
+delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. Before any of that, the repository a
+A redelivery reads the same again. Every delivery is also read as an
+automation's trigger (`src/automations/automation-github.ts`, "Automations"
+below), and a submitted review, a new comment on a pull request, or a check
+suite or status that failed on an agent's branch is told to the agents on
+that pull request as a message from GitHub, as is every check on an agent's
+head finished, to the agent at work waiting on them (`src/github/agent-wakes.ts`). Before any of that, the repository a
 delivery names is recorded by GitHub's id under the name it carries
 (`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
@@ -257,8 +300,9 @@ before the service ever saw it is relabeled too. The App must subscribe to
 the Repository event for those, a setting of the App on GitHub; without it,
 the next reach of the old name, which GitHub answers with a redirect to the
 new one on whichever of the workspace's installations reaches it now
-(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
-ignored. An `installation` delivery, which GitHub sends every
+(`github-app.ts`), does the same. GitHub's `ping` and
+`installation_repositories` are answered and ignored, as is any other event
+neither an automation nor an agent reads. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
@@ -314,7 +358,7 @@ variables above for every environment that receives its deliveries.
 ## The Vespin Slack bot
 
 Vespin's own Slack bot writes to a workspace's members in Slack. It is one
-Slack app, Vercel Connect's managed `slack/slack` connector, apart from the
+Slack app, Vercel Connect's managed `slack/vespin` connector, apart from the
 Slack connector each member connects for their agents (`SLACK_CONNECTOR_UID`).
 `src/slack/slack-bot.ts`'s `SlackBot` reads the connector's UID from
 `SLACK_BOT_CONNECTOR_UID` and asks Connect for the bot token under an app
@@ -324,15 +368,20 @@ Vercel OIDC token can mint the app token, so the CLI cannot check it: check it
 on a Preview. An owner or admin connects the bot under Settings › Workspace
 (`src/slack/slack-bot-procedures.ts`), which calls `auth.test` and keeps the
 team in `slack_installation`, one per workspace; Disconnect deletes it.
-`SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
-time and keeps the answer, a miss included, in `slack_member`
-(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
+`SlackBot.dm` finds a member by the Slack id kept in `slack_member`
+(`@repo/database/models/slack-installation-store`), else through a Slack
+account the member connected for their agents whose `auth.test` answers the
+installed team, else by their email (`users.lookupByEmail`), and keeps the
+answer. An email miss is kept too, for a day
+(`SLACK_MEMBER_MISS_LIFETIME`), and a kept miss still tries the member's own
+accounts, so one who connects Slack after a miss is found at the next write. `dm` and `update` log and
 swallow every failure; never yield either inside a transaction.
 
 An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
 has each run's result sent to its owner by the bot as the run's agent's turn
 settles (`src/automations/automation-slack-delivery.ts`, heard through
-`SettledTurnListener`): the agent's final message as mrkdwn, or that the run
+`SettledTurnListener`): the agent's final message in a `markdown` block, which
+Slack draws as standard Markdown, or that the run
 failed or was stopped, with a link to the agent. The run is claimed first
 (`automation_run.slack_delivered_at`), so each run sends once.
 
@@ -341,12 +390,24 @@ reaches our Slack route (`/api/slack/events`) as an `app_mention` or
 `message.im` event and starts a coding agent as them on no task
 (`src/slack/slack-agent-starts.ts`), once the answer has left; Slack's
 retries (`x-slack-retry-num`) and bots' messages are dropped. The writer is
-found by the Slack id the bot kept, or else by the email Slack holds for them
-(`users.info`). The bot replies in the thread with the agent's link, the
+found by the Slack id the bot kept, else through the Slack accounts members
+connected that no kept id names yet, one `auth.test` each (`SlackBot.memberOf`),
+or else by the email Slack holds for them (`users.info`). The bot reacts to
+the message with 👀 (`eyes`), replying in the thread only to refuse, the
 thread is kept against the agent in `slack_agent_thread`, a later mention in
 that thread is sent to the agent instead, and every settled turn of the agent
-is posted back in the thread once (`SettledTurnListener`). The Slack app must
+is posted back in the thread once, with the agent's link (`SettledTurnListener`). The Slack app must
 subscribe to the `app_mention` and `message.im` bot events.
+
+An owner or admin names the repository a Slack start defaults to under
+Settings › Workspace › Slack bot (`POST /api/workspaces/slack-bot/repository`,
+kept as `slack_installation.default_repository`) and one per channel
+(`POST /api/workspaces/slack-bot/channel`, kept in `slack_channel_repository`),
+where they also put the bot in a public channel (`conversations.join`) or take
+it out of one (`conversations.leave`). The read answers an owner or admin the
+team's channels (`conversations.list`). A Slack start's repository is the one
+the message names, else its channel's, else the workspace's, else the
+member's latest agent's.
 
 ## The admin resource
 
@@ -396,12 +457,12 @@ none.
 
 `src/auth/bearer.ts` answers effects. `hostedUserId(request, userInfo)`
 and `userIdForAuthorization(authorization, userInfo)` each answer
-`Effect<string | undefined>`, and a `UserInfoEndpoint` answers
-`Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
+`Effect<Option<string>, Cause.UnknownError>`, and a `UserInfoEndpoint` answers
+`Effect<OAuthUserInfo | undefined, Cause.UnknownError>`: the auth service's own
 `oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
-`Effect.tryPromise` once where an endpoint is constructed —
-`hostedUserInfo` in `src/auth/bearer.ts` itself
-and the events group's inline one — and nowhere else. What that
+`Effect.tryPromise` once, in `src/auth/bearer.ts` itself, beneath
+`hostedUserInfo`, and nowhere else; the events group reads the bearer
+through the same `accountMiddleware` every other group does. What that
 call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
@@ -425,8 +486,10 @@ whether a bearer or a cookie named it (`src/agents/coder-host/runtime-sessions.t
 `routedSessions`): a coding agent's session is answered by the harness its
 conversation runs on, and one that ran on eve is refused as ended. What acts for
 one device rather than the account takes the bearer alone: the Mac's
-commands (`resolveHostedBearerUserId`), as the terminal relay
-resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
+commands (`resolveHostedBearerUserId`). The terminal relay and the Browser
+tab's live view resolve with `resolveRelayUserId`, which takes the desktop's
+bearer where the upgrade carries no `Origin`, and the page's session cookie
+where it carries one of the deployment's own (`src/http/relay-upgrade.ts`). Because a tab opened on a byte route now
 carries the cookie, every byte a member, an agent, or GitHub wrote is served
 under `HOSTED_BYTES_HEADERS` (`src/http/http-effect.ts`), whose sandboxed
 policy keeps an SVG's script from running as this origin.
@@ -438,7 +501,7 @@ hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
 (`@repo/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
-either as `request_too_large` before anything goes upstream; `keywords` are
+either as `request-too-large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
 sends the clip and the words to OpenAI's `gpt-transcribe` on the caller's own
@@ -459,7 +522,9 @@ answers the route over a scripted OpenAI at its HTTP door.
 
 `src/accounts/models-procedures.ts` answers `GET /api/models`, the first
 procedure of the hosted oRPC router (`src/orpc/`): the models an agent
-may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
+may run on, as `{ models: [{ id, name, provider, efforts, contextWindows?,
+fastNotEnabled?, fastWithheldByPlan?, credentialMissing? }], macs? }`
+(`@repo/features/models-wire`). The list is
 `src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
 boundary and kept to the Anthropic and OpenAI models whose tags carry both
@@ -480,10 +545,20 @@ choice is the window the context ring reads, nothing more. The read is the
 `ModelCatalog` service `src/runtime.ts`'s layer builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
-The bearer is resolved before the read, as every hosted endpoint resolves
-it, though the catalog is public and the same for every account.
+The catalog is public and the same for every account, but the answer is the
+account's: the bearer is resolved before the read, and the offer is cut to
+it. `fastNotEnabled` marks a model whose fast versions are dropped because
+Anthropic never granted fast mode to the organization of the key the
+account's agents run on, `fastWithheldByPlan` every OpenAI model where the
+account's ChatGPT plan pays for its GPT agents, which have no fast mode
+there, and `credentialMissing` a model no subscription or key of the
+account's pays for, which a Start refuses and the menus draw disabled
+(`src/agents/coder-host/agent-runtime-choice.ts`). `macs` lists the Macs
+the account registered, newest heard from first, with the providers each
+offers, and is left out where there are none. A store the route could not
+read is `unavailable`.
 
-The same module holds the functions the agent routes and the coder
+`src/providers/model-catalog.ts` also holds the functions the agent routes and the coder
 host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
 through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
@@ -516,7 +591,7 @@ without being sent anywhere. Saves are braked at ten an hour per account
 on each instance, so the endpoint is no oracle for keys that are not the
 caller's. Neither the key nor what the provider said of it is logged.
 
-A key is kept in `account_provider_key` (migration 0080), sealed by
+A key is kept in `account_provider_key` (migration `20261005002640_account_provider_key`), sealed by
 `packages/database/src/models/provider-key-seal.ts`: AES-256-GCM under a data key drawn
 for that save, the data key wrapped under the deployment's key-encryption
 key, with the account and provider bound as additional data on both seals
@@ -644,7 +719,8 @@ one account at a provider (two Notion workspaces), each its own row and its
 own grant. Connect keys a grant by connector and subject, so each row keeps
 the subject it asks under (`connect_subject`): the Vespin account's own user
 id for the first account at a provider, as every ask was before a second
-was possible, and a minted `luke_acct_…` id for another. Each row also keeps
+was possible, and a minted `app_acct_…` id for another (`luke_acct_…` on
+rows minted before the rename, which stay valid). Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
@@ -663,7 +739,7 @@ a provider is primary: the agents are told each by its label, and to ask
 which one where the developer has not said.
 A provider offers more than one account where its catalog entry names a
 `MULTIPLE_ACCOUNTS_VARIABLE` (Notion, Linear, Slack, Supabase, PostHog,
-Executor), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
+Executor, Gmail, Google Calendar, Google Drive), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
 `false`, or `0`, which switches it back to one at once where a provider
 turns out to revoke an earlier grant when a later one completes for the
 same user and client; at most `INTEGRATION_ACCOUNTS_MAX` (five) per provider,
@@ -818,7 +894,7 @@ vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
 vercel connect create granola --name granola                   # Granola
-vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
+vercel connect create mcp.mercury.com --name vespin-mercury    # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
 vercel connect create supabase --name supabase                 # Supabase
@@ -1019,11 +1095,13 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
-`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
-production, preview, and development. The web and `dev` are services of that
-one project (the root `vercel.json`'s `services`), so its variables and the
-connector's link reach both, which matters because the agents read
-tokens too. Asking Connect about an arbitrary user id needs the deployment's
+`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
+production, preview, and development. The web is that project's one service
+(the root `vercel.json`'s `services`), so its variables and the connector's
+link reach every function, the agents' own MCP door among them
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/workspace-mcp/app.ts`),
+which reads the member's token on the service's side and never hands it to
+the agent (`src/integrations/connection-door.ts`). Asking Connect about an arbitrary user id needs the deployment's
 own Vercel OIDC token, which the SDK reads from the request
 (`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
 project. For local development, `vercel env pull` writes a
@@ -1142,17 +1220,16 @@ for it. Disconnect and deleting the account still revoke its grant.
 Every agent runs on Claude Code or Codex, the harness its model's provider
 names, chosen once at its Start and kept on its row
 (`src/agents/coder-host/agent-runtime-choice.ts`). An agent is one harness
-session over a `coding_agent` conversation
+session over an `agent` conversation
 (`packages/database/src/models/agent-store.ts`), and every call on it, a
 Start, a message, a Stop, a retune, or a delete's retire, is answered by the
 harness the conversation runs on (`sessionsRouter` in
 `src/agents/coder-host/runtime-sessions.ts`, over the `claudeCodeSessions`
 and `codexSessions` that `native-agent-sessions.ts` builds). An agent that ran on eve has
 ended for good: every call on it is refused as `agent-retired`, and only a
-new agent goes on from its work. A route holding the developer's own bearer
-calls as the developer, and one reached on a browser's session cookie alone
-as the deployment acting for the cookie's account ("Reaching eve as the
-deployment").
+new agent goes on from its work. Every caller reaches the session for the
+account its route resolved, whether a bearer or a browser's session cookie
+named it (`routedSessions`), and the harness acts for the agent's starter.
 
 The agent is offered Vespin's own tools on Vespin's MCP server
 (`src/agents/workspace-mcp/app.ts`, at `/api/agents/mcp`), which admits the
@@ -1181,9 +1258,17 @@ the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent 
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
-transcript, as many entries as asked, to a bound; `start_agent`, which starts
+transcript, as many entries as asked, to a bound; `message_agent`, which
+sends another agent of the workspace, on any task, a message by its id that
+lands in its conversation under the caller's name, opening with the caller's
+mention and closing with how to answer it, which the service writes, seen in
+those two transcripts alone, read by a running agent at its next step and
+starting a turn of an idle one, and answered `accepted` once its session
+takes it, never itself, an archived agent, or one whose starter left the
+workspace (`src/agents/coder-host/agent-message.ts`); `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
-`taskId` that `list_tasks` answers, by the Start button's own path, telling
+`taskId` that `list_tasks` answers, by the one path every start takes
+(`src/agents/coder-host/start.ts`), telling
 it which agent started it; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
@@ -1214,7 +1299,7 @@ task of the workspace, sets or clears its repository (confirmed through the
 workspace's installation), pins it for the agent's starter, moves it into
 one of the starter's sections or out of them by that same write, or
 archives it or brings it back, by the task
-menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
+menu's own path (`updateTask`, as `src/tasks/tasks-procedures.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
 task's archive keeps only when it stands from; `list_automations`,
@@ -1331,8 +1416,8 @@ credentials.
 ## The account group
 
 `src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
-router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
-template procedures, on the paths `@repo/features/contract`'s `account.ts`
+router (`src/orpc/`): the signed-in desktop's own delete, preferences, access,
+provider-key, memory, and ChatGPT-credential procedures, on the paths `@repo/features/contract`'s `account.ts`
 declares, each answering from this deployment's own database.
 Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
@@ -1350,30 +1435,44 @@ and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
-The preferences snapshot carries three parts. `preferences` is the settings
+The preferences snapshot carries six parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
-`codingAgent` is the account's default model and effort for an agent —
+`linkOpen`, where the account's app links open (null reads as the browser),
+and `agentEnter`, what Enter does in an agent's box while it works (`steer`
+or `queue`, null reads as steer), are synced settings kept as parts of their
+own (`link_open`, `agent_enter`), so a build that predates them neither
+refuses the snapshot nor clears them by writing `preferences` back whole.
+`agent` is the account's default model and effort for an agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
-spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses,
+spelling, and until the account chooses, the fallback a Start naming no
+model runs on (`accountModelChoices`), which follows the provider whose
+credential pays: `anthropic/claude-opus-5.5` at `high` for Anthropic's,
 with `contextWindow: "standard"` beside them where the smaller context window
 of a model offering two was chosen (absent is the model's whole window).
 Settings › Agents and the Start menu's chevron both write it, as one
-value rather than two that could disagree. A PUT carries either part or both;
-a part left out stands as it was, so the desktop's settings sync never
-resets the chosen model and the Start menu never touches the settings. A
-`codingAgent` write is accepted only as the instance's model catalog accepts
+value rather than two that could disagree. A PUT carries any of the parts,
+and one that carries none is `invalid-request`; a part left out stands as it was, so the desktop's settings sync never
+resets the chosen model and the Start menu never touches the settings. An
+`agent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
-is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
+is `invalid-request`, and a catalog the instance cannot read is `unavailable`;
+and it moves the default to another model only where a credential of the
+account's pays for that model's provider, else `invalid-request`.
 The store keeps the columns on `account_preference`, and
 reads a half-written pair as the default; `agent_context_window` is
-null for the model's whole window (migration 0077). `updated_at` is the preferences
-part's own instant, nullable since migration 0062 and left null by a write
-that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
+null for the model's whole window (migration `20261004033640_coding_agent_context_window`). `updated_at` is the preferences
+part's own instant, nullable since migration
+`20260930063320_coding_agent_default_model` and left null by a write
+that carries no `preferences`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
-`experiments` is the third part: each experiment the account turned on or
+`chaptersModel` is the Claude model Generate chapters runs on, one of
+`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
+the account chooses; any other value is `invalid-request`.
+
+`experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
 `EXPERIMENT`, as `{ "memory": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
@@ -1414,7 +1513,7 @@ read from the service's record of the agent (`callerWorkspace`,
 `callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
 keeps a memory or corrects one in place under a lock on the workspace's row,
 so the same words kept twice stand once, a correction leaves no older version
-beside the new one, and the bound of 200 memories of 400 characters a
+beside the new one, and the bound of 1,000 memories of 400 characters a
 workspace is counted once. Recall ranks the workspace's memories by how many
 of the query's words each holds; no index or embedding stands behind it.
 Credential-shaped words are refused before the store is reached, and a store
@@ -1451,8 +1550,15 @@ lays it out are `src/chapters/chapters-prompt.ts`.
 
 ## The agent routes
 
-`src/agents/agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a task's agents through. An agent
+The desktop starts, lists, reads, messages, re-models, and stops a task's
+agents through procedures of the hosted oRPC router:
+`src/agents/agents-procedures.ts`, `src/agents/messages-procedures.ts`, and
+`src/agents/agent-pull-request-procedures.ts`, on the paths
+`@repo/features/contract`'s `agents.ts`, `messages.ts`, and
+`agent-pull-requests.ts` declare. `src/agents/agents-app.ts` serves only
+what an agent's window reads as bytes: a picture a tool answered the agent
+or one of its workers, a file of a message queued for it, an inbox item's
+attachment, and an image its pull request's overview names. An agent
 belongs to its task's workspace: every route reads it through the task's
 membership gate (`agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
@@ -1624,16 +1730,21 @@ double, reading every run for the token and never finding it.
 
 ## Automations
 
-An automation is an account's saved agent Start on one of its tasks,
-fired by a trigger. The account, the task, the trigger, the
-action, and the guards are an `automation` row
+An automation is an account's saved agent Start in one of its workspaces,
+on no task, fired by a trigger. The account, the workspace
+(`organization_id`), its `scope` (`personal`, the default, or `workspace`,
+which every member reads and runs), its `repositories` (the first is where
+a run's agent starts), the trigger, the action, and the guards are an
+`automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
 and the guards as `@repo/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
-run. The store is `packages/database/src/models/automation-store.ts`: an
-automation is made only on a task the account reaches, and every other
-statement an account makes names it.
+run. The store is `packages/database/src/models/automation-store.ts`: every
+statement an account makes names the automation and is gated on the
+account's membership of its workspace (`allowedTo`), as its scope and the
+account's role there allow, so an account that leaves keeps its automations
+there, unread, and their runs fail as they fire.
 
 A schedule is five-field cron read in an IANA zone
 (`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
@@ -1659,12 +1770,12 @@ a run past the daily cap (runs started in the last twenty-four
 hours) or past the concurrency guard (agents its runs started still
 starting or running, read as each agent's tab reads it) is skipped, never
 queued. Then it is a Start with a prompt, on the one path a Start takes
-(`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
-through the App, and the model are checked as for the developer's own
+(`src/agents/coder-host/start.ts`): the owner's membership of the workspace,
+the automation's repository and the reach of it through the workspace's
+installation, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and its session is
-reached as the deployment acting for the owner ("Reaching eve as the
-deployment"), never on the bearer the cron called with, as an agent's own
-`start_agent` reaches one. The prompt is the
+reached through `routedSessions` acting for the owner, never on the bearer
+the cron called with, as an agent's own `start_agent` reaches one. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1699,17 +1810,25 @@ made where one stands, and failed as `unavailable` where none does.
 
 The routes are procedures of the hosted oRPC router
 (`src/automations/automations-procedures.ts`), under the account bearer, every
-row gated by the store on the account owning the automation and still
-reaching its task, so another account's automation, or one on a task of a
-workspace the account left, is `not-found`:
+row gated by the store on the account's membership of the automation's
+workspace and what its scope lets the account do there, so another
+account's personal automation, or one in a workspace the account left, is
+`not-found`:
 
-- `GET /api/automations` answers the account's automations newest first,
-  or one task's under `?planId=`, each with its newest run;
-  `POST /api/automations` makes one (`201`). A schedule that does not
+- `GET /api/automations` answers the automations the account may read
+  newest first, or one workspace's under `?workspaceId=`, each with its
+  newest run, and `[]` under `?planId=`, kept for the released desktops
+  that still send it;
+  `POST /api/automations` makes one (`201`) in the workspace its
+  `workspaceId` names, on its `repositories`, each reached through the
+  workspace's installation (`standingOf`). A schedule that does not
   read (five-field cron, a known zone, no more often than every fifteen
-  minutes), a model the catalog does not offer the account, or a key the
-  frame does not name is `invalid-request`; a task with no repository is
-  `no-repository`. A webhook trigger's secret is minted here, answered
+  minutes), a model the catalog does not offer the account, a key the
+  frame does not name, a `planId`, no workspace or no repositories, or the
+  `workspace` scope in the account's personal workspace is
+  `invalid-request`, a workspace the account is not in is `not-found`, and
+  a GitHub trigger with no repository is `no-repository`
+  (`checkTriggerRepositories`). A webhook trigger's secret is minted here, answered
   once as `webhookSecret`, and kept only as its SHA-256.
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
   delete one. A resume, or a new trigger, computes a schedule's next due
@@ -1758,8 +1877,8 @@ reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
 nothing until it is marked ready, and an opened pull request is both this and
 `pull-request-opened`), an issue opened or labelled, a check suite that
 completed as `failure` or `timed_out`, and a push to a branch, each in any of
-the automation's repositories (or its task's, on a row an older build wrote,
-matched the way GitHub folds a name's case), of an owner still a member of
+the automation's repositories (matched the way GitHub folds a name's case),
+of an owner still a member of
 the automation's workspace, filtered by the trigger's labels (the label just applied, or
 any label of what was opened) and branches (a pull request's base, a check
 suite's or a push's branch). Only the repository, the number, title, and
@@ -1790,8 +1909,8 @@ fire.
 
 ## The tasks group
 
-`src/tasks/tasks-app.ts` is the Mac's Tasks tab's route group over the account's
-named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
+`src/tasks/tasks-procedures.ts`, on the hosted oRPC router, is the Mac's Tasks tab's
+route group over the account's named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
 started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
@@ -1816,9 +1935,10 @@ teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its agents go with it, its number in the
 workspace it left kept for the links written with it, and
-`DELETE /api/plans/{id}` deletes it, its agents' rows going with it
-and their conversations stamped deleted, with the one the task's own Vespin
-kept where the row still names it (`deleteTask`),
+`DELETE /api/plans/{id}` stops each of its agents for good, then deletes
+it, its agents' rows going with it and their conversations stamped deleted
+(`deleteTask`), or answers `agent-not-ready` where an agent started
+meanwhile,
 the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has an agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting
@@ -1827,7 +1947,7 @@ with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
 each number once and at most three, as GitHub last answered a read of them.
 Four statements answer the whole list: the agents of every task listed with
-`agent.published` (migration 0078), their newest turns, the lines
+`agent.published` (migration `20261004103320_coding_agent_published`), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/task-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
@@ -1848,11 +1968,15 @@ account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, where the
 next segment is a task's id.
 
-`src/accounts/workspaces-app.ts` answers the account's workspaces
-(`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
+`src/accounts/workspaces-procedures.ts`, on the hosted oRPC router, answers
+the account's workspaces (`packages/features/src/workspace-wire.ts`), with
+their GitHub in `workspace-github-procedures.ts` and their invitations in
+`workspace-invitations-procedures.ts`; `src/accounts/workspaces-app.ts`
+serves only a workspace's photo, as its bytes. Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
-repositories come only from the Vespin GitHub App installations an owner or
-admin connects to it, one per GitHub account. Every request resolves the bearer first and ensures the
+repositories come from the Vespin GitHub App installations an owner or
+admin connects to it, one per GitHub account, and from those its members add
+on their own GitHub token ("The Vespin GitHub App" above). Every request resolves the bearer first and ensures the
 account's first workspace.
 
 - `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
@@ -1934,7 +2058,7 @@ a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
-A task's repository is `task.repository` (migration 0063), the full name
+A task's repository is `task.repository` (migration `20260930133000_plan_repository`), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
 where every task from before repositories stands and is no error. It is
 kept only once `workspaceRepository` on the `GitHubApp` confirms the
@@ -2032,9 +2156,11 @@ The conversation tables have no `prompts` table and no `tool_sets` table
 (`20260921141320_dead_tool_sets` dropped the second): a turn keeps the
 composed prompt's hash and the tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`coding_agent`, which
+conversation row names its kind (`CONVERSATION_KIND` in
+`packages/database/src/storage-vocabulary.ts`: `agent`, which
 `packages/database/src/models/agent-store.ts` opens, is the one any
-code still opens; `plan`, a task's own Vespin's, is opened no more), the
+code still opens, and `child` a subagent's or worker's; `main` and
+`observed` are older rows' kinds), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
@@ -2152,7 +2278,7 @@ replacement each wake every watch, so its reader reads again.
 reconnects or where the deployment has no `DATABASE_URL_UNPOOLED`, every
 `next` waits its caller's own poll, as every held read did before Vespin Sync;
 a watch on no topics always does, and a runtime that provides no hub, as a
-test may, stands on the clock. The hub's metrics (`luke.sync.*`) count
+test may, stands on the clock. The hub's metrics (`app.sync.*`) count
 notifications, wakes, fallback wakes, reconnects, and the milliseconds the
 listener stood down, and gauge the notification queue's usage; none carries a
 topic, an id, or a transaction id.
@@ -2168,22 +2294,46 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 `src/maintenance/maintenance-app.ts`, hands it the deployment's seams. Vercel crons run
 only on production deployments.
 
-The sweep ends what no request will, and it reads no word of any account.
-It runs two things in turn and answers what each did: the purge of
-conversations stamped deleted more than seven days ago, which is what a
-deleted task's agents' conversations come to, counted as `purged`; the
-sweep over turns still running past their kind's bound, an hour for a turn
-of any other conversation and a day and an hour for an agent's
-(`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
-`TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
-the service never heard and which are settled as failed for `abandoned`
-through the same write a turn's own end takes, at most fifty a sweep and
-counted as `abandoned`.
+The sweep ends what no request will. `MaintenanceSweeps`
+(`src/maintenance/maintenance-sweep.ts`) runs eighteen sweeps in turn and
+answers what each did; one that fails is logged and answered as failed while
+the rest still run, and any failure fails the cron's check-in. In order:
 
-It then fires the automations whose schedule is due ("Automations" below),
-at most twenty-five a sweep, counted as `automations.fired`, and acts on
-the runs still queued from the last hour, at most twelve a sweep and four
-at once, counted as `automations.started`, `skipped`, and `failed`.
+- `purged`: conversations stamped deleted more than seven days ago, which
+  is what a deleted task's agents' conversations come to, with their
+  sessions' sandboxes queued for deletion.
+- `abandoned`: turns still running past their kind's bound, an hour for a
+  turn of any other conversation and a day and an hour for an agent's
+  (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
+  `TURN_ABANDON.AGENT_AFTER_MS`), whose end the service never heard, settled
+  as failed for `abandoned` through the same write a turn's own end takes,
+  or as cancelled where a Stop went unconfirmed, at most fifty a sweep.
+- `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
+  that stopped beating within their lease, and local runners left warm past
+  their device's window.
+- `sandboxes`, `terminals`, `nativeSandboxes`, `eveSandboxes`, and
+  `sandboxRetention`: the Vercel Sandboxes queued for deletion deleted, and
+  agents' sandboxes stopped once no run and no terminal holds them, their
+  snapshot retention bounded.
+- `nativeWakeups`: native agents' due wakeups delivered, each as a message
+  from the service.
+- `withdrawnLines`: withdrawn lines no turn took within an agent's turn
+  bound deleted.
+- `automations`: the automations whose schedule is due fired
+  ("Automations" below), at most twenty-five a sweep, and the runs still
+  queued from the last hour acted on, at most twelve a sweep and four at
+  once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
+- `purgedPictures`: plan pictures uploaded a day ago that no save named.
+- `tokenPullRequests`: the open pull requests of agents on a member's own
+  GitHub token, which no webhook reaches, read on that token, their reviews,
+  comments, and checks among them, and the agent woken with what changed
+  (`src/github/token-pull-request-sweep.ts`).
+- `imageTemplates` and `repositorySnapshots`: the native agents' image
+  template moved on, and workspaces' repository snapshots past their age
+  deleted.
+- `agentQueues`: unpaused queues of idle agents handed on.
+- `hostPairings`: lapsed host pairings, and approved hosts that never
+  collected their secret, deleted.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance

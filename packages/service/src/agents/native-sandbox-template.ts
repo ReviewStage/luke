@@ -62,7 +62,7 @@ export const EVE_BASE_IMAGE = "vcr.vercel.com/vercel/eve/base:0.74.0";
 
 export const NATIVE_TEMPLATE = {
   /** Every template's name starts with this, its key after it. */
-  NAME_PREFIX: "luke-native-template-",
+  NAME_PREFIX: "agent-template-",
   /** How long a template's sandbox may run: a build is minutes, and one cut off is built again. */
   BUILD_TIMEOUT: Duration.minutes(45),
   /** How long a template may stand created with no build started before its builder is taken for gone. */
@@ -95,14 +95,22 @@ export const NATIVE_TEMPLATE = {
   SWEEP_PERIOD: Duration.minutes(1),
 } as const;
 
-/** The template's tags beside its key: where its build runs, and how the build ended. Note that they and `NATIVE_TEMPLATE.NAME_PREFIX` keep their old names, because the sweep finds the templates made before by them. */
+/**
+ * What every template's name started with before the product's rename,
+ * listed by the sweep alone, which deletes each such template once it is
+ * `SWEEP_AFTER` old, as it does another key's. Note that it can go a day
+ * after the rename deployed, once no template under it is left to delete.
+ */
+const TEMPLATE_NAME_PREFIX_BEFORE_RENAME = "luke-native-template-";
+
+/** The template's tags beside its key: where its build runs, and how the build ended. */
 const TEMPLATE_TAG = {
-  KEY: "lukeTemplate",
-  SESSION: "lukeTemplateSession",
-  BUILD: "lukeTemplateBuild",
+  KEY: "agentTemplate",
+  SESSION: "agentTemplateSession",
+  BUILD: "agentTemplateBuild",
   /** Set, to the instant, once a reader found the build ended well, before it snapshots it. */
-  BUILT: "lukeTemplateBuilt",
-  FAILED_AT: "lukeTemplateFailedAt",
+  BUILT: "agentTemplateBuilt",
+  FAILED_AT: "agentTemplateFailedAt",
 } as const;
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
@@ -449,11 +457,15 @@ export const sweepTemplates = (
   Effect.gen(function* () {
     const current = (yield* sweepCurrent(api, build)).state;
     const now = yield* Clock.currentTimeMillis;
-    const listed = yield* api.listNamed(NATIVE_TEMPLATE.NAME_PREFIX);
+    const prefixes = [NATIVE_TEMPLATE.NAME_PREFIX, TEMPLATE_NAME_PREFIX_BEFORE_RENAME];
+    const listed = (yield* Effect.forEach(prefixes, (prefix) =>
+      Effect.map(api.listNamed(prefix), (named) =>
+        named.filter((sandbox) => sandbox.name.startsWith(prefix)),
+      ),
+    )).flat();
     let deleted = 0;
     for (const sandbox of listed) {
-      if (sandbox.name === build.name || !sandbox.name.startsWith(NATIVE_TEMPLATE.NAME_PREFIX))
-        continue;
+      if (sandbox.name === build.name) continue;
       if (!olderThan(now, sandbox.createdAt, NATIVE_TEMPLATE.SWEEP_AFTER)) continue;
       yield* api.deleteSandbox(sandbox.name);
       deleted += 1;

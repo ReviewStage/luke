@@ -57,7 +57,7 @@ function listed(
 }
 
 test("starting, naming, and ending a shell target its session exactly and carry a name as one argument", () => {
-  const exact = `=luke-${SHELL_A}`;
+  const exact = `=terminal-${SHELL_A}`;
   const hostile = "dev server; rm -rf / $(id) 'q'";
   const started = startTerminal(SHELL_A, hostile);
   const renamed = renameTerminal(SHELL_A, hostile);
@@ -90,16 +90,16 @@ test("every command runs with every capability dropped, on a tmux server of its 
     assert.deepEqual(ask.args.slice(0, CAPABILITIES_DROPPED.length), CAPABILITIES_DROPPED);
     assert.doesNotMatch(scriptOf(ask) ?? "", /\b(sudo|apt-get|dnf)\b/);
     // A server on tmux's default socket may predate the drop and hold the capabilities still.
-    assert.match(scriptOf(ask) ?? "", /tmux -L luke-unprivileged "\$@"/);
+    assert.match(scriptOf(ask) ?? "", /tmux -L terminal "\$@"/);
   }
 });
 
 test("a list reads back a tab's shells oldest first, named and marked running as they stand, and nothing else tmux holds", () => {
   const stdout = [
-    listed(`luke-${SHELL_B}`, 200, "dev server", "node", "/workspace/repository/apps/web"),
+    listed(`terminal-${SHELL_B}`, 200, "dev server", "node", "/workspace/repository/apps/web"),
     listed("main", 50, "", "bash", "/root"),
-    listed("luke-not-an-id", 60, "", "bash", "/root"),
-    listed(`luke-${SHELL_A}`, 100, "", "zsh", "/workspace/repository"),
+    listed("terminal-not-an-id", 60, "", "bash", "/root"),
+    listed(`terminal-${SHELL_A}`, 100, "", "zsh", "/workspace/repository"),
     "",
   ].join("\n");
 
@@ -116,7 +116,7 @@ test("a list reads back a tab's shells oldest first, named and marked running as
 });
 
 test("a title or folder with spaces is read back whole, and a list that failed is none at all", () => {
-  const stdout = listed(`luke-${SHELL_A}`, 100, "dev  server", "node", "/workspace/my app");
+  const stdout = listed(`terminal-${SHELL_A}`, 100, "dev  server", "node", "/workspace/my app");
 
   assert.deepEqual(terminalsOf({ exitCode: 0, stdout, stderr: "" }), [
     { id: SHELL_A, title: "dev  server", command: "node", cwd: "/workspace/my app", running: true },

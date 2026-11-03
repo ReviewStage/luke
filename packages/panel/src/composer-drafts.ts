@@ -197,7 +197,7 @@ const revisedPlaceSchema = Schema.Struct({
   thread: Schema.optionalKey(Schema.Literal(true)),
 });
 
-/** The places of boxes since removed, as a build from before stored them: Chat's, a channel's or a thread's and an ask's answer, and the Inbox's New thread's. */
+/** The places of boxes since removed, as a build from before stored them: Chat's and its ask's answer, and the Inbox's New thread's. */
 const RETIRED_DRAFT_PLACE = {
   CHAT: "chat",
   CHAT_ASK: "chatAsk",

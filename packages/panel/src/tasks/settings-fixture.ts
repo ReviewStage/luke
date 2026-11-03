@@ -54,6 +54,7 @@ import {
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -546,6 +547,33 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   };
 }
 
+/* ----- Acme's Slack bot ----- */
+
+/** The repositories Acme's GitHub reaches, which the Slack bot's pickers list. */
+const ACME_REPOSITORIES = ["relay", "web", "api"].map((name, index) => ({
+  owner: "acme",
+  name,
+  fullName: `acme/${name}`,
+  defaultBranch: "main",
+  private: true,
+  updatedAt: Date.parse("2026-10-06T11:00:00Z") - index * 86_400_000,
+}));
+
+/** Acme's Slack bot as the staged page last changed it: connected, a default repository, and the team's channels. */
+let acmeSlackBot: WorkspaceSlackBot = {
+  configured: true,
+  team: { id: "T0ACME", name: "Acme" },
+  notifications: true,
+  defaultRepository: "acme/relay",
+  channels: [
+    { id: "C0ENG", name: "eng", private: false, member: true, repository: "acme/api" },
+    { id: "C0BUGS", name: "bugs", private: false, member: true },
+    { id: "G0INCIDENTS", name: "incidents", private: true, member: true },
+    { id: "C0DESIGN", name: "design", private: false, member: false },
+    { id: "C0GENERAL", name: "general", private: false, member: false },
+  ],
+};
+
 /* ----- The act door ----- */
 
 type StagedAnswer<Kind extends PortActKind> = (
@@ -707,13 +735,36 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       workspaceId === WORKSPACE.ACME ? [{ installationId: "sentry-acme", account: "acme" }] : [],
   }),
   [ACT_KIND.WORKSPACE_SLACK_BOT_READ]: ({ workspaceId }) =>
-    workspaceId === WORKSPACE.ACME
-      ? { configured: true, team: { id: "T0ACME", name: "Acme" }, notifications: true }
-      : { configured: true },
-  [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => ({
-    configured: true,
-    team: { id: "T0ACME", name: "Acme" },
-    notifications,
+    workspaceId === WORKSPACE.ACME ? acmeSlackBot : { configured: true },
+  [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => {
+    acmeSlackBot = { ...acmeSlackBot, notifications };
+    return acmeSlackBot;
+  },
+  [ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY]: ({ repository }) => {
+    const { defaultRepository: _cleared, ...rest } = acmeSlackBot;
+    acmeSlackBot = repository === null ? rest : { ...rest, defaultRepository: repository };
+    return acmeSlackBot;
+  },
+  [ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL]: ({ channelId, member, repository }) => {
+    const channels = (acmeSlackBot.channels ?? []).map((channel) => {
+      if (channel.id !== channelId) return channel;
+      const { repository: _named, ...plain } = channel;
+      const joined = member ?? channel.member;
+      // A channel the bot left keeps no repository, as the service forgets it.
+      const kept = !joined || repository === null ? undefined : (repository ?? channel.repository);
+      return kept === undefined
+        ? { ...plain, member: joined }
+        : { ...plain, member: joined, repository: kept };
+    });
+    acmeSlackBot = { ...acmeSlackBot, channels };
+    return acmeSlackBot;
+  },
+  [ACT_KIND.TASKS_REPOSITORIES]: ({ workspaceId }) => ({
+    repositories: {
+      installed: true,
+      repositories: workspaceId === WORKSPACE.ACME ? ACME_REPOSITORIES : [],
+      installationUrl: "https://github.com/apps/vespin-agent/installations/new",
+    },
   }),
   [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>

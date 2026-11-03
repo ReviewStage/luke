@@ -291,9 +291,8 @@ const NO_PAGES: readonly PageLine[] = [];
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
- * pinned there, since the Inbox is no plan's page. Beside a channel's
- * stream it holds the thread open there as its Inbox tab
- * (`use-side-panel.ts`'s `thread`).
+ * pinned there, since the Inbox is no plan's page, and its one Inbox tab
+ * is named for the thread rather than the task's Inbox (`thread`).
  */
 export const SIDE_PANEL_HOLDER = {
   TASK: "plan",
@@ -992,7 +991,7 @@ function stripTabs(input: {
   shownAgent: string | undefined;
   /** The open plan, or the agent on no task, whose pages a page tab's card previews, and whose panel a closed cloud Browser draft leaves. */
   pagePlace: PagePlace;
-  /** Whether the Inbox kind holds a channel's thread, as it does beside the window's Inbox, and is named Thread. */
+  /** Whether the Inbox kind holds one thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
@@ -1293,7 +1292,7 @@ function PanelTabs({
     onOpenAgent,
     shownAgent,
     pagePlace,
-    // Note that beside the window's Inbox the one Inbox tab is a channel's thread, never a task's Inbox (`use-side-panel.ts`'s `thread`).
+    // Note that beside the window's Inbox the one Inbox tab is the chosen thread, never a task's Inbox.
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);

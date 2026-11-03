@@ -83,7 +83,7 @@ function polledTaskList(unchanged: boolean): WireValue {
 export const NOTION_SIGN_IN = "https://notion.example/oauth/authorize";
 
 /** Where the fake sends a browser to install the GitHub App on a workspace. */
-export const GITHUB_INSTALL = "https://github.com/apps/luke/installations/new";
+export const GITHUB_INSTALL = "https://github.com/apps/vespin-agent/installations/new";
 
 /** One request the fake answered: its method and path, never a header. */
 interface SeenRequest {
@@ -119,7 +119,7 @@ export const WORKSPACE_MEMBER = {
 export const GITHUB_REPOSITORIES = {
   installed: true,
   repositories: [],
-  installationUrl: "https://github.com/apps/luke/installations/new",
+  installationUrl: "https://github.com/apps/vespin-agent/installations/new",
 } as const;
 
 /** How the fake starts: signed in or not, and where the account chose its app links open, if it chose. */

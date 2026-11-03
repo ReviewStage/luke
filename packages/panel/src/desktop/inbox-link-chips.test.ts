@@ -209,7 +209,6 @@ async function inbox(options: {
           onClose: () => undefined,
           onChoose: setChosen,
           onOpenItem: () => undefined,
-          onOpenChannel: () => undefined,
           onClear: () => setChosen(undefined),
           pages: undefined,
           onTaskAgents: () => undefined,

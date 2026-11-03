@@ -29,7 +29,7 @@ const REPOSITORY = "acme/relay";
 const LINKS = [
   `Read [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
   `[the store](https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5),`,
-  "https://linear.app/acme/issue/LUKE-142/fix-the-thing, and [the docs](https://example.com/docs).",
+  "https://linear.app/acme/issue/ACME-142/fix-the-thing, and [the docs](https://example.com/docs).",
   "Not `https://linear.app/acme/issue/LUKE-9`.",
 ].join(" ");
 
@@ -91,7 +91,7 @@ function chips(container: HTMLElement): [string | undefined, string | null][] {
 const THREE_CHIPS = [
   ["section", "the rollout"],
   ["file", "the store"],
-  ["link", "LUKE-142/fix-the-thing"],
+  ["link", "ACME-142/fix-the-thing"],
 ];
 
 /** The same chips where the page's plan is at hand, whose heading names the section now whatever its link was labelled. */

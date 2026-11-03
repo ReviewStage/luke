@@ -200,7 +200,7 @@ import {
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
  * tail, to a bound. One agent messages another with `message_agent`
- * (`coder-host/agent-message.ts`). A start takes the one path the Start button's does
+ * (`coder-host/agent-message.ts`). A start takes the one path every other start does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
@@ -240,7 +240,7 @@ import {
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice.
  * A task's change takes the one path the member's own task menu does
- * (`tasks-app.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
+ * (`tasks-procedures.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
  * the caller acts for: a new name, a repository confirmed through the
  * workspace's installation or none, where it stands, or that member's own
  * pin, on any task of the caller's workspace, a teammate's among them. A
@@ -819,8 +819,8 @@ export const START_AGENT_TOOL = {
   name: AGENT_TOOL.START_AGENT,
   description:
     "Start a new agent on the task you work on, or on another task of your workspace by " +
-    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start ` +
-    "button would: on the task's plan itself with no prompt, or on the prompt given in the " +
+    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer would: ` +
+    "on the task's plan itself with no prompt, or on the prompt given in the " +
     "plan's place, with the note after either and any pictures images names, which it sees as " +
     "images. Start it on the task you work on, taskId left " +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
@@ -2068,7 +2068,7 @@ export const reachedRepository = (
 
 /**
  * One call of `update_task`: a task of the caller's workspace changed as the
- * member's own menu changes it (`updateTask`, which `tasks-app.ts`'s PATCH
+ * member's own menu changes it (`updateTask`, which `tasks-procedures.ts`'s PATCH
  * runs), for the member the caller acts for, its repository confirmed first
  * as the PATCH confirms one, or why not. Note that the task is read first, on
  * that member's standing, both to hold it to the caller's workspace and to

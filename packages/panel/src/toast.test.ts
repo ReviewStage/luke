@@ -335,7 +335,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.equal(issues.length, 1, "the refusal opens no issue");
   const [issue] = issues;
   assert.deepEqual(issue?.hint, {
-    mechanism: { type: "auto.luke.shown_failure", handled: true },
+    mechanism: { type: "auto.vespin.shown_failure", handled: true },
     captureContext: {
       level: "error",
       fingerprint: ["shown-failure", "agent.stop", "[redacted]"],

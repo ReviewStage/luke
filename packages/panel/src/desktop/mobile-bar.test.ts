@@ -6,8 +6,7 @@ import { mobileBarShown } from "./mobile-bar.js";
 
 /**
  * mobile-bar.test.ts -- a phone's bar stands over the Inbox's list, and
- * gives the whole screen to an item chosen over it, a channel's narrowed
- * Inbox alike.
+ * gives the whole screen to an item chosen over it.
  */
 
 const CHOSEN = { taskId: "task-1", itemId: "item-1" } as const;

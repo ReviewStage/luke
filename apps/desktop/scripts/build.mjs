@@ -158,7 +158,7 @@ function sentryPlugins() {
     sentryEsbuildPlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "stage-review",
-      project: "luke-desktop",
+      project: "vespin-desktop",
       release: { name: sentryRelease },
       errorHandler: (error) => {
         console.warn(

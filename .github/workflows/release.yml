@@ -123,7 +123,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          key_directory=$(mktemp -d "$RUNNER_TEMP/luke-notary.XXXXXX")
+          key_directory=$(mktemp -d "$RUNNER_TEMP/vespin-notary.XXXXXX")
           trap 'rm -rf "$key_directory"' EXIT
           APPLE_API_KEY_PATH="$key_directory/AuthKey_$APPLE_API_KEY_ID.p8"
           printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$APPLE_API_KEY_PATH"
@@ -145,8 +145,8 @@ jobs:
             exit 1
           fi
 
-          if [[ -z $(find "$APP_PATH" -name LUKE-LICENSE.txt -print -quit) ]]; then
-            echo "error: LUKE-LICENSE.txt is missing from the application bundle" >&2
+          if [[ -z $(find "$APP_PATH" -name VESPIN-LICENSE.txt -print -quit) ]]; then
+            echo "error: VESPIN-LICENSE.txt is missing from the application bundle" >&2
             exit 1
           fi
 
@@ -208,7 +208,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: luke-${{ env.VERSION }}-macos-arm64-rehearsal
+          name: vespin-${{ env.VERSION }}-macos-arm64-rehearsal
           path: |
             ${{ env.DIST_DIR }}/${{ env.ASSET_NAME }}
             ${{ env.DIST_DIR }}/${{ env.CHECKSUM_NAME }}

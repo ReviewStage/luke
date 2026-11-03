@@ -68,7 +68,7 @@ function fakeEve(refusing = false) {
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
   };
-  return { sent, eveFor: () => Effect.succeed(sessions) };
+  return { sent, sessionsFor: () => Effect.succeed(sessions) };
 }
 
 /** The words of a message sent to eve. */
@@ -107,7 +107,7 @@ const openAgent = Effect.gen(function* () {
 
 /** One sweep at the instant given, over the eve given. */
 const sweepAt = (at: Date, eve: ReturnType<typeof fakeEve>) =>
-  sweepNativeWakeups(eve.eveFor, at).pipe(Effect.provide(githubReaching([]).layer));
+  sweepNativeWakeups(eve.sessionsFor, at).pipe(Effect.provide(githubReaching([]).layer));
 
 /** The words the session was sent, in order. */
 const sentTo = (eve: ReturnType<typeof fakeEve>, sessionId: string) =>

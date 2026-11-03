@@ -53,12 +53,12 @@ function button(name: string): HTMLButtonElement {
   );
 }
 
-/** A dialog that asks to archive a channel, its act running once pressed. */
+/** A dialog that asks to archive a task, its act running once pressed. */
 function Asking(): React.JSX.Element {
   const [running, setRunning] = useState(false);
   return createElement(Dialog, {
     open: true,
-    title: "Archive #design?",
+    title: "Archive Launch plan?",
     onDismiss: () => undefined,
     actions: createElement(DialogActions, {
       onCancel: () => undefined,

@@ -8,7 +8,12 @@ import { agentTable } from "../schemas/agent.js";
 import { member, user } from "../schemas/auth.js";
 import { integrationConnection } from "../schemas/integration.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { slackAgentThread, slackInstallation, slackMember } from "../schemas/slack-installation.js";
+import {
+  slackAgentThread,
+  slackChannelRepository,
+  slackInstallation,
+  slackMember,
+} from "../schemas/slack-installation.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
 /**
@@ -33,8 +38,12 @@ import type { TaskStoreEffect } from "./task-store.js";
  * email Slack holds for them (`slackMemberByEmail`); an agent it starts
  * works in the repository the member's latest agent in the workspace worked
  * in (`slackStartRepository`) unless the message names one. A thread an agent was
- * started from is kept against it (`slackAgentThread`), and each of the
- * agent's settled turns is claimed there once (`claimSlackThreadTurn`).
+ * started from is kept against it (`slackAgentThread`), and moved to the
+ * agent that continues it where that one ended (`moveSlackAgentThread`), and
+ * each of the agent's settled turns is claimed there once (`claimSlackThreadTurn`).
+ * An owner or admin names the repository Slack starts default to, for the
+ * workspace and for each channel (`slackStartRepositories`); a channel's is
+ * forgotten when the bot leaves it.
  */
 
 /** What linking names: the workspace, the Slack team the bot answers for, and the member connecting it. */
@@ -319,6 +328,29 @@ const insertAgentThread = SqlSchema.void({
     ),
 });
 
+const updateAgentThread = SqlSchema.void({
+  Request: Schema.Struct({
+    ...SlackThreadSchema.fields,
+    fromAgentId: Schema.String,
+    agentId: Schema.String,
+    userId: Schema.String,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(slackAgentThread)
+        .set({ agentId: row.agentId, userId: row.userId, postedTurnId: null })
+        .where(
+          and(
+            eq(slackAgentThread.organizationId, row.organizationId),
+            eq(slackAgentThread.channelId, row.channelId),
+            eq(slackAgentThread.threadTs, row.threadTs),
+            eq(slackAgentThread.agentId, row.fromAgentId),
+          ),
+        ),
+    ),
+});
+
 const findAgentThread = SqlSchema.findOneOption({
   Request: SlackThreadSchema,
   Result: Schema.Struct({ agentId: Schema.String, userId: Schema.String }),
@@ -357,6 +389,102 @@ const claimThreadTurn = SqlSchema.findAll({
           channelId: slackAgentThread.channelId,
           threadTs: slackAgentThread.threadTs,
         }),
+    ),
+});
+
+/** The workspace's default repository for Slack starts. */
+const findDefaultRepository = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ repository: Schema.NullOr(Schema.String) }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({ repository: slackInstallation.defaultRepository })
+        .from(slackInstallation)
+        .where(eq(slackInstallation.organizationId, organizationId)),
+    ),
+});
+
+const updateDefaultRepository = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ organizationId, repository, now }) =>
+    Database.use((db) =>
+      db
+        .update(slackInstallation)
+        .set({ defaultRepository: repository, updatedAt: now })
+        .where(eq(slackInstallation.organizationId, organizationId))
+        .returning({ organizationId: slackInstallation.organizationId }),
+    ),
+});
+
+const ChannelRepositorySchema = Schema.Struct({
+  channelId: Schema.String,
+  repository: Schema.String,
+});
+
+/** One channel's default repository for Slack starts. */
+export type SlackChannelRepository = typeof ChannelRepositorySchema.Type;
+
+const findChannelRepositories = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: ChannelRepositorySchema,
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({
+          channelId: slackChannelRepository.channelId,
+          repository: slackChannelRepository.repository,
+        })
+        .from(slackChannelRepository)
+        .where(eq(slackChannelRepository.organizationId, organizationId))
+        .orderBy(asc(slackChannelRepository.channelId)),
+    ),
+});
+
+const upsertChannelRepository = SqlSchema.void({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    channelId: Schema.String,
+    repository: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .insert(slackChannelRepository)
+        .values({
+          organizationId: row.organizationId,
+          channelId: row.channelId,
+          repository: row.repository,
+          updatedAt: row.now,
+        })
+        .onConflictDoUpdate({
+          target: [slackChannelRepository.organizationId, slackChannelRepository.channelId],
+          set: {
+            repository: sql`excluded.repository`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+        }),
+    ),
+});
+
+const deleteChannelRepository = SqlSchema.void({
+  Request: Schema.Struct({ organizationId: Schema.String, channelId: Schema.String }),
+  execute: ({ organizationId, channelId }) =>
+    Database.use((db) =>
+      db
+        .delete(slackChannelRepository)
+        .where(
+          and(
+            eq(slackChannelRepository.organizationId, organizationId),
+            eq(slackChannelRepository.channelId, channelId),
+          ),
+        ),
     ),
 });
 
@@ -504,6 +632,13 @@ export function recordSlackAgentThread(thread: SlackAgentThread): TaskStoreEffec
   return Effect.flatMap(DateTime.nowAsDate, (now) => insertAgentThread({ ...thread, now }));
 }
 
+/** Moves the thread from the agent it was kept for to the one that continues it, started by the member named, so its later messages and settled turns go there; a thread moved to another agent since stands. */
+export function moveSlackAgentThread(
+  thread: SlackAgentThread & { readonly fromAgentId: string },
+): TaskStoreEffect<void> {
+  return updateAgentThread(thread);
+}
+
 /** The agent the thread was started from, and the member who started it; nothing for a thread no agent was started from. */
 export function slackAgentThreadAt(
   organizationId: string,
@@ -519,4 +654,44 @@ export function claimSlackThreadTurn(
   turnId: string,
 ): TaskStoreEffect<readonly (typeof SlackThreadSchema.Type)[]> {
   return claimThreadTurn({ agentId, turnId });
+}
+
+/** The workspace's default repository for Slack starts, and each channel's, as an owner or admin named them. */
+export function slackStartRepositories(organizationId: string): TaskStoreEffect<{
+  readonly defaultRepository: string | null;
+  readonly channels: readonly SlackChannelRepository[];
+}> {
+  return Effect.gen(function* () {
+    const found = yield* findDefaultRepository(organizationId);
+    const channels = yield* findChannelRepositories(organizationId);
+    const defaultRepository = Option.getOrNull(
+      Option.flatMapNullishOr(found, (row) => row.repository),
+    );
+    return { defaultRepository, channels };
+  });
+}
+
+/** Names the workspace's default repository for Slack starts, or clears it with null; false where the bot is not connected. */
+export function writeSlackDefaultRepository(
+  organizationId: string,
+  repository: string | null,
+): TaskStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      updateDefaultRepository({ organizationId, repository, now }),
+      (rows) => rows.length > 0,
+    ),
+  );
+}
+
+/** Names a channel's default repository for Slack starts, or forgets it with null; fails where the bot is not connected, since the row is keyed under its installation. */
+export function writeSlackChannelRepository(
+  organizationId: string,
+  channelId: string,
+  repository: string | null,
+): TaskStoreEffect<void> {
+  if (repository === null) return deleteChannelRepository({ organizationId, channelId });
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    upsertChannelRepository({ organizationId, channelId, repository, now }),
+  );
 }

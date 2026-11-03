@@ -8,7 +8,6 @@ import { afterPaint } from "../after-paint.js";
 import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
-  channelGroups,
   EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
@@ -60,15 +59,10 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * sidebar, the side panel, and the window's history, which follow the
  * window's choice, draw it a frame later rather than holding up the thread.
  *
- * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under the Inbox's own view choices, so a scope turned
- * in a channel stands in every channel and in the Inbox, and across a
- * launch. Its order, the latest first, is the Inbox's own.
- *
- * Narrowed to a task instead, it lists and counts every item of that task
- * alone (`taskGroups`), open and settled, addressed to anyone, as the
- * task's own Inbox tab once listed them, whatever view the Inbox keeps,
- * which it leaves as it stands (`TASK_LISTS`).
+ * Narrowed to a task, it lists and counts every item of that task alone
+ * (`taskGroups`), open and settled, addressed to anyone, as the task's own
+ * Inbox tab once listed them, whatever view the Inbox keeps, which it
+ * leaves as it stands (`TASK_LISTS`).
  */
 
 /** What an Inbox narrowed to a task lists: every item the task holds, open or settled, whoever it is addressed to. */
@@ -162,22 +156,14 @@ function useChoiceFirst(
   return { chosen: stands ? newest.choice : chosen, settling: stands, choose, clear };
 }
 
-/** What the window's Inbox is narrowed to: a channel, or a task, or neither; never both. */
-interface InboxNarrowing {
-  readonly channelId?: string | undefined;
-  readonly taskId?: string | undefined;
-}
-
 /**
- * The window's Inbox as it is read and listed, narrowed to a channel or a
- * task where one is given, and its chosen item; see the module's head, its
- * list held still while it is shown (`use-held-inbox-list.ts`).
+ * The window's Inbox as it is read and listed, narrowed to `narrowedTask`
+ * where one is given, and its chosen item; see the module's head, its list
+ * held still while it is shown (`use-held-inbox-list.ts`).
  */
-export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing = {}) {
-  const { channelId, taskId: narrowedTask } = narrowing;
+export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
-  // Note that a channel lists under the Inbox's kept choices, so one scope stands wherever the page is narrowed.
   const choices = useInboxViewChoices();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
@@ -307,7 +293,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@repo/host`'s `inbox-collections.ts`).
   const everyTask = tasks.tasks;
   const listedWorkspace = tasks.workspace?.id;
-  const everyChannel: readonly InboxGroup[] = useMemo(
+  const everyItem: readonly InboxGroup[] = useMemo(
     () =>
       inboxGroups(held, {
         tasks: holdings,
@@ -317,13 +303,10 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
       }),
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
-  const keptInChannel = asked?.opened === true ? asked.itemId : undefined;
-  const standing = useMemo(() => {
-    if (narrowedTask !== undefined) return taskGroups(everyChannel, narrowedTask);
-    return channelId === undefined
-      ? everyChannel
-      : channelGroups(everyChannel, channelId, keptInChannel);
-  }, [everyChannel, channelId, narrowedTask, keptInChannel]);
+  const standing = useMemo(
+    () => (narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask)),
+    [everyItem, narrowedTask],
+  );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // The list's search, which narrows what it lists, never what it counts.

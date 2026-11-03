@@ -199,7 +199,7 @@ it.layer(probeDB)("the drift check on a synced table", (it) => {
 
       assert.deepEqual(
         before.map((object) => object.object),
-        ["luke_sync_update"],
+        ["app_sync_update"],
       );
       assert.deepEqual(after, []);
     }),
@@ -212,8 +212,8 @@ it.layer(probeDB)("the drift check on a synced table", (it) => {
       assert.deepEqual(
         drift.map((object) => [object.table, object.object, object.rendered]).sort(),
         [
-          ["sync_probe", "luke_sync_update", undefined],
-          ["sync_probe", "luke_sync_write", undefined],
+          ["sync_probe", "app_sync_update", undefined],
+          ["sync_probe", "app_sync_write", undefined],
         ],
       );
     }),

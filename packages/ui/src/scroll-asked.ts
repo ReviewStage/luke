@@ -7,8 +7,7 @@
  * frame leave it wherever the hidden rows clamped it. None of those is the
  * reader's, so a log that follows takes a scroll up as theirs only where
  * their wheel, touch, press or key came just before it, or a script said
- * here that it was about to scroll the box for them, as find, a reveal, or
- * a channel's unread line does.
+ * here that it was about to scroll the box for them, as find or a reveal does.
  */
 
 /** How long after a script's word a scroll of its box is still read as asked for, in milliseconds: long enough for a scroll a few frames late, as a virtualized row's is. */

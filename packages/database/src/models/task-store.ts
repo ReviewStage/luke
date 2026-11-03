@@ -60,7 +60,6 @@ import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { agentAutomationNameSql } from "./agent-name.js";
-import { ensureGeneralChannel } from "./channel-store.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
 import { type Device, devicesNamed } from "./device-store.js";
 import {
@@ -1461,13 +1460,6 @@ function pinAsAsked(
 }
 
 /**
- * The task's agents and inbox moved along with it to another workspace, so
- * no row of the task's stays tied to the workspace it left, whose deletion
- * would otherwise take them with it. Note that the inbox's threads go to the
- * new workspace's #general, because a channel is one workspace's and the one
- * a thread stood in has no counterpart there.
- */
-/**
  * Every member's entries for the plan taken out of their sections, as it
  * moves to another workspace: a section is one workspace's, so a plan that
  * leaves it leaves every section there, and one moved back later stands
@@ -1479,22 +1471,20 @@ const leaveSections = SqlSchema.void({
     Database.use((db) => db.delete(taskSectionEntry).where(eq(taskSectionEntry.taskId, taskId))),
 });
 
+/**
+ * The task's agents and inbox moved along with it to another workspace, so
+ * no row of the task's stays tied to the workspace it left, whose deletion
+ * would otherwise take them with it.
+ */
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
   taskId: string,
   organizationId: string,
-  moved: boolean,
-  now: Date,
 ) {
   yield* Database.use((db) =>
     db.update(agentTable).set({ organizationId }).where(eq(agentTable.taskId, taskId)),
   );
-  // A change naming the workspace the task stands in leaves its threads in their channels.
-  const channel = moved ? { channelId: yield* ensureGeneralChannel(organizationId, now) } : {};
   yield* Database.use((db) =>
-    db
-      .update(inboxItem)
-      .set({ organizationId, ...channel })
-      .where(eq(inboxItem.taskId, taskId)),
+    db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.taskId, taskId)),
   );
   yield* Database.use((db) =>
     db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
@@ -1786,7 +1776,7 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           yield* broughtBackWithTask(taskId, finishedAt);
         }
         if (changes.organizationId !== undefined) {
-          yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
+          yield* followingAgentsAndInbox(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) {
             yield* leaveSections(taskId);
             yield* leaveTaskBlocks(taskId);

@@ -110,7 +110,7 @@ const openDeliveringRun = () =>
 
 it.layer(getTestDB())("an automation run's result sent on Slack", (it) => {
   it.effect(
-    "a run that delivers to Slack sends its agent's final message to its owner once, as mrkdwn with a link to the agent",
+    "a run that delivers to Slack sends its agent's final message to its owner once, as a markdown block with a link to the agent",
     () =>
       Effect.gen(function* () {
         const slack = recordingSlack();
@@ -132,12 +132,12 @@ it.layer(getTestDB())("an automation run's result sent on Slack", (it) => {
         assert.ok(message !== undefined);
         assert.equal(message.channel, SLACK_USER);
         assert.match(message.text ?? "", /^Email digest: /u);
-        const blocks = JSON.stringify(JSON.parse(message.blocks ?? "[]"));
-        assert.ok(
-          blocks.includes("*3 threads* need you. See <https://vespin.dev/acme/plan/1|the plan>."),
-          blocks,
-        );
-        assert.ok(blocks.includes(`/agent/${agent.id}|Open in Vespin>`), blocks);
+        const blocks = JSON.parse(message.blocks ?? "[]");
+        assert.deepEqual(blocks[1], {
+          type: "markdown",
+          text: "**3 threads** need you. See [the plan](https://vespin.dev/acme/plan/1).",
+        });
+        assert.ok(JSON.stringify(blocks).includes(`/agent/${agent.id}|Open in Vespin>`));
 
         // The settle heard again, as a retried batch would, sends nothing twice.
         yield* deliverRunToSlack({

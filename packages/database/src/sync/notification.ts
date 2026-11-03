@@ -14,7 +14,7 @@
 import { Schema } from "effect";
 
 /** The channel every synced table notifies and every listener listens on. */
-export const SYNC_CHANNEL = "luke_sync";
+export const SYNC_CHANNEL = "app_sync";
 
 /**
  * Postgres refuses a payload of 8000 bytes or more (`NOTIFY`'s default

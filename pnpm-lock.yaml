@@ -85,9 +85,6 @@ patchedDependencies:
   drizzle-orm@1.0.0-rc.4:
     hash: 7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b
     path: patches/drizzle-orm@1.0.0-rc.4.patch
-  eve@0.74.0:
-    hash: 0891deee83916529a6a25210218b6f98e5df6857145242e4737c1922ff974eb9
-    path: patches/eve@0.74.0.patch
 
 importers:
 
@@ -1008,7 +1005,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(patch_hash=0891deee83916529a6a25210218b6f98e5df6857145242e4737c1922ff974eb9)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -10778,7 +10775,7 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.32.1(zod@4.5.4)
       ai: 7.0.135(zod@4.5.4)
       better-auth: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4)(next@16.3.1)(pg@8.23.0)(react-dom@19.2.8)(react@19.2.8)(vitest@5.0.0)
-      eve: 0.74.0(patch_hash=0891deee83916529a6a25210218b6f98e5df6857145242e4737c1922ff974eb9)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+      eve: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
 
   '@vercel/detect-agent@1.2.5': {}
 
@@ -11955,7 +11952,7 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eve@0.74.0(patch_hash=0891deee83916529a6a25210218b6f98e5df6857145242e4737c1922ff974eb9)(@opentelemetry/api@1.9.1)(ai@7.0.135):
+  eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135):
     dependencies:
       ai: 7.0.135(zod@4.5.4)
       nitro: 3.0.260903-beta

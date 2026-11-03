@@ -132,10 +132,10 @@ it.effect("a web batch is stamped web, and one that names no platform is stamped
 
     const [webItem] = web.forwarded[0]?.body.batch ?? [];
     assert.equal(webItem?.properties.platform, "web");
-    assert.equal(webItem?.properties.$lib, "luke-web");
+    assert.equal(webItem?.properties.$lib, "vespin-web");
     const [olderItem] = older.forwarded[0]?.body.batch ?? [];
     assert.equal(olderItem?.properties.platform, "desktop");
-    assert.equal(olderItem?.properties.$lib, "luke-desktop");
+    assert.equal(olderItem?.properties.$lib, "vespin-desktop");
   }),
 );
 

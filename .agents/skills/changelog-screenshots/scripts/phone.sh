@@ -5,7 +5,7 @@ set -euo pipefail
 # worktree, opens /app.html?fixture=<profile> in Safari on an iPhone
 # simulator, and writes the device screen (rounded, alpha-masked) to <out.png>.
 #
-# The worktree is $SHOTS_WORKTREE (default ~/Developer/luke-changelog-shots),
+# The worktree is $SHOTS_WORKTREE (default ~/Developer/changelog-shots),
 # checked out at the release with its staging applied and installed (build.sh,
 # APP_SHOT_PATCH_DIST=0); the web app's fixture switch exists from 0.21.0 on.
 # The simulator is $APP_SHOT_PHONE (default "iPhone 17"), dark, at 9:41. Its
@@ -14,13 +14,13 @@ set -euo pipefail
 
 out=${1:?usage: phone.sh <out.png> <profile>}
 profile=${2:?usage: phone.sh <out.png> <profile>}
-worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
+worktree=${SHOTS_WORKTREE:-$HOME/Developer/changelog-shots}
 name=${APP_SHOT_PHONE:-iPhone 17}
 url="http://127.0.0.1:5199/app.html?fixture=$profile"
 device=$(xcrun simctl list devices available | awk -F'[()]' -v name="$name" 'index($0, "    " name " (") == 1 {print $2; exit}')
 [[ -n $device ]] || { printf 'error: no simulator named %s\n' "$name" >&2; exit 1; }
 mkdir -p "$(dirname -- "$out")"
-(cd "$worktree/apps/web" && exec ./node_modules/.bin/vite --host 127.0.0.1 --port 5199 --strictPort >/tmp/luke-phone-vite.log 2>&1) &
+(cd "$worktree/apps/web" && exec ./node_modules/.bin/vite --host 127.0.0.1 --port 5199 --strictPort >/tmp/release-phone-vite.log 2>&1) &
 vite=$!
 # Note that we stop the server on every exit, because a failed capture must not leave it holding the port.
 trap 'kill $vite 2>/dev/null || true' EXIT

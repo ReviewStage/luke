@@ -42,10 +42,12 @@ import { Data, Duration, Effect, Option, type Redacted, Ref, Result, Schema } fr
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { agentPublished } from "../agents/coder-host/published.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import {
   AGENT_WAKE,
   type AgentWake,
+  appAvatarOf,
+  githubAvatarOf,
   githubIdOf,
   type HeadChecksRead,
   headChecksFor,
@@ -121,7 +123,11 @@ type PollFailure = GitHubUnavailable | TokenRefused | QueryError | Schema.Schema
 type PollServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 const AuthorSchema = Schema.NullOr(
-  Schema.Struct({ login: Schema.String, id: Schema.optionalKey(Schema.Number) }),
+  Schema.Struct({
+    login: Schema.String,
+    id: Schema.optionalKey(Schema.Number),
+    avatar_url: Schema.optionalKey(Schema.String),
+  }),
 );
 
 const PullSchema = Schema.Struct({ head: Schema.Struct({ sha: Schema.String }) });
@@ -153,7 +159,11 @@ const CheckRunsSchema = Schema.Struct({
       status: Schema.String,
       conclusion: Schema.NullOr(Schema.String),
       completed_at: Schema.NullOr(Schema.String),
-      app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+      app: Schema.optionalKey(
+        Schema.NullOr(
+          Schema.Struct({ slug: Schema.String, id: Schema.optionalKey(Schema.Number) }),
+        ),
+      ),
     }),
   ),
 });
@@ -178,7 +188,7 @@ interface Poll {
   readonly member: MemberGitHubToken;
   readonly number: number;
   readonly claimed: ClaimedTokenPullRequest;
-  readonly eveFor: EveForAccount;
+  readonly sessionsFor: SessionsForAccount;
   /** The sweep's instant, in epoch milliseconds. */
   readonly now: number;
   /** How the failed checks it tells read the head's checks: once for all of them (`failedChecksReadOnce`). */
@@ -251,7 +261,7 @@ function tell(
   const { agent, number } = poll;
   const branches = agent.branch === null ? [] : [agent.branch];
   return wakeAgents(
-    poll.eveFor,
+    poll.sessionsFor,
     { ...wake, repository: agent.repository, branches, pullRequest: number },
     key,
     poll.member.githubLogin,
@@ -335,6 +345,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
       kind: AGENT_WAKE.CHECK_FAILED,
       url: checksUrl(poll, sha),
       by: `${failed.app?.slug ?? "github"}[bot]`,
+      ...appAvatarOf(failed.app),
       at: instantOf(poll, failed.completed_at),
       sha,
     },
@@ -364,6 +375,7 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
         kind: AGENT_WAKE.CHECK_FAILED,
         url: checksUrl(poll, sha),
         by: status.creator?.login ?? GHOST,
+        ...githubAvatarOf(status.creator ?? {}),
         at: instantOf(poll, status.updated_at),
         sha,
       },
@@ -431,6 +443,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
               url: review.html_url,
               by: review.user?.login ?? GHOST,
               ...githubIdOf(review.user ?? {}),
+              ...githubAvatarOf(review.user ?? {}),
               at: instantOf(poll, review.submitted_at),
               verdict: review.state.toLowerCase(),
               words: review.body ?? "",
@@ -453,6 +466,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
         url: comment.html_url,
         by: comment.user?.login ?? GHOST,
         ...githubIdOf(comment.user ?? {}),
+        ...githubAvatarOf(comment.user ?? {}),
         at: instantOf(poll, comment.created_at),
         words: comment.body ?? "",
       },
@@ -501,7 +515,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
 const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
   claimed: ClaimedTokenPullRequest,
   ring: Redacted.Redacted | undefined,
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   now: number,
 ): Effect.fn.Return<number, never, PollServices> {
   return yield* Effect.gen(function* () {
@@ -516,7 +530,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
       member,
       number: claimed.pullRequest,
       claimed,
-      eveFor,
+      sessionsFor,
       now,
       readFailedChecks: yield* failedChecksReadOnce,
     };
@@ -537,7 +551,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** Claims the next batch of token agents' pull requests due a poll at `now` and polls each, `CONCURRENCY` at a time. */
 export const sweepTokenPullRequests = /* @__PURE__ */ Effect.fn("web/sweepTokenPullRequests")(
   function* (
-    eveFor: EveForAccount,
+    sessionsFor: SessionsForAccount,
     ring: Redacted.Redacted | undefined,
     now: Date,
   ): Effect.fn.Return<TokenPullRequestSweepOutcome, QueryError | Schema.SchemaError, PollServices> {
@@ -549,7 +563,7 @@ export const sweepTokenPullRequests = /* @__PURE__ */ Effect.fn("web/sweepTokenP
     );
     const told = yield* Effect.forEach(
       claimed,
-      (each) => pollClaimed(each, ring, eveFor, now.getTime()),
+      (each) => pollClaimed(each, ring, sessionsFor, now.getTime()),
       {
         concurrency: TOKEN_PULL_REQUEST_SWEEP.CONCURRENCY,
       },

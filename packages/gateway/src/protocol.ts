@@ -138,6 +138,10 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
   /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
   WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
+  /** A workspace's default repository for Slack starts named or cleared on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
+  /** One channel's bot membership or default repository changed on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**
@@ -244,31 +248,6 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
-  /** A channel made; the workspace's channels as they then stand. */
-  CHANNELS_CREATE: "channels.create",
-  /** A channel's name, purpose, or both edited; the workspace's channels as they then stand. */
-  CHANNELS_EDIT: "channels.edit",
-  /** A channel archived; the workspace's channels as they then stand. */
-  CHANNELS_ARCHIVE: "channels.archive",
-  /** An archived channel opened again; the workspace's channels as they then stand. */
-  CHANNELS_UNARCHIVE: "channels.unarchive",
-  /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
-  CHANNELS_MOVE: "channels.move",
-  /**
-   * A workspace's channels, open and archived, held followed for a window
-   * from now until it is let go, and a while after among the workspaces let
-   * go lately. What they hold is heard as `WORKSPACE_CHANNELS_CHANGED`
-   * events, on the app state every window draws, never answered.
-   */
-  CHANNELS_FOLLOW: "channels.follow",
-  /** A workspace's channels let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  CHANNELS_UNFOLLOW: "channels.unfollow",
-  /** A held workspace's channels read again at once, as Try again asks; never answered. */
-  CHANNELS_RETRY: "channels.retry",
-  /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
-  CHANNELS_LOOK: "channels.look",
-  /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
-  CHANNELS_THREADS: "channels.threads",
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
@@ -321,8 +300,6 @@ export const GATEWAY_METHOD = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
-  /** `AGENTS_WORKSPACE_TOOLS` under the name an operator built before the rename still calls; goes once the releases after it are out. */
-  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
@@ -565,8 +542,6 @@ export const GATEWAY_EVENT = {
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
-  /** Every workspace's channels the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  WORKSPACE_CHANNELS_CHANGED: "workspaceChannels.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */

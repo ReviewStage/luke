@@ -38,7 +38,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
- * untitled; and an account with no API key is titled from its opening's
+ * untitled; a message to the Slack bot is named from its member's words
+ * alone; and an account with no API key is titled from its opening's
  * first words, with no model. The
  * model is a script that keeps what it was asked; the store is PGlite.
  * Synthetic throughout.
@@ -312,6 +313,48 @@ it.layer(getTestDB())("an agent's title", (it) => {
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
         assert.doesNotMatch(asked[0] ?? "", /Vespin started this run/u);
         assert.equal(titled.title, "Fix the flakiest CI test");
+      }),
+  );
+
+  it.effect(
+    "a message to the Slack bot is named from its member's words alone, never the thread or what the agent is told of the reply",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const words = "Fix the flaky invite test";
+        const handed = `${words}\n\n---\n\nA member wrote this to Vespin's Slack bot in a Slack thread.\n\n<slack-thread>\n<@U01>: the billing export is broken too\n</slack-thread>`;
+        const { agent } = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: yield* openWorkspace(owner),
+            planSnapshot: null,
+            prompt: handed,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          }),
+        );
+        // The opening carries the Slack line the bot wrote, as a Start from Slack does.
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            seq: 1,
+            clientId: randomUUID(),
+            role: MESSAGE_ROLE.USER,
+            parts: [{ type: "text", text: handed }],
+            metadata: { channel: MESSAGE_CHANNEL.SLACK, words },
+            placedAt: new Date(),
+          }),
+        );
+        const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
+
+        yield* titleAgent(model, { userId: owner, conversationId: agent.conversationId }, agent);
+
+        assert.match(asked[0] ?? "", /Fix the flaky invite test/u);
+        assert.doesNotMatch(asked[0] ?? "", /billing export|Slack bot/u);
       }),
   );
 

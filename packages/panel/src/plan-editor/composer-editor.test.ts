@@ -411,8 +411,8 @@ function mountedWithMentions(text: string) {
 }
 
 /** A page of an integration's, as the panel names it. */
-const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
-const ISSUE = { name: "LUKE-142/fix-the-thing", target: ISSUE_URL };
+const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
+const ISSUE = { name: "ACME-142/fix-the-thing", target: ISSUE_URL };
 
 const STORE_LINK = "[@session-store.ts](luke://file/apps/web/session-store.ts)";
 
@@ -498,8 +498,8 @@ test("a page of an integration's pasted whole is laid in as its mention, a space
   paste(box.host, ` ${ISSUE_URL} `);
   typeInComposer(box.host, "first.");
 
-  assert.equal(box.drafts.at(-1), `See [@LUKE-142/fix-the-thing](${ISSUE_URL}) first.`);
-  assert.deepEqual(box.drawn, [`LUKE-142/fix-the-thing ${ISSUE_URL}`]);
+  assert.equal(box.drafts.at(-1), `See [@ACME-142/fix-the-thing](${ISSUE_URL}) first.`);
+  assert.deepEqual(box.drawn, [`ACME-142/fix-the-thing ${ISSUE_URL}`]);
 });
 
 test("a page's address pasted inside a code span stays the code's words", () => {
@@ -520,7 +520,7 @@ test("a page's address pasted on the line after a closing fence is laid in as it
 
   paste(box.host, ISSUE_URL);
 
-  assert.deepEqual(box.drawn, [`LUKE-142/fix-the-thing ${ISSUE_URL}`]);
+  assert.deepEqual(box.drawn, [`ACME-142/fix-the-thing ${ISSUE_URL}`]);
 });
 
 test("a mention laid in from elsewhere stands where the caret is, a space after it, and none is laid in past the box's bound", () => {

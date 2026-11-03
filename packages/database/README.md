@@ -38,7 +38,7 @@ with it partway through a fresh database's run.
 ### Vespin Sync's capture
 
 A synced table is declared in `src/sync/tables.ts` (`defineSyncTable`): the
-topics a write to it notifies on `luke_sync`, and the hot columns whose
+topics a write to it notifies on `app_sync`, and the hot columns whose
 change notifies nothing. Its trigger function and triggers are rendered from
 that declaration (`src/sync/render.ts`) and never written by hand, because
 they run inside every write to the table. A migration that syncs a table, or

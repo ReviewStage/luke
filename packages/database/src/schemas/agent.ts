@@ -7,6 +7,7 @@ import {
   type AgentMachineKind,
   type AgentPayer,
   type AgentPullRequest,
+  type AgentSource,
   CONTEXT_WINDOW,
   type ContextWindow,
 } from "@repo/features/agent-wire";
@@ -255,6 +256,8 @@ export const agentTable = pgTable(
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
     /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
     startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
+    /** What outside the app the agent was started from, a Slack message, with its link; null for one started in the app. */
+    source: jsonb("source").$type<AgentSource>(),
     /** The coding agent whose `start_agent` started this one; null for any other starter, and once the agent's row is gone. */
     startedByAgentId: uuid("started_by_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",

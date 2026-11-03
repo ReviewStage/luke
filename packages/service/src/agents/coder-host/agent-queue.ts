@@ -52,8 +52,8 @@ import { agentStatusOf, startedBlank } from "./status.js";
 import { steerAgentWritten } from "./steer.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
-/** eve as the service reaches it acting for one member, whose queued message goes as theirs, or the refusal where it cannot. */
-export type QueueEve = (
+/** The agents' sessions as the service reaches them acting for one member, whose queued message goes as theirs, or the refusal where it cannot. */
+export type QueueSessions = (
   account: string,
 ) => Effect.Effect<
   AgentSessions<EveTypedTurn>,
@@ -129,11 +129,11 @@ const atWork = Effect.fn("web/queueAtWork")(function* (agent: Agent) {
  * fails, the message still claimed, for its caller to let go of.
  */
 export const sendQueued = Effect.fn("web/sendQueued")(function* (
-  eveFor: QueueEve,
+  sessionsFor: QueueSessions,
   agent: Agent,
   message: QueuedMessageRow,
 ) {
-  const eve = yield* eveFor(message.userId);
+  const eve = yield* sessionsFor(message.userId);
   const { sent } = yield* steerAgentWritten(
     eve,
     storeWriter({ tools: CODER_TOOL_SET }),
@@ -205,11 +205,11 @@ export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: Agen
  * under its id. Nobody's answer waits on it.
  */
 export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
-  eveFor: QueueEve,
+  sessionsFor: QueueSessions,
   agent: Agent,
   message: QueuedMessageRow,
 ) {
-  yield* sendQueued(eveFor, agent, message).pipe(
+  yield* sendQueued(sessionsFor, agent, message).pipe(
     Effect.catch((refusal: HostedRefusal) =>
       hostedStoreOrUnavailable(
         refuseQueuedMessage(agent.id, message, refusal.error as HostedApiError),
@@ -220,9 +220,12 @@ export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
 });
 
 /** The agent's queue handed on where the agent stands idle and the queue unpaused: its next message claimed, then sent. */
-export const handOnQueue = Effect.fn("web/handOnQueue")(function* (eveFor: QueueEve, agent: Agent) {
+export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
+  sessionsFor: QueueSessions,
+  agent: Agent,
+) {
   const claimed = yield* claimNext(agent);
-  if (Option.isSome(claimed)) yield* sendClaimed(eveFor, agent, claimed.value);
+  if (Option.isSome(claimed)) yield* sendClaimed(sessionsFor, agent, claimed.value);
 });
 
 /**
@@ -234,7 +237,7 @@ export const handOnQueue = Effect.fn("web/handOnQueue")(function* (eveFor: Queue
  * launch as any other.
  */
 export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
-  eveFor: QueueEve,
+  sessionsFor: QueueSessions,
   agent: Agent,
 ) {
   const turns = yield* latestTurnsOfReached([agent.conversationId]).pipe(
@@ -249,7 +252,7 @@ export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
       Effect.catchCause((cause) => Effect.logWarning("agent-queue: a pause failed", cause)),
     );
   }
-  yield* handOnQueue(eveFor, agent);
+  yield* handOnQueue(sessionsFor, agent);
 });
 
 /** Why a turn's end pauses the queue, by the status the turn ended under. */
@@ -280,11 +283,13 @@ const QUEUE_SWEEP_LIMIT = 50;
  * does. Answers how many queues it
  * looked at.
  */
-export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (eveFor: QueueEve) {
+export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (
+  sessionsFor: QueueSessions,
+) {
   const queues = yield* unpausedQueues(QUEUE_SWEEP_LIMIT);
   for (const { agentId, userId } of queues) {
     const agent = yield* readAgent(userId, agentId);
-    if (Option.isSome(agent)) yield* handOnQueue(eveFor, agent.value);
+    if (Option.isSome(agent)) yield* handOnQueue(sessionsFor, agent.value);
   }
   return queues.length;
 });

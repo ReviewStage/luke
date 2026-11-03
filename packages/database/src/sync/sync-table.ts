@@ -16,7 +16,7 @@ import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core
 import type { TopicKind } from "./notification.js";
 
 /** The prefix of every function and trigger Sync's capture renders, which the drift check reads by. */
-export const SYNC_OBJECT_PREFIX = "luke_sync_";
+export const SYNC_OBJECT_PREFIX = "app_sync_";
 
 /** Postgres's longest identifier, in bytes; a longer name is cut short without a word. */
 const IDENTIFIER_BYTES = 63;

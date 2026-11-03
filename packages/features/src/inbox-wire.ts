@@ -159,8 +159,6 @@ export const INBOX_BOUNDS = {
   MAX_STEPS: 8,
   /** The most characters one step of a `do` ask may spell, in Markdown. */
   MAX_STEP_CHARS: 600,
-  /** The most characters a post's channel may spell: a channel's name at its bound (`channel-wire.ts`), and the `#` an agent may write before it. */
-  MAX_CHANNEL_CHARS: 81,
   /** The most characters a post's addressee may spell: a member's mention link written whole. */
   MAX_ADDRESSEE_CHARS: 512,
 } as const;
@@ -169,12 +167,12 @@ export const INBOX_BOUNDS = {
  * The tools an agent keeps its threads with, by the names their tool parts
  * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
  * which a transcript before version 5 names, are retired, and so are
- * `post_to_inbox` and `read_inbox`, since named for the channels a thread
- * is posted to (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks
- * nothing is a reply, and a withdrawn ask is a close.
+ * `post_to_inbox` and `read_inbox`, since named for the threads they post
+ * and read (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing
+ * is a reply, and a withdrawn ask is a close.
  */
 export const INBOX_TOOL = {
-  /** Adds the agent's message to the thread under its key, opening one under a new key in the channel it names, its ask replacing the open one. */
+  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
   POST: "post_thread",
   /** Withdraws the thread's open ask, with why. */
   WITHDRAW: "withdraw_ask",
@@ -672,19 +670,17 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
  * agent's sandbox, and the ask it may end with, whose answer the agent
- * always hears. From Channels, the channel it goes to by name, `#` or not,
- * and the member its ask is addressed to by their mention link, each read
- * by the service rather than held to a grammar here, so a name or a link
+ * always hears, and the member its ask is addressed to by their mention
+ * link, read by the service rather than held to a grammar here, so a link
  * that names nothing is refused in words the model can act on. The model
  * is shown this schema and eve holds the call to it. Note that a post from
- * an agent still holding the schema before it may name `waits`, which the
- * service's read drops with any other key it does not name.
+ * an agent still holding an earlier schema may name `waits` or `channel`,
+ * which the service's read drops with any other key it does not name.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  channel: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS)),
   to: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_ADDRESSEE_CHARS)),
   ask: EffectSchema.optionalKey(inboxAskInputSchema),
 });
@@ -884,11 +880,6 @@ export const inboxItemSchema = EffectSchema.Struct({
    * which the desktop reads as read.
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * The channel of its workspace the thread lives in (`channel-wire.ts`),
-   * which a link to the item opens it in. Absent from a service before it.
-   */
-  channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;
@@ -931,9 +922,8 @@ function inboxAsksOpen(item: InboxItem): boolean {
 
 /**
  * Whether a thread needs the reader: its ask stands open and waits on them.
- * The one reading of it, which a channel's count (`inbox-store.ts`'s
- * `askingReader`) must agree with and its stream, Needs me, and the tint
- * all draw from.
+ * The one reading of it, which a to-do count (`inbox-store.ts`'s
+ * `askingReader`) must agree with and Needs me and the tint draw from.
  */
 export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
   return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;

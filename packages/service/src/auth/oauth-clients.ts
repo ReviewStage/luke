@@ -6,7 +6,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
  */
 
 export const DESKTOP_OAUTH_CLIENT = {
-  id: "luke-desktop",
+  id: "desktop",
   name: `${PRODUCT_NAME} for macOS`,
   scopes: ["openid", "profile", "email", "offline_access"],
   redirectUris: ["http://127.0.0.1/callback"],

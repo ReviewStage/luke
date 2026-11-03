@@ -3,7 +3,6 @@ import {
   HostedAdminClient,
   HostedAgentClient,
   HostedAutomationClient,
-  HostedChannelClient,
   HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -29,7 +28,6 @@ import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
-import { composeChannels } from "./compose-channels.js";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
@@ -74,7 +72,6 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.AGENTS,
   HOST_CONCERN.AUTOMATIONS,
-  HOST_CONCERN.CHANNELS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
@@ -188,16 +185,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         credential: account.credential,
       }),
     });
-    const channels = yield* composeChannels({
-      kernel,
-      account,
-      accountId,
-      client: new HostedChannelClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
-      }),
-      inbox: agents.inbox,
-    });
     const integrations = yield* composeIntegrations({
       kernel,
       account,
@@ -292,7 +279,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* account.refreshAccess;
         yield* tasks.open;
         yield* agents.open;
-        yield* channels.open;
       }
       yield* settings.emitSettings();
     });
@@ -303,7 +289,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* agents.reset;
       yield* automations.reset;
-      yield* channels.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* settings.emitSettings();
@@ -336,7 +321,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.AGENTS]: agents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
-      [HOST_CONCERN.CHANNELS]: channels,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,

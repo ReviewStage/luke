@@ -2450,12 +2450,8 @@ it.effect(
     }),
 );
 
-/** The channel the account's items live in, and another one moved to. */
-const CHANNEL_ID = "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9";
-const OTHER_CHANNEL_ID = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
-
-/** The item as the account's items read sends it, in its channel. */
-const HELD_ITEM: InboxItem = { ...LIVE_ITEM, channelId: CHANNEL_ID };
+/** The item as the account's items read sends it. */
+const HELD_ITEM: InboxItem = LIVE_ITEM;
 
 /** A second task of the account's, and an item on it changed a minute before the first. */
 const OTHER_TASK_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f";
@@ -2479,7 +2475,6 @@ function stampOf(item: InboxItem, planId: string, moved: Record<string, unknown>
     updatedAt: item.updatedAt,
     unread: item.unread ?? false,
     waitsOn: "user-dana",
-    channelId: item.channelId ?? CHANNEL_ID,
     messages: 0,
     ...moved,
   };
@@ -2536,7 +2531,7 @@ it.effect(
 );
 
 it.effect(
-  "an item's read mark and channel moving with no resend are patched from its stamp, and who it waits on moving asks for it again from its change",
+  "an item's read mark moving with no resend are patched from its stamp, and who it waits on moving asks for it again from its change",
   () =>
     Effect.gen(function* () {
       const { open, asked, sealItems, live, accountItems } = yield* subject();
@@ -2551,7 +2546,7 @@ it.effect(
       yield* toldTimes(accountItems, 1);
 
       // Only the stamp moves: the item changed before the latest held, so it is not sent.
-      const marked = { ...OTHER_ITEM, unread: true, channelId: OTHER_CHANNEL_ID };
+      const marked = { ...OTHER_ITEM, unread: true };
       deliverItems(
         live,
         [stampOf(HELD_ITEM, TASK_ID), stampOf(marked, OTHER_TASK_ID)],

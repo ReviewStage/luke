@@ -353,8 +353,7 @@ function callWorkspaceTool(
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
  * repository, where it runs, whether anyone but its starter has put words
- * into it, and its starter's Memory (`offeredWorkspaceMcpTool`),
- * each in the words it is shown them with (`describe`); those eve offers
+ * into it, and its starter's Memory (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -378,19 +377,16 @@ function listWorkspaceTools(
           ),
       ),
     ),
-    Effect.flatMap((offered) => {
-      const listed = [...WORKSPACE_MCP_TOOLS].filter(([name]) => offered(name));
-      return Effect.map(
-        Effect.forEach(listed, ([name, tool]) =>
-          Effect.map(tool.describe?.(admitted) ?? Effect.succeed(tool.description), (words) => ({
-            name,
-            description: words,
-            inputSchema: tool.inputSchema,
-            _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
-          })),
-        ),
-        (tools) => Result.succeed({ tools }),
-      );
+    Effect.map((offered) => {
+      const tools = [...WORKSPACE_MCP_TOOLS]
+        .filter(([name]) => offered(name))
+        .map(([name, tool]) => ({
+          name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
+        }));
+      return Result.succeed({ tools });
     }),
     Effect.catchCause((cause) =>
       Effect.as(
@@ -402,7 +398,7 @@ function listWorkspaceTools(
 }
 
 /** Our own server, over the doors the edge composes. */
-function lukeServer(doors: WorkspaceMcpDoors): McpServer {
+function workspaceServer(doors: WorkspaceMcpDoors): McpServer {
   return {
     name: WORKSPACE_MCP_SERVER,
     instructions: () => Effect.succeedNone,
@@ -517,7 +513,7 @@ function answerMessage(
 function bearerRefused(): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(HOSTED_REFUSAL.INVALID_TOKEN, {
     status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-    headers: { "www-authenticate": 'Bearer realm="luke"' },
+    headers: { "www-authenticate": `Bearer realm="${PRODUCT_NAME}"` },
   });
 }
 
@@ -579,9 +575,9 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMcpEndpoint")(functi
 
 /** The group: our server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
 export function workspaceMcpApp(doors: WorkspaceMcpDoors): WebRoutes<WorkspaceMcpServices> {
-  const luke = Option.some(lukeServer(doors));
+  const server = Option.some(workspaceServer(doors));
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, WORKSPACE_MCP_PATH, hostedRefusing(mcpEndpoint(() => luke))),
+    HttpRouter.add(ANY_METHOD, WORKSPACE_MCP_PATH, hostedRefusing(mcpEndpoint(() => server))),
     HttpRouter.add(
       ANY_METHOD,
       `${WORKSPACE_INTEGRATION_MCP_PATH}/:connection`,

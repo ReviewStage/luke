@@ -1,5 +1,4 @@
 import type { AgentInboxScope } from "@repo/features/agent-view";
-import type { WorkspaceChannels } from "@repo/features/channel-live";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
@@ -31,8 +30,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, a task's or an agent's pages, or a workspace's channels, is
- * held by the surface that reads it: the host follows it while any surface
+ * own inbox, or a task's or an agent's pages, is held by the surface that reads it: the host follows it while any surface
  * holds it and a while after, so a holder chosen again, or a surface drawn
  * again, draws from where its read stands. Nothing else in the panel opens a
  * follow (`anti-slop/no-follow-outside-host-read`).
@@ -85,17 +83,6 @@ const pagesAtom = Atom.family((kind: PageOwner["kind"]) =>
 
 /** No pages read, for a surface holding none. */
 const NO_PAGES_HELD: Atom.Atom<AppHolderPages | undefined> = Atom.make(undefined);
-
-/** One workspace's channels as the host holds them, by its id, told to its readers only as that workspace's read moves. */
-const workspaceChannelsAtom = Atom.family((workspaceId: string) =>
-  Atom.map(
-    APP_SLICE.CHANNELS,
-    (held): AppHostRead<WorkspaceChannels> | undefined => held?.[workspaceId],
-  ),
-);
-
-/** No workspace's channels, for a surface holding none. */
-const NO_WORKSPACE: Atom.Atom<AppHostRead<WorkspaceChannels> | undefined> = Atom.make(undefined);
 
 /** The feed of every item the account reaches, held for the session. */
 function useAccountItems(): HostRead<AppInboxItems> {
@@ -185,29 +172,6 @@ export function usePlacesPages(
   );
 }
 
-/**
- * One workspace's channels, open and archived, held by this surface while
- * `workspaceId` names one: the hold is a stream on the act port, which
- * carries nothing and which the host keeps the workspace followed for; the
- * rows arrive on app state.
- */
-function useWorkspaceChannels(workspaceId: string | undefined): HostRead<WorkspaceChannels> {
-  const held = useAppSlice(
-    workspaceId === undefined ? NO_WORKSPACE : workspaceChannelsAtom(workspaceId),
-  );
-  useEffect(() => {
-    if (workspaceId === undefined) return;
-    return streamFrom(
-      () => askAct(ACT_KIND.CHANNELS_FOLLOW, { workspaceId }),
-      () => undefined,
-    );
-  }, [workspaceId]);
-  const retry = useCallback(() => {
-    if (workspaceId !== undefined) tellAct(ACT_KIND.CHANNELS_RETRY, { workspaceId });
-  }, [workspaceId]);
-  return { rows: held?.rows, status: statusOf(held), retry };
-}
-
 export function useHostRead(read: typeof LIVE_READ.INBOX_ITEMS): HostRead<AppInboxItems>;
 export function useHostRead(
   read: typeof LIVE_READ.HOLDER_INBOX,
@@ -218,21 +182,9 @@ export function useHostRead(
   key: PagePlace | undefined,
 ): HeldRead<readonly PageLine[]>;
 export function useHostRead(
-  read: typeof LIVE_READ.CHANNELS,
-  workspaceId: string | undefined,
-): HostRead<WorkspaceChannels>;
-export function useHostRead(
-  read:
-    | typeof LIVE_READ.INBOX_ITEMS
-    | typeof LIVE_READ.HOLDER_INBOX
-    | typeof LIVE_READ.PAGES
-    | typeof LIVE_READ.CHANNELS,
-  key?: InboxHolderKey | PagePlace | string,
-):
-  | HostRead<AppInboxItems>
-  | HostRead<readonly InboxItem[]>
-  | HeldRead<readonly PageLine[]>
-  | HostRead<WorkspaceChannels> {
+  read: typeof LIVE_READ.INBOX_ITEMS | typeof LIVE_READ.HOLDER_INBOX | typeof LIVE_READ.PAGES,
+  key?: InboxHolderKey | PagePlace,
+): HostRead<AppInboxItems> | HostRead<readonly InboxItem[]> | HeldRead<readonly PageLine[]> {
   // Note that each read is one hook, called in the same order on every render, since the read a surface asks for never changes.
   const items = useAccountItems();
   const holder = useHolderInbox(
@@ -241,10 +193,6 @@ export function useHostRead(
   const pages = useHolderPages(
     read === LIVE_READ.PAGES && typeof key === "object" && !("kind" in key) ? key : undefined,
   );
-  const channels = useWorkspaceChannels(
-    read === LIVE_READ.CHANNELS && typeof key === "string" ? key : undefined,
-  );
   if (read === LIVE_READ.INBOX_ITEMS) return items;
-  if (read === LIVE_READ.HOLDER_INBOX) return holder;
-  return read === LIVE_READ.PAGES ? pages : channels;
+  return read === LIVE_READ.HOLDER_INBOX ? holder : pages;
 }

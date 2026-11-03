@@ -358,10 +358,7 @@
   --spacing-row-inset: var(--ui-row-inset);
   --spacing-list-inset: var(--ui-list-inset);
   --spacing-control-gap: var(--ui-control-gap);
-  /* A row nested under a place stands in by the place's glyph and its gap,
-     so its own glyph stands under the place's name (`SidebarFilters`). */
-  --spacing-nav-nest: calc(var(--ui-control-icon) + var(--ui-icon-gap));
-  /* A list row nested under another stands in by that nest once for each
+  /* A list row nested under another stands in by the glyph and its gap once for each
      level it stands at (`ListRow`'s `depth`), so its glyph stands under the
      name of the row it is nested under. */
   --spacing-list-row-nest: calc(
@@ -584,7 +581,7 @@
 
   /* Banner, ScrollArea, and Pagination. */
   --color-attention: var(--ui-color-attention);
-  /* A post that needs the reader, in a channel's stream: the attention ink's tint and nothing else. */
+  /* A post that needs the reader: the attention ink's tint and nothing else. */
   --color-attention-tint: var(--ui-color-attention-tint);
   --color-body-foreground: var(--ui-color-text-body);
   /* A strip's tint and hairline, mixed from the ink of the tone the banner
@@ -1083,8 +1080,10 @@
   --spacing-page-versions-end: calc(var(--ui-control-gap) - var(--ui-space-2));
   --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
   --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
+  /* off-scale: an Inbox picture away from the screen, as tall as it stood (`inbox-pictures.tsx`) */
+  --spacing-picture-held: var(--picture-held-height);
   --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
-  --color-voice-luke: var(--voice-luke);
+  --color-voice-app: var(--voice-app);
   /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
      sides, as far in as the measure leaves them (`--pull-request-page-measure`,
      tasks.css), never under a column's inset; the Chapters view's rail, as

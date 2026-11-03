@@ -69,7 +69,7 @@ import type {
   AppInboxTaskHolding,
   AppInboxTasklessItem,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@repo/settings";
+import { APP_SETTING_DEFAULTS } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
@@ -143,12 +143,7 @@ import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import {
-  APP_SETTINGS_VIEW,
-  useAppSlice,
-  useExperiment,
-  useStartsWithoutRepository,
-} from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice, useStartsWithoutRepository } from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -184,19 +179,14 @@ import {
   readAgentById,
   useAgents,
 } from "./use-agents.js";
-import {
-  chooseChannel,
-  chooseInboxTask,
-  leaveChannel,
-  leaveInboxTask,
-  listChannelWorkspace,
-  openChannelThread,
-  openTaskThread,
-  standInboxPlace,
-} from "./use-channels.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
+import {
+  chooseInboxTask,
+  leaveInboxTask,
+  listInboxWorkspace,
+  openTaskThread,
+} from "./use-inbox-task.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useLastTask } from "./use-last-task.js";
 import {
   isOverviewTab,
   MAIN_TAB,
@@ -292,19 +282,10 @@ interface InboxViewControl {
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
    * Opens the Inbox on an item, from wherever the window stands: the
-   * command palette, a person's page, or a link. With Channels on it
-   * opens the item as a thread, in `channelId` where the caller knows it,
-   * and in the channel its item names once read otherwise. Asked first
-   * where leaving would lose unsaved work, as every door that moves the
-   * place is.
+   * command palette, a person's page, or a link. Asked first where leaving
+   * would lose unsaved work, as every door that moves the place is.
    */
-  readonly onOpenItem: (chosen: InboxChoice, channelId?: string) => void;
-  /**
-   * Opens the Inbox narrowed to a channel with Channels on, from wherever
-   * the window stands: the sidebar's row, the command palette. It chooses
-   * no item, as the Inbox's own row opens it.
-   */
-  readonly onOpenChannel: (channelId: string) => void;
+  readonly onOpenItem: (chosen: InboxChoice) => void;
   /** Chooses no item, which stands the list alone where the Inbox shows one column. */
   readonly onClear: () => void;
   /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
@@ -595,8 +576,6 @@ export interface NewTaskStart {
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
-  /** Whether a launch is still opening the task last open, while the page with no task open waits rather than flash before it (`use-last-task.ts`). */
-  restoring: boolean;
   /**
    * The line New task's agent start under way opens its agent on, which the
    * window draws on a task's page in its shape until the start answers
@@ -809,7 +788,7 @@ export interface TasksControl {
   ) => Promise<boolean>;
   onRetryList: () => void;
   onRetryDocument: () => void;
-  /** Opens the New task dialog over whatever stands open, which it leaves standing. */
+  /** Opens the New task dialog over whatever stands open, which it leaves standing; on Home, hands Home's own composer the caret instead (`newTask.homeAsks`). */
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
@@ -828,6 +807,8 @@ export interface TasksControl {
     open: boolean;
     /** What the press that opened the dialog chose: a repository, where it chose one. */
     preset: NewTaskPreset | undefined;
+    /** How many times New task was pressed on Home, whose composer takes the caret at each press rather than a dialog opening over it. */
+    homeAsks: number;
     /** The workspaces a task may start in, the account's every one. */
     workspaces: readonly Workspace[];
     /** The workspace the dialog starts the task in until another is chosen: the one listed; none before the workspaces are read. */
@@ -1315,6 +1296,8 @@ export function useTasksTab(input: {
   const [newTaskAsk, setNewTaskAsk] = useState<
     { readonly preset: TasksControl["newTask"]["preset"] } | undefined
   >(undefined);
+  // How many times New task was pressed while Home stood, whose own composer takes the caret on each.
+  const [homeNewTasks, setHomeNewTasks] = useState(0);
   // New task's agent start under way: the line its agent opens on, and the navigation it was pressed at.
   const [startingTask, setStartingTask] = useState<
     { readonly line: SentLine; readonly navigation: number } | undefined
@@ -1410,15 +1393,15 @@ export function useTasksTab(input: {
   const chooseListed = useCallback(
     (workspaceId: string) => {
       workspaceChoices.current += 1;
-      listChannelWorkspace(workspaceId);
+      listInboxWorkspace(workspaceId);
       listWorkspace(workspaceId);
     },
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
-  // Note that a workspace listed by any other way, as the account's workspaces change, moves the channel place before the window paints.
+  // Note that a workspace listed by any other way, as the account's workspaces change, moves the Inbox's task before the window paints.
   useLayoutEffect(() => {
-    if (listedWorkspace !== undefined) listChannelWorkspace(listedWorkspace.id);
+    if (listedWorkspace !== undefined) listInboxWorkspace(listedWorkspace.id);
   }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
@@ -1623,7 +1606,6 @@ export function useTasksTab(input: {
           : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
     [cloudPlace, cloudListed, cloudDrafts],
   );
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   // Where the panel's file and page tabs opened here read, saved with each tab: the task the panel
   // stands for and its repository, or, beside an agent on no task, the agent's pages and no files,
   // whose opener names the workspace and repository it reads them through (`desktop-agent-page.tsx`).
@@ -2305,15 +2287,6 @@ export function useTasksTab(input: {
   // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
   const restoreNow = useRef(restoreStatuses);
   restoreNow.current = restoreStatuses;
-  const { restoring, forgo: forgoReopen } = useLastTask({
-    staged: fixture !== undefined,
-    account: input.account,
-    tasks: tasks.tasks,
-    listStatus: tasks.listStatus,
-    openTaskId,
-    boundFor,
-    select,
-  });
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -2840,6 +2813,15 @@ export function useTasksTab(input: {
   // because a fresh ask would keep the card's draft under another preset.
   const newTaskWith = (preset: TasksControl["newTask"]["preset"]) =>
     setNewTaskAsk((standing) => standing ?? { preset });
+  // Home opens on New task's composer, so a plain New task there takes its
+  // caret rather than drawing the same card again in a dialog over it. Note
+  // that the tab need not be shown, because every New task press brings it
+  // forward first.
+  const newTask = () => {
+    const atHome = page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined;
+    if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
+    else newTaskWith(undefined);
+  };
   // The dialog is the Tasks tab's, so Settings taking the window puts it
   // away rather than leaving it to stand again on the way back.
   if (!shown && newTaskAsk !== undefined) setNewTaskAsk(undefined);
@@ -3099,8 +3081,6 @@ export function useTasksTab(input: {
     // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
     const holder = planId === null ? undefined : viewed.tasks.find((task) => task.id === planId);
     listLinked(holder?.workspaceId ?? workspace);
-    // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
-    if (channelsOn) openChannelThread(place.itemId);
     openTaskThread(holder?.id ?? ("planId" in place ? place.planId : undefined));
     standInFor({
       kind: STAND_IN.INBOX,
@@ -3180,12 +3160,10 @@ export function useTasksTab(input: {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
     switch (place.kind) {
-      // Note that a workspace's Home, and its Board, stand over the launch's reopen of the task last open, since a fresh tab's
-      // address may name either; a step naming no workspace of the reader's, by id, slug, or former slug, is not there for
-      // them, so it stands as not found rather than opening the listed workspace or where the window rests.
+      // A step naming no workspace of the reader's, by id, slug, or former slug, is not there for them, so it stands as not
+      // found rather than opening the listed workspace or where the window rests.
       case LINK_PLACE.HOME:
       case LINK_PLACE.BOARD:
-        forgoReopen();
         if (
           viewed.workspaces.length > 0 &&
           workspaceOfSlug(viewed.workspaces, workspace) === undefined
@@ -3258,16 +3236,6 @@ export function useTasksTab(input: {
       case LINK_PLACE.INBOX_ITEM:
         openInboxItem(workspace, place);
         return;
-      // A channel's link opens the Inbox narrowed to it; one archived or unknown says so there (`desktop-inbox.tsx`).
-      case LINK_PLACE.CHANNEL: {
-        listLinked(workspace);
-        if (!channelsOn) return;
-        standInboxPlace({ channelId: place.channelId });
-        // Note that a channel's link opens it as its row does: on no item.
-        timeInboxOpen();
-        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
-        return;
-      }
       case LINK_PLACE.AUTOMATIONS:
         listLinked(workspace);
         standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
@@ -3561,7 +3529,6 @@ export function useTasksTab(input: {
 
   return useSteadyDoors({
     page,
-    restoring,
     starting,
     shown,
     signedIn,
@@ -3651,30 +3618,22 @@ export function useTasksTab(input: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
-      // It leaves any task it was narrowed to, and with Channels on any channel shown, so the Inbox lists every item.
+      // It leaves any task it was narrowed to, so the Inbox lists every item.
       onOpen: guard(() => {
         timeInboxOpen();
         setHistoryFor(undefined);
         leaveInboxTask();
-        if (channelsOn) leaveChannel();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
-      onOpenItem: guard((chosen: InboxChoice, channelId?: string) => {
+      onOpenItem: guard((chosen: InboxChoice) => {
         setHistoryFor(undefined);
-        if (channelsOn) openChannelThread(chosen.itemId, channelId);
         openTaskThread("taskId" in chosen ? chosen.taskId : undefined);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
         );
-      }),
-      onOpenChannel: guard((channelId: string) => {
-        timeInboxOpen();
-        setHistoryFor(undefined);
-        chooseChannel(channelId);
-        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClear: () =>
         setStandIn((held) =>
@@ -3841,7 +3800,7 @@ export function useTasksTab(input: {
     onRetryDocument: () => {
       if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
     },
-    onNewTask: () => newTaskWith(undefined),
+    onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {
       // The open document stands for its task where the list read did not land, as its menu reads it.
@@ -3858,6 +3817,7 @@ export function useTasksTab(input: {
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,
+      homeAsks: homeNewTasks,
       workspaces: viewed.workspaces,
       workspaceId: listedWorkspace?.id,
       repositoriesIn,

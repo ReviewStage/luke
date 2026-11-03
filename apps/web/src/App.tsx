@@ -3,7 +3,6 @@ import {
   BUTTON_VARIANT,
   ButtonLink,
   LANDING_SCENE,
-  LandingFacts,
   LandingPage,
   LandingSection,
   MARK_PROVIDER,
@@ -32,7 +31,6 @@ export function App(): React.JSX.Element {
       bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
       barCall={<SiteDownload />}
       title="An inbox for all your coding agents."
-      lead="Agents post to your Inbox when they need a decision, a manual step, or your eyes on something, and you answer them there. They work in cloud sandboxes on your own Claude or ChatGPT subscription or API key."
       actions={
         <>
           <SiteDownload />
@@ -43,7 +41,6 @@ export function App(): React.JSX.Element {
       }
       close={{
         title: "Free and open source.",
-        lead: "Apache 2.0. The Mac app, the web app, and the service behind them are one repository.",
         actions: (
           <>
             <SiteDownload />
@@ -60,49 +57,24 @@ export function App(): React.JSX.Element {
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
     >
       <LandingSection
-        title="One inbox for every agent."
-        lead="Agents post only when something needs you: a decision, a to-do, or something to look at. Answer in the thread, and they carry on."
+        title="Monitor all your agents with one inbox."
+        lead="Agents only post to your inbox when something needs your attention."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
         title="Agents work together."
-        lead="They start other agents, message each other, and keep your board current, while you get on with something else."
+        lead="They hand off work, message each other, and split tasks into sub-tasks."
         scene={LANDING_SCENE.AGENTS}
       />
       <LandingSection
-        title="Start agents from your tools."
-        lead="A schedule, a GitHub event, a Sentry issue, or a webhook starts an agent on a task of its own, with the prompt and repository you set."
-        scene={LANDING_SCENE.AUTOMATIONS}
-      />
-      <LandingSection
         title="On every device."
-        lead="The Mac app, your browser, and your phone show the same tasks and threads."
+        lead={`Use ${PRODUCT_NAME} on Mac or the web.`}
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection
-        title="Bring your own subscription."
-        lead="Agents run on Claude Code or Codex, on your Claude or ChatGPT plan or your own API key. Pick the model and effort for each agent."
-        scene={LANDING_SCENE.MODELS}
-        aside={
-          <LandingFacts
-            facts={[
-              {
-                title: "Your plan or your key",
-                detail:
-                  "Claude Code runs on your Claude plan, Codex on your ChatGPT plan, or either on an API key.",
-              },
-              {
-                title: "No tokens billed by us",
-                detail: `${PRODUCT_NAME} pays for no model calls, and charges for none.`,
-              },
-              {
-                title: "Per agent",
-                detail:
-                  "Mix them in one task: each agent runs on the model and effort you pick for it.",
-              },
-            ]}
-          />
-        }
+        title="Bring your own keys."
+        lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
+        scene={LANDING_SCENE.KEYS}
       />
     </LandingPage>
   );

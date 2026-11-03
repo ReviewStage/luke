@@ -19,13 +19,10 @@ import {
 import { managesWorkspace } from "@repo/features/workspace-role";
 import {
   WORKSPACE_BOUNDS,
-  WORKSPACE_PHOTO_BOUNDS,
-  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceGithubInstallation,
   type WorkspaceMember,
-  workspacePhotoOfDataUrl,
   workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
 import { ACT_KIND, WORKSPACE_SLUG_REFUSAL } from "@repo/host/acts";
@@ -104,14 +101,15 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, failureShown, refusedShown, unreadShown } from "../failure-report.js";
-import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
+import { AddSlackChannel, SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
 import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
@@ -157,22 +155,6 @@ import {
  * are being read their loading lines hold the page back (`SettingsLine`),
  * and a read that failed says so with Retry.
  */
-
-/** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 32, so it stays sharp on a Retina screen. */
-const PHOTO_EDGE = 256;
-
-/** The image types a photo is picked from, which are the ones a photo may be kept as. */
-const PHOTO_TYPES: ReadonlySet<string> = new Set(Object.values(WORKSPACE_PHOTO_TYPE));
-
-/** The photo picker's `accept`: those types alone. */
-const PHOTO_ACCEPT = [...PHOTO_TYPES].join(",");
-
-/** Why a picked file did not become the workspace's photo, in the words said under its row. */
-const PHOTO_REFUSAL = {
-  KIND: (name: string) => `${name} isn't a PNG, JPEG, or WebP image.`,
-  UNREADABLE: (name: string) => `${name} could not be read.`,
-  TOO_LARGE: (name: string) => `${name} is too large for a workspace photo.`,
-} as const;
 
 /** The photo's acts in the identity row's ⋯. */
 const PHOTO_WORDS = {
@@ -316,7 +298,7 @@ const SLACK_MARK = (
  * to the workspace's members.
  */
 const SLACK_BOT_LINE = {
-  CONNECTED: (team: string) => `Connected to ${team} · Messages members whose email matches`,
+  CONNECTED: (team: string) => `Connected to ${team}`,
   MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
   MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
 } as const;
@@ -1672,6 +1654,7 @@ function ManagedSlackBot({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  const [addRefusal, setAddRefusal] = useState<string>();
   const [connecting, setConnecting] = useState(false);
   const underWay = useRef(false);
   const connect = () => {
@@ -1717,9 +1700,20 @@ function ManagedSlackBot({
           leading: SLACK_MARK,
           label: "Slack bot",
           description: slackBotLine(slackBot, true),
-          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT),
+          error:
+            refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT) ??
+            refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
           control:
-            slackBot.team !== undefined ? null : (
+            slackBot.team !== undefined ? (
+              slackBot.channels === undefined ? null : (
+                <AddSlackChannel
+                  workspaceId={workspaceId}
+                  channels={slackBot.channels}
+                  onChanged={onChanged}
+                  onRefused={setAddRefusal}
+                />
+              )
+            ) : (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
                 busy={connecting}
@@ -1781,7 +1775,7 @@ function SlackNotificationsRow({
   );
 }
 
-/** The bot's row, and under it the reader's own switch where the bot is connected. */
+/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels (`slack-bot-channels.tsx`) and the reader's own switch. */
 function SlackBotRows({
   workspace,
   slackBot,
@@ -1799,15 +1793,19 @@ function SlackBotRows({
     </SettingsRow>
   );
   if (slackBot.team === undefined || slackBot.notifications === undefined) return row;
+  // Note that the rows stand side by side as the card's own, as GitHub's do, so the card rules a line between each.
   return (
-    <Stack gap={GAP.NONE}>
+    <>
       {row}
+      {managesWorkspace(workspace) ? (
+        <SlackBotChannelRows workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
+      ) : null}
       <SlackNotificationsRow
         workspaceId={workspace.id}
         on={slackBot.notifications}
         onChanged={onChanged}
       />
-    </Stack>
+    </>
   );
 }
 
@@ -1849,28 +1847,6 @@ export interface WorkspaceSettingsControl {
   listFailed: boolean;
   /** Asks for the workspaces again. */
   onRetryList: () => void;
-}
-
-/** A picked file read into a workspace's photo: the `data:` URL to send, or why it cannot be one. */
-type PhotoRead = { readonly photo: string } | { readonly refusal: string };
-
-/**
- * A picked file drawn as a workspace's photo on this machine: its centre
- * square at `PHOTO_EDGE` pixels a side, written as WebP. Note that it is
- * encoded with no bound of its own, because a photo past the service's is
- * said as too large rather than as a file that could not be read.
- */
-async function photoOfFile(file: File): Promise<PhotoRead> {
-  if (!PHOTO_TYPES.has(file.type)) return { refusal: PHOTO_REFUSAL.KIND(file.name) };
-  const image = await encodeImage(file, Number.POSITIVE_INFINITY, PHOTO_EDGE);
-  if (image === undefined) return { refusal: PHOTO_REFUSAL.UNREADABLE(file.name) };
-  const photo = `data:${image.mediaType};base64,${image.base64}`;
-  const bytes = workspacePhotoOfDataUrl(photo)?.bytes.length;
-  if (bytes === undefined) return { refusal: PHOTO_REFUSAL.UNREADABLE(file.name) };
-  if (bytes > WORKSPACE_PHOTO_BOUNDS.MAX_BYTES) {
-    return { refusal: PHOTO_REFUSAL.TOO_LARGE(file.name) };
-  }
-  return { photo };
 }
 
 /** Who the reader is in the workspace, in the identity row's line. */

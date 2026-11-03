@@ -33,7 +33,6 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -160,7 +159,6 @@ function shellProps(
  */
 function mount(
   inboxOpen: boolean,
-  restoring = false,
   overrides: Partial<TasksControl> = {},
   tab: PanelTab = PANEL_TAB.TASKS,
   onTabChange: (tab: PanelTab) => void = ignore,
@@ -175,7 +173,6 @@ function mount(
     const [asked, setAsked] = useState(false);
     const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
-      restoring,
       inboxView: {
         open: inboxOpen,
         chosen: undefined,
@@ -183,7 +180,6 @@ function mount(
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
-        onOpenChannel: () => undefined,
         onClear: ignore,
         pages: undefined,
         onTaskAgents: () => undefined,
@@ -209,7 +205,7 @@ function titleBarButtons(page: HTMLElement): string[] {
 
 test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
-  const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const page = mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
   const bars = page.querySelectorAll(
     'section[aria-label="Settings"] :is(.desktop-drag-strip, .ui-toolbar)',
@@ -418,11 +414,8 @@ test("the title bar's buttons, each wrapped in its hint, tell a reader the chord
   ]);
 });
 
-test("an account with no plan is welcomed on New task's composer, and the title bar's New task still raises the dialog over the window, which Escape puts away", () => {
+test("an account with no plan raises New task from the title bar over the window, which Escape puts away", () => {
   const page = mount(false);
-  const welcome = page.querySelector('section[aria-label="Welcome"]');
-  assert.ok(welcome, "the welcome stands");
-  assert.ok(welcome.querySelector(".new-task-composer"), "the welcome holds New task's composer");
   const newTask = page.querySelector<HTMLButtonElement>(
     '.title-bar-controls:not([data-edge]) button[aria-label="New task"]',
   );
@@ -439,11 +432,6 @@ test("an account with no plan is welcomed on New task's composer, and the title 
     true,
     "Escape puts the dialog away",
   );
-});
-
-test("while a launch reopens the plan last open, the column draws no welcome to flash before it", () => {
-  const page = mount(false, true);
-  assert.equal(page.querySelector('section[aria-label="Welcome"]'), null);
 });
 
 /** The sidebar's row named `name`: the button whose first words a reader hears are it. */
@@ -465,23 +453,21 @@ function homeRow(page: HTMLElement): HTMLButtonElement {
   return placeRow(page, "Home") ?? assert.fail("the Home row stands");
 }
 
-test("the sidebar's Home row is the place shown on Home, and neither over the Inbox nor while a launch reopens a plan", () => {
+test("the sidebar's Home row is the place shown on Home, and not over the Inbox", () => {
   assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
   act(() => root?.unmount());
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
-  act(() => root?.unmount());
-  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
 });
 
 test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
   let home = 0;
   const tabs: PanelTab[] = [];
-  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  mount(false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   act(() => runAppCommand(APP_COMMAND.HOME));
   assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
   act(() => root?.unmount());
 
-  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
+  const tasks = mount(false, { onGoHome: () => (home += 1) });
   act(() => homeRow(tasks).click());
   assert.equal(home, 2);
 });
@@ -494,11 +480,10 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Vespin once signed out", async () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Automations, or Settings, and Vespin once signed out", async () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
-      false,
       {
         signedIn,
         workspaces,
@@ -523,7 +508,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
     [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Vespin", DOCUMENT_NAME],
   );
 
-  mount(false, false, {
+  mount(false, {
     workspaces: [ACME],
     workspace: ACME,
     automationsView: { ...tasksControl().automationsView, open: true },
@@ -538,7 +523,6 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
     window.localStorage.setItem("app.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
-      false,
       {
         page: TASKS_PAGE.DOCUMENT,
         tasks: [DOCUMENT_TASK],
@@ -702,7 +686,7 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
 
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   const told: SidebarCollapse["overlay"][] = [];
-  const page = mount(false, false, {}, PANEL_TAB.TASKS, ignore, {
+  const page = mount(false, {}, PANEL_TAB.TASKS, ignore, {
     overlay: SIDEBAR_OVERLAY.OPEN,
     onOverlay: (next) => told.push(next),
   });
@@ -719,30 +703,6 @@ test("the sidebar offers no Issues row, with every experiment on, since Vespin k
   await settle();
   assert.ok(placeRow(page, "Automations"));
   assert.equal(placeRow(page, "Issues"), undefined);
-});
-
-test("with Channels on, the sidebar keeps the Tasks section and stands the channels right under the Inbox's row, which marks the Inbox until a channel is chosen", async () => {
-  await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
-  const page = mount(true, false, { workspaces: [ACME], workspace: ACME });
-  await settle();
-  const sidebar = page.querySelector("aside.desktop-sidebar") ?? assert.fail("the sidebar stands");
-  const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
-    nav.getAttribute("aria-label"),
-  );
-  assert.ok(groups.includes("My tasks"), `the Tasks section stands: ${groups.join(", ")}`);
-  assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
-  const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
-  assert.equal(
-    inbox().nextElementSibling?.getAttribute("aria-label"),
-    "Channels",
-    "the channels stand right under the Inbox's row",
-  );
-  assert.equal(inbox().getAttribute("aria-current"), "page");
-
-  act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
-  await settle();
-  assert.equal(inbox().getAttribute("aria-current"), null, "a channel marks its own row");
-  act(() => leaveChannel());
 });
 
 /** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
@@ -780,28 +740,23 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox, with Channels on as off", async () => {
-  for (const experiments of [{}, experimentsOn(EXPERIMENT.CHANNELS)]) {
-    handState(experiments);
-    const asked: string[] = [];
-    const page = await mountNarrow({
-      boardView: { ...tasksControl().boardView, open: true },
-      inboxView: {
-        ...tasksControl().inboxView,
-        onOpen: () => asked.push("open"),
-      },
-    });
-    assert.deepEqual(
-      barItems(page).map((item) => item.textContent),
-      ["Inbox", "Tasks", "More"],
-    );
-    assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
-    assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
-    act(() => barItem(page, "Inbox").click());
-    assert.deepEqual(asked, ["open"]);
-    act(() => root?.unmount());
-    page.remove();
-  }
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
+  const asked: string[] = [];
+  const page = await mountNarrow({
+    boardView: { ...tasksControl().boardView, open: true },
+    inboxView: {
+      ...tasksControl().inboxView,
+      onOpen: () => asked.push("open"),
+    },
+  });
+  assert.deepEqual(
+    barItems(page).map((item) => item.textContent),
+    ["Inbox", "Tasks", "More"],
+  );
+  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
+  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
+  act(() => barItem(page, "Inbox").click());
+  assert.deepEqual(asked, ["open"]);
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
@@ -940,7 +895,7 @@ test("⇧⌘B opens the Tasks page, bringing the Tasks tab forward from Settings
   handState({});
   const went: string[] = [];
   const boardView = { ...tasksControl().boardView, onOpen: () => went.push("tasks page") };
-  mount(false, false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
+  mount(false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.TASKS), true);
   assert.deepEqual(went, [PANEL_TAB.TASKS, "tasks page"]);
@@ -965,7 +920,6 @@ test("while the Automations pages are still loading their frame stands the list 
   handState({});
   mount(
     false,
-    false,
     { workspaces: [ACME], workspace: ACME, automationsView },
     PANEL_TAB.TASKS,
     ignore,
@@ -978,7 +932,6 @@ test("while the Automations pages are still loading their frame stands the list 
 
   // Note that the window's state has landed in the registry, so Automations opens within one render, before their chunk can.
   const page = mount(
-    false,
     false,
     { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
     PANEL_TAB.TASKS,
@@ -1004,7 +957,7 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
-  const page = mount(false, false, { history });
+  const page = mount(false, { history });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
   assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
@@ -1052,7 +1005,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   };
 
   handState({});
-  const page = mount(false, false, overrides);
+  const page = mount(false, overrides);
   await settle();
   assert.ok(page.querySelector("section[aria-label=Automations]"));
   assert.equal(document.title, "Automations — Acme");
@@ -1220,7 +1173,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   });
 });
 
-test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox narrowed to a channel too", async () => {
+test("the side panel's toggle stands for the Inbox's chosen item", async () => {
   const control = tasksControl();
   const chosen = {
     inboxView: {
@@ -1229,31 +1182,25 @@ test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox n
       chosen: { taskId: DOCUMENT_TASK.id, itemId: "inbox-item-1" },
     },
   };
-  const toggled: Record<string, boolean> = {};
-  for (const [shown, experiments, patch, stream] of [
-    ["the Inbox", {}, chosen, false],
-    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen, true],
-  ] as const) {
-    await handBridge(experiments);
-    if (stream) chooseChannel("c1000001-6d9f-4ab7-92df-000000000001");
-    else leaveChannel();
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    act(() =>
-      root?.render(
-        onRegistry(AtomRegistry.make(), createElement(PlacedShell, { place: PLACE.INBOX, patch })),
+  await handBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlacedShell, { place: PLACE.INBOX, patch: chosen }),
       ),
-    );
-    await settle();
-    toggled[shown] = [...container.querySelectorAll("button")].some((button) =>
-      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
-    );
-    act(() => root?.unmount());
-    container.remove();
-  }
-  leaveChannel();
-  assert.deepEqual(toggled, { "the Inbox": true, "a channel": true });
+    ),
+  );
+  await settle();
+  const toggled = [...container.querySelectorAll("button")].some((button) =>
+    ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+  );
+  act(() => root?.unmount());
+  container.remove();
+  assert.ok(toggled, "the toggle stands for the Inbox's chosen item");
 });
 
 test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {
@@ -1290,7 +1237,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
-  const page = mount(false, false, {
+  const page = mount(false, {
     page: TASKS_PAGE.DOCUMENT,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     tasks: [DOCUMENT_TASK],
@@ -1322,14 +1269,14 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
-  mount(false, false, { adminView });
+  mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   handState({}, { access: { admin: true } });
-  mount(false, false, { adminView });
+  mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
   assert.equal(opened, 1);
@@ -1337,7 +1284,7 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
 
 test("Admin stands in the plan's place beside the sidebar, its row marked, with no way back of its own", async () => {
   handState({}, { access: { admin: true } });
-  const page = mount(false, false, { adminView: { ...tasksControl().adminView, open: true } });
+  const page = mount(false, { adminView: { ...tasksControl().adminView, open: true } });
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
   assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
@@ -1433,7 +1380,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
+  assert.equal(back(fromNowhere).textContent, "Home", "with no page behind, Home");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

@@ -31,7 +31,7 @@ describe("launchSpec", () => {
   it("starts app-server on stdio with OpenAI's documented ChatGPT-plan provider", () => {
     const overrides = spec.args.filter((_, index) => spec.args[index - 1] === "-c");
     expect(spec.args.slice(spec.args.indexOf("--") + 1, spec.args.indexOf("--") + 5)).toEqual([
-      "/opt/luke-codex/bin/codex",
+      "/opt/agent-codex/bin/codex",
       "app-server",
       "--listen",
       "stdio://",

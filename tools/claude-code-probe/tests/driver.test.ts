@@ -77,15 +77,15 @@ describe("the driver", () => {
       seen.push(String(type));
       if (type === "assistant") send(child, { type: "stop" });
       if (type === "result") send(child, { type: "end" });
-      if (type === "luke_probe_exit") break;
+      if (type === "agent_probe_exit") break;
     }
 
     expect(seen).toEqual([
       "system",
-      "luke_probe_account",
+      "agent_probe_account",
       "assistant",
       "result",
-      "luke_probe_exit",
+      "agent_probe_exit",
     ]);
   }, 10_000);
 });

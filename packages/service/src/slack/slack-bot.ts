@@ -23,9 +23,11 @@
  * email Slack holds for them (`users.info`). The bot replies in the thread
  * they wrote in (`chat.postMessage` with `thread_ts`), reading the thread's
  * earlier messages (`conversations.replies`) and its link
- * (`chat.getPermalink`).
+ * (`chat.getPermalink`). Settings lists the team's channels
+ * (`conversations.list`), and an owner or admin puts the bot in a public one
+ * (`conversations.join`) or takes it out of one (`conversations.leave`).
  *
- * `dm`, `update`, and those reads and replies are best-effort: whatever fails, Slack, Connect, or the
+ * `dm`, `update`, and those reads, replies, joins, and leaves are best-effort: whatever fails, Slack, Connect, or the
  * store, is logged by a fixed line and Slack's own error code, never Slack's
  * words or the token, and answers nothing. Note that neither is to be
  * yielded inside a transaction, because each waits on Slack.
@@ -78,6 +80,10 @@ const SLACK_METHOD = {
   CHAT_GET_PERMALINK: "chat.getPermalink",
   CONVERSATIONS_REPLIES: "conversations.replies",
   USERS_INFO: "users.info",
+  CONVERSATIONS_LIST: "conversations.list",
+  CONVERSATIONS_JOIN: "conversations.join",
+  CONVERSATIONS_LEAVE: "conversations.leave",
+  REACTIONS_ADD: "reactions.add",
 } as const;
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
@@ -109,6 +115,14 @@ export interface SlackThreadMessage {
   readonly user?: string;
   readonly bot: boolean;
   readonly text: string;
+}
+
+/** A channel of the team as the bot sees it: its name, whether it is private, and whether the bot is in it. */
+export interface SlackChannel {
+  readonly id: string;
+  readonly name: string;
+  readonly private: boolean;
+  readonly member: boolean;
 }
 
 /** The Slack team the bot's token answers for. */
@@ -147,11 +161,12 @@ export interface SlackBotService {
   readonly configured: boolean;
   /** The team the bot's token answers for, as `auth.test` says. */
   readonly team: Effect.Effect<SlackTeam, SlackBotFailure>;
-  /** Writes to the member directly, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
+  /** Writes to the member directly, in the thread under the DM `thread` names where given, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
   readonly dm: (
     organizationId: string,
     userId: string,
     content: SlackMessageContent,
+    thread?: SlackMessage,
   ) => Effect.Effect<Option.Option<SlackMessage>, never, DatabaseServices>;
   /** The member of the workspace a Slack user of its connected team is, by the id kept for them or through a Slack account a member connected themselves; nothing where neither finds one. */
   readonly memberOf: (
@@ -180,6 +195,14 @@ export interface SlackBotService {
   readonly permalink: (channel: string, ts: string) => Effect.Effect<Option.Option<string>>;
   /** The email Slack holds for the user; nothing where it holds none, or the read failed. */
   readonly userEmail: (slackUserId: string) => Effect.Effect<Option.Option<string>>;
+  /** The team's public channels and the private ones the bot is in, archived ones left out, as far as Slack's first page holds them; nothing where the read failed. */
+  readonly channels: Effect.Effect<Option.Option<readonly SlackChannel[]>>;
+  /** Puts the bot in a public channel; false where Slack refused. */
+  readonly join: (channel: string) => Effect.Effect<boolean>;
+  /** Takes the bot out of a channel; false where Slack refused. */
+  readonly leave: (channel: string) => Effect.Effect<boolean>;
+  /** Reacts to a message with the emoji Slack names `emoji`; a failure is logged and answers nothing. */
+  readonly react: (channel: string, ts: string, emoji: string) => Effect.Effect<void>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
@@ -218,6 +241,24 @@ const UserInfoSchema = Schema.Struct({
   }),
 });
 
+/** `conversations.list`'s answer, as far as it is read. */
+const ChannelsSchema = Schema.Struct({
+  channels: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      name: Schema.String,
+      is_private: Schema.optional(Schema.Boolean),
+      is_member: Schema.optional(Schema.Boolean),
+    }),
+  ),
+});
+
+/** The most channels read, Slack's own bound for one page; a team with more is read by its first page. */
+const CHANNELS_READ = "1000";
+
+/** The kinds of conversation the channel list reads. */
+const CHANNEL_TYPES = "public_channel,private_channel";
+
 /** The most of a thread's messages read; a thread longer than this is read by its first page. */
 const THREAD_MESSAGES_READ = "200";
 
@@ -243,6 +284,15 @@ function readAnswer<A>(
 /** A message's arguments as the Web API takes them, its blocks as the JSON Slack reads them from. */
 function contentArgs(content: SlackMessageContent): Record<string, string> {
   return { text: content.text, blocks: JSON.stringify(content.blocks) };
+}
+
+/**
+ * A new message's arguments: its content, with Slack's link and media
+ * previews off. Note that we turn them off, because an agent's words name
+ * many pull requests, and a preview of each buries the message itself.
+ */
+function postArgs(content: SlackMessageContent): Record<string, string> {
+  return { ...contentArgs(content), unfurl_links: "false", unfurl_media: "false" };
 }
 
 /** Logs a failure by its fixed line, and answers nothing. */
@@ -375,6 +425,10 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       threadMessages: () => Effect.succeed([]),
       permalink: () => Effect.succeedNone,
       userEmail: () => Effect.succeedNone,
+      channels: Effect.succeedNone,
+      join: () => Effect.succeed(false),
+      leave: () => Effect.succeed(false),
+      react: () => Effect.void,
     };
   }
   return {
@@ -383,7 +437,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       Effect.flatMap((answer) => readAnswer(SLACK_METHOD.AUTH_TEST, AuthTestSchema, answer)),
       Effect.map((answer) => ({ id: answer.team_id, name: answer.team })),
     ),
-    dm: (organizationId, userId, content) =>
+    dm: (organizationId, userId, content, thread) =>
       Effect.gen(function* () {
         const installation = yield* workspaceSlackInstallation(organizationId);
         if (Option.isNone(installation)) return Option.none<SlackMessage>();
@@ -396,8 +450,10 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         if (Option.isNone(slackId)) return Option.none<SlackMessage>();
         // Note that a user id as the channel writes to the bot's own conversation with them.
         const posted = yield* api(SLACK_METHOD.CHAT_POST_MESSAGE, {
-          channel: slackId.value,
-          ...contentArgs(content),
+          ...(thread === undefined
+            ? { channel: slackId.value }
+            : { channel: thread.channel, thread_ts: thread.ts }),
+          ...postArgs(content),
         });
         const message = yield* readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, posted);
         return Option.some<SlackMessage>({ channel: message.channel, ts: message.ts });
@@ -414,7 +470,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       api(SLACK_METHOD.CHAT_POST_MESSAGE, {
         channel,
         thread_ts: threadTs,
-        ...contentArgs(content),
+        ...postArgs(content),
       }).pipe(
         Effect.flatMap((answer) =>
           readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, answer),
@@ -460,6 +516,54 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         Effect.flatMap((answer) => readAnswer(SLACK_METHOD.USERS_INFO, UserInfoSchema, answer)),
         Effect.map((answer) => Option.fromNullishOr(answer.user.profile?.email)),
         Effect.catch(swallowed<string>("read a member's email")),
+      ),
+    channels: api(SLACK_METHOD.CONVERSATIONS_LIST, {
+      types: CHANNEL_TYPES,
+      exclude_archived: "true",
+      limit: CHANNELS_READ,
+    }).pipe(
+      Effect.flatMap((answer) =>
+        readAnswer(SLACK_METHOD.CONVERSATIONS_LIST, ChannelsSchema, answer),
+      ),
+      Effect.map((answer) =>
+        Option.some(
+          answer.channels.map(
+            (channel): SlackChannel => ({
+              id: channel.id,
+              name: channel.name,
+              private: channel.is_private === true,
+              member: channel.is_member === true,
+            }),
+          ),
+        ),
+      ),
+      Effect.catch(swallowed<readonly SlackChannel[]>("read the team's channels")),
+    ),
+    join: (channel) =>
+      api(SLACK_METHOD.CONVERSATIONS_JOIN, { channel }).pipe(
+        Effect.as(true),
+        Effect.catch((cause) =>
+          Effect.as(
+            Effect.logWarning("The Slack bot could not join a channel", cause.message),
+            false,
+          ),
+        ),
+      ),
+    leave: (channel) =>
+      api(SLACK_METHOD.CONVERSATIONS_LEAVE, { channel }).pipe(
+        Effect.as(true),
+        Effect.catch((cause) =>
+          Effect.as(
+            Effect.logWarning("The Slack bot could not leave a channel", cause.message),
+            false,
+          ),
+        ),
+      ),
+    react: (channel, ts, emoji) =>
+      api(SLACK_METHOD.REACTIONS_ADD, { channel, timestamp: ts, name: emoji }).pipe(
+        Effect.asVoid,
+        Effect.catch(swallowed<void>("react to a message")),
+        Effect.asVoid,
       ),
   };
 }

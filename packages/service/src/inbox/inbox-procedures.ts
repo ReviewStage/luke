@@ -522,8 +522,12 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
  * answer to the thread's open ask is the reply that answers it, as
  * `answeredByReply` takes one; one without is a plain reply, which never
  * answers, even while an ask stands open.
+ *
+ * Exported for a caller with no request of its own, our Slack route
+ * (`slack/slack-agent-starts.ts`), which posts a member's reply in the Slack
+ * thread of a DM the bot wrote them as their reply on the DM's thread.
  */
-const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   itemId: string,
@@ -587,7 +591,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * A thread a member starts with an agent, written and handed to the agent
- * as a message on it is (`messaged`): the agent hears the member's words
+ * as a message on it is (`messageAsMember`): the agent hears the member's words
  * under the thread's key, which it answers on with its own posts. Refused
  * before anything is written where the member may not message the agent,
  * so a thread the agent could never hear never stands; a hand-off that
@@ -717,7 +721,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }) {
       const itemId = yield* pathUuid(input.params.id);
       const { text, clientKey, attachments = [], answers, revision } = input.body;
-      return yield* messaged(writer, context.userId, itemId, {
+      return yield* messageAsMember(writer, context.userId, itemId, {
         text,
         clientKey,
         attachments,

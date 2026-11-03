@@ -360,7 +360,7 @@ export function fixtureRepositories(workspaceId: string | undefined): TasksRepos
     repositories: {
       installed: true,
       repositories: FIXTURE_REPOSITORIES.get(workspaceId ?? FIXTURE_FIRST.id) ?? [],
-      installationUrl: "https://github.com/apps/luke/installations/new",
+      installationUrl: "https://github.com/apps/vespin-agent/installations/new",
     },
   };
 }

@@ -12,7 +12,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -48,10 +48,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
  * cron on the cadence `vercel.json` fixes. The logic lives in
  * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
  * seams and the database queries behind them, each answering an Effect over
- * the group's own `SqlClient.SqlClient`. An automation's run reaches eve as the deployment acting for the
- * automation's owner, under the deployment's own eve secret, never the
- * bearer the cron called with; a deployment without it, or without an
- * origin for eve, fails each run it acts on as unavailable.
+ * the group's own `SqlClient.SqlClient`. An automation's run reaches its
+ * agent's session through `routedSessions` acting for the automation's
+ * owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -62,7 +61,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const eveFor: EveForAccount = routedSessions;
+  const sessionsFor: SessionsForAccount = routedSessions;
   const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
@@ -101,17 +100,19 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     sweepNativeWakeups: (now) =>
-      sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepAgentQueues: () => sweepAgentQueues(eveFor).pipe(Effect.provideContext(startContext)),
+      sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
-      sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
+      sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     sweepTokenPullRequests: (now) =>
-      sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
-        Effect.provideContext(startContext),
-      ),
+      sweepTokenPullRequests(
+        sessionsFor,
+        environment.providerKeyEncryptionKeys,
+        new Date(now),
+      ).pipe(Effect.provideContext(startContext)),
     // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
     sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     // A repository no agent starts on any more keeps no snapshot past its age.

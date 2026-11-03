@@ -18,6 +18,7 @@ import {
 } from "@repo/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
+import { RECORDING_CURSOR_FILE, RECORDING_CURSOR_SOURCE } from "../browser/recording-cursor.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
@@ -74,7 +75,7 @@ const INSTALL_GTK =
  * `--with-deps` install takes no option to wait, so the wait is set in apt's
  * configuration, where it and every install here read it.
  */
-const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
+const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; fi >/dev/null; fi`;
 
 /**
  * Installs bubblewrap and socat, which Claude Code's command sandbox runs
@@ -151,6 +152,18 @@ const INSTALL_CODEX = [
 ];
 
 /**
+ * The agent's pointer as a video draws it (`../browser/recording-cursor.ts`),
+ * kept where every user reads it, for an agent's own Playwright script to
+ * add to the pages it records. Note that it is written from base64, so no
+ * character of the source is the shell's to read.
+ */
+const INSTALL_RECORDING_CURSOR = [
+  `$SUDO install -d -o root -g root -m 0755 ${RECORDING_CURSOR_FILE.DIRECTORY}`,
+  `printf '%s' '${Buffer.from(RECORDING_CURSOR_SOURCE).toString("base64")}' | base64 -d | $SUDO tee ${RECORDING_CURSOR_FILE.PATH} >/dev/null`,
+  `$SUDO chmod 0644 ${RECORDING_CURSOR_FILE.PATH}`,
+];
+
+/**
  * The directory each launch installs the runner's bundle in, made root's
  * here, before any Terminal opens, so no shell of the default user's makes
  * it first and replaces the bundle in it.
@@ -161,7 +174,7 @@ const MAKE_RUNNER_DIRECTORY = [`$SUDO install -d -o root -g root -m 0755 ${RUNNE
 const SANDBOX_USER = "vercel-sandbox";
 
 /** The drop-in that keeps the API's `sudo` to Vercel's documented contract. */
-const SUDO_ENV_DROP_IN = "/etc/sudoers.d/luke-env";
+const SUDO_ENV_DROP_IN = "/etc/sudoers.d/sandbox-env";
 
 /**
  * Vercel documents that the API's `sudo: true` keeps the command's
@@ -250,14 +263,16 @@ const SYSTEM_STAGE = stage([
  * changes rarely to what changes often, each one command, with the code
  * extension's tooling between the first and the rest. `gh stack` follows the
  * tooling, which installs the `gh` it extends;
- * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; and
- * the capability check comes last, once everything is in place.
+ * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; the
+ * recording pointer, which changes with the app, follows the tools; and the
+ * capability check comes last, once everything is in place.
  */
 export const PREPARE_STAGES: readonly string[] = [
   SYSTEM_STAGE,
   stage(INSTALL_GH_STACK),
   stage(INSTALL_CLAUDE_CODE),
   stage(INSTALL_CODEX),
+  stage(INSTALL_RECORDING_CURSOR),
   stage(CHECK_CAPABILITY_DROP),
 ];
 

@@ -1,76 +1,28 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
-  BUTTON_SIZE,
   ComposeIcon,
   GearIcon,
   IconButton,
-  InboxIcon,
-  MoreButton,
   NAV_CURRENT,
   NavItem,
   ProductMark,
   SearchIcon,
-  Shortcut,
   SidebarAccountRow,
-  SidebarFilters,
   SidebarFoot,
   SidebarIdentity,
   SidebarPlaces,
   SidebarRule,
-  STATUS_TONE,
-  useDisclosureFold,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
  * shares: the app's head, and the same head naming the surface it stands on;
- * the places over their rule; a place and the rows that narrow it, which
- * its row folds, its ⋯ standing beside its chord under the pointer; and the
- * foot's account row.
+ * the places over their rule; and the foot's account row.
  */
-
-/** A place and the rows that narrow it, which the place's chevron folds. */
-function FoldingFilters(): React.JSX.Element {
-  const fold = useDisclosureFold(true);
-  return (
-    <SidebarPlaces label="Places">
-      <NavItem
-        icon={<InboxIcon />}
-        count={{ value: 3, noun: "need you", tone: STATUS_TONE.ATTENTION }}
-        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
-        fold={{ state: fold.state, label: "Channels" }}
-        actions={<MoreButton thing="Inbox" size={BUTTON_SIZE.COMPACT} />}
-      >
-        Inbox
-      </NavItem>
-      <SidebarFilters
-        label="Channels"
-        fold={fold}
-        standing={
-          <NavItem icon={<GLYPH.CHANNEL />} current={NAV_CURRENT.PAGE} unread>
-            general
-          </NavItem>
-        }
-      >
-        <NavItem icon={<GLYPH.CHANNEL />} current={NAV_CURRENT.PAGE} unread>
-          general
-        </NavItem>
-        <NavItem
-          icon={<GLYPH.CHANNEL />}
-          count={{ value: 1, noun: "needs you", tone: STATUS_TONE.ATTENTION }}
-        >
-          infra
-        </NavItem>
-      </SidebarFilters>
-    </SidebarPlaces>
-  );
-}
 
 function SidebarParts(): React.JSX.Element {
   return (
@@ -98,11 +50,6 @@ function SidebarParts(): React.JSX.Element {
             </NavItem>
           </SidebarPlaces>
           <SidebarRule />
-        </div>
-      </CatalogSection>
-      <CatalogSection id="sidebar-filters" title="A place and the rows that narrow it">
-        <div className="catalog-narrow">
-          <FoldingFilters />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-foot" title="Foot">

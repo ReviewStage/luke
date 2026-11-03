@@ -30,7 +30,7 @@ import { Pool } from "pg";
  *   it is sealed under, which the local server must hold too.
  * - `APP_DEMO_HOST_STATE` and `APP_DEMO_SERVICE_ORIGIN`, optional and
  *   given together: the state folder of the host the run starts on this Mac
- *   (`luke-host run` under `APP_HOST_STATE_ROOT`), and the local server's
+ *   (`vespin-host run` under `APP_HOST_STATE_ROOT`), and the local server's
  *   origin it calls. The host is enrolled as Dean's, every task runs its
  *   agents on it, and its record is written into that folder once the seed
  *   has landed, holding a device secret minted here, which the database
@@ -104,7 +104,7 @@ const seedConfiguredDatabase = Effect.gen(function* () {
     Option.map(host, ({ minted }) => ({ secretHash: minted.hash })),
   ).pipe(Effect.provide(sqlClientOverUrl(url.success)));
   yield* Effect.logInfo(
-    `Seeded the acme world: ${seeded.taskIds.length} tasks, ${seeded.channelIds.length} channels, ${seeded.memberIds.length + 1} members`,
+    `Seeded the acme world: ${seeded.taskIds.length} tasks, ${seeded.memberIds.length + 1} members`,
     { deanId: seeded.deanId, workspaceId: seeded.workspaceId },
   );
   if (Option.isSome(credential)) {

@@ -13,6 +13,7 @@ import {
   SearchableMenu,
   SettingsRow,
   type SettingsRowDensity,
+  type SettingsRowIndent,
   Tooltip,
 } from "@repo/ui";
 import type { ShownError } from "@repo/ui/reported-failure";
@@ -199,6 +200,7 @@ export function PickerRow({
   saves = 0,
   error,
   density,
+  indent,
   ...picker
 }: Omit<PickerProps, "describedBy" | "invalid"> & {
   /** The why under the row's name: words, and where a row needs one, a link among them. */
@@ -211,10 +213,13 @@ export function PickerRow({
   error?: ShownError | undefined;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
+  /** Whether the row stands inset under the row above, one of its things. */
+  indent?: SettingsRowIndent | undefined;
 }): React.JSX.Element {
   return (
     <SettingsRow
       density={density}
+      indent={indent}
       label={picker.label}
       adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}

@@ -50,8 +50,8 @@ import {
 import { runAgent } from "./runner.js";
 import { fakeAppServer } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { ANSWER, type Answer, makeFakeService } from "./testing/fake-service.js";
 import { type FakeProcess, fakeProc, UNREAD_PROC } from "./testing/fake-proc.js";
+import { ANSWER, type Answer, makeFakeService } from "./testing/fake-service.js";
 import {
   BACKGROUND_WAIT,
   FOLLOW_UP_TURNS,
@@ -143,7 +143,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
 /** One launch over stdin lines the test writes, against a fake CLI and a fake service. */
 function launch(
   steps: readonly Step[],
-  luke: ReturnType<typeof fakeService>,
+  service: ReturnType<typeof fakeService>,
   env: Record<string, string> = ENV,
   proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
@@ -159,7 +159,7 @@ function launch(
       Effect.provide(
         Layer.mergeAll(
           cli.layer,
-          luke.layer,
+          service.layer,
           fakeAppServer([]).layer,
           processTable(proc, RUNNER_PID),
         ),
@@ -191,13 +191,13 @@ function settled<A, E>(fiber: Fiber.Fiber<A, E>) {
 
 it.effect("posts a waiting turn in order and ends the launch only once nothing is pending", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { cli, write, run } = yield* launch(WORKFLOW_TURN, luke);
+    const service = fakeService();
+    const { cli, write, run } = yield* launch(WORKFLOW_TURN, service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-    assert.deepEqual(kinds(luke.applied), [
+    assert.deepEqual(kinds(service.applied), [
       "system/init",
       "assistant",
       "user",
@@ -214,16 +214,16 @@ it.effect("posts a waiting turn in order and ends the launch only once nothing i
       RUNNER_EVENT.END,
     ]);
     assert.deepEqual(
-      luke.applied.map(({ sequence }) => sequence),
-      luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+      service.applied.map(({ sequence }) => sequence),
+      service.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
-    const posted = withoutAccepted(luke.applied);
+    const posted = withoutAccepted(service.applied);
     const waiting = posted[8]?.message;
     assert.ok(waiting !== undefined && "type" in waiting && waiting.type === RUNNER_EVENT.WAITING);
     assert.equal(waiting.background_tasks.length, 1);
     assert.equal(waiting.session_crons.length, 1);
     assert.ok(JSON.stringify(posted[11]?.message).includes(TURN_DONE.FIRST));
-    assert.deepEqual(luke.applied.at(-1)?.message, {
+    assert.deepEqual(service.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.TURN_ENDED,
     });
@@ -234,7 +234,7 @@ it.effect("posts a waiting turn in order and ends the launch only once nothing i
     });
     assert.equal(cli.prompts[0]?.priority, undefined);
     assert.equal(cli.closed, true);
-    assert.ok(luke.bearers.every((header) => header === `Bearer ${BEARER}`));
+    assert.ok(service.bearers.every((header) => header === `Bearer ${BEARER}`));
   }),
 );
 
@@ -242,14 +242,14 @@ it.effect(
   "hands a stop to the CLI during a long foreground command, and a message and a model change while the turn runs",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService([], STOPPED_COMMAND);
-      const { cli, prompted, write, run } = yield* launch(STOPPED_TURN, luke);
+      const service = fakeService([], STOPPED_COMMAND);
+      const { cli, prompted, write, run } = yield* launch(STOPPED_TURN, service);
       yield* write(CONFIG);
       yield* write({
         type: INPUT_LINE.MESSAGE,
         content: [{ type: "text", text: "Run sleep 600." }],
       });
-      yield* luke.seen;
+      yield* service.seen;
 
       yield* write({
         type: INPUT_LINE.MESSAGE,
@@ -275,11 +275,11 @@ it.effect(
       assert.deepEqual(cli.models, ["claude-opus"]);
       assert.deepEqual(cli.efforts, [EFFORT.LOW]);
       assert.deepEqual(cli.fastModes, [true, false]);
-      assert.deepEqual(kinds(luke.applied).slice(-2), [
+      assert.deepEqual(kinds(service.applied).slice(-2), [
         "result/error_during_execution",
         RUNNER_EVENT.END,
       ]);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.STOPPED,
       });
@@ -290,10 +290,10 @@ it.effect(
   "takes Vespin's later lines past a model change the CLI never answers, and ends on a Stop it never answers",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService([], STOPPED_COMMAND);
+      const service = fakeService([], STOPPED_COMMAND);
       const { cli, prompted, write, run } = yield* launch(
         STOPPED_TURN,
-        luke,
+        service,
         ENV,
         UNREAD_PROC,
         [],
@@ -301,7 +301,7 @@ it.effect(
       );
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
       yield* Queue.take(prompted);
       yield* write({ type: INPUT_LINE.MODEL, model: "claude-opus", effort: EFFORT.LOW });
       yield* write({
@@ -320,11 +320,11 @@ it.effect(
 
 it.effect("skips a stop meant for another launch's turn, and takes the one naming its own", () =>
   Effect.gen(function* () {
-    const luke = fakeService([], STOPPED_COMMAND);
-    const { cli, write, run } = yield* launch(STOPPED_TURN, luke);
+    const service = fakeService([], STOPPED_COMMAND);
+    const { cli, write, run } = yield* launch(STOPPED_TURN, service);
     yield* write(CONFIG);
     yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Run sleep 600." }] });
-    yield* luke.seen;
+    yield* service.seen;
 
     // A Stop of the launch before this one, delayed past it: its turn is not this launch's.
     yield* write({ type: INPUT_LINE.STOP, launch: FIRST_SEQUENCE - 7 });
@@ -337,11 +337,11 @@ it.effect("skips a stop meant for another launch's turn, and takes the one namin
 
 it.effect("keeps the CLI up for a message sent during a turn until a turn answers it", () =>
   Effect.gen(function* () {
-    const luke = fakeService([], "Working on the first message.");
-    const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+    const service = fakeService([], "Working on the first message.");
+    const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* luke.seen;
+    yield* service.seen;
     yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
     yield* Queue.take(prompted);
     yield* Queue.take(prompted);
@@ -352,7 +352,7 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       cli.prompts.map((prompt) => prompt.priority),
       [undefined, "next"],
     );
-    assert.deepEqual(kinds(luke.applied), [
+    assert.deepEqual(kinds(service.applied), [
       "system/init",
       "assistant",
       "result/success",
@@ -367,13 +367,13 @@ it.effect(
   "keeps the CLI up past a result that names no prompt until the turn that answers Vespin's message",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
-      const { write, run } = yield* launch(STRAY_RESULT_THEN_TURN, luke);
+      const service = fakeService();
+      const { write, run } = yield* launch(STRAY_RESULT_THEN_TURN, service);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      assert.deepEqual(kinds(luke.applied), [
+      assert.deepEqual(kinds(service.applied), [
         "system/init",
         "result/success",
         "assistant",
@@ -387,11 +387,11 @@ it.effect(
   "ends as failed a launch whose CLI says nothing of the message a stray result left, once its bound passes",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService([], STRAY_RESULT.uuid);
-      const { cli, write, run } = yield* launch(STRAY_RESULT_THEN_SILENCE, luke);
+      const service = fakeService([], STRAY_RESULT.uuid);
+      const { cli, write, run } = yield* launch(STRAY_RESULT_THEN_SILENCE, service);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
 
       yield* TestClock.adjust(RUNNER_UNANSWERED.SILENCE_MS - 1);
       assert.equal(run.pollUnsafe(), undefined);
@@ -402,17 +402,17 @@ it.effect(
 );
 
 /** How many IDLE events the service has taken. */
-function idles(luke: ReturnType<typeof fakeService>): number {
-  return luke.applied.filter(
+function idles(service: ReturnType<typeof fakeService>): number {
+  return service.applied.filter(
     ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
   ).length;
 }
 
 /** Waits, without moving the clock, until the service has taken the IDLE events given. */
-function untilIdles(luke: ReturnType<typeof fakeService>, count: number) {
+function untilIdles(service: ReturnType<typeof fakeService>, count: number) {
   return Effect.gen(function* () {
-    for (let step = 0; step < 5_000 && idles(luke) < count; step += 1) yield* Effect.yieldNow;
-    assert.equal(idles(luke), count);
+    for (let step = 0; step < 5_000 && idles(service) < count; step += 1) yield* Effect.yieldNow;
+    assert.equal(idles(service), count);
   });
 }
 
@@ -422,19 +422,19 @@ it.effect(
   "keeps a warm launch up past its turn, posting IDLE, takes the next message as a fresh turn of the same CLI, and ends as idled when Vespin retires it",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
-      const { cli, write, run } = yield* launch(WARM_TURNS, luke);
+      const service = fakeService();
+      const { cli, write, run } = yield* launch(WARM_TURNS, service);
       yield* write(WARM_CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* untilIdles(luke, 1);
+      yield* untilIdles(service, 1);
       assert.equal(run.pollUnsafe(), undefined, "the launch stays up past its turn");
 
       yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "And this." }] });
-      yield* untilIdles(luke, 2);
+      yield* untilIdles(service, 2);
       yield* write({ type: INPUT_LINE.RETIRE });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
-      assert.deepEqual(kinds(luke.applied), [
+      assert.deepEqual(kinds(service.applied), [
         "system/init",
         "assistant",
         "result/success",
@@ -444,7 +444,7 @@ it.effect(
         RUNNER_EVENT.IDLE,
         RUNNER_EVENT.END,
       ]);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.IDLED,
       });
@@ -459,15 +459,15 @@ it.effect(
 
 it.effect("a retire written behind a message is skipped, and the message's turn runs", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { write, run } = yield* launch(WARM_TURNS, luke);
+    const service = fakeService();
+    const { write, run } = yield* launch(WARM_TURNS, service);
     yield* write(WARM_CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* untilIdles(luke, 1);
+    yield* untilIdles(service, 1);
 
     yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "And this." }] });
     yield* write({ type: INPUT_LINE.RETIRE });
-    yield* untilIdles(luke, 2);
+    yield* untilIdles(service, 2);
     assert.equal(run.pollUnsafe(), undefined, "the retire behind the message ended nothing");
     yield* write({ type: INPUT_LINE.RETIRE });
 
@@ -479,13 +479,13 @@ it.effect(
   "takes Vespin's lines from the read its config names, past its cursor and its stdin's end",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
+      const service = fakeService();
       const linesUrl = "https://app.test/runner/lines";
       const uuid = "00000000-0000-4000-8000-0000000000aa";
       const reads: { launch: string | null; after: string | null; bearer: string | null }[] = [];
       // The first read is answered the message; every later one is held until the launch lets it go.
       const respond: FakeResponder = (url, init) => {
-        if (!url.startsWith(linesUrl)) return luke.respond(url, init);
+        if (!url.startsWith(linesUrl)) return service.respond(url, init);
         const query = new URL(url).searchParams;
         reads.push({
           launch: query.get(RUNNER_LINES.QUERY.LAUNCH),
@@ -501,7 +501,7 @@ it.effect(
         return Response.json({ lines });
       };
       const { cli, write, run, closeStdin } = yield* launch(SHORT_TURN, {
-        ...luke,
+        ...service,
         layer: fakeHttpClientLayer(respond),
       });
       yield* write({ ...CONFIG, linesUrl });
@@ -514,7 +514,7 @@ it.effect(
       ]);
       assert.equal(cli.prompts[0]?.uuid, uuid);
       assert.ok(
-        luke.applied.some(
+        service.applied.some(
           ({ message }) =>
             "type" in message && message.type === RUNNER_EVENT.ACCEPTED && message.uuid === uuid,
         ),
@@ -524,11 +524,11 @@ it.effect(
 
 it.effect("a warm launch nobody retires ends as idled at its cap", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { write, run } = yield* launch(SHORT_TURN, luke);
+    const service = fakeService();
+    const { write, run } = yield* launch(SHORT_TURN, service);
     yield* write(WARM_CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* untilIdles(luke, 1);
+    yield* untilIdles(service, 1);
     yield* TestClock.adjust(Duration.millis(RUNNER_WARM.IDLE_CAP_MS - 1));
     assert.equal(run.pollUnsafe(), undefined);
 
@@ -542,14 +542,14 @@ it.effect(
   "a launch the config does not ask to stay warm ends at its turn's end and skips a retire",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
-      const { write, run } = yield* launch(SHORT_TURN, luke);
+      const service = fakeService();
+      const { write, run } = yield* launch(SHORT_TURN, service);
       yield* write(CONFIG);
       yield* write({ type: INPUT_LINE.RETIRE });
       yield* write(FIRST_MESSAGE);
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      assert.equal(idles(luke), 0);
+      assert.equal(idles(service), 0);
     }),
 );
 
@@ -557,13 +557,13 @@ it.effect(
   "posts a heartbeat with no events every interval while the harness says nothing, and none once the launch ended",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService([], "Working on the first message.");
-      const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+      const service = fakeService([], "Working on the first message.");
+      const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, service);
       const heartbeats = () =>
-        luke.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
+        service.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
       const beforeAny = heartbeats();
       // Each interval is let run out, and its heartbeat land, before the next begins.
       for (const beat of [1, 2]) {
@@ -581,17 +581,17 @@ it.effect(
       assert.equal(beforeAny, 0);
       assert.equal(whileSilent, 2);
       assert.equal(heartbeats(), 2, "a launch that ended posts no heartbeat");
-      assert.ok(luke.bearers.every((header) => header === `Bearer ${BEARER}`));
+      assert.ok(service.bearers.every((header) => header === `Bearer ${BEARER}`));
     }),
 );
 
 it.effect("lets a heartbeat Vespin never answers go, and posts the next one an interval on", () =>
   Effect.gen(function* () {
-    const luke = fakeService([], "Working on the first message.");
+    const service = fakeService([], "Working on the first message.");
     let hung = 0;
     // The service holds the first heartbeat open, answering nothing until the runner lets it go.
-    const stalling: typeof luke = {
-      ...luke,
+    const stalling: typeof service = {
+      ...service,
       layer: fakeHttpClientLayer((url, init) => {
         if (hung === 0 && JSON.parse(String(init.body)).events.length === 0) {
           hung += 1;
@@ -599,15 +599,15 @@ it.effect("lets a heartbeat Vespin never answers go, and posts the next one an i
             init.signal?.addEventListener("abort", () => reject(new Error("let go"))),
           );
         }
-        return luke.respond(url, init);
+        return service.respond(url, init);
       }),
     };
     const { prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, stalling);
     const heartbeats = () =>
-      luke.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
+      service.bodies.filter((body) => JSON.parse(body).events.length === 0).length;
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* luke.seen;
+    yield* service.seen;
     yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
     for (let step = 0; step < 500 && hung === 0; step += 1) yield* Effect.yieldNow;
     yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS));
@@ -627,16 +627,16 @@ it.effect("lets a heartbeat Vespin never answers go, and posts the next one an i
 
 it.effect("interrupts a turn a wakeup started when Vespin stops it", () =>
   Effect.gen(function* () {
-    const luke = fakeService([], STOPPED_COMMAND);
-    const { cli, write, run } = yield* launch(WAKEUP_STOPPED_TURN, luke);
+    const service = fakeService([], STOPPED_COMMAND);
+    const { cli, write, run } = yield* launch(WAKEUP_STOPPED_TURN, service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* luke.seen;
+    yield* service.seen;
     yield* write({ type: INPUT_LINE.STOP });
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     assert.equal(cli.interrupts, 1);
-    assert.deepEqual(kinds(luke.applied).slice(-4), [
+    assert.deepEqual(kinds(service.applied).slice(-4), [
       RUNNER_EVENT.WAITING,
       "assistant",
       "result/error_during_execution",
@@ -647,7 +647,7 @@ it.effect("interrupts a turn a wakeup started when Vespin stops it", () =>
 
 it.effect("takes the launch's secrets out of every event it posts", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const leak: Step = {
       emit: {
         type: "assistant",
@@ -660,12 +660,12 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
         parent_tool_use_id: null,
       },
     };
-    const { write, run } = yield* launch([leak, ...SHORT_TURN], luke);
+    const { write, run } = yield* launch([leak, ...SHORT_TURN], service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);
 
-    assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, {
+    assert.deepEqual(withoutAccepted(service.applied)[0]?.message, {
       type: "assistant",
       message: {
         content: [
@@ -675,7 +675,7 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
       },
       parent_tool_use_id: null,
     });
-    const posted = JSON.stringify(luke.applied);
+    const posted = JSON.stringify(service.applied);
     for (const secret of [CLAUDE_TOKEN, BEARER]) {
       assert.ok(!posted.includes(JSON.stringify(secret).slice(1, -1)));
     }
@@ -687,7 +687,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const apiKey = "account-api-key-for-tests";
-      const luke = fakeService();
+      const service = fakeService();
       const leak: Step = {
         emit: {
           type: "assistant",
@@ -695,7 +695,7 @@ it.effect(
           parent_tool_use_id: null,
         },
       };
-      const { cli, write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+      const { cli, write, run } = yield* launch([leak, ...SHORT_TURN], service, {
         [RUNNER_ENV.BEARER]: BEARER,
         [RUNNER_ENV.API_KEY]: apiKey,
         PATH: "/usr/bin",
@@ -709,13 +709,13 @@ it.effect(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
       );
       assert.ok(denied.includes(`${RUNNER_ENV.API_KEY}:deny`));
-      assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+      assert.ok(!JSON.stringify(service.applied).includes(apiKey));
     }),
 );
 
 it.effect("leaves an escape that only looks like a secret's spelling as it was", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const said: Step = {
       emit: {
         type: "assistant",
@@ -723,7 +723,7 @@ it.effect("leaves an escape that only looks like a secret's spelling as it was",
         parent_tool_use_id: null,
       },
     };
-    const { write, run } = yield* launch([said, ...SHORT_TURN], luke, {
+    const { write, run } = yield* launch([said, ...SHORT_TURN], service, {
       ...ENV,
       [RUNNER_ENV.CLAUDE_TOKEN]: "\n",
     });
@@ -731,56 +731,56 @@ it.effect("leaves an escape that only looks like a secret's spelling as it was",
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);
 
-    assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, said.emit);
+    assert.deepEqual(withoutAccepted(service.applied)[0]?.message, said.emit);
   }),
 );
 
 it.effect("ends a waiting launch at once on a stop, with no turn to interrupt", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { cli, write, run } = yield* launch(SHORT_TURN, luke);
+    const service = fakeService();
+    const { cli, write, run } = yield* launch(SHORT_TURN, service);
     yield* write(CONFIG);
     yield* write({ type: INPUT_LINE.STOP });
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     assert.equal(cli.interrupts, 0);
     assert.equal(cli.closed, true);
-    assert.deepEqual(kinds(luke.applied), [RUNNER_EVENT.END]);
+    assert.deepEqual(kinds(service.applied), [RUNNER_EVENT.END]);
   }),
 );
 
 it.effect("posts each event once and in order through posts Vespin failed or never answered", () =>
   Effect.gen(function* () {
-    const luke = fakeService([ANSWER.SERVER_ERROR, ANSWER.UNREACHABLE, ANSWER.TAKE_THEN_FAIL]);
-    const { write, run } = yield* launch(SHORT_TURN, luke);
+    const service = fakeService([ANSWER.SERVER_ERROR, ANSWER.UNREACHABLE, ANSWER.TAKE_THEN_FAIL]);
+    const { write, run } = yield* launch(SHORT_TURN, service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
 
     const exit = yield* settled(run);
     assert.ok(Exit.isSuccess(exit));
     assert.equal(exit.value, RUNNER_END.TURN_ENDED);
-    assert.ok(luke.posts() > 3);
-    assert.deepEqual(kinds(luke.applied), [
+    assert.ok(service.posts() > 3);
+    assert.deepEqual(kinds(service.applied), [
       "system/init",
       "assistant",
       "result/success",
       RUNNER_EVENT.END,
     ]);
     assert.deepEqual(
-      luke.applied.map(({ sequence }) => sequence),
-      luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+      service.applied.map(({ sequence }) => sequence),
+      service.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
-    assert.equal(luke.applied.length, 5);
+    assert.equal(service.applied.length, 5);
   }),
 );
 
 /** A fake service that answers nothing, as a network that is down does, until `isUp` says it is back. */
-function downUntil(luke: ReturnType<typeof fakeService>, isUp: () => boolean): typeof luke {
+function downUntil(service: ReturnType<typeof fakeService>, isUp: () => boolean): typeof service {
   return {
-    ...luke,
+    ...service,
     layer: fakeHttpClientLayer((url, init) => {
       if (!isUp()) return Promise.reject(new Error("network is down"));
-      return luke.respond(url, init);
+      return service.respond(url, init);
     }),
   };
 }
@@ -790,42 +790,42 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let up = false;
-      const luke = fakeService();
+      const service = fakeService();
       const { write, run } = yield* launch(
         SHORT_TURN,
-        downUntil(luke, () => up),
+        downUntil(service, () => up),
       );
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
 
       for (let second = 0; second < 30 * 60; second += 1) yield* TestClock.adjust("1 second");
       assert.equal(run.pollUnsafe(), undefined, "the launch holds its run through the outage");
-      assert.equal(luke.applied.length, 0);
+      assert.equal(service.applied.length, 0);
       up = true;
 
       const exit = yield* settled(run);
       assert.ok(Exit.isSuccess(exit));
       assert.equal(exit.value, RUNNER_END.TURN_ENDED);
-      assert.deepEqual(kinds(luke.applied), [
+      assert.deepEqual(kinds(service.applied), [
         "system/init",
         "assistant",
         "result/success",
         RUNNER_EVENT.END,
       ]);
       assert.deepEqual(
-        luke.applied.map(({ sequence }) => sequence),
-        luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+        service.applied.map(({ sequence }) => sequence),
+        service.applied.map((_, index) => FIRST_SEQUENCE + index),
       );
     }),
 );
 
 it.effect("lets a post Vespin never answers go after its bound, and posts it again", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     let hung = 0;
     // The first post is held open, answering nothing until the runner lets it go.
-    const stalling: typeof luke = {
-      ...luke,
+    const stalling: typeof service = {
+      ...service,
       layer: fakeHttpClientLayer((url, init) => {
         if (hung === 0) {
           hung += 1;
@@ -833,7 +833,7 @@ it.effect("lets a post Vespin never answers go after its bound, and posts it aga
             init.signal?.addEventListener("abort", () => reject(new Error("let go"))),
           );
         }
-        return luke.respond(url, init);
+        return service.respond(url, init);
       }),
     };
     const { write, run } = yield* launch(SHORT_TURN, stalling);
@@ -843,11 +843,11 @@ it.effect("lets a post Vespin never answers go after its bound, and posts it aga
     for (let step = 0; step < 500 && hung === 0; step += 1) yield* Effect.yieldNow;
     assert.equal(hung, 1);
     yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS - 1));
-    assert.equal(luke.applied.length, 0, "the held post is not let go early");
+    assert.equal(service.applied.length, 0, "the held post is not let go early");
     const exit = yield* settled(run);
     assert.ok(Exit.isSuccess(exit));
     assert.equal(hung, 1);
-    assert.deepEqual(kinds(luke.applied), [
+    assert.deepEqual(kinds(service.applied), [
       "system/init",
       "assistant",
       "result/success",
@@ -858,10 +858,10 @@ it.effect("lets a post Vespin never answers go after its bound, and posts it aga
 
 it.effect("ends a stopped launch within one post's bound while Vespin is still unreachable", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const { cli, write, run } = yield* launch(
       SHORT_TURN,
-      downUntil(luke, () => false),
+      downUntil(service, () => false),
     );
     yield* write(CONFIG);
     yield* write({ type: INPUT_LINE.STOP });
@@ -880,12 +880,12 @@ it.effect(
   "posts each message's uuid as accepted ahead of handing it to the CLI, which takes it as the prompt's own",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService([], "Working on the first message.");
-      const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+      const service = fakeService([], "Working on the first message.");
+      const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, service);
       const first = "6f1c2a4e-3b7d-4c8e-9a0b-1d2e3f405162";
       yield* write(CONFIG);
       yield* write({ ...FIRST_MESSAGE, uuid: first });
-      yield* luke.seen;
+      yield* service.seen;
       // A line that names no uuid is still accepted, under one the runner minted.
       yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
       yield* Queue.take(prompted);
@@ -893,7 +893,7 @@ it.effect(
       yield* release;
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      const accepted = luke.applied.filter(
+      const accepted = service.applied.filter(
         ({ message }) => "type" in message && message.type === RUNNER_EVENT.ACCEPTED,
       );
       assert.deepEqual(
@@ -902,29 +902,29 @@ it.effect(
       );
       assert.equal(cli.prompts[0]?.uuid, first);
       assert.notEqual(cli.prompts[1]?.uuid, undefined);
-      assert.deepEqual(luke.applied[0]?.message, accepted[0]?.message);
+      assert.deepEqual(service.applied[0]?.message, accepted[0]?.message);
     }),
 );
 
 it.effect("skips a message line whose uuid is not a UUID, handing the CLI nothing", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { cli, writeText, write, run } = yield* launch(SHORT_TURN, luke);
+    const service = fakeService();
+    const { cli, writeText, write, run } = yield* launch(SHORT_TURN, service);
     yield* write(CONFIG);
     yield* writeText(JSON.stringify({ type: INPUT_LINE.MESSAGE, uuid: "not-a-uuid", content: [] }));
     yield* write({ type: INPUT_LINE.STOP });
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     assert.deepEqual(cli.prompts, []);
-    assert.deepEqual(kinds(luke.applied), [RUNNER_EVENT.END]);
-    assert.equal(luke.applied.length, 1);
+    assert.deepEqual(kinds(service.applied), [RUNNER_EVENT.END]);
+    assert.equal(service.applied.length, 1);
   }),
 );
 
 it.effect("ends the launch, closing the CLI, when Vespin refuses its bearer", () =>
   Effect.gen(function* () {
-    const luke = fakeService([ANSWER.REFUSE]);
-    const { cli, write, run } = yield* launch(STOPPED_TURN, luke);
+    const service = fakeService([ANSWER.REFUSE]);
+    const { cli, write, run } = yield* launch(STOPPED_TURN, service);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
 
@@ -933,7 +933,7 @@ it.effect("ends the launch, closing the CLI, when Vespin refuses its bearer", ()
     const error = Cause.squash(exit.cause);
     assert.ok(error instanceof EventsUndelivered);
     assert.equal(error.transient, false);
-    assert.equal(luke.posts(), 1);
+    assert.equal(service.posts(), 1);
     assert.equal(cli.closed, true);
   }),
 );
@@ -942,8 +942,8 @@ it.effect(
   "starts the CLI with the plan's options, Vespin's MCP server in process with no secret, and both secrets denied to commands",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
-      const { cli, write, run } = yield* launch(SHORT_TURN, luke);
+      const service = fakeService();
+      const { cli, write, run } = yield* launch(SHORT_TURN, service);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
       yield* Fiber.join(run);
@@ -1028,7 +1028,7 @@ it.effect(
   "loads the member's installed skills as a local plugin where Vespin wrote them, and none where it wrote none",
   () =>
     Effect.gen(function* () {
-      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      const folder = mkdtempSync(join(tmpdir(), "installed-skills-"));
       yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
       const missing = join(folder, "never-written");
       const installed = join(folder, "installed");
@@ -1096,11 +1096,11 @@ function launchWithMcp(
   },
 ) {
   return Effect.gen(function* () {
-    const luke = fakeService();
-    const routed: typeof luke = {
-      ...luke,
+    const service = fakeService();
+    const routed: typeof service = {
+      ...service,
       layer: fakeHttpClientLayer((url, init) =>
-        url === named.url ? mcp.respond(url, init) : luke.respond(url, init),
+        url === named.url ? mcp.respond(url, init) : service.respond(url, init),
       ),
     };
     const launched = yield* launch(SHORT_TURN, routed);
@@ -1195,14 +1195,14 @@ it.effect(
       writeFileSync(executable, `#!/bin/sh\nprintf '%s\\0' "$@" > '${argvFile}'\n`);
       chmodSync(executable, 0o755);
       const listen = vi.spyOn(Server.prototype, "listen");
-      const luke = fakeService();
+      const service = fakeService();
       const stdin = yield* Queue.unbounded<string, Cause.Done>();
       const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env: ENV }).pipe(
         Effect.scoped,
         Effect.provide(
           Layer.mergeAll(
             claudeCodeLive,
-            luke.layer,
+            service.layer,
             fakeAppServer([]).layer,
             processTable(UNREAD_PROC, RUNNER_PID),
           ),
@@ -1272,7 +1272,7 @@ it.effect(
 );
 
 /** Our browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
-const LUKE_BROWSER: readonly FakeProcess[] = [
+const AGENT_BROWSER: readonly FakeProcess[] = [
   { pid: 300, parent: 1, emptied: true, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
   {
     pid: 310,
@@ -1291,7 +1291,7 @@ const LUKE_BROWSER: readonly FakeProcess[] = [
 
 /** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
-  ...LUKE_BROWSER,
+  ...AGENT_BROWSER,
   { pid: 1, parent: 0, emptied: false },
   { pid: RUNNER_PID, parent: 1, emptied: true },
   { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
@@ -1332,17 +1332,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const proc = yield* fakeProc(WAITING_PROCESSES);
-      const luke = fakeService([], WAKEUP.prompt);
-      const { cli, write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc);
+      const service = fakeService([], WAKEUP.prompt);
+      const { cli, write, run } = yield* launch(WAKEUP_WAIT, service, ENV, proc);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
 
       yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS - 1);
       assert.equal(run.pollUnsafe(), undefined);
       yield* TestClock.adjust(1);
       assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.RELEASED,
         wakeups: [{ at: WAKEUP_DUE, prompt: WAKEUP.prompt }],
@@ -1360,11 +1360,11 @@ it.effect.each([
   ([, process]) =>
     Effect.gen(function* () {
       const proc = yield* fakeProc([...WAITING_PROCESSES, process]);
-      const luke = fakeService([], WAKEUP.prompt);
-      const { write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc);
+      const service = fakeService([], WAKEUP.prompt);
+      const { write, run } = yield* launch(WAKEUP_WAIT, service, ENV, proc);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
 
       yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
       assert.equal(run.pollUnsafe(), undefined);
@@ -1377,11 +1377,11 @@ it.effect.each([
 it.effect("never releases a wait on a background task, the agent's own process", () =>
   Effect.gen(function* () {
     const proc = yield* fakeProc(WAITING_PROCESSES);
-    const luke = fakeService([], RUNNER_EVENT.WAITING);
-    const { write, run } = yield* launch(BACKGROUND_WAIT, luke, ENV, proc);
+    const service = fakeService([], RUNNER_EVENT.WAITING);
+    const { write, run } = yield* launch(BACKGROUND_WAIT, service, ENV, proc);
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* luke.seen;
+    yield* service.seen;
 
     yield* TestClock.adjust(2 * RUNNER_RELEASE.IDLE_CAP_MS);
     assert.equal(run.pollUnsafe(), undefined);
@@ -1395,17 +1395,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const proc = yield* fakeProc(WAITING_PROCESSES);
-      const luke = fakeService([], RUNNER_EVENT.WAITING);
-      const { write, run } = yield* launch(RECURRING_WAIT, luke, ENV, proc);
+      const service = fakeService([], RUNNER_EVENT.WAITING);
+      const { write, run } = yield* launch(RECURRING_WAIT, service, ENV, proc);
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
+      yield* service.seen;
 
       yield* TestClock.adjust(RUNNER_RELEASE.IDLE_CAP_MS - RUNNER_RELEASE.RECHECK_MS);
       assert.equal(run.pollUnsafe(), undefined);
       yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
       assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.RELEASED,
         wakeups: [],
@@ -1416,16 +1416,16 @@ it.effect(
 it.effect("keeps a waiting launch whose wait a message from Vespin turned into a turn", () =>
   Effect.gen(function* () {
     const proc = yield* fakeProc(WAITING_PROCESSES);
-    const luke = fakeService([], WAKEUP.prompt);
+    const service = fakeService([], WAKEUP.prompt);
     const { prompted, release, write, run } = yield* launch(
       WAKEUP_WAIT_THEN_MESSAGE,
-      luke,
+      service,
       ENV,
       proc,
     );
     yield* write(CONFIG);
     yield* write(FIRST_MESSAGE);
-    yield* luke.seen;
+    yield* service.seen;
     yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
     yield* Queue.take(prompted);
     yield* Queue.take(prompted);
@@ -1466,8 +1466,8 @@ it.effect.each([
   },
 ])("resumes a rewound session $case", ({ rewindBefore, resume, at }) =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { cli, write, run } = yield* launch(SHORT_TURN, luke, ENV, UNREAD_PROC, REWOUND_CHAIN);
+    const service = fakeService();
+    const { cli, write, run } = yield* launch(SHORT_TURN, service, ENV, UNREAD_PROC, REWOUND_CHAIN);
     yield* write({ ...CONFIG, rewindBefore });
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);

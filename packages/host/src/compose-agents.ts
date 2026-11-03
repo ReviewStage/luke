@@ -108,7 +108,6 @@ import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  type GatewayMethodHandler,
   type GatewayMethodTable,
   invalid,
   readParams,
@@ -281,8 +280,6 @@ export interface AgentsDependencies {
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
-  /** The inbox reads every write on an item is drawn over, which a thread moved between channels is drawn over too (`compose-channels.ts`). */
-  readonly inbox: Pick<InboxReads, "write">;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -499,18 +496,6 @@ function composed(
         transcript,
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
-    });
-
-  // Read under two names, since an operator built before the rename still asks `AGENTS_LUKE_TOOLS`.
-  const readWorkspaceTools: GatewayMethodHandler = (params) =>
-    Effect.gen(function* () {
-      const { agentId } = yield* readParams(
-        agentPullRequestParamsSchema,
-        params,
-        `reading an agent's ${PRODUCT_NAME} tools names one agent`,
-      );
-      const answer = yield* asked(client.workspaceTools(agentId));
-      return carried<AgentWorkspaceToolsAnswerView>(answer);
     });
 
   const methods: GatewayMethodTable = {
@@ -971,8 +956,16 @@ function composed(
         const answer = yield* asked(client.reviewOptions(agentId));
         return carried<AgentReviewOptionsAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS]: readWorkspaceTools,
-    [GATEWAY_METHOD.AGENTS_LUKE_TOOLS]: readWorkspaceTools,
+    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPullRequestParamsSchema,
+          params,
+          `reading an agent's ${PRODUCT_NAME} tools names one agent`,
+        );
+        const answer = yield* asked(client.workspaceTools(agentId));
+        return carried<AgentWorkspaceToolsAnswerView>(answer);
+      }),
     [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
@@ -1228,7 +1221,6 @@ function composed(
     methods,
     lifetime: Effect.void,
     open: Effect.andThen(sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems), holders.open),
-    inbox: { write: reads.write },
     reset,
   };
 }

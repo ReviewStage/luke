@@ -69,7 +69,7 @@ const STATE_ROOT = "/Users/dev/Library/Application Support/Vespin";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { APP_RUNNER_TOKEN: "runner-secret" };
 /** The runner's own start on the box, as the platform launches it. */
-const RUNNER = "/opt/luke-host/node/bin/node";
+const RUNNER = "/opt/vespin-host/node/bin/node";
 /** Where the agent's gh keeps its sign-in, which the follower writes the agent's GitHub token into. */
 const GH_HOSTS = `${LAYOUT.folder}/home/.config/gh/hosts.yml`;
 const CLIS = fakeClis();
@@ -307,7 +307,7 @@ const followingDevice = (
         clis: fakeClis(ready),
         formerlyDirect: options.formerlyDirect ?? true,
         storesOwned: false,
-        runnerBundle: "/opt/luke/agent-runner.mjs",
+        runnerBundle: "/opt/agent/agent-runner/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
         deviceMachine: {},
@@ -917,18 +917,18 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
 const RUNNING = "0.3.0";
 const NEWER = "0.4.0";
 
-/** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `luke-host/` folder. */
+/** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `vespin-host/` folder. */
 const newerTarball = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const scratch = yield* temporaryDirectoryScoped("host-tarball-");
-  yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
+  yield* fileSystem.makeDirectory(`${scratch}/vespin-host/bin`, { recursive: true });
   yield* fileSystem.writeFileString(
-    `${scratch}/luke-host/bin/vespin-host`,
+    `${scratch}/vespin-host/bin/vespin-host`,
     `#!/bin/sh\necho ${NEWER}\n`,
     { mode: 0o755 },
   );
-  execFileSync("tar", ["-czf", `${scratch}/luke-host.tar.gz`, "-C", scratch, "luke-host"]);
-  const archive = readFileSync(`${scratch}/luke-host.tar.gz`);
+  execFileSync("tar", ["-czf", `${scratch}/vespin-host.tar.gz`, "-C", scratch, "vespin-host"]);
+  const archive = readFileSync(`${scratch}/vespin-host.tar.gz`);
   const sha256 = createHash("sha256").update(archive).digest("hex");
   const release: DeviceAgentRelease = {
     version: NEWER,

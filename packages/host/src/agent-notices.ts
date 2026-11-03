@@ -63,8 +63,8 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * it, since an agent runs on its starter's keys and asks its starter: each
  * answer is written whole as each task's open items of those, which the
  * sidebar counts, and the Dock's badge counts the open asks among them,
- * the questions waiting on the developer as the Inbox's number and every
- * channel's count read them (`askingReader` in the service's inbox store),
+ * the questions waiting on the developer as the Inbox's number reads them
+ * (`askingReader` in the service's inbox store),
  * since a notice asks nobody to act; every task holding any
  * member's item is listed for the Inbox. The same read carries the newest
  * run of each of the account's own automations that failed to start lately,
@@ -239,7 +239,6 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
       title: item.title,
       postedAt: item.postedAt,
       ...(item.asking === undefined ? undefined : { asking: item.asking }),
-      ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     };
     const held = tasks.get(item.planId);
     if (held === undefined) tasks.set(item.planId, [waiting]);
@@ -262,7 +261,6 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationName: item.automationName,
     repository: item.repository,
     ...(item.asking === undefined ? undefined : { asking: item.asking }),
-    ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
     ...(item.waitsOn === undefined ? undefined : { waitsOn: item.waitsOn }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),

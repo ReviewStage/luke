@@ -1,7 +1,7 @@
 /**
  * web-sentry.ts -- the web app's error and performance reports: Sentry's browser SDK, loaded and started only where the build carries a DSN, on the desktop renderer's terms.
  *
- * The tab reports to the `luke-web` project, the deployment it is served
+ * The tab reports to the `vespin-web` project, the deployment it is served
  * from, under the same DSN, environment, and release the deployment's own
  * functions report under (`packages/service/src/observability/sentry.ts`),
  * read from the build's environment as the desktop reads its own: Vercel's

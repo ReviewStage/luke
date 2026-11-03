@@ -217,7 +217,7 @@ it.layer(getTestDB())("the store writer's journal rewrites", (it) => {
         // Note that the metric is read as Sentry's layer reads it, from the registry by its name.
         const rewritten = Effect.gen(function* () {
           const found = (yield* Metric.snapshot).find(
-            ({ id }) => id === "luke.transcript.journal_rewrite_bytes",
+            ({ id }) => id === "app.transcript.journal_rewrite_bytes",
           );
           return found?.type === "Histogram" ? found.state : { count: 0, sum: 0 };
         });

@@ -211,7 +211,7 @@ it.layer(getTestDB())("the eve sandbox sweep", (it) => {
           ...eveSandbox(ended.sessionId),
           name: `eve-sbx-tpl-vercel-${randomUUID()}`,
         };
-        const nativeOwn = { ...eveSandbox(ended.sessionId), name: `luke-agent-${randomUUID()}` };
+        const nativeOwn = { ...eveSandbox(ended.sessionId), name: `agent-sandbox-${randomUUID()}` };
         api.sandboxes.push(unknown, ofNative, template, nativeOwn);
 
         const outcome = yield* sweepEveSandboxes(NOW).pipe(Effect.provide(api.layer));
@@ -267,7 +267,7 @@ it.layer(getTestDB())("the eve sandbox sweep", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel();
         for (let each = 0; each < EVE_SANDBOX_SWEEP.MAX_PAGES * PAGE; each += 1) {
-          api.sandboxes.push({ ...eveSandbox(), name: `luke-agent-${randomUUID()}` });
+          api.sandboxes.push({ ...eveSandbox(), name: `agent-sandbox-${randomUUID()}` });
         }
         const agent = yield* openAgent({ status: TURN_STATUS.SETTLED, at: LONG_AGO });
         const beyond = eveSandbox(agent.sessionId);

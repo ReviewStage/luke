@@ -1,4 +1,4 @@
-import { ALIGN, Checkbox, GAP, Stack } from "@repo/ui";
+import { ALIGN, Checkbox, CodeCard, GAP, Stack } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -6,8 +6,30 @@ import { CatalogSection } from "../section";
 /**
  * checkboxes.tsx -- a box unchecked, checked, mixed, and unavailable, one
  * with long words in a narrow column, and boxes named by a label of their
- * own, drawn without words, as a task list's markers.
+ * own, drawn without words, as a task list's markers, and one holding a
+ * detail under its words, as a to-do's step holds its command.
  */
+
+const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
+
+function WithDetail(): React.JSX.Element {
+  const [checked, setChecked] = useState(false);
+  return (
+    <Checkbox
+      checked={checked}
+      onChange={setChecked}
+      detail={
+        <CodeCard
+          title="sh"
+          code={"xcrun notarytool store-credentials vespin \\\n  --team-id ABCD1234"}
+          copy={copyToClipboard}
+        />
+      }
+    >
+      On your Mac, store the notarization profile:
+    </Checkbox>
+  );
+}
 
 function Held({ start, children }: { start: boolean; children: string }): React.JSX.Element {
   const [checked, setChecked] = useState(start);
@@ -43,6 +65,11 @@ function Checkboxes(): React.JSX.Element {
           <Wordless label="Send the invite" />
           <Checkbox label="Pick a date" checked disabled onChange={() => undefined} />
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="checkbox-detail" title="A detail under its words, a to-do step's command">
+        <div className="catalog-narrow">
+          <WithDetail />
+        </div>
       </CatalogSection>
       <CatalogSection id="checkbox-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">

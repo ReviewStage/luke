@@ -17,9 +17,13 @@
   }
 
   /* The page's two insets: where the rails stand, and where words start
-     inside them. */
+     inside them. The rails stand at most 1280px apart, so a window wider
+     than that centres the frame, the room outside it its margin, and the
+     bar's links, the hero, every section, and the foot keep to it. */
   .ui-landing-page > * {
-    --ui-landing-inset: 48px;
+    /* off-scale: 1376px, the rails' 1280px and an inset either side */
+    --ui-landing-margin: max(0px, (100cqw - 1376px) / 2);
+    --ui-landing-inset: calc(var(--ui-landing-margin) + 48px);
     --ui-landing-gutter: calc(var(--ui-landing-inset) + 32px);
   }
 
@@ -161,7 +165,7 @@
   .ui-landing-hero-words {
     position: relative;
     z-index: 1;
-    max-width: 600px;
+    max-width: calc(600px + 2 * var(--ui-landing-margin));
     padding: 0 var(--ui-landing-inset) 0 var(--ui-landing-gutter);
   }
 
@@ -193,7 +197,7 @@
   .ui-landing-hero-art {
     position: absolute;
     top: 40px;
-    right: 72px;
+    right: calc(var(--ui-landing-inset) + 24px);
     width: 580px;
     height: 580px;
   }
@@ -310,8 +314,67 @@
      the word as densely as a desktop, only smaller. */
   .ui-landing-foot-art {
     position: relative;
+    margin-inline: var(--ui-landing-margin);
     aspect-ratio: 24 / 5;
     overflow: hidden;
+  }
+
+  /* The 404: the numerals in dots over the line, centred in the rails, the
+     page's room under the bar and over the foot's rule. */
+  .ui-landing-lost {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 64px var(--ui-landing-gutter) 96px;
+    text-align: center;
+  }
+
+  .ui-landing-lost-art {
+    position: relative;
+    width: min(100%, 720px);
+    aspect-ratio: 3 / 1;
+  }
+
+  .ui-landing-dot-words {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ui-color-accent);
+    font-family: var(--ui-font-display);
+  }
+
+  .ui-landing-lost-words {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 640px;
+    margin-top: 40px;
+  }
+
+  .ui-landing-lost-address {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    color: var(--ui-color-text-muted);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
+  }
+
+  .ui-landing-lost-address > :first-child {
+    color: var(--ui-color-accent);
+  }
+
+  .ui-landing-lost-address > * + *::before {
+    margin-right: 10px;
+    content: "·";
+  }
+
+  .ui-landing-lost .ui-landing-actions {
+    justify-content: center;
   }
 
   /* A message arriving in a scene rises into place. */
@@ -908,7 +971,7 @@
     flex: 1;
   }
 
-  .ui-landing-models {
+  .ui-landing-keys {
     max-width: 520px;
     margin: 0 auto;
     background: transparent;
@@ -918,6 +981,10 @@
      words, each stage under its heading, and the phone nearer the window. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
+    .ui-landing-lost {
+      padding: 32px var(--ui-landing-gutter) 72px;
+    }
+
     .ui-landing-page > * {
       --ui-landing-inset: 16px;
       --ui-landing-gutter: calc(var(--ui-landing-inset) + 12px);

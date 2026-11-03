@@ -13,7 +13,6 @@ import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-voc
 import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
-import { CHANNEL_TOOL } from "@repo/features/channel-wire";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
 import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
@@ -323,9 +322,6 @@ const SERVED_TOOLS = [
   "post_thread",
   "read_threads",
   "withdraw_ask",
-  "create_channel",
-  "update_channel",
-  "move_thread",
   "open_pull_request",
   "edit_plan",
   "look_at_picture",
@@ -388,11 +384,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
-  create_channel: (admitted, input) =>
-    runAgentInbox(admitted, { tool: CHANNEL_TOOL.CREATE, input }),
-  update_channel: (admitted, input) =>
-    runAgentInbox(admitted, { tool: CHANNEL_TOOL.UPDATE, input }),
-  move_thread: (admitted, input) => runAgentInbox(admitted, { tool: CHANNEL_TOOL.MOVE, input }),
   open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
   edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
@@ -458,7 +449,7 @@ const initialize = (protocolVersion: string) => ({
 
 it.layer(getTestDB())("Vespin's MCP server", (it) => {
   it.effect(
-    "an SDK client under the runner's bearer lists read_threads and reads its agent's threads through the inbox door, and is shown post_thread naming its workspace's channels",
+    "an SDK client under the runner's bearer lists read_threads and reads its agent's threads through the inbox door",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -481,9 +472,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         assert.ok(listed.tools.some((tool) => tool.name === INBOX_TOOL.READ));
-        const posting = listed.tools.find((tool) => tool.name === INBOX_TOOL.POST);
-        const words = posting?.description ?? "";
-        assert.ok(words.includes("\n#general: "), words);
         assert.equal(called.isError, false);
         // SAFETY: the server answers every tool call with text blocks alone (`app.ts`'s `toolResult`).
         const [content] = called.content as readonly { type: string; text: string }[];
@@ -614,9 +602,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         for (const tool of listed.tools) {
           const served = WORKSPACE_MCP_TOOLS.get(tool.name);
           assert.ok(served !== undefined);
-          // A tool whose words differ by workspace opens on its words for every agent, its workspace's after them.
-          if (served.describe === undefined) assert.equal(tool.description, served.description);
-          else assert.ok(tool.description?.startsWith(served.description), tool.name);
+          assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
         }
       }),

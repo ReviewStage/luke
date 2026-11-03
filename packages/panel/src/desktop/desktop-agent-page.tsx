@@ -1,10 +1,12 @@
 import {
   AGENT_BOUNDS,
+  AGENT_SOURCE,
   type AgentStatus,
   type AgentSummary,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import type { MentionLines } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
@@ -24,6 +26,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  ProviderMark,
   SidePanelIcon,
   STATUS_TONE,
   Toolbar,
@@ -36,6 +39,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
+import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
@@ -164,6 +168,23 @@ const ACTIONS_THING = "Agent";
 
 /** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
+
+/** What the place an agent started from Slack leads its bar with is called. */
+const SLACK_PLACE = "Slack";
+
+/** The trail an agent started from Slack leads its bar with: Slack, on its mark, opening the message it was started from; none for any other agent, or where Slack answered no link. */
+function slackTrail(agent: Pick<AgentSummary, "source">): readonly ToolbarPlace[] | undefined {
+  const { source } = agent;
+  if (source?.kind !== AGENT_SOURCE.SLACK || source.url === undefined) return undefined;
+  const { url } = source;
+  return [
+    {
+      label: SLACK_PLACE,
+      icon: <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />,
+      onPress: () => appPlatform().openWeb(url),
+    },
+  ];
+}
 
 /**
  * The row the sidebar lists the agent by among its tasks, whose pin, read
@@ -685,7 +706,7 @@ export function DesktopAgentPage({
         terminals={terminalDoors}
         onClose={tasks.agentView.onClose}
         phone={phoneHead}
-        trail={automationTrail(agent, tasks)}
+        trail={automationTrail(agent, tasks) ?? slackTrail(agent)}
         steps={
           runPlace === undefined ? null : (
             <AutomationRunSteps place={runPlace} onOpenAgent={tasks.agentView.onOpen} />

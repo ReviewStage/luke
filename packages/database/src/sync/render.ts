@@ -134,7 +134,7 @@ function notifyBlock(): string {
 
 function functionStatement(table: SyncTable): string {
   return [
-    `CREATE OR REPLACE FUNCTION ${quoteIdentifier(syncFunctionName(table))}() RETURNS trigger LANGUAGE plpgsql AS $luke_sync$`,
+    `CREATE OR REPLACE FUNCTION ${quoteIdentifier(syncFunctionName(table))}() RETURNS trigger LANGUAGE plpgsql AS $app_sync$`,
     "DECLARE",
     "\tsync_topics jsonb := '[]';",
     "\tsync_topic jsonb;",
@@ -146,7 +146,7 @@ function functionStatement(table: SyncTable): string {
     notifyBlock(),
     "\tRETURN NULL;",
     "END",
-    "$luke_sync$;",
+    "$app_sync$;",
   ].join("\n");
 }
 

@@ -51,7 +51,7 @@ describe("sanitizer", () => {
 
     expect(
       scrub({
-        type: "luke_probe_account",
+        type: "agent_probe_account",
         email: "someone@example.org",
         organization: "Someone's Individual Org",
         subscriptionType: "max",
@@ -59,7 +59,7 @@ describe("sanitizer", () => {
         apiProvider: "firstParty",
       }),
     ).toEqual({
-      type: "luke_probe_account",
+      type: "agent_probe_account",
       email: REDACTED.ACCOUNT,
       organization: REDACTED.ACCOUNT,
       subscriptionType: "max",
@@ -91,13 +91,13 @@ describe("sanitizer", () => {
     const scrub = sanitizer({
       secrets: [],
       replacements: [
-        ["octo-dev/scratch", "luke-probe-owner/throwaway"],
-        ["octo-dev", "luke-probe-owner"],
+        ["octo-dev/scratch", "agent-probe-owner/throwaway"],
+        ["octo-dev", "agent-probe-owner"],
       ],
     });
 
     expect(scrub("To github.com/octo-dev/scratch.git, cloned by octo-dev")).toBe(
-      "To github.com/luke-probe-owner/throwaway.git, cloned by luke-probe-owner",
+      "To github.com/agent-probe-owner/throwaway.git, cloned by agent-probe-owner",
     );
   });
 

@@ -10,6 +10,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -159,7 +160,7 @@ function mount(
       ),
     ),
   );
-  return { page: container, opened };
+  return { page: container, opened, tasks };
 }
 
 async function settle(): Promise<void> {
@@ -236,11 +237,52 @@ test("nothing waiting says so in the Inbox's words, and a list that could not be
   assert.match(refused.page.textContent ?? "", /Your tasks could not be read\./u);
 });
 
-test("an account with nothing yet is welcomed in Home's place", async () => {
-  const { page } = mount({ tasks: [], listed: { tasks: [], inbox: [], inboxTasks: [] } }, []);
+/** A new account, its one model missing its credential where `agentMissing` says, over a workspace that reaches no repository. */
+function newAccount(agentMissing: boolean): Partial<TasksControl> {
+  const base = tasksControl();
+  return {
+    tasks: [],
+    listed: { tasks: [], inbox: [], inboxTasks: [] },
+    newTask: {
+      ...base.newTask,
+      workspaceId: ACME.id,
+      models: [
+        {
+          id: "anthropic/claude-opus-5.5",
+          name: "Claude Opus 5.5",
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          efforts: ["high"],
+          ...(agentMissing ? { credentialMissing: true } : {}),
+        },
+      ],
+    },
+  };
+}
+
+test("a new account with an agent is greeted as new on Home itself, over New task's composer, with nothing asked of setup", async () => {
+  const { page } = mount(newAccount(false), []);
   await settle();
-  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
-  assert.equal(page.querySelector("section.home-section"), null);
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome, Dean");
+  assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
+  assert.equal(page.querySelector("[aria-label='Finish setting up']"), null);
+});
+
+test("a new account without an agent is asked to finish setting up above the composer", async () => {
+  const { page } = mount(newAccount(true), []);
+  await settle();
+  const setup = page.querySelector("[aria-label='Finish setting up']");
+  assert.ok(setup, "Finish setting up stands");
+  assert.match(setup.textContent ?? "", /Connect an agent/u);
+  assert.doesNotMatch(
+    setup.textContent ?? "",
+    /Connect GitHub/u,
+    "a GitHub read that did not answer asks nothing of it",
+  );
+  const composer = page.querySelector(".home-composer");
+  assert.ok(
+    composer && setup.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the composer stands under it",
+  );
 });
 
 test("the composer's words take the caret as Home shows, but on a phone, whose places bar a field typed in puts away, they leave it", async () => {
@@ -257,4 +299,25 @@ test("the composer's words take the caret as Home shows, but on a phone, whose p
   await settle();
   assert.ok(composerEditor(phone.page), "the composer stands");
   assert.ok(document.activeElement !== composerEditor(phone.page), "on a phone they leave it");
+});
+
+test("New task pressed while Home stands hands the composer's words the caret, on a phone too", async () => {
+  const { page, tasks } = mount({}, [RETRY_429], SHELL_ROOM.NARROW);
+  await settle();
+  assert.ok(document.activeElement !== composerEditor(page));
+  const pressed = { ...tasks, newTask: { ...tasks.newTask, homeAsks: 1 } };
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, {
+          tasks: pressed,
+          room: SHELL_ROOM.NARROW,
+          accountName: DEAN.name,
+          staged: true,
+        }),
+      ),
+    ),
+  );
+  assert.ok(document.activeElement === composerEditor(page), "the words take the caret");
 });

@@ -81,15 +81,9 @@ const WEB_ORIGIN_SCHEMES = ["https://", "http://"] as const;
 /**
  * The origins production trusts beyond its own: every Vercel preview of this
  * project, by deployment (`vespin-<hash>-stage-review.vercel.app`) or by branch
- * (`vespin-git-<branch>-stage-review.vercel.app`), and the dev server. Note
- * that the project's previews from before its rename, under `luke-`, stay
- * trusted, because their deployments keep the hostnames they were built with.
+ * (`vespin-git-<branch>-stage-review.vercel.app`), and the dev server.
  */
-const PROXIED_ORIGINS = [
-  "https://vespin-*-stage-review.vercel.app",
-  "https://luke-*-stage-review.vercel.app",
-  LOCAL_AUTH_URL,
-] as const;
+const PROXIED_ORIGINS = ["https://vespin-*-stage-review.vercel.app", LOCAL_AUTH_URL] as const;
 
 export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */

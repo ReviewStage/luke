@@ -112,27 +112,27 @@ const LOSS = {
 type Loss = (typeof LOSS)[keyof typeof LOSS];
 
 const SYNC_METRIC = {
-  NOTIFICATIONS: Metric.counter("luke.sync.notifications", {
+  NOTIFICATIONS: Metric.counter("app.sync.notifications", {
     description: "Changes the instance's listener heard on the sync channel",
     incremental: true,
   }),
-  WAKES: Metric.counter("luke.sync.wakes", {
+  WAKES: Metric.counter("app.sync.wakes", {
     description: "Watches a notification or a reconnect woke",
     incremental: true,
   }),
-  FALLBACK_WAKES: Metric.counter("luke.sync.fallback_wakes", {
+  FALLBACK_WAKES: Metric.counter("app.sync.fallback_wakes", {
     description: "Watches on topics that woke on their clock because no listener stood",
     incremental: true,
   }),
-  RECONNECTS: Metric.counter("luke.sync.reconnects", {
+  RECONNECTS: Metric.counter("app.sync.reconnects", {
     description: "Connections the listener stood up after losing one or failing to open",
     incremental: true,
   }),
-  DOWN_MILLIS: Metric.counter("luke.sync.listener_down_ms", {
+  DOWN_MILLIS: Metric.counter("app.sync.listener_down_ms", {
     description: "Milliseconds the listener stood with no connection while a watch held it",
     incremental: true,
   }),
-  QUEUE_USAGE: Metric.gauge("luke.sync.queue_usage", {
+  QUEUE_USAGE: Metric.gauge("app.sync.queue_usage", {
     description: "The share of Postgres's notification queue in use, as the last heartbeat read it",
   }),
 } as const;

@@ -32,9 +32,7 @@
  * names they go by now and a person's card by the name the workspace's
  * members give them, each falling back to what was kept as it stood, the
  * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
- * at work or failed as everywhere. With Channels on and a channel shown in
- * the Inbox's place, its card names the channel, wearing the channel's
- * glyph, "#general"; with none, it is the Inbox's.
+ * at work or failed as everywhere.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -51,7 +49,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
 import {
   isAgentTab,
   isChangesTab,
@@ -77,9 +74,7 @@ import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
-import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -135,9 +130,6 @@ const PLACE_LOOK = {
 
 /** What a task's card is called where the window lists no name for it. */
 const TASK_WORDS = "Task";
-
-/** What the Inbox narrowed to a channel is called before the window has read the channel. */
-const CHANNELS_WORDS = "Channels";
 
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
@@ -209,7 +201,6 @@ function cardLook(
   tasks: TasksControl,
   title: StepTitle | undefined,
   members: readonly WorkspaceMember[] | undefined,
-  channels: KindLook | undefined,
 ): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
@@ -237,10 +228,6 @@ function cardLook(
       };
     }
     case STOP_KIND.PLACE: {
-      // Note that with Channels on the Inbox's place is what Channels shows, so its card is named for that.
-      if (stop.place === SWITCHER_PLACE.INBOX && channels !== undefined) {
-        return { ...channels, detail: undefined };
-      }
       const { icon: Icon, label } = PLACE_LOOK[stop.place];
       return { icon: <Icon />, label, detail: undefined };
     }
@@ -271,23 +258,6 @@ function cardLook(
   }
 }
 
-/**
- * The channel the Inbox is narrowed to, which its card goes back to, or
- * Channels before the window has read its channels; none while it lists
- * every channel. Note that it reads the channels the host holds for the
- * window, as the sidebar draws them.
- */
-function useChannelsLook(tasks: TasksControl): KindLook | undefined {
-  const narrowed = useInboxNarrowed();
-  const { channels } = useChannels(narrowed ? tasks.workspace?.id : undefined);
-  const { channelId } = useChannelPlace();
-  if (!narrowed) return undefined;
-  const shown = channelShown(channels, channelId);
-  return shown.kind === CHANNEL_SHOWN.CHANNEL
-    ? { icon: <GLYPH.CHANNEL />, label: shown.channel.name }
-    : { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
-}
-
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */
 function StopCard({
   stop,
@@ -309,8 +279,7 @@ function StopCard({
   onPick: () => void;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const channels = useChannelsLook(tasks);
-  const look = cardLook(stop, tasks, title, members, channels);
+  const look = cardLook(stop, tasks, title, members);
   return (
     <TabCard
       icon={look.icon}
@@ -343,7 +312,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
-    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open && !tasks.restoring,
+    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
     column,

@@ -3,7 +3,6 @@ import type { InboxItem } from "@repo/features/inbox-wire";
 import { FAILURE_SURFACE, type FailureAbout } from "@repo/features/shown-failure";
 import { countWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
-import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -11,7 +10,6 @@ import { type ActHandle, firstRefusal, KEPT, type Kept, notKept, unreachedAs } f
 import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
@@ -31,7 +29,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * items it marked together. Marking every item read marks the items the
  * Inbox lists in the one workspace it lists, as the service marks them; an
  * item waiting on the developer keeps waiting, since the dots are all it
- * clears. A channel's items are marked read each on its own instead
+ * clears. A task's items are marked read each on its own instead
  * (`onMarkEach`), since the service marks a whole workspace's at once, and
  * one toast says what it refused.
  *
@@ -57,7 +55,7 @@ export interface InboxReadMarks {
   readonly onMark: (item: InboxItem, unread: boolean, saying?: MarkSaying) => Promise<Kept>;
   /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
-  /** Marks every item given that is unread as read, each on its own, as a channel's are marked, the rest of the workspace's left as they are. */
+  /** Marks every item given that is unread as read, each on its own, as a task's are marked, the rest of the workspace's left as they are. */
   readonly onMarkEach: (items: readonly InboxItem[]) => void;
 }
 
@@ -197,7 +195,6 @@ export function useNodOnOpen({
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
   const { drawn, failed, draftOf, onAcknowledge } = control;
-  const channels = useExperiment(EXPERIMENT.CHANNELS);
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
@@ -209,9 +206,9 @@ export function useNodOnOpen({
     const was = nodded.current;
     if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
     nodded.current = { id: item.id, revision: item.revision };
-    if (!acknowledgedOnOpen(item, readerId, channels)) return;
+    if (!acknowledgedOnOpen(item, readerId)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
     afterPaint(() => onAcknowledge(item));
-  }, [shown, readerId, drawn, failed, draftOf, onAcknowledge, channels]);
+  }, [shown, readerId, drawn, failed, draftOf, onAcknowledge]);
 }

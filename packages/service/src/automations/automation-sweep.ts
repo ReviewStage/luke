@@ -4,6 +4,7 @@ import {
   latestTurnsOfReached,
 } from "@repo/database/models/agent-store";
 import {
+  type ArchivableRunAgent,
   type AutomationRun,
   archivableRunAgents,
   type ClaimedFiring,
@@ -27,7 +28,11 @@ import { Effect } from "effect";
 import type { StartServices } from "../agents/coder-host/start.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { discardedOrLogged } from "../agents/device-discard.js";
-import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
+import {
+  executeAutomationRun,
+  recoverStrandedRun,
+  type SessionsForAccount,
+} from "./automation-runs.js";
 
 /**
  * automation-sweep.ts -- the minute sweep's share of automations: claim the schedules due, once each, as queued runs, then act on the runs queued.
@@ -130,46 +135,83 @@ const ENDED_UNWELL: ReadonlySet<AgentStatus> = new Set([
   AGENT_STATUS.CANCELLED,
 ]);
 
+/** An agent "Archive finished runs" may put away, as its reader saw it: whose it is, its id, its conversation and how far its lines had run, when it was made, and when it was put away where it already was. */
+export type FinishedAgentRead = Pick<
+  ArchivableRunAgent,
+  "userId" | "agentId" | "conversationId" | "createdAt" | "archivedAt" | "conversationSeq"
+>;
+
+/** What came of one: the agent as read, where it stands, whether it was archived now, and whether nothing failed letting it go on its device. */
+export interface FinishedAgentArchive<A extends FinishedAgentRead> {
+  readonly agent: A;
+  readonly status: AgentStatus;
+  readonly archived: boolean;
+  readonly discarded: boolean;
+}
+
+/**
+ * The agents archived under "Archive finished runs"' rule, each answered in
+ * order: one standing unarchived that finished well, read as its tab reads
+ * it, is archived only while its lines stand where they were read and it
+ * holds no pull request or inbox item open (`archiveUnmovedAgent`), and a
+ * local one archived, now or before, is let go of on its device. Note that
+ * the rule is shared, because an agent started from Slack is archived by it
+ * too once a turn of its settles (`../slack/slack-agent-starts.ts`).
+ */
+export function archiveFinishedAgents<A extends FinishedAgentRead>(
+  agents: readonly A[],
+  now: number,
+) {
+  return Effect.gen(function* () {
+    const conversations = agents.map((agent) => agent.conversationId);
+    const turns = yield* latestTurnsOfReached(conversations);
+    const awaiting = yield* awaitingLinesOfReached(conversations);
+    return yield* Effect.forEach(agents, (agent) =>
+      Effect.gen(function* () {
+        const status = agentStatusOf(turns.get(agent.conversationId), {
+          createdAt: agent.createdAt,
+          now,
+          awaitingLineAt: awaiting.get(agent.conversationId),
+        });
+        const finishedWell = agent.archivedAt === null && status === AGENT_STATUS.COMPLETED;
+        // Note that the archive takes only while the agent's lines stand where they were read, so
+        // one woken since, or whose starter left, stands and is read again later.
+        const archived =
+          finishedWell &&
+          (yield* archiveUnmovedAgent(agent.userId, agent.agentId, agent.conversationSeq));
+        // A local agent archived is let go of on its device, as an archive by hand lets it go.
+        const discarded =
+          archived || agent.archivedAt !== null
+            ? yield* discardedOrLogged({ id: agent.agentId, userId: agent.userId })
+            : true;
+        return { agent, status, archived, discarded } satisfies FinishedAgentArchive<A>;
+      }),
+    );
+  });
+}
+
 /** The agents of runs that finished well archived for automations that ask it, as above, answering how many. */
 const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
   const agents = yield* archivableRunAgents(
     new Date(now - AUTOMATION_SWEEP.ARCHIVE_WITHIN_MS),
     AUTOMATION_SWEEP.MAX_ARCHIVE_READS,
   );
-  const conversations = agents.map((agent) => agent.conversationId);
-  const turns = yield* latestTurnsOfReached(conversations);
-  const awaiting = yield* awaitingLinesOfReached(conversations);
-  const archived = yield* Effect.forEach(agents, (agent) =>
-    Effect.gen(function* () {
-      const status = agentStatusOf(turns.get(agent.conversationId), {
-        createdAt: agent.createdAt,
-        now,
-        awaitingLineAt: awaiting.get(agent.conversationId),
-      });
-      const finishedWell = agent.archivedAt === null && status === AGENT_STATUS.COMPLETED;
-      // Note that the archive takes only while the agent's lines stand where they were read, so
-      // one woken since, or whose starter left, stands and is read again by a later sweep.
-      const archived =
-        finishedWell &&
-        (yield* archiveUnmovedAgent(agent.userId, agent.agentId, agent.conversationSeq));
-      // A local agent archived is let go of on its device, as an archive by hand lets it go, and
-      // its run stays unsettled until the discard is queued, so a later sweep asks again.
-      const discarded =
-        archived || agent.archivedAt !== null
-          ? yield* discardedOrLogged({ id: agent.agentId, userId: agent.userId })
-          : true;
-      if (discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status))) {
-        yield* settleRunArchive(agent.runId);
-      }
-      return archived;
-    }),
+  const outcomes = yield* archiveFinishedAgents(agents, now);
+  // A run stays unsettled until its agent's discard is queued, so a later sweep asks again.
+  yield* Effect.forEach(
+    outcomes,
+    ({ agent, status, archived, discarded }) =>
+      discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status))
+        ? settleRunArchive(agent.runId)
+        : Effect.void,
+    { discard: true },
   );
-  return archived.filter(Boolean).length;
+  return outcomes.filter((outcome) => outcome.archived).length;
 });
 
 /** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on, then the finished runs' agents archived where asked. */
 export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations")(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   now: number,
 ): Effect.fn.Return<AutomationSweepOutcome, unknown, StartServices> {
   const claimed = yield* claimDueSchedules(now);
@@ -190,7 +232,7 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
   );
   const outcomes = (yield* Effect.forEach(
     byAutomation(queued),
-    (runs) => Effect.forEach(runs, (run) => executeAutomationRun(eveFor, run)),
+    (runs) => Effect.forEach(runs, (run) => executeAutomationRun(sessionsFor, run)),
     { concurrency: AUTOMATION_SWEEP.CONCURRENCY },
   )).flat();
   const counted = (status: AutomationRunStatus) =>

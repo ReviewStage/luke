@@ -6,26 +6,15 @@ import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { afterEach, vi } from "vitest";
-import {
-  addressBar,
-  drawPanel,
-  installPanelDoors,
-  openAt,
-  settle,
-  travel,
-  unmountPanels,
-} from "./support/web-panel";
+import { drawPanel, installPanelDoors, openAt, unmountPanels } from "./support/web-panel";
 
 /**
  * On a phone's width the task's header leads with the way back to the page
- * it was opened from, the Tasks page where the tab opened on the task
+ * it was opened from, Home where the tab opened on the task
  * (`browser-history-narrow-panel.test.ts` holds a tab of the side panel
  * pushed over it). Its own file, because the panel's state lives as long as the page does, as a tab's
  * does.
  */
-
-/** A task of the fixture run's, which its tasks profile opens on its Overview, at its address by its number. */
-const FIXTURE_TASK_PATH = "/personal/task/42";
 
 /** A phone's width, narrower than the panel stands two panes side by side at. */
 const PHONE_WIDTH = 390;
@@ -49,7 +38,7 @@ afterEach(() => {
 });
 
 it.effect(
-  "on a phone's width a task the tab opened on, with no page behind it, leads with the way to the Tasks page, which Back leaves for the task again",
+  "on a phone's width a task the tab opened on, with no page behind it, leads with the way to Home",
   () =>
     Effect.gen(function* () {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
@@ -61,16 +50,8 @@ it.effect(
       yield* Effect.promise(async () => {
         await drawPanel();
         assert.equal(await panelPushed(), false);
-        assert.equal(back().textContent, "Tasks");
-
-        await act(async () => back().click());
-        await settle();
-        assert.equal(document.querySelector(".task-head"), null, "the task is left");
-        assert.ok(document.querySelector('[aria-label="Tasks"]'), "for the Tasks page");
-
-        await travel(() => window.history.back());
-        assert.equal(addressBar(), FIXTURE_TASK_PATH, "Back opens the task again");
-        assert.equal(await panelPushed(), false);
+        // Note that the press is not taken here, because a fixture run keeps its task open (`use-tasks-tab.ts`'s `leaveTask`); `use-tasks-tab.test.ts` leaves it.
+        assert.equal(back().textContent, "Home");
       });
     }),
 );

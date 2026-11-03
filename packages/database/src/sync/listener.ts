@@ -49,7 +49,7 @@ export interface SyncListening {
 
 export interface SyncListenerShape {
   /**
-   * Listens on `luke_sync`, answering once Postgres has acknowledged the
+   * Listens on Sync's channel, answering once Postgres has acknowledged the
    * `LISTEN`, so a write committed after it is answered is heard; closing
    * the scope ends the listen and its connection.
    */

@@ -174,9 +174,9 @@ test.each([
     const VM = {
       local: true,
       isolation,
-      checkoutPath: "/home/luke-host/.vespin/agents/a1/repository",
-      installedSkills: "/home/luke-host/.vespin/agents/a1/installed-skills",
-      sharedFiles: "/home/luke-host/.vespin/agents/a1/tmp",
+      checkoutPath: "/home/vespin-host/.vespin/agents/a1/repository",
+      installedSkills: "/home/vespin-host/.vespin/agents/a1/installed-skills",
+      sharedFiles: "/home/vespin-host/.vespin/agents/a1/tmp",
     };
     for (const repository of ["Acme/Relay", null]) {
       const words = coderInstructions(

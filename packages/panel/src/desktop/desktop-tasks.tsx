@@ -40,7 +40,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -112,9 +112,9 @@ import { tabCard } from "./tab-card.js";
 import { TaskActions, type TaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
+  HOME_BACK,
   screenBack,
   TASK_PANE,
-  TASKS_BACK,
   TaskHead,
   type TaskHeadBack,
   type TaskPane,
@@ -849,12 +849,10 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does,
-  // keyed by the task, so another task's group starts folded rather than as this one was left.
+  // The task's agents head its plan, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
       <PlanAgents
-        key={openedId}
         agents={agents}
         held={views.held}
         tab={tab}
@@ -892,24 +890,19 @@ function PlanDocument({
       tasks.onShowInbox,
     ],
   );
-  // The task's sub-tasks and relations stand over its agents, keyed by the task,
-  // so another task's sub-tasks start folded rather than as this one's were left.
+  // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
+  // so another task's groups start folded rather than as this one's were left. Note that the
+  // key is the head's alone, because two siblings under one key leave the old task's drawn.
   const planHead = useMemo(
     () => (
-      <>
+      <Fragment key={openedId}>
         {opened === undefined ? null : (
-          <PlanRelations
-            key={opened.id}
-            task={opened}
-            tasks={tasks}
-            door={relations}
-            onOpenTask={openTask}
-          />
+          <PlanRelations task={opened} tasks={tasks} door={relations} onOpenTask={openTask} />
         )}
         {planAgents}
-      </>
+      </Fragment>
     ),
-    [opened, tasks, relations, openTask, planAgents],
+    [openedId, opened, tasks, relations, openTask, planAgents],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -1427,7 +1420,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
   room?: ShellRoom;
-  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); the Tasks page where none is handed. */
+  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); Home where none is handed. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   // A task New task is starting with its agent stands as its page until the start answers.
@@ -1439,7 +1432,7 @@ export const DesktopTasks = memo(function DesktopTasks({
         summary={summary}
         phoneAway={
           room === SHELL_ROOM.NARROW
-            ? (away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen })
+            ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
             : undefined
         }
       />
@@ -1459,16 +1452,13 @@ export const DesktopTasks = memo(function DesktopTasks({
             looks={looks}
             summary={summary}
             room={room}
-            away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
+            away={away ?? { label: HOME_BACK, onPress: tasks.onGoHome }}
           />
         </SkillFiles>
       );
-    // With no task open the column is Home, and ⌘N's dialog stands over it
-    // as it stands over a task.
+    // With no task open the column is Home, whose own composer New task
+    // hands the caret rather than opening its dialog over it.
     case TASKS_PAGE.HOME:
-      // A launch reopening the task last open draws the window's ground
-      // alone until it opens, so Home never flashes before it.
-      if (tasks.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />

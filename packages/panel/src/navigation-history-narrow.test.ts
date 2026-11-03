@@ -22,7 +22,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { chooseInboxTask, leaveChannel } from "./tasks/use-channels.js";
+import { chooseInboxTask, leaveInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -513,7 +513,7 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
 
 test("an Inbox narrowed to a task, showing one column, steps its item's way back to the task's list rather than adding a step after the item", () => {
   chooseInboxTask(DOCUMENT_TASK.id);
-  onTestFinished(leaveChannel);
+  onTestFinished(leaveInboxTask);
   const window = mount(SHELL_ROOM.WIDE, {
     ...ON_TASK,
     inbox: { open: true, chosen: undefined, single: true },

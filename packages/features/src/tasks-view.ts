@@ -40,7 +40,9 @@ import {
 import { wireUuidSchema } from "./service-wire.js";
 import {
   workspaceSlackBotAnswerSchema,
+  workspaceSlackBotChannelRequestSchema,
   workspaceSlackBotNotificationsRequestSchema,
+  workspaceSlackBotRepositoryRequestSchema,
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
@@ -966,6 +968,19 @@ export const tasksWorkspaceSlackBotNotificationsParamsSchema =
 
 export type TasksWorkspaceSlackBotNotificationsParams =
   typeof tasksWorkspaceSlackBotNotificationsParamsSchema.Type;
+
+/** The workspace's default repository for Slack starts named or cleared, as the window asks for it. */
+export const tasksWorkspaceSlackBotRepositoryParamsSchema =
+  workspaceSlackBotRepositoryRequestSchema;
+
+export type TasksWorkspaceSlackBotRepositoryParams =
+  typeof tasksWorkspaceSlackBotRepositoryParamsSchema.Type;
+
+/** One channel's bot membership or default repository changed, as the window asks for it. */
+export const tasksWorkspaceSlackBotChannelParamsSchema = workspaceSlackBotChannelRequestSchema;
+
+export type TasksWorkspaceSlackBotChannelParams =
+  typeof tasksWorkspaceSlackBotChannelParamsSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

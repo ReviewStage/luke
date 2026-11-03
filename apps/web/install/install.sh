@@ -15,30 +15,19 @@
 # VPS that logs in as root has; run as root under sudo from another account,
 # it is refused, so a stale `curl … | sudo sh` never installs into root's
 # account.
-# An install that came before, under /opt or a Mac's Application Support, is
-# refused with that install's own uninstall command, since the two would run
-# side by side.
 #
 # The account's files, which `vespin-host uninstall` (apps/host/scripts/vespin-host.sh)
 # removes by the same names, and which the release's own launcher reads its
 # state root from:
 #
-#   ~/.local/share/luke-host/versions/<version>/   each release, as its tarball's luke-host/ folder
-#   ~/.local/share/luke-host/current                link to versions/<version>, the one that runs
+#   ~/.local/share/vespin-host/versions/<version>/ each release, as its tarball's vespin-host/ folder
+#   ~/.local/share/vespin-host/current              link to versions/<version>, the one that runs
 #   ~/.local/bin/vespin-host                        absolute link to …/current/bin/vespin-host
-#   ~/.local/state/luke-host/                       the state root: the box's record and its agents'
+#   ~/.local/state/vespin-host/                     the state root: the box's record and its agents'
 #   ~/.config/systemd/user/vespin-host.service      Linux: the service, run through current
 #   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
 #                                                   Mac: the LaunchAgent, run through current
 #   ~/Library/Logs/Vespin Host/vespin-host.log      Mac: the LaunchAgent's log
-#
-# An install of a release before 0.7.0 named the program luke-host: it linked
-# ~/.local/bin/luke-host and ran luke-host.service. Run again over one, it
-# moves it over in place to the layout above, as a later release's daemon
-# moves its own service over (packages/host/src/daemon/host-service-move.ts):
-# luke-host.service is stopped and removed before vespin-host.service starts,
-# the plist is rewritten under the same label, and ~/.local/bin/luke-host is
-# left where it is, since an older app's Remove names it.
 #
 # On Linux it turns on lingering first, so the service keeps running after
 # the account logs out: on its own where the account may, and otherwise with
@@ -68,16 +57,8 @@ URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 
 ORIGIN="@@ORIGIN@@"
 UNIT="vespin-host.service"
-# The unit an install of a release before 0.7.0 ran the host as, which a run
-# again moves over from.
-UNIT_BEFORE_RENAME="luke-host.service"
-# A Mac's LaunchAgent, by its label, which an install that came before used too.
+# A Mac's LaunchAgent, by its label.
 MAC_LABEL="dev.vespin.host.standalone"
-# Where a Mac's install that came before put the host, under its user's home.
-MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
-# Where a Linux box's install that came before put the host and its service.
-EARLIER_INSTALL_DIR="/opt/luke-host"
-EARLIER_UNIT_FILE="/etc/systemd/system/luke-host.service"
 # The oldest macOS it installs on: the release's launcher reads its own path
 # with readlink -f, which macOS has had since 12.3.
 MAC_MIN_VERSION="12.3"
@@ -110,10 +91,9 @@ fail() {
 # The account's files, under its home, by the names the header lists. Note
 # that they are set once the home is known, as account_paths does.
 account_paths() {
-  RELEASES="$HOME/.local/share/luke-host"
+  RELEASES="$HOME/.local/share/vespin-host"
   LINK="$HOME/.local/bin/vespin-host"
   UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
-  UNIT_FILE_BEFORE_RENAME="$HOME/.config/systemd/user/$UNIT_BEFORE_RENAME"
   PLIST="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
   MAC_LOG="$HOME/Library/Logs/Vespin Host/vespin-host.log"
 }
@@ -184,19 +164,6 @@ require_own_account() {
     fail "Run it from the Mac account whose agents Vespin host should run, not as root: curl -fsSL $ORIGIN/install.sh | sh"
   fi
   [ -n "${HOME:-}" ] && [ -d "$HOME" ] || fail "This account has no home folder to install Vespin host into (HOME is ${HOME:-not set})."
-}
-
-# Refuses an install that came before, which this one would run beside, and
-# names its own uninstall command. Note that it is never moved, so its agents'
-# folders and its box's pairing are the member's to give up.
-require_no_earlier_install() {
-  if [ "$(uname -s)" = "Darwin" ]; then
-    earlier="$HOME/$MAC_EARLIER_FOLDER"
-    [ -e "$earlier" ] || return 0
-    fail "Vespin host is already installed for this account in $earlier, by an earlier install. Remove it first with: sudo '$earlier/luke-host/bin/luke-host' uninstall — then run this again."
-  fi
-  [ -e "$EARLIER_INSTALL_DIR" ] || [ -e "$EARLIER_UNIT_FILE" ] || return 0
-  fail "Vespin host is already installed on this box under $EARLIER_INSTALL_DIR, by an earlier install. Remove it first with: sudo $EARLIER_INSTALL_DIR/bin/luke-host uninstall — then run this again."
 }
 
 # Refuses a box not run by systemd, or whose systemd user manager for this
@@ -391,33 +358,19 @@ stop_service() {
   stop_unit "$UNIT"
 }
 
-# Retires the unit an install of a release before 0.7.0 left, where its file
-# stands, as a later release's daemon retires it once it moved its service
-# over (host-service-move.ts): stopped, disabled, and its file removed, so it
-# never runs beside UNIT; refuses, having changed nothing, where it does not
-# stop. Note that it is retired before any release's folder is swapped, since
-# a daemon updated in place may run the very release swapped.
-retire_unit_before_rename() {
-  [ -e "$UNIT_FILE_BEFORE_RENAME" ] || return 0
-  stop_unit "$UNIT_BEFORE_RENAME"
-  systemctl --user disable "$UNIT_BEFORE_RENAME" >/dev/null 2>&1 || true
-  rm -f "$UNIT_FILE_BEFORE_RENAME"
-}
-
 # Unpacks the checked tarball $1 into the releases, as versions/$VERSION, and
 # points current and the command's link at it. Note that it is unpacked into
 # $work, a folder of the releases' own, so the version's folder appears whole.
 install_release() {
   mkdir -p "$RELEASES/versions" "$work/unpacked"
   tar -xzf "$1" -C "$work/unpacked" || fail "Could not unpack ${1##*/}"
-  [ -x "$work/unpacked/luke-host/bin/vespin-host" ] || fail "${1##*/} holds no vespin-host."
-  [ "$(uname -s)" = "Darwin" ] || retire_unit_before_rename
+  [ -x "$work/unpacked/vespin-host/bin/vespin-host" ] || fail "${1##*/} holds no vespin-host."
   target="$RELEASES/versions/$VERSION"
   if [ -e "$target" ]; then
     stop_service
     mv "$target" "$work/replaced"
   fi
-  mv "$work/unpacked/luke-host" "$target"
+  mv "$work/unpacked/vespin-host" "$target"
   ln -sfn "versions/$VERSION" "$RELEASES/current"
   mkdir -p "$(dirname "$LINK")"
   ln -sfn "$RELEASES/current/bin/vespin-host" "$LINK"
@@ -544,7 +497,6 @@ main() {
   fi
   require_own_account
   account_paths
-  require_no_earlier_install
   [ "$kernel" = "Darwin" ] || require_user_manager
   require_tools
   release_target
@@ -555,7 +507,6 @@ main() {
   mkdir -p "$RELEASES"
   work="$(mktemp -d "$RELEASES/.install.XXXXXX")"
   trap 'rm -rf "$work"' EXIT
-  # Note that the release names its tarball luke-host-…, which a host through 0.6.0 updates itself by, and the download is saved by the program's own name.
   tarball="vespin-host-$VERSION-$target_name.tar.gz"
   download "$target_url" "$work/$tarball"
   check_sha256 "$work/$tarball" "$target_sha256"

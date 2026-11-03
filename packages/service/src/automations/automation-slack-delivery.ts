@@ -7,8 +7,8 @@
  * own, which matters for one that reads untrusted input. An agent's one
  * turn is its whole run, so the store writer's settle of that turn
  * (`SettledTurnListener`, `../agents/coder-host/settled-turns.ts`) is the
- * run's end: a finished run sends the agent's final message, converted from
- * Markdown to Slack's mrkdwn, a failed one that it failed and why, and a
+ * run's end: a finished run sends the agent's final message in a `markdown`
+ * block, which Slack draws as standard Markdown, a failed one that it failed and why, and a
  * stopped one that it was stopped, each with a link to the agent.
  *
  * The run is claimed before anything is sent
@@ -30,51 +30,48 @@ import { Effect, Option } from "effect";
 import { lastSaid } from "../agents/coder-host/starter-report.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
-import { SlackBot, type SlackMessageContent } from "../slack/slack-bot.js";
-import { slackEscaped, slackMrkdwn } from "../slack/slack-mrkdwn.js";
+import { type SlackBlock, SlackBot, type SlackMessageContent } from "../slack/slack-bot.js";
+import { slackClipped, slackEscaped, slackMarkdownBlock } from "../slack/slack-markdown.js";
 
-/** The most characters of the final message a Slack section holds, inside Slack's own bound of 3000 with room for the escapes. */
-const RESULT_CHARS = 2500;
-
-/** What the cut end of a long final message says; the link reads the rest. */
-const CUT_MARK = "…";
-
-/** The final message, cut to what one section holds. */
-function cut(words: string): string {
-  return words.length > RESULT_CHARS
-    ? `${words.slice(0, RESULT_CHARS - CUT_MARK.length)}${CUT_MARK}`
-    : words;
-}
+/** The most characters of the final message the notification's plain text says; the blocks hold more. */
+const NOTIFICATION_CHARS = 2500;
 
 /** What the message says of the run: its final message where it finished, that it failed and why, or that it was stopped. */
 function outcomeOf(
   turn: SettledAgentTurn,
   words: string | undefined,
-): { readonly plain: string; readonly mrkdwn: string } {
+): { readonly plain: string; readonly words?: string } {
   if (turn.status === TURN_STATUS.FAILED) {
-    const plain = turn.failure === null ? "Run failed." : `Run failed: ${turn.failure}.`;
-    return { plain, mrkdwn: slackEscaped(plain) };
+    return { plain: turn.failure === null ? "Run failed." : `Run failed: ${turn.failure}.` };
   }
-  if (turn.status === TURN_STATUS.CANCELLED) {
-    return { plain: "Run stopped.", mrkdwn: "Run stopped." };
-  }
-  if (words === undefined) return { plain: "Run finished.", mrkdwn: "Run finished." };
-  return { plain: cut(words), mrkdwn: slackMrkdwn(cut(words)) };
+  if (turn.status === TURN_STATUS.CANCELLED) return { plain: "Run stopped." };
+  if (words === undefined) return { plain: "Run finished." };
+  return { plain: slackClipped(words, NOTIFICATION_CHARS), words };
 }
 
-/** The message: the automation's name over the run's outcome, and a link to the agent. */
+/** The message: the automation's name over the run's outcome, the agent's words as Markdown, and a link to the agent. */
 function deliveryContent(
   automationName: string,
   link: string,
-  outcome: { readonly plain: string; readonly mrkdwn: string },
+  outcome: { readonly plain: string; readonly words?: string },
 ): SlackMessageContent {
+  const heading = `*${slackEscaped(automationName)}*`;
+  const said: SlackBlock[] =
+    outcome.words === undefined
+      ? [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: `${heading}\n${slackEscaped(outcome.plain)}` },
+          },
+        ]
+      : [
+          { type: "section", text: { type: "mrkdwn", text: heading } },
+          slackMarkdownBlock(outcome.words),
+        ];
   return {
     text: `${automationName}: ${outcome.plain}`,
     blocks: [
-      {
-        type: "section",
-        text: { type: "mrkdwn", text: `*${slackEscaped(automationName)}*\n${outcome.mrkdwn}` },
-      },
+      ...said,
       {
         type: "context",
         elements: [{ type: "mrkdwn", text: `<${link}|Open in ${PRODUCT_NAME}>` }],

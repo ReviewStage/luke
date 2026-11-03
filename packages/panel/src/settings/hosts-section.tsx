@@ -1,6 +1,6 @@
 import { DEVICE_STANDING } from "@repo/features/agent-wire";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
-import { type Host, hostInstallCommand, hostUninstallCommand } from "@repo/features/host-wire";
+import { HOST_UNINSTALL_COMMAND, type Host, hostInstallCommand } from "@repo/features/host-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
@@ -244,7 +244,7 @@ function HostRow({
             host.platform === DEVICE_PLATFORM.DARWIN ? UNINSTALL_TITLE.MAC : UNINSTALL_TITLE.SERVER
           }
           titleIs={CODE_CARD_TITLE.WORDS}
-          code={hostUninstallCommand(host.version)}
+          code={HOST_UNINSTALL_COMMAND}
           copy={copyThroughShell}
         />
       </ConfirmDialog>

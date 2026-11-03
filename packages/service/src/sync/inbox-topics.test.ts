@@ -7,7 +7,6 @@ import {
   recordAutomationRun,
   settleAutomationRun,
 } from "@repo/database/models/automation-store";
-import { createChannel } from "@repo/database/models/channel-store";
 import { createTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
@@ -36,13 +35,7 @@ import {
   postInboxThread,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
-import {
-  agentInboxLive,
-  channelsLive,
-  inboxItemsLive,
-  inboxLive,
-  taskInboxLive,
-} from "./live-queries.js";
+import { agentInboxLive, inboxItemsLive, inboxLive, taskInboxLive } from "./live-queries.js";
 import type { LiveParams, LiveQuery } from "./live-query.js";
 
 /**
@@ -51,7 +44,7 @@ import type { LiveParams, LiveQuery } from "./live-query.js";
  * tables' declarations name, and one of them wakes every read that shows
  * the write. An agent's post, a member's message and its file, and a
  * read mark wake the task's and the agent's inbox on their own topics; an
- * item, a channel, an automation, and a run wake the account-level reads
+ * item, an automation, and a run wake the account-level reads
  * on the account of every member the write concerns, and no one outside
  * the workspace. A read mark is notified under the transaction its answer
  * names, which is what the desktop confirms the mark on.
@@ -111,13 +104,12 @@ const wakes = <A, E, R>(
     return fired;
   });
 
-/** The five reads of the world's inbox, as the member follows them. */
+/** The four reads of the world's inbox, as the member follows them. */
 const inboxReadsOf = (world: InboxWorld, userId: string) => ({
   account: [inboxLive, { userId }] as const,
   items: [inboxItemsLive, { userId, since: "0", settledSince: "0" }] as const,
   task: [taskInboxLive, { userId, taskId: world.taskId }] as const,
   agent: [agentInboxLive, { userId, agentId: world.agentId }] as const,
-  channels: [channelsLive, { userId, workspaceId: world.workspaceId }] as const,
 });
 
 /** The agent's question on the world's task, posted as its tool posts one; the item's id. */
@@ -154,7 +146,6 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
           owner.agent,
           teammate.account,
           teammate.items,
-          teammate.channels,
         ]);
       }),
   );
@@ -183,7 +174,7 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
             ],
           }),
           itemTopics(world),
-          [teammate.account, teammate.items, teammate.task, teammate.agent, teammate.channels],
+          [teammate.account, teammate.items, teammate.task, teammate.agent],
         );
         yield* wakes(
           withdrawInboxMessage(world.teammate, itemId, clientKey),
@@ -216,31 +207,6 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
         assert.ok(marked.value !== false && marked.value.txid !== undefined, "the mark moved");
         assert.deepEqual(marked.txids, [marked.value.txid]);
       }),
-  );
-
-  it.effect("a channel made in the workspace wakes every member's channels", () =>
-    Effect.gen(function* () {
-      const world = yield* openInboxWorld;
-      const owner = inboxReadsOf(world, world.owner);
-
-      yield* wakes(
-        Effect.map(
-          createChannel(
-            world.teammate,
-            world.workspaceId,
-            { name: "deploys", purpose: "Where previews ship.", project: false },
-            yield* DateTime.nowAsDate,
-          ),
-          (made) => assert.ok(Result.isSuccess(made), "the channel was made"),
-        ),
-        [
-          [TOPIC.WORKSPACE, world.workspaceId],
-          [TOPIC.ACCOUNT, world.owner],
-          [TOPIC.ACCOUNT, world.teammate],
-        ],
-        [owner.channels],
-      );
-    }),
   );
 
   it.effect(

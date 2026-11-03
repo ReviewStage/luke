@@ -4,7 +4,6 @@ import { HoverCardSkeleton } from "@repo/ui";
 import type { ReactNode } from "react";
 import { AppCard } from "../actor-ref.js";
 import { tabCard } from "../desktop/tab-card.js";
-import { ChannelChipCard } from "./channel-card.js";
 import {
   AutomationChipCard,
   PageChipCard,
@@ -165,15 +164,6 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.BOARD]: OWN_CARD,
   [THING_KIND.INBOX]: OWN_CARD,
   [THING_KIND.INBOX_ITEM]: (item, at) => <InboxItemChipCard place={item} fallback={at.own} />,
-  [THING_KIND.CHANNEL]: (channel, at) => (
-    <ChannelChipCard
-      channelId={channel.channelId}
-      workspace={at.workspace}
-      wordsWorkspaceId={at.wordsWorkspaceId}
-      reading={reading(at)}
-      fallback={at.own}
-    />
-  ),
   [THING_KIND.AUTOMATIONS]: OWN_CARD,
   [THING_KIND.AUTOMATION]: AUTOMATION_CARD,
   [THING_KIND.AUTOMATION_RUN]: AUTOMATION_CARD,

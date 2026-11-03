@@ -1,7 +1,6 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import type { WorkspaceChannels } from "@repo/features/channel-live";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
@@ -38,10 +37,6 @@ export const RUN_PROFILE = {
   TASKS_COMMENTS: "tasks-comments",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
-  /** Channels on, signed in as a member of a synthetic workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
-  CHANNELS: "channels",
-  /** The same workspace's channels, read as the member's teammate. */
-  CHANNELS_TEAMMATE: "channels-teammate",
   /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
   PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
@@ -159,8 +154,6 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
-  /** The channel the thread lives in, which the sidebar counts it under; absent from a service before it. */
-  channelId?: string;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -317,23 +310,11 @@ export type AppPages = {
 /** No pages held, as the host stands before any window chooses a task or an agent and after the session ends. */
 export const NO_PAGES: AppPages = { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} };
 
-/**
- * Each workspace's channels the host holds for the windows
- * (`channel-follow.ts`): the workspaces a window lists or names, and the few
- * let go lately, by id, each as its own read stands, its open channels by
- * name and its archived ones the latest archived first.
- */
-export type AppWorkspaceChannels = Readonly<Record<string, AppHostRead<WorkspaceChannels>>>;
-
-/** No workspace's channels held, as the host stands before any window lists one and after the session ends. */
-export const NO_WORKSPACE_CHANNELS: AppWorkspaceChannels = {};
-
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.PAGES]: readonly PageLine[];
-  [LIVE_READ.CHANNELS]: WorkspaceChannels;
 }
 
 /**
@@ -426,8 +407,6 @@ export interface AppState {
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
-  /** Each workspace's channels, open and archived, held while a window holds them and a while after: what the sidebar's channels, the Inbox's head, the palette, and a `#channel` chip read. */
-  [LIVE_READ.CHANNELS]: AppWorkspaceChannels;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;

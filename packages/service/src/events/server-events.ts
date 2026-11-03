@@ -31,7 +31,7 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./ev
  * sandbox — a task started, a coding agent started, a member's message to it,
  * each of its turns ended, a Stop, an archive, a pull request opened and
  * merged, an automation made, changed, or deleted, an integration connected,
- * and a member's changes to their skills, channels, machines, and workspace.
+ * and a member's changes to their skills, machines, and workspace.
  *
  * It holds to the desktop's counted events' rule
  * (`@repo/features/analytics`'s `product-events.ts`): an event is a name from
@@ -106,7 +106,6 @@ export const SERVER_EVENT = {
   DICTATION_USE: "dictation:use",
   MEMORY_FORGET: "memory:forget",
   HOST_PAIRING_CHANGE: "host:pairing_change",
-  CHANNEL_CHANGE: "channel:change",
   WORKSPACE_MEMBER_CHANGE: "workspace:member_change",
   AUTOMATION_CHANGE: "automation:change",
   AGENT_TOOL_OPEN: "agent:tool_open",
@@ -222,8 +221,7 @@ export const SERVER_SIGN_IN_METHOD = {
 
 /** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
-  // Note that the box's word keeps the host program's old name, because the counted events before the rename carry it and a new word would split their history.
-  BOX_HOST: "luke_host",
+  BOX_HOST: "box_host",
   THIS_MAC: "this_mac",
 } as const;
 
@@ -296,14 +294,6 @@ export const SERVER_HOST_PAIRING_ACTION = {
   REMOVE: "remove",
 } as const;
 
-/** What a member did to a channel; an unarchive is left out. */
-export const SERVER_CHANNEL_ACTION = {
-  CREATE: "create",
-  EDIT: "edit",
-  ARCHIVE: "archive",
-  THREAD_MOVE: "thread_move",
-} as const;
-
 /** What was done to a workspace's members or to the workspace itself. */
 export const SERVER_WORKSPACE_MEMBER_ACTION = {
   REMOVE: "remove",
@@ -339,8 +329,6 @@ export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
 export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
 
 export type ServerSkillAction = Values<typeof SERVER_SKILL_ACTION>;
-
-export type ServerChannelAction = Values<typeof SERVER_CHANNEL_ACTION>;
 
 export type ServerAgentTool = Values<typeof SERVER_AGENT_TOOL>;
 
@@ -453,7 +441,6 @@ export interface ServerEventProperties {
   /** A member's forget of one of the workspace's memories; what it held is never counted. */
   [SERVER_EVENT.MEMORY_FORGET]: Record<string, never>;
   [SERVER_EVENT.HOST_PAIRING_CHANGE]: { action: Values<typeof SERVER_HOST_PAIRING_ACTION> };
-  [SERVER_EVENT.CHANNEL_CHANGE]: { action: Values<typeof SERVER_CHANNEL_ACTION> };
   [SERVER_EVENT.WORKSPACE_MEMBER_CHANGE]: { action: Values<typeof SERVER_WORKSPACE_MEMBER_ACTION> };
   /** Who changed it is the member or one of their agents, as `automation:create` says. */
   [SERVER_EVENT.AUTOMATION_CHANGE]: {
@@ -512,7 +499,7 @@ const GROUP_IDENTIFY_EVENT = "$groupidentify";
 const WORKSPACE_GROUP_REFRESH_MS = 24 * 60 * 60_000;
 
 /** The `$lib` every server-recorded event is stamped with, beside the desktop's own. */
-const SERVER_EVENT_LIB = "luke-service";
+const SERVER_EVENT_LIB = "vespin-service";
 
 /**
  * How long one capture may take. It runs once the request has answered

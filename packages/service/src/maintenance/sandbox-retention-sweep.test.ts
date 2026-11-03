@@ -184,6 +184,7 @@ it.effect(
 
       assert.deepEqual(outcome, { applied: 2, skipped: 0, failed: 0, deferred: 0, lost: 0 });
       assert.deepEqual(api.prefixes.toSorted(), [
+        `agent-sandbox-${BUCKET}`,
         `eve-sbx-vercel-${BUCKET}`,
         `luke-agent-${BUCKET}`,
       ]);
@@ -263,8 +264,9 @@ it.effect("every agent sandbox is bounded within the 256 minutes the buckets tak
     const spread = ["00", "0f", "7c", "a7", "ff"].map((prefix) =>
       sandbox(`eve-sbx-vercel-${prefix}d41d8cd98f00b204e9800998ecf8`),
     );
-    const native = sandbox("luke-agent-3fa85f64-5717-4562-b3fc-2c963f66afa6");
-    const api = vercel([...spread, native]);
+    const native = sandbox("agent-sandbox-3fa85f64-5717-4562-b3fc-2c963f66afa6");
+    const beforeRename = sandbox("luke-agent-9c1d2e3f-5717-4562-b3fc-2c963f66afa6");
+    const api = vercel([...spread, native, beforeRename]);
 
     for (let minute = 0; minute < SANDBOX_RETENTION_SWEEP.BUCKETS; minute += 1) {
       yield* sweepSandboxRetention(new Date(NOW.getTime() + minute * 60_000)).pipe(
@@ -274,7 +276,7 @@ it.effect("every agent sandbox is bounded within the 256 minutes the buckets tak
 
     assert.deepEqual(
       api.updated.map(({ name }) => name).toSorted(),
-      [...spread, native].map(({ name }) => name).toSorted(),
+      [...spread, native, beforeRename].map(({ name }) => name).toSorted(),
     );
   }),
 );

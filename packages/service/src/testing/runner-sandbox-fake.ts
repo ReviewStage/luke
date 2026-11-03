@@ -19,6 +19,7 @@ import { runnerLine } from "@repo/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
+import { runnerTag } from "../agents/machine/vercel-machine.js";
 import {
   sandboxListRefusal,
   sandboxStopRefusal,
@@ -359,8 +360,10 @@ export function runnerSandboxApi() {
       const command: FakeCommand = {
         id: id("cmd"),
         sandboxSessionId: sessionId,
-        agentId: sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags
-          .lukeAgent,
+        agentId: runnerTag(
+          sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags,
+          "AGENT",
+        ),
         command: asked.command,
         args: asked.args,
         cwd: asked.cwd,

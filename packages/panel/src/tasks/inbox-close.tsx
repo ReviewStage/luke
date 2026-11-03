@@ -118,7 +118,7 @@ export function useInboxCloser({
             failure: {
               surface: FAILURE_SURFACE.INBOX_CLOSE,
               cause,
-              about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+              about: { inboxItemId: item.id, agentId: item.agentId },
             },
           });
         }

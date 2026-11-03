@@ -2,25 +2,38 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { createAgent } from "@repo/database/models/agent-store";
+import { archiveAgent, createAgent, readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
+import {
+  linkSlackInstallation,
+  recordSlackAgentThread,
+  writeSlackChannelRepository,
+} from "@repo/database/models/slack-installation-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { slackAgentThread } from "@repo/database/schemas/slack-installation";
+import { messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
-import { INBOX_ASK, INBOX_ASK_STATUS } from "@repo/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { type AfterResponse, keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
-import { githubReaching, openGithubUser } from "../testing/github-app-fake.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "../testing/github-app-fake.js";
 import { recordingHarness } from "../testing/native-harness-fake.js";
 import { SlackBot, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { slackEventsApp } from "./slack-events-app.js";
@@ -29,12 +42,17 @@ import { dmThreadPost } from "./thread-dms.js";
 /**
  * Our Slack route, answered by its group the way a function answers it,
  * over a real store, a fake Slack, and a verifier standing in for Vercel's
- * keys: a press of a decide ask's option in the DM the bot wrote answers
+ * keys: a press of a decide ask's option in the DM the bot wrote is
+ * acknowledged before anything is done, then answers
  * the ask as the member it was written to, hands the agent its answer, and
  * rewrites the DM to say the option chosen, and a request Connect did not
  * sign is refused before anything of it is read; and a mention of the bot
  * starts an agent as the member Slack's email names, replying with its
- * link, and starts nothing for a Slack user who is no member.
+ * link, and starts nothing for a Slack user who is no member; a message in
+ * the thread of an archived agent brings it back and hands it the message,
+ * and one in the thread of an agent whose session ended continues it in a
+ * new agent the thread moves to; and a member's reply under the DM of an
+ * inbox thread is posted on that thread as theirs and starts no agent.
  *
  * Synthetic accounts, workspaces, tokens, and Slack ids throughout.
  */
@@ -49,8 +67,8 @@ interface SlackCall {
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed. */
-function fakeSlack(calls: SlackCall[]): SlackWebApi {
+/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at the timestamp given. */
+function fakeSlack(calls: SlackCall[], postedTs = "1700000000.000100"): SlackWebApi {
   return (method, args) => {
     calls.push({ method, args });
     switch (method) {
@@ -66,7 +84,7 @@ function fakeSlack(calls: SlackCall[]): SlackWebApi {
       case "chat.getPermalink":
         return Effect.succeed({ ok: true, permalink: "https://team.slack.com/archives/C0001/p1" });
       case "chat.postMessage":
-        return Effect.succeed({ ok: true, channel: "D0001", ts: "1700000000.000100" });
+        return Effect.succeed({ ok: true, channel: "D0001", ts: postedTs });
       default:
         return Effect.succeed({ ok: true });
     }
@@ -140,15 +158,33 @@ const openAskedMember = (bot: Layer.Layer<SlackBot>) =>
     return { owner, item };
   });
 
-/** The group over the test's store, the bot, and the verifier, answering one request. */
-const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
+/** The installation the mention's workspace connects, reaching the repository its channel defaults to. */
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 8_100,
+  login: "Acme",
+  repositories: [{ owner: "Acme", name: "Relay" }],
+};
+
+/** The installation the thread agent below works through, its own since an installation stands in one workspace. */
+const BEACON_INSTALLATION: InstallationFixture = {
+  id: 8_101,
+  login: "Acme",
+  repositories: [{ owner: "Acme", name: "Beacon" }],
+};
+
+/** The group over the test's store, the bot, and the verifier, answering one request; its after-response work runs in place unless kept. */
+const answer = (
+  bot: Layer.Layer<SlackBot>,
+  request: Request,
+  after: Layer.Layer<AfterResponse> | Layer.Layer<never> = Layer.empty,
+) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, ENVIRONMENT),
-      githubReaching([]).layer,
+      githubReaching([RELAY_INSTALLATION, BEACON_INSTALLATION]).layer,
       modelCatalogOf([
         {
           id: AGENT_DEFAULT_CHOICE.model,
@@ -159,6 +195,7 @@ const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
       ]),
       HARNESS.layer,
       bot,
+      after,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       slackEventsApp(verify).pipe(HttpRouter.provideRequest(services)),
@@ -215,9 +252,108 @@ function mention(slackUserId: string, eventId: string): Request {
   });
 }
 
+/** Slack's mention of the bot in the thread given by the Slack user given, as Connect forwards it with its bearer. */
+function threadMention(slackUserId: string, eventId: string, threadTs: string): Request {
+  const payload = {
+    type: "event_callback",
+    team_id: "T0001",
+    event_id: eventId,
+    authorizations: [{ user_id: "UBOT" }],
+    event: {
+      type: "app_mention",
+      user: slackUserId,
+      text: "<@UBOT> now make it faster",
+      ts: "1700000003.000400",
+      thread_ts: threadTs,
+      channel: "C0001",
+    },
+  };
+  return new Request(new URL(EVENTS, ORIGIN), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${CONNECT_TOKEN}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Slack's direct message to the bot by the Slack user given, in the thread of the DM given, as Connect forwards it. */
+function dmReply(
+  slackUserId: string,
+  eventId: string,
+  dm: { channel: string; ts: string },
+): Request {
+  const payload = {
+    type: "event_callback",
+    team_id: "T0001",
+    event_id: eventId,
+    authorizations: [{ user_id: "UBOT" }],
+    event: {
+      type: "message",
+      channel_type: "im",
+      user: slackUserId,
+      text: "A week, but let admins extend it",
+      ts: "1700000005.000600",
+      thread_ts: dm.ts,
+      channel: dm.channel,
+    },
+  };
+  return new Request(new URL(EVENTS, ORIGIN), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${CONNECT_TOKEN}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** A member's agent on no task, on the runtime given, in the Beacon repository where asked and none otherwise, started from a Slack thread of its own; with that thread and the Slack user their email names. */
+const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
+  Effect.gen(function* () {
+    const owner = yield* openGithubUser();
+    yield* connectAgentApiKeys(owner);
+    const { workspaceId } = yield* startTask(owner, { name: "Flaky tests" });
+    yield* linkSlackInstallation({
+      organizationId: workspaceId,
+      teamId: "T0001",
+      teamName: "Team",
+      userId: owner,
+    });
+    if (inBeacon) yield* connectWorkspaceGitHub(workspaceId, BEACON_INSTALLATION);
+    const started = yield* createAgent(owner, {
+      taskId: null,
+      organizationId: workspaceId,
+      idempotencyKey: randomUUID(),
+      model: AGENT_DEFAULT_CHOICE.model,
+      effort: "high",
+      planSnapshot: null,
+      prompt: "find the flakiest test and fix it",
+      repository: inBeacon ? "Acme/Beacon" : null,
+      runtime,
+      payer: AGENT_PAYER.API_KEY,
+    });
+    assert.ok(Option.isSome(started));
+    const agent = started.value.agent;
+    yield* claimRuntimeSession(
+      { userId: owner, conversationId: agent.conversationId },
+      `wrun_${randomUUID()}`,
+      yield* DateTime.nowAsDate,
+    );
+    // Note that each agent's thread is its own, because a message is read against every workspace of the team, oldest first.
+    const threadTs = `1700000001.${randomUUID().replace(/\D/gu, "").slice(0, 6)}`;
+    yield* recordSlackAgentThread({
+      organizationId: workspaceId,
+      channelId: "C0001",
+      threadTs,
+      agentId: agent.id,
+      userId: owner,
+    });
+    const [row] = yield* (yield* Database)
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, owner));
+    return { owner, agent, threadTs, slackUserId: `U-${row?.email}` };
+  });
+
 it.layer(getTestDB())("our Slack route", (it) => {
   it.effect(
-    "a press Connect signed answers the ask as the member it was written to, tells the agent, and says the choice in the DM; one unsigned is refused",
+    "a press Connect signed is acknowledged first, then answers the ask as the member it was written to, tells the agent, and says the choice in the DM; one unsigned is refused",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -238,14 +374,20 @@ it.layer(getTestDB())("our Slack route", (it) => {
 
         const unsigned = yield* answer(bot, press(month, slackUserId, undefined));
         const stillOpen = yield* askStatus;
-        const signed = yield* answer(bot, press(month, slackUserId, CONNECT_TOKEN));
+        const kept = keptAfterResponse();
+        const signed = yield* answer(bot, press(month, slackUserId, CONNECT_TOKEN), kept.layer);
+        const atAnswer = yield* askStatus;
+        // The press's work, then the settle of the DM it hands on once the answer is taken.
+        yield* kept.run;
+        yield* kept.run;
 
         assert.deepEqual(unsigned, {
           status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
           body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
         });
         assert.equal(stillOpen, INBOX_ASK_STATUS.OPEN);
-        assert.equal(signed.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(signed, { status: HOSTED_HTTP_STATUS.OK, body: {} });
+        assert.equal(atAnswer, INBOX_ASK_STATUS.OPEN);
         assert.equal(yield* askStatus, INBOX_ASK_STATUS.ANSWERED);
         assert.deepEqual(
           HARNESS.heard.filter((heard) => heard.account === owner),
@@ -262,7 +404,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names and replies with its link; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -276,6 +418,8 @@ it.layer(getTestDB())("our Slack route", (it) => {
           teamName: "Team",
           userId: owner,
         });
+        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+        yield* writeSlackChannelRepository(task.workspaceId, "C0001", "Acme/Relay");
         const [row] = yield* (yield* Database)
           .select({ email: user.email })
           .from(user)
@@ -293,10 +437,150 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.equal(afterStranger, before);
         assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
-        const [refused, onIt] = replies();
+        const [refused, ...others] = replies();
         assert.match(refused?.args.text ?? "", /couldn't find you/u);
-        assert.equal(onIt?.args.thread_ts, "1700000002.000300");
-        assert.match(onIt?.args.text ?? "", /^On it: https:\/\/.+\/agent\//u);
+        assert.deepEqual(others, []);
+        const reactions = calls.filter((call) => call.method === "reactions.add");
+        assert.deepEqual(
+          reactions.map((call) => call.args),
+          [{ channel: "C0001", timestamp: "1700000002.000300", name: "eyes" }],
+        );
+        const [startedAgent] = yield* (yield* Database)
+          .select({
+            repository: agentTable.repository,
+            source: agentTable.source,
+            metadata: messages.metadata,
+          })
+          .from(slackAgentThread)
+          .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+          .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
+          .where(eq(slackAgentThread.channelId, "C0001"));
+        assert.equal(startedAgent?.repository, "Acme/Relay");
+        // The agent keeps where it came from, which the lists mark it by.
+        assert.deepEqual(startedAgent?.source, {
+          kind: "slack",
+          url: "https://team.slack.com/archives/C0001/p1",
+        });
+        // The first line says Slack carried it, with the member's own words alone, for a window to draw.
+        assert.deepEqual(startedAgent?.metadata, {
+          channel: "slack",
+          words: "find the flakiest test and fix it",
+          url: "https://team.slack.com/archives/C0001/p1",
+        });
+      });
+    },
+  );
+
+  it.effect(
+    "a message in the thread of an archived agent brings it back, hands it the message, and reacts with 👀",
+    () => {
+      const calls: SlackCall[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
+      return Effect.gen(function* () {
+        const { owner, agent, threadTs, slackUserId } = yield* openThreadAgent(
+          CONVERSATION_RUNTIME.CLAUDE_CODE,
+          false,
+        );
+        yield* archiveAgent(owner, agent.id, true);
+
+        const answered = yield* answer(
+          bot,
+          threadMention(slackUserId, `Ev${randomUUID()}`, threadTs),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).archivedAt, null);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "send", account: owner });
+        assert.deepEqual(
+          calls.filter((call) => call.method === "chat.postMessage"),
+          [],
+        );
+        assert.deepEqual(
+          calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
+          [{ channel: "C0001", timestamp: "1700000003.000400", name: "eyes" }],
+        );
+      });
+    },
+  );
+
+  it.effect(
+    "a message in the thread of an agent whose session ended continues it in a new agent, moves the thread to it, and links it once",
+    () => {
+      const calls: SlackCall[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
+      return Effect.gen(function* () {
+        // An agent left on eve runs on no harness, so its session has ended for good.
+        const { owner, agent, threadTs, slackUserId } = yield* openThreadAgent(
+          CONVERSATION_RUNTIME.EVE,
+          true,
+        );
+
+        const answered = yield* answer(
+          bot,
+          threadMention(slackUserId, `Ev${randomUUID()}`, threadTs),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        const [thread] = yield* (yield* Database)
+          .select({ agentId: slackAgentThread.agentId })
+          .from(slackAgentThread)
+          .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+          .where(eq(agentTable.userId, owner));
+        assert.ok(thread !== undefined && thread.agentId !== agent.id);
+        const continued = Option.getOrThrow(yield* readAgent(owner, thread.agentId));
+        assert.deepEqual(continued.startedFrom?.agentId, agent.id);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
+        const replies = calls.filter((call) => call.method === "chat.postMessage");
+        assert.equal(replies.length, 1);
+        assert.equal(replies[0]?.args.thread_ts, threadTs);
+        assert.match(replies[0]?.args.text ?? "", /had stopped/u);
+        assert.deepEqual(
+          calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
+          [{ channel: "C0001", timestamp: "1700000003.000400", name: "eyes" }],
+        );
+      });
+    },
+  );
+
+  it.effect(
+    "a reply under a thread's DM is posted on that thread as the member it went to, tells the agent, reacts with 👀, and starts no agent",
+    () => {
+      const calls: SlackCall[] = [];
+      // Note that the DM's timestamp is this test's own, because the store is shared with the press above.
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls, "1700000004.000500")));
+      return Effect.gen(function* () {
+        const { owner, item } = yield* openAskedMember(bot);
+        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const slackUserId = posted?.args.channel ?? "";
+        const opened = HARNESS.heard.filter((heard) => heard.call === "open").length;
+
+        const replied = yield* answer(
+          bot,
+          dmReply(slackUserId, `Ev${randomUUID()}`, { channel: "D0001", ts: "1700000004.000500" }),
+        );
+
+        assert.equal(replied.status, HOSTED_HTTP_STATUS.OK);
+        const thread = Option.getOrThrow(yield* readInboxItem(owner, item.id)).item.thread ?? [];
+        assert.deepEqual(
+          thread
+            .filter((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER)
+            .map((m) => m.text),
+          ["A week, but let admins extend it"],
+        );
+        assert.equal(thread.find((message) => message.ask)?.ask?.status, INBOX_ASK_STATUS.OPEN);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "send", account: owner });
+        assert.equal(HARNESS.heard.filter((heard) => heard.call === "open").length, opened);
+        assert.deepEqual(
+          yield* (yield* Database)
+            .select({ agentId: slackAgentThread.agentId })
+            .from(slackAgentThread)
+            .where(eq(slackAgentThread.threadTs, "1700000004.000500")),
+          [],
+        );
+        assert.deepEqual(
+          calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
+          [{ channel: "D0001", timestamp: "1700000005.000600", name: "eyes" }],
+        );
       });
     },
   );

@@ -368,7 +368,7 @@ export interface AppShortcut {
   experiment?: Experiment;
   /**
    * What the command is called while an experiment that changes what it
-   * reaches is on, as Next inbox item steps through a channel's threads while Channels is:
+   * reaches is on:
    * the menu bar, the Keyboard shortcuts page, and the settings search say
    * this instead (`shortcutLabel`).
    */

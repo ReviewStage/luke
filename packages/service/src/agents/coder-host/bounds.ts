@@ -75,14 +75,9 @@ export const CODER = {
    * with JS plugins it reserves about 6 GiB per thread, which the kernel's
    * default overcommit refuses at 4 GB, but it uses under one, and
    * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
-   * boots with the default, lets it lint there in 36 seconds. It is named
-   * under its name now and the one it is being renamed to, since an agent's
-   * repository follows GitHub's rename (`models/github-repositories.ts`).
+   * boots with the default, lets it lint there in 36 seconds.
    */
-  SANDBOX_VCPUS_BY_REPOSITORY: new Map([
-    ["reviewstage/luke", 4],
-    ["reviewstage/vespin", 4],
-  ]) as ReadonlyMap<string, number>,
+  SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/vespin", 4]]) as ReadonlyMap<string, number>,
   /**
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns
@@ -93,12 +88,9 @@ export const CODER = {
    * is rarely picked up again. The cost: an agent resumed after 3 idle days
    * finds no snapshot and starts from a fresh clone of its repository, so its
    * uncommitted and unpushed work is gone, and an agent archived while its
-   * sandbox ran keeps its for a day alone (`session-sandboxes.ts`). An eve
-   * agent's sandbox opens anew through its root's selector, checkout and
-   * all, where its sandbox or its snapshot is
-   * gone (`patches/eve@0.74.0.patch`, held by
-   * `agent-runtime/sandbox-resume.test.ts`), and a native agent's resume does
-   * the same (`runner-sessions.ts`).
+   * sandbox ran keeps its for a day alone (`session-sandboxes.ts`). A
+   * native agent whose sandbox or snapshot is gone opens a fresh one,
+   * checkout and all (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(3), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@repo/features/host-wire`). */

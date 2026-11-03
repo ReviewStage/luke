@@ -19,7 +19,6 @@ import {
 } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { AutomationSummary } from "@repo/features/automation-wire";
-import type { Channel } from "@repo/features/channel-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -53,7 +52,6 @@ import type {
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
-  AppWorkspaceChannels,
 } from "@repo/host/app-state";
 import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
@@ -71,7 +69,6 @@ import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import { ToastHost } from "../toast.js";
@@ -327,10 +324,6 @@ class InboxWorld {
   deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
   /** Delivers the holders' own inboxes to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
   deliverHolders: (held: AppHolderInboxes) => void = () => undefined;
-  /** Each workspace's channels as the host holds them when the window mounts. */
-  channels: AppWorkspaceChannels = {};
-  /** Delivers the workspaces' channels to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
-  deliverChannels: (held: AppWorkspaceChannels) => void = () => undefined;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -584,8 +577,6 @@ beforeEach(() => {
   world.fileReads = [];
   world.main = heldInboxes();
   world.deliverHolders = () => undefined;
-  world.channels = {};
-  world.deliverChannels = () => undefined;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AGENTS_INBOX_ITEMS_RETRY) {
@@ -716,7 +707,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => world.root?.unmount());
   world.root = undefined;
-  leaveChannel();
   document.body.innerHTML = "";
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -757,7 +747,6 @@ export function mount(
     withSidebar = false,
     readerKnown = true,
     toasts = false,
-    channels = false,
     chosen: firstChosen,
     drawnWhileOpen = false,
     agents: firstAgents = agentHoldingsOf(firstTaskless),
@@ -778,8 +767,6 @@ export function mount(
     readerKnown?: boolean;
     /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
     toasts?: boolean;
-    /** Whether the Inbox is narrowed to #general, chosen as the sidebar's row chooses it. */
-    channels?: boolean;
     /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
     chosen?: InboxChoice;
     /** Whether the Inbox is drawn only while open, as the shell draws it. */
@@ -798,11 +785,9 @@ export function mount(
   const reads = handHostReads({
     items: feedNow(),
     holders: world.main.now(),
-    channels: world.channels,
   });
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
-  world.deliverChannels = reads.deliverChannels;
   // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
   holdPages(reads.deliverPages, (place) =>
     "taskId" in place
@@ -868,7 +853,6 @@ export function mount(
         },
         onChoose: setChosen,
         onOpenItem: setChosen,
-        onOpenChannel: chooseChannel,
         onClear: () => setChosen(undefined),
         pages: undefined,
         onTaskAgents: () => undefined,
@@ -918,7 +902,6 @@ export function mount(
       : createElement(Panelled, { at: room });
   const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
-  if (channels) chooseChannel(GENERAL.id);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
@@ -1689,13 +1672,3 @@ export function repliedOn(item: InboxItem, id: string) {
     };
   };
 }
-
-/** The workspace's #general, which every thread naming no channel lives in. */
-export const GENERAL: Channel = {
-  id: "c0ffee00-0000-4000-8000-000000000001",
-  name: "general",
-  purpose: "Everything the agents post",
-  project: false,
-  createdAt: 1,
-  waiting: 0,
-};

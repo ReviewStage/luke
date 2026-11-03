@@ -1,7 +1,7 @@
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
 /**
- * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
+ * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where they would not fit beside them.
  *
  * A notice comes in four looks: a slim strip across a column, its words held
  * to one line and fading out at its end where it cuts them short (a stranded
@@ -13,12 +13,13 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * in one of a few tones, which tint the strip and the card and ink the inset
  * line.
  *
- * They share one layout, so they give way alike: each strip measures its own
- * width, and below a narrow one its presses leave the words' line for a line
- * of their own, each as wide as the line allows, so a word is never squeezed
- * a letter to a line and a press never stands on the words. It measures
- * itself rather than the window, because the same strip stands in a narrow
- * column beside a wide side panel and across a whole window alike. A strip
+ * They share one layout, so they give way alike: the presses stand beside the
+ * words wherever the words keep a readable width beside them, and only where
+ * they would not do they leave the words' line for a line of their own, so a
+ * word is never squeezed a letter to a line and a press never stands on the
+ * words. It answers its own room rather than the window, because the same
+ * strip stands in a narrow column beside a wide side panel and across a whole
+ * window alike. A strip
  * is named by its own words, never an attribute, because a session
  * recording masks text and nothing else.
  *

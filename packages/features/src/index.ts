@@ -25,7 +25,6 @@ export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
-export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
   type DeviceAgentBeat,

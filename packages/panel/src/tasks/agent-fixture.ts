@@ -94,7 +94,7 @@ const PULL_REQUEST = {
   number: 214,
   title: "feat(members): invite a teammate by email",
   url: `https://github.com/${REPOSITORY}/pull/214`,
-  head: "luke/teammate-invitations",
+  head: "agent/teammate-invitations",
   base: "main",
   headSha: "3f9a1c7e5b2d4f6a8c0e1b3d5f7a9c1e3b5d7f9a",
   baseSha: "8b2d4f6a0c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d",

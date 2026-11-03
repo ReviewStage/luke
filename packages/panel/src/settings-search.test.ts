@@ -176,14 +176,14 @@ function experimentalFound(query: string, accountDrawn: boolean): readonly strin
 
 test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
   assert.deepEqual(experimentalFound("on a schedule", true), [], "Automations is no experiment");
-  for (const query of ["threads by topic", "a stream your agents post to"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
+  for (const query of ["pilot agent", "splits the work into sub-tasks"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Pilot"], query);
   }
   assert.deepEqual(experimentalFound("hosts", true), ["Bring your own host"], "the page it holds");
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Bring your own host", "Skills", "Pilot", "Channels", "Memory"],
+      ["Bring your own host", "Skills", "Pilot", "Memory"],
       query,
     );
   }

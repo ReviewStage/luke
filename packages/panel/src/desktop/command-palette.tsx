@@ -64,7 +64,6 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { automationTriggerText } from "@repo/features/automation-list-model";
 import type { AutomationSummary } from "@repo/features/automation-wire";
-import type { Channel } from "@repo/features/channel-wire";
 import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -87,14 +86,7 @@ import {
 } from "@repo/features/words";
 import { taskKey } from "@repo/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
-import {
-  EXPERIMENT,
-  type Experiment,
-  type ExperimentChoices,
-  experimentOn,
-  HOST_CAPABILITY,
-  type HostCapability,
-} from "@repo/settings";
+import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
   APP_COMMAND,
@@ -193,7 +185,6 @@ import {
 } from "../settings-search.js";
 import { agentName } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { ChannelCard } from "../tasks/channel-card.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
 import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -205,7 +196,6 @@ import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
-import { useChannels } from "../tasks/use-channels.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
@@ -234,7 +224,6 @@ const PALETTE_FILTER = {
   TASKS: "plans",
   THIS_TASK: "this-task",
   INBOX: "inbox",
-  CHANNELS: "channels",
   PEOPLE: "people",
   AUTOMATIONS: "automations",
   FILES: "files",
@@ -249,26 +238,12 @@ type PaletteKind = Exclude<PaletteFilter, typeof PALETTE_FILTER.ALL>;
 
 const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 
-/** The filters an experiment holds, which stand only while the account has it on. */
-const FILTER_EXPERIMENT: Partial<Record<PaletteFilter, Experiment>> = {
-  [PALETTE_FILTER.CHANNELS]: EXPERIMENT.CHANNELS,
-};
-
-/** The filters standing for the account's experiments, in their order. */
-function filtersOn(experiments: ExperimentChoices): readonly PaletteFilter[] {
-  return PALETTE_FILTERS.filter((each) => {
-    const experiment = FILTER_EXPERIMENT[each];
-    return experiment === undefined || experimentOn(experiments, experiment);
-  });
-}
-
 /** Each filter's name, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
   [PALETTE_FILTER.THIS_TASK]: "This task",
   [PALETTE_FILTER.INBOX]: "Inbox",
-  [PALETTE_FILTER.CHANNELS]: "Channels",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.AUTOMATIONS]: "Automations",
   [PALETTE_FILTER.FILES]: "Files",
@@ -276,28 +251,11 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.SETTINGS]: "Settings",
 } as const satisfies Record<PaletteFilter, string>;
 
-/** What a filter is called while an experiment that changes what it finds is on, as the Inbox's items are channels' threads while Channels is. */
-const FILTER_RENAMED: Partial<Record<PaletteFilter, { experiment: Experiment; label: string }>> = {
-  [PALETTE_FILTER.INBOX]: { experiment: EXPERIMENT.CHANNELS, label: "Threads" },
-};
-
-/** Each filter's name for the account's experiments: its renamed one while that experiment is on, its own otherwise. */
-function filterLabels(experiments: ExperimentChoices): Record<PaletteFilter, string> {
-  const labels: Record<PaletteFilter, string> = { ...FILTER_LABEL };
-  for (const each of PALETTE_FILTERS) {
-    const renamed = FILTER_RENAMED[each];
-    if (renamed !== undefined && experimentOn(experiments, renamed.experiment)) {
-      labels[each] = renamed.label;
-    }
-  }
-  return labels;
-}
-
 /** What the search field asks for: the product's name under All, and the kind, as it stands mid-sentence, under its filter. */
-function filterPlaceholder(filter: PaletteFilter, labels: Record<PaletteFilter, string>): string {
+function filterPlaceholder(filter: PaletteFilter): string {
   return filter === PALETTE_FILTER.ALL
     ? `Search ${PRODUCT_NAME}`
-    : `Search ${labels[filter].toLowerCase()}`;
+    : `Search ${FILTER_LABEL[filter].toLowerCase()}`;
 }
 
 /** How many rows a kind lists: its best few under All, and as many as are worth reading under its own filter. */
@@ -350,11 +308,9 @@ const READING_LINE = readingWords(`the repository's ${TERM.FILE.many}`);
 const TASKS_READING_LINE = readingWords(`your ${TERM.TASK.many}`);
 const TASKS_FAILED_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
-/** What the Inbox filter says while its items are first read, and where a read did not land; with Channels on, the filter finds threads. */
+/** What the Inbox filter says while its items are first read, and where a read did not land. */
 const INBOX_READING_LINE = readingWords("your inbox");
 const INBOX_FAILED_LINE = "Your inbox could not be read.";
-const THREADS_READING_LINE = readingWords("your threads");
-const THREADS_FAILED_LINE = readFailedWords("your threads");
 
 /** How many characters of an item's words a row says on either side of the word that found it. */
 const SNIPPET_REACH = 40;
@@ -673,20 +629,11 @@ function peopleNotice(
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
 
-/** What the Inbox filter says while its items have not been pushed, or a push did not land, of threads with Channels on; nothing once every one is. */
-function inboxNotice(search: InboxSearch, channelsOn: boolean): PaletteNotice | undefined {
-  if (search.reading) {
-    return {
-      kind: PALETTE_NOTICE.READING,
-      line: channelsOn ? THREADS_READING_LINE : INBOX_READING_LINE,
-    };
-  }
+/** What the Inbox filter says while its items have not been pushed, or a push did not land; nothing once every one is. */
+function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
+  if (search.reading) return { kind: PALETTE_NOTICE.READING, line: INBOX_READING_LINE };
   return search.failed
-    ? {
-        kind: PALETTE_NOTICE.FAILED,
-        line: channelsOn ? THREADS_FAILED_LINE : INBOX_FAILED_LINE,
-        onRetry: search.onRetry,
-      }
+    ? { kind: PALETTE_NOTICE.FAILED, line: INBOX_FAILED_LINE, onRetry: search.onRetry }
     : undefined;
 }
 
@@ -1095,22 +1042,6 @@ function peopleRows(
     terms: row.terms,
     card: row.card,
     onChoose: () => open(row.member.userId),
-  }));
-}
-
-/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing narrows the Inbox to; `#app` typed finds it too. */
-function channelRows(
-  channels: readonly Channel[],
-  workspaceId: string | undefined,
-  open: (channelId: string) => void,
-): readonly PaletteRow[] {
-  return channels.map((channel) => ({
-    icon: <GLYPH.CHANNEL />,
-    label: channel.name,
-    detail: channel.purpose,
-    card: <ChannelCard channel={channel} workspaceId={workspaceId} />,
-    terms: [channel.name, `#${channel.name}`, channel.purpose],
-    onChoose: () => open(channel.id),
   }));
 }
 
@@ -1828,13 +1759,9 @@ function revealChecked(band: HTMLElement): void {
  * moving there would bring it.
  */
 function PaletteFilters({
-  filters,
-  labels,
   filter,
   onFilter,
 }: {
-  filters: readonly PaletteFilter[];
-  labels: Record<PaletteFilter, string>;
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
@@ -1846,7 +1773,7 @@ function PaletteFilters({
     <div ref={band}>
       <ChoiceBar
         label="Filter"
-        items={filters.map((each) => ({ value: each, label: labels[each] }))}
+        items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
         value={filter}
         onChange={onFilter}
         look={CHOICE_BAR_LOOK.FILL}
@@ -1974,8 +1901,6 @@ export function CommandPalette({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const experiments = useExperimentChoices();
-  const filters = useMemo(() => filtersOn(experiments), [experiments]);
-  const labels = useMemo(() => filterLabels(experiments), [experiments]);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   // How many times ⌘K has opened the palette, each of which chooses its first row.
@@ -2099,7 +2024,7 @@ export function CommandPalette({
       const step = arrowStep(event, query);
       if (step !== 0) {
         event.preventDefault();
-        setFilter(steppedFilter(filters, filter, step));
+        setFilter(steppedFilter(PALETTE_FILTERS, filter, step));
         return;
       }
       const pressed = commandForKey(
@@ -2111,9 +2036,9 @@ export function CommandPalette({
       // claims their chords for its filters while it stands.
       event.preventDefault();
       if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-      else setFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+      else setFilter(steppedFilter(PALETTE_FILTERS, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
     },
-    [sought, query, filters, filter],
+    [sought, query, filter],
   );
 
   const tokens = searchTokens(sought);
@@ -2179,9 +2104,6 @@ export function CommandPalette({
       inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
     [inboxAsked, inboxSearch.items],
   );
-  // Note that the channels are those the host holds for the window, as the sidebar draws them.
-  const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
-  const channels = useChannels(channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined);
   // Note that the automations are followed the first time they are searched, on the Inbox's terms.
   const automationsAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.AUTOMATIONS || tokens.length > 0);
@@ -2243,12 +2165,7 @@ export function CommandPalette({
           tokens,
           now,
           open: (chosen) =>
-            onTasks(() =>
-              tasks.inboxView.onOpenItem(
-                { ...choiceOf(chosen), opened: true },
-                chosen.item.channelId,
-              ),
-            ),
+            onTasks(() => tasks.inboxView.onOpenItem({ ...choiceOf(chosen), opened: true })),
         }),
       ),
   } as const;
@@ -2256,11 +2173,6 @@ export function CommandPalette({
   // while open: every row a tier matches ranks above the next tier's.
   const tiersOf = {
     [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
-    [PALETTE_FILTER.CHANNELS]: () => [
-      channelRows(channels.channels ?? [], tasks.workspace?.id, (channelId) =>
-        onTasks(() => tasks.inboxView.onOpenChannel(channelId)),
-      ),
-    ],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
@@ -2321,18 +2233,14 @@ export function CommandPalette({
       .flatMap((tier) => ranked(tier, sought, limit, byRow))
       .slice(0, limit);
   };
-  const kinds = filters.filter((each): each is PaletteKind =>
+  const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.THIS_TASK]: () => undefined,
-    [PALETTE_FILTER.INBOX]: () =>
-      inboxAsked
-        ? inboxNotice(inboxSearch, experimentOn(experiments, EXPERIMENT.CHANNELS))
-        : undefined,
-    [PALETTE_FILTER.CHANNELS]: () => undefined,
+    [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.AUTOMATIONS]: () =>
       automationsAsked ? automationsNotice(tasks, automations) : undefined,
@@ -2376,7 +2284,7 @@ export function CommandPalette({
     return [
       ...sections.map((section) => ({
         id: section.kind,
-        label: labels[section.kind],
+        label: FILTER_LABEL[section.kind],
         items: items(section.rows),
         note: noteOf(section),
       })),
@@ -2385,10 +2293,7 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
-  const band = useMemo(
-    () => <PaletteFilters filters={filters} labels={labels} filter={filter} onFilter={setFilter} />,
-    [filters, labels, filter],
-  );
+  const band = useMemo(() => <PaletteFilters filter={filter} onFilter={setFilter} />, [filter]);
 
   return (
     <>
@@ -2396,7 +2301,7 @@ export function CommandPalette({
         open={open}
         opening={openings}
         onOpenChange={setOpen}
-        placeholder={filterPlaceholder(filter, labels)}
+        placeholder={filterPlaceholder(filter)}
         groups={stood.current}
         filter={filter}
         query={query}

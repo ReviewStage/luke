@@ -11,9 +11,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * counts the open threads that wait on the developer, a question or an
  * update not yet opened, the threads its Needs you lists (`inbox-model.ts`'s
  * `needsYou`), while a task's badge counts its questions alone, as main
- * counts them. Each channel's row counts the same threads the Inbox's does,
- * by the channel each lives in (`useChannelWaiting`), so the channels' add
- * up to the Inbox's, bar those in an archived channel, which has no row.
+ * counts them.
  */
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map();
@@ -52,7 +50,7 @@ function toDoByTask(
  * count, and one the reader settles leaves main's read the moment it is
  * asked (`@repo/host`'s `account-inbox-follow.ts`).
  */
-function waitingThreads(tasks: TasksControl): readonly Pick<AppInboxWaitingItem, "channelId">[] {
+function waitingThreads(tasks: TasksControl): readonly AppInboxWaitingItem[] {
   // Note that only the standing tasks are counted, as To do lists them, so a task not listed yet counts nowhere.
   const standing = new Set(tasks.listed.tasks.map((task) => task.id));
   const ofTasks = tasks.inbox
@@ -81,20 +79,4 @@ export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number
  */
 export function useInboxWaiting(tasks: TasksControl): number {
   return tasks.signedIn ? waitingThreads(tasks).length : 0;
-}
-
-/**
- * How many of the threads the Inbox counts (`waitingThreads`) live in each
- * channel, by channel: what each channel's sidebar row says, so the rows
- * add up to the Inbox's number. A channel where none waits is left out, and
- * every one while signed out; a thread from a service that names no
- * channel counts in the Inbox's number alone.
- */
-export function useChannelWaiting(tasks: TasksControl): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-  if (!tasks.signedIn) return counts;
-  for (const { channelId } of waitingThreads(tasks)) {
-    if (channelId !== undefined) counts.set(channelId, (counts.get(channelId) ?? 0) + 1);
-  }
-  return counts;
 }

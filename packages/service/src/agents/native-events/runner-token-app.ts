@@ -187,7 +187,7 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
 });
 
 /** How a device runs agents that we hand a GitHub token: on our sign-ins, in a VM or straight on the device. */
-const ON_LUKES_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
+const ON_OUR_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
   DEVICE_ISOLATION.SANDBOX,
   DEVICE_ISOLATION.DIRECT,
 ]);
@@ -226,7 +226,7 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   }
   // Note that the device is read under the member, so another member's device reads as none.
   const standing = yield* hostedStoreOrUnavailable(deviceLayout(userId, deviceId));
-  if (!Option.exists(standing, (each) => ON_LUKES_SIGN_INS.has(each.isolation))) {
+  if (!Option.exists(standing, (each) => ON_OUR_SIGN_INS.has(each.isolation))) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return yield* repositoryTokenFor(userId, agent.value, brake);

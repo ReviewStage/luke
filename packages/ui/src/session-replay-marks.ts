@@ -11,7 +11,7 @@
  * checkbox's value, and every other radio of a group goes with the one
  * pressed. Base UI draws a hidden input beside each of its radios,
  * checkboxes, and switches, and gives it the option's value, which can be
- * an account's, a workspace's, or a channel's id. The recorder's fixed
+ * an account's, a workspace's, or a task's id. The recorder's fixed
  * `ph-ignore-input` class keeps an input's changes out of the recording,
  * and Base UI takes no class for that input, so its ref puts the class
  * there. Note that it lands before the recorder reads the value React gave

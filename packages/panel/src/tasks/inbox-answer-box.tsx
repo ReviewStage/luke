@@ -3,7 +3,6 @@ import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@repo/fea
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@repo/features/inbox-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { pasteCutWords } from "@repo/features/words";
-import { EXPERIMENT } from "@repo/settings";
 import {
   Checkbox,
   ComposerBody,
@@ -29,7 +28,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -41,7 +39,7 @@ import { focusMissing } from "./inbox-ask-controls.js";
 import { type InboxMissing, missingWords } from "./inbox-ask-words.js";
 import {
   acknowledgedOnOpen,
-  asksNod,
+  awaitsNod,
   type InboxDraft,
   inboxMissing,
   inboxNoteReading,
@@ -130,7 +128,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  *
  * Where the page offers it, a checkbox under the card turns the next send
  * into a new thread rather than a reply: "Send as a new thread to", the
- * item's agent's chip, and the chip of the channel it lands in. Ticked, the
+ * and the item's agent's chip. Ticked, the
  * line asks to start a thread and Send reads "Start thread"; the words and
  * files go as the thread's first message, its first line standing for its
  * title, and the box unticks once the thread is started, so the next send
@@ -168,9 +166,6 @@ const NEW_THREAD_PLACEHOLDER = "Start a new thread";
 
 /** What the checkbox under the card says before the agent's chip. */
 const SEND_AS_NEW = "Send as a new thread to";
-
-/** What it says between the agent's chip and the channel's. */
-const NEW_THREAD_IN = "in";
 
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
@@ -388,7 +383,7 @@ function AnswerForm({
   );
 }
 
-/** The checkbox under the card that turns the next send into a new thread: to the agent's chip, in the channel's where there is one. */
+/** The checkbox under the card that turns the next send into a new thread, to the agent's chip. */
 function NewThreadChoice({
   offer,
   checked,
@@ -405,12 +400,6 @@ function NewThreadChoice({
     <div className="inbox-new-thread flex min-w-0 pt-ui-8 pl-ui-4 text-muted-foreground">
       <Checkbox checked={checked} disabled={held} onChange={onChange}>
         {SEND_AS_NEW} {offer.agent}
-        {offer.channel === undefined ? null : (
-          <>
-            {" "}
-            {NEW_THREAD_IN} {offer.channel}
-          </>
-        )}
       </Checkbox>
     </div>
   );
@@ -452,12 +441,10 @@ export interface NewThreadStart {
   readonly clientKey: string;
 }
 
-/** A new thread the box can start instead of a reply: who it goes to and where it lands, as chips, and the start itself. */
+/** A new thread the box can start instead of a reply: who it goes to, as a chip, and the start itself. */
 export interface AnswerNewThread {
   /** The item's agent's chip, whom the thread goes to. */
   readonly agent: ReactNode;
-  /** The chip of the channel the thread lands in; none where the window lists no channels. */
-  readonly channel: ReactNode | undefined;
   /** Starts the thread, answering why it did not, or nothing once it did. */
   readonly onStart: (start: NewThreadStart) => Promise<string | undefined>;
 }
@@ -507,10 +494,8 @@ function AnswerCard({
     },
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
-  const channels = useExperiment(EXPERIMENT.CHANNELS);
-  const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
-  // Note that under Channels a notice waiting on a teammate offers no Got it, since it is theirs to settle.
-  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded && !starts;
+  const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
+  const nod = awaitsNod(item) && emptyBox(draft) && !nodded && !starts;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = starts
@@ -571,7 +556,7 @@ function AnswerCard({
           failure: {
             surface: FAILURE_SURFACE.AGENT_ARCHIVE,
             cause: result,
-            about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+            about: { inboxItemId: item.id, agentId: item.agentId },
           },
         });
       } else if (kept !== undefined) control.onDropNote(item.id, kept);

@@ -43,10 +43,6 @@ export const GITHUB_TOKEN_REJECTION = {
   INVALID: "invalid",
   /** GitHub accepted the token, but it lacks the `repo` scope. */
   NO_REPO_SCOPE: "no_repo_scope",
-  /** The member has no GitHub account linked to the app to match the token against; nothing was sent to GitHub. */
-  NO_GITHUB_ACCOUNT: "no_github_account",
-  /** The token belongs to another GitHub user than the one the member linked to the app. */
-  OTHER_USER: "other_user",
   /** GitHub could not be asked, or did not answer; the same token may be tried again. */
   UNREACHABLE: "unreachable",
   /** The member saved too many tokens in too short a time; nothing was sent to GitHub. */

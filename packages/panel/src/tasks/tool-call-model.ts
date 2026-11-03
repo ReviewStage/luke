@@ -1073,12 +1073,6 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.POST_THREAD]: READ_INBOX_CALL,
   [AGENT_TOOL.WITHDRAW_ASK]: READ_INBOX_CALL,
   [AGENT_TOOL.READ_THREADS]: READ_INBOX_CALL,
-  [AGENT_TOOL.CREATE_CHANNEL]: ({ input, output }) =>
-    namedCall(CALL_KIND.CREATE_CHANNEL, input, output, "name"),
-  [AGENT_TOOL.UPDATE_CHANNEL]: ({ input, output }) =>
-    namedCall(CALL_KIND.UPDATE_CHANNEL, input, output, "channel"),
-  [AGENT_TOOL.MOVE_THREAD]: ({ input, output }) =>
-    namedCall(CALL_KIND.MOVE_THREAD, input, output, "channel"),
   [AGENT_TOOL.OPEN_PULL_REQUEST]: ({ input, output }) => openedPullRequestView(input, output),
   [AGENT_TOOL.LOAD_SKILL]: ({ input, output }) => {
     const skillName = loadedSkill(input);
@@ -1130,9 +1124,10 @@ const AGENT_TOOL_VIEWS = {
 
 /**
  * The retired tools a row reads by name: every one but Chat's four, the
- * code and whiteboard tools, and a voice call's own three, whose calls, with
- * no Chat, Code tab, Board, or call left to open, draw as any other call
- * does, by the tool's name and what it was handed and answered.
+ * three that kept channels, the code and whiteboard tools, and a voice
+ * call's own three, whose calls, with no Chat, channel, Code tab, Board, or
+ * call left to open, draw as any other call does, by the tool's name and
+ * what it was handed and answered.
  */
 type RetiredTool = Exclude<
   (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
@@ -1140,6 +1135,9 @@ type RetiredTool = Exclude<
   | typeof RETIRED_TOOL.READ_CHAT
   | typeof RETIRED_TOOL.RESOLVE_ASK
   | typeof RETIRED_TOOL.EDIT_CHANNEL
+  | typeof RETIRED_TOOL.CREATE_CHANNEL
+  | typeof RETIRED_TOOL.UPDATE_CHANNEL
+  | typeof RETIRED_TOOL.MOVE_THREAD
   | typeof RETIRED_TOOL.SHOW_CODE
   | typeof RETIRED_TOOL.DRAW_ON_BOARD
   | typeof RETIRED_TOOL.LOOK_AT_BOARD

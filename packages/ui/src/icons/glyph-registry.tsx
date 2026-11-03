@@ -27,6 +27,7 @@ import {
   ListChecks,
   ListEnd,
   ListTodo,
+  Lock,
   ListTree,
   MessageSquareHeart,
   MessagesSquare,
@@ -137,8 +138,11 @@ export const GLYPH = {
   PEOPLE: lucideGlyph(Users),
   SKILL: lucideGlyph(BookOpen),
   COMMENT: CommentsIcon,
+  // A Slack channel, as the Slack bot's settings list it.
   CHANNEL: lucideGlyph(Hash),
-  // A thread in a channel, the Inbox's item, where no ask of its own says more.
+  // A channel only its members see, as Slack marks a private one.
+  PRIVATE_CHANNEL: lucideGlyph(Lock),
+  // A thread, the Inbox's item, where no ask of its own says more.
   THREAD: lucideGlyph(MessagesSquare),
   TERMINAL: TerminalIcon,
   MEMORY: MemoryIcon,

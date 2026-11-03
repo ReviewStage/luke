@@ -7,6 +7,7 @@ import {
   opensMenu,
   SettingsRow,
   type SettingsRowControl,
+  type SettingsRowIndent,
   Tooltip,
   useMenu,
 } from "@repo/ui";
@@ -56,6 +57,8 @@ interface MenuRowWords {
   describedControl?: (control: SettingsRowControl) => ReactNode;
   /** Whether the row just arrived, which lights it once. */
   landed?: boolean;
+  /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
+  indent?: SettingsRowIndent;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -144,6 +147,7 @@ export function MenuRow({
           </>
         ) : (
           <SettingsRow
+            indent={row.indent}
             leading={row.leading}
             label={row.label}
             adornment={row.adornment}

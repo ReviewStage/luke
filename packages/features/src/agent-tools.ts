@@ -11,7 +11,6 @@
  */
 
 import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
-import { CHANNEL_TOOL } from "./channel-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
@@ -68,10 +67,6 @@ export const AGENT_TOOL = {
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_THREADS: INBOX_TOOL.READ,
-  // The workspace's channels, made, changed, and a thread moved between them, as a member does.
-  CREATE_CHANNEL: CHANNEL_TOOL.CREATE,
-  UPDATE_CHANNEL: CHANNEL_TOOL.UPDATE,
-  MOVE_THREAD: CHANNEL_TOOL.MOVE,
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
@@ -120,8 +115,9 @@ export const CONNECTION_TOOL = {
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
  * four about the workspace's own issues, gone with them, the inbox's
- * post and read, since named for the channels a thread is posted to,
- * the four of the workspace's Chat, removed with it, the brain's lines of
+ * post and read, since named for the threads they post and read,
+ * the four of the workspace's Chat, removed with it, the three that made,
+ * changed, and moved threads between channels, removed with them, the brain's lines of
  * code put on the developer's screen and its two whiteboard tools, removed
  * with the Code and Board tabs, a voice call's question queue and
  * hang-up, removed with GPT Live, the memory's two tools, since named for
@@ -148,7 +144,7 @@ export const RETIRED_TOOL = {
   READ_ISSUE: "read_issue",
   CREATE_ISSUE: "create_issue",
   UPDATE_ISSUE: "update_issue",
-  // Renamed `post_thread` and `read_threads`, since a thread is posted to a channel.
+  // Renamed `post_thread` and `read_threads`, for the threads they post and read.
   POST_TO_INBOX: "post_to_inbox",
   READ_INBOX: "read_inbox",
   // The workspace's Chat, removed with it.
@@ -156,6 +152,10 @@ export const RETIRED_TOOL = {
   READ_CHAT: "read_chat",
   RESOLVE_ASK: "resolve_ask",
   EDIT_CHANNEL: "edit_channel",
+  // The workspace's channels, made, changed, and a thread moved between them, removed with them.
+  CREATE_CHANNEL: "create_channel",
+  UPDATE_CHANNEL: "update_channel",
+  MOVE_THREAD: "move_thread",
   // Code snippets and the task's whiteboard, removed with them.
   SHOW_CODE: "show_code",
   DRAW_ON_BOARD: "draw_on_board",
@@ -167,7 +167,7 @@ export const RETIRED_TOOL = {
   // Renamed `save_memory` and `search_memory`, as every other tool names what it acts on.
   REMEMBER: "remember",
   RECALL: "recall",
-  // Folded into `update_comment` (`resolved`), whose name no channel thread's tool shares.
+  // Folded into `update_comment` (`resolved`), whose name no inbox thread's tool shares.
   RESOLVE_THREAD: "resolve_thread",
   REOPEN_THREAD: "reopen_thread",
 } as const;

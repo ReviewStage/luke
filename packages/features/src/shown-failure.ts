@@ -91,14 +91,6 @@ export const FAILURE_SURFACE = {
   AUTOMATION_TOGGLE: "automation.toggle",
   BROWSER_OPEN: "browser.open",
   BUNDLE_LOAD: "bundle.load",
-  CHANNELS_ARCHIVED_READ: "channels_archived.read",
-  CHANNELS_READ: "channels.read",
-  CHANNEL_ARCHIVE: "channel.archive",
-  CHANNEL_MOVE: "channel.move",
-  CHANNEL_POST: "channel.post",
-  CHANNEL_READ: "channel.read",
-  CHANNEL_UNARCHIVE: "channel.unarchive",
-  CHANNEL_WRITE: "channel.write",
   CHAPTERS_MODEL_READ: "chapters_model.read",
   COPY: "copy",
   DICTATION: "dictation",
@@ -210,8 +202,10 @@ export const FAILURE_SURFACE = {
   WORKSPACE_SENTRY_DISCONNECT: "workspace_sentry.disconnect",
   WORKSPACE_SENTRY_READ: "workspace_sentry.read",
   WORKSPACE_SLACK_BOT: "workspace.slack_bot",
+  WORKSPACE_SLACK_BOT_CHANNEL: "workspace_slack_bot.channel",
   WORKSPACE_SLACK_BOT_DISCONNECT: "workspace_slack_bot.disconnect",
   WORKSPACE_SLACK_BOT_READ: "workspace_slack_bot.read",
+  WORKSPACE_SLACK_BOT_REPOSITORY: "workspace_slack_bot.repository",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_WRITE: "workspace.write",
 } as const;
@@ -249,7 +243,6 @@ export interface FailureAbout {
   readonly callId?: string | undefined;
   readonly inboxItemId?: string | undefined;
   readonly automationId?: string | undefined;
-  readonly channelId?: string | undefined;
   readonly pullRequest?: number | undefined;
 }
 
@@ -344,7 +337,6 @@ const ABOUT_ATTRIBUTE = {
   callId: "call.id",
   inboxItemId: "inbox_item.id",
   automationId: "automation.id",
-  channelId: "channel.id",
   pullRequest: "pull_request.number",
 } as const satisfies { readonly [Key in keyof Required<FailureAbout>]: string };
 
@@ -399,7 +391,7 @@ const DETAILS_HEADING = `${PRODUCT_NAME} showed an error. Find it in Sentry and 
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
 
 /** The mechanism an issue names, so Sentry says which path caught it; handled, since the app showed it. */
-const SHOWN_FAILURE_MECHANISM = "auto.luke.shown_failure";
+const SHOWN_FAILURE_MECHANISM = "auto.vespin.shown_failure";
 
 /** What every issue's fingerprint starts with, so a shown failure never groups with a crash of the same name. */
 const SHOWN_FAILURE_FINGERPRINT = "shown-failure";
@@ -615,7 +607,6 @@ export function failureAboutOf(payload: unknown): FailureAbout {
     turnId: stringOf(payload, "turnId"),
     inboxItemId: stringOf(payload, "inboxItemId"),
     automationId: stringOf(payload, "automationId"),
-    channelId: stringOf(payload, "channelId"),
     pullRequest: numberOf(payload, "pullRequest"),
   };
 }

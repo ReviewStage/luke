@@ -16,7 +16,6 @@ import {
   NAV_ITEM_VARIANT,
   NavItem,
   NavItemLink,
-  NavItemSkeleton,
   SearchIcon,
   STATUS_TONE,
   useMenu,
@@ -99,7 +98,7 @@ function WithActions(): React.JSX.Element {
       <NavItem
         icon={<GearIcon />}
         count={{ value: 2, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
-        actions={<MoreButton thing="Channel" size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />}
+        actions={<MoreButton thing="Place" size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />}
       >
         launch
       </NavItem>
@@ -194,19 +193,6 @@ function NavItems(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="nav-item-steps" title="Steps read in order, over a meta line">
         <Steps />
-      </CatalogSection>
-      <CatalogSection id="nav-item-skeleton" title="Rows while their places are read">
-        <div className="catalog-narrow">
-          <NavItemSkeleton icon={<FolderIcon />} width="64%" />
-          <NavItemSkeleton icon={<FolderIcon />} width="48%" />
-          <NavItemSkeleton icon={<FolderIcon />} width="72%" />
-          <NavItemSkeleton
-            variant={NAV_ITEM_VARIANT.STEP}
-            icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
-            width="80%"
-            detailWidth="40%"
-          />
-        </div>
       </CatalogSection>
     </>
   );

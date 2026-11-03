@@ -14,7 +14,7 @@ import {
   sqlClientOverPglite,
   syncListenerOverPglite,
 } from "@repo/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { INBOX_CURSOR_START } from "@repo/features/inbox-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
@@ -43,8 +43,9 @@ import {
  * Postgres: what Dean reads back through the reads a route answers, and
  * the ids the seed chose, the same for two fresh databases. Synthetic
  * accounts; the credential is a fixture sealed under the suites' ring.
- * Note that a seed takes about two seconds, since it opens a migrated
- * PGlite and writes the whole world into it, a few hundred statements.
+ * Note that a seed takes about five seconds, since it opens a migrated
+ * PGlite and writes the whole world into it, a few thousand statements, so
+ * the file, which seeds three times, takes about fifteen.
  */
 
 const SEEDED_AT = Date.parse("2026-11-02T21:00:00Z");
@@ -112,7 +113,7 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
           workspaces.find((workspace) => workspace.id === seeded.workspaceId)?.role,
           "owner",
         );
-        assert.equal(tasks.length, 7);
+        assert.equal(tasks.length, 21);
         const invitations = tasks.find((task) => task.name === "Teammate invitations");
         assert.equal(invitations?.status, TASK_STATUS.IN_PROGRESS);
         assert.equal(invitations?.repository, null);
@@ -120,7 +121,30 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
           tasks.find((task) => task.name === "Webhook retries")?.status,
           TASK_STATUS.DONE,
         );
-        // The three asks and the notice waiting on Dean, the ask he answered no longer among them.
+        // The pilot's four sub-tasks stand under the task it broke down, and the tasks waiting on an open one read blocked.
+        const billing = tasks.find((task) => task.name === "Usage-based billing");
+        assert.deepEqual(
+          new Set(
+            tasks.filter((task) => task.parentTaskId === billing?.id).map((task) => task.name),
+          ),
+          new Set([
+            "Record usage events per workspace",
+            "Daily usage rollup",
+            "Report usage to Stripe",
+            "Usage on Settings › Billing",
+          ]),
+        );
+        assert.deepEqual(
+          new Set(tasks.filter((task) => task.blocked === true).map((task) => task.name)),
+          new Set([
+            "Report usage to Stripe",
+            "Usage on Settings › Billing",
+            "Invite emails through Postmark",
+            "Handle Postmark bounces",
+            "Resend an expired invite",
+          ]),
+        );
+        // The asks and notices waiting on Dean, those he and his teammates answered or nodded away no longer among them.
         assert.deepEqual(
           new Set(
             inbox.items.filter((item) => item.waitsOn === DEMO_DEAN.id).map((item) => item.title),
@@ -130,6 +154,12 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
             "Add the Postmark token to the preview environment",
             "What should the invite email say?",
             "Pending invites now show on Settings › Members",
+            "Who may hide the checklist for the whole workspace?",
+            "How far back should the rollup backfill?",
+            "What should the rotation email tell customers?",
+            "Add Stripe's test keys to the preview",
+            "Where usage-based billing stands",
+            "Promote the chart hotfix to production",
           ]),
         );
         assert.equal(inbox.plans.find((plan) => plan.planId === invitations?.id)?.toDo, 3);
@@ -161,20 +191,25 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         });
         // Bring your own host stays off, since with it on the app would enroll the Mac's own account install with the demo's server.
         assert.equal(ownHosts, false);
-        // The seeded agents are Dean's on that host, paid for by his plan, so a follow-up to one runs there.
+        // The seeded agents are Dean's on that host, paid for by his plan, so a follow-up to one runs there, those his pilot started among them.
         assert.deepEqual(
           agents.map((agent) => [agent.userId, agent.machine, agent.deviceId]),
-          [
-            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
-            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
-            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
-          ],
+          Array.from({ length: 8 }, () => [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id]),
         );
-        assert.deepEqual(payers, [
-          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-        ]);
+        assert.deepEqual(
+          payers,
+          Array.from({ length: 8 }, () => AGENT_PAYER.CLAUDE_SUBSCRIPTION),
+        );
+        const pilot = agents.find((agent) => agent.kind === AGENT_KIND.PILOT);
+        assert.equal(pilot?.taskId, billing?.id);
+        assert.deepEqual(
+          new Set(
+            agents
+              .filter((agent) => agent.startedByAgentId === pilot?.id)
+              .map((agent) => agent.title),
+          ),
+          new Set(["Meter API calls per workspace", "Roll usage up by day"]),
+        );
       }),
   ),
 );

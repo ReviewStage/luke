@@ -326,9 +326,6 @@ algorithm. Inside the function, every comment is a one-line guide comment.
 - Never move a design comment out to a document. The reader is at the
   function. Put it there.
 
-A good one here: `apps/desktop/src/main/window/panel-manager.ts:511`, a
-resize explained with a cause, a measurement, and a hazard.
-
 ### Checklist comments name the other place
 
 "A checklist comment... tells you a set of actions to do when something is

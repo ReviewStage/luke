@@ -6,6 +6,7 @@ import {
   LandingFacts,
   LandingPage,
   LandingSection,
+  LostPage,
   ScrollArea,
 } from "@repo/ui";
 import type { Example } from "../examples";
@@ -14,8 +15,9 @@ import { CatalogSection } from "../section";
 /**
  * landing.tsx -- the product's landing: its bar, the one line beside the
  * copper ball, a feature over its scene, a feature with facts beside its
- * stage, and the close over the wordmark in dots, in a frame that scrolls as
- * a document would. Every name and line is made up.
+ * stage, and the close over the wordmark in dots, and the page an unknown
+ * address is answered with, each in a frame that scrolls as a document would.
+ * Every name and line is made up.
  */
 
 function Bar(): React.JSX.Element {
@@ -35,7 +37,7 @@ function Landing(): React.JSX.Element {
     <LandingPage
       bar={<Bar />}
       title="An inbox for all your coding agents."
-      lead="Agents post when they need you, and you answer them there."
+      lead="Agents work in cloud sandboxes, open pull requests, and post to your Inbox when they need you."
       actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Download for macOS</Button>}
       close={{
         title: "Free and open source.",
@@ -45,22 +47,25 @@ function Landing(): React.JSX.Element {
       footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
     >
       <LandingSection
-        title="One inbox for every agent."
-        lead="Agents post only when something needs you."
+        title="Monitor all your agents with one inbox."
+        lead="Agents only post to your inbox when something needs your attention."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
-        title="Bring your own subscription."
-        lead="Pick the model and effort for each agent."
-        scene={LANDING_SCENE.MODELS}
+        title="Bring your own keys."
+        lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
+        scene={LANDING_SCENE.KEYS}
         aside={
           <LandingFacts
             facts={[
               {
-                title: "Your plan or your key",
-                detail: "A plan you already pay for, or an API key.",
+                title: "A model per agent",
+                detail: "Agents in one task can each run on a different model and effort.",
               },
-              { title: "Per agent", detail: "Each agent runs on the model you pick for it." },
+              {
+                title: `Nothing billed by ${PRODUCT_NAME}`,
+                detail: "Anthropic or OpenAI bills your plan or key for model calls.",
+              },
             ]}
           />
         }
@@ -69,15 +74,37 @@ function Landing(): React.JSX.Element {
   );
 }
 
+function Lost(): React.JSX.Element {
+  return (
+    <LostPage
+      bar={<Bar />}
+      footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
+      address="/docs/getting-startd"
+      title="No agent could find this page."
+      lead="It searched every branch and came back empty-handed."
+      actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Back to home</Button>}
+    />
+  );
+}
+
 function LandingExample(): React.JSX.Element {
   return (
-    <CatalogSection id="landing-page" title="The landing, its features, and its close">
-      <div className="catalog-screen catalog-screen-public">
-        <ScrollArea>
-          <Landing />
-        </ScrollArea>
-      </div>
-    </CatalogSection>
+    <>
+      <CatalogSection id="landing-page" title="The landing, its features, and its close">
+        <div className="catalog-screen catalog-screen-public">
+          <ScrollArea>
+            <Landing />
+          </ScrollArea>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="lost-page" title="The page an unknown address is answered with">
+        <div className="catalog-screen catalog-screen-public">
+          <ScrollArea>
+            <Lost />
+          </ScrollArea>
+        </div>
+      </CatalogSection>
+    </>
   );
 }
 

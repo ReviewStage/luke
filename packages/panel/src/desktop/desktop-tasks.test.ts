@@ -127,7 +127,7 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task with no agent tab draws a new agent's draft and no pane of start buttons", () => {
+test("a task with no agent tab draws a new agent's draft", () => {
   const DRAFT_ID = "draft-1";
   const drawn = () => {
     const page = document.createElement("div");
@@ -161,7 +161,6 @@ test("a task with no agent tab draws a new agent's draft and no pane of start bu
   };
   const page = drawn();
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
-  assert.equal(page.querySelector(".desktop-no-agent"), null);
 });
 
 /** The task's page with the side panel open on `tab`, as markup. */
@@ -513,6 +512,63 @@ test("a sub-task's row opens the task where it was left, as a sidebar row does, 
 
   assert.deepEqual(selected, [child.id], "the task opens on the tab it was left on");
   assert.deepEqual(linked, [], "no link to its Overview is followed");
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("opening another task draws only its own sub-tasks, none of the task left behind", () => {
+  const home = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const other: Task = { ...TASK, id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a11", name: "Slack bot" };
+  const subTask = (id: string, number: number, parentTaskId: string) => ({
+    id,
+    workspaceId: TASK.workspaceId,
+    name: `Task ${number}`,
+    repository: null,
+    createdAt: number,
+    updatedAt: number,
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.NONE,
+    number,
+    parentTaskId,
+  });
+  const listed = [subTask("t-2", 2, TASK.id), subTask("t-3", 3, other.id)];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const open = (task: Task) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: task.id,
+              region: { kind: DOCUMENT_REGION.READY, task },
+              tasks: listed,
+              workspaces: [home],
+              workspace: home,
+              sidePanel: DOCUMENT_PANEL,
+            }),
+          }),
+        ),
+      ),
+    );
+  open(TASK);
+  open(other);
+
+  const rows = [...container.querySelectorAll("ul[aria-label='Sub-tasks'] > li[data-task-id]")];
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-task-id")),
+    ["t-3"],
+  );
   act(() => root.unmount());
   container.remove();
 });

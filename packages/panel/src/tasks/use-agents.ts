@@ -324,7 +324,7 @@ export interface AgentsControl {
   start: {
     /** Whether a Start could run now: the task names a repository, or runs where a Start runs without one. */
     available: boolean;
-    /** Why it cannot, said on the button, while it cannot. */
+    /** Why it cannot, said on the "+" menu's New agent and the terminal picker's start row, while it cannot. */
     reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;

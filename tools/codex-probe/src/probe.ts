@@ -222,7 +222,7 @@ function firstTurnPrompt(nonce: string, ciMarker: string, ciSeconds: number): st
     "You are being exercised by Vespin's sandbox probe. Do these steps in order with your tools:",
     `1. Create PROBE.md in the current directory containing exactly the line ${nonce}.`,
     `2. Run \`node ${PROBE_FILES.SCANNER}\` once and keep its output; do not run it any other way.`,
-    `3. Call the \`echo\` tool of the \`luke_probe\` MCP server with the text ${nonce}.`,
+    `3. Call the \`echo\` tool of the \`agent_probe\` MCP server with the text ${nonce}.`,
     `4. Run \`${PROBE_FILES.CI_WATCH} ${ciSeconds} ${ciMarker}\`. It behaves like \`gh pr checks --watch\` and takes about ${Math.ceil(ciSeconds / 60)} minutes. Wait for it to finish however long it takes; never stop it early.`,
     "5. Reply with the last line the watch printed.",
   ].join("\n");
@@ -363,7 +363,7 @@ async function sessionFiles(sandbox: Sandbox): Promise<readonly string[]> {
 export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
   const recorded: RecordedMessage[] = [];
   const notes: string[] = [];
-  const nonce = `luke-probe-${randomBytes(6).toString("hex")}`;
+  const nonce = `agent-probe-${randomBytes(6).toString("hex")}`;
   const markers = { nonce, steerMarker: `${nonce}-steered`, ciMarker: `${nonce}-ci` };
   const credentials: ChatGptCredentials[] = [options.credentials];
   let terminal: ScanReport | undefined;
@@ -383,7 +383,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
     keepLastSnapshots: { count: 1 },
     timeout: PROBE_BOUNDS.SANDBOX_TIMEOUT_MS,
     resources: { vcpus: PROBE_BOUNDS.VCPUS },
-    tags: { purpose: "luke-codex-probe" },
+    tags: { purpose: "agent-codex-probe" },
     networkPolicy:
       options.githubToken === undefined ? "allow-all" : githubPolicy(options.githubToken),
   });

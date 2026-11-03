@@ -20,25 +20,26 @@
  * every capability dropped (`sandbox-capabilities.ts`), since the pages the
  * browser loads are no one's we vouch for, which would make it read as
  * the agent's own work; it is told apart by its sessions' leaders instead
- * (`@repo/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
+ * (`@repo/agent-runner/pins`'s `SANDBOX_BROWSER_PIN`), so it never holds a
  * sandbox up through a pause. Every value the script reads
  * is a constant of this module, handed to it as a positional argument.
  */
 
-import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
+import { PLAYWRIGHT_PIN, SANDBOX_BROWSER_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const SANDBOX_BROWSER = {
   /** The browser's DevTools port on the sandbox's loopback: apart from the 9222 an agent's own Chromium would take, and Node's inspector's 9229. */
-  DEVTOOLS_PORT: LUKE_BROWSER_PIN.DEVTOOLS_PORT,
+  DEVTOOLS_PORT: SANDBOX_BROWSER_PIN.DEVTOOLS_PORT,
   /** The X display the browser draws on: apart from the `:99` an agent's own `xvfb-run -a` takes first. */
-  DISPLAY: LUKE_BROWSER_PIN.DISPLAY,
+  DISPLAY: SANDBOX_BROWSER_PIN.DISPLAY,
   /** The display's and the browser window's size. */
   WIDTH: 1280,
   HEIGHT: 800,
-  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. Note that it keeps its old folder, because a persistent sandbox made before still holds its profile there. */
-  STATE_DIRECTORY: ".luke/browser",
+  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. */
+  STATE_DIRECTORY: `${SANDBOX_STATE_FOLDER}/browser`,
   /** How long the start waits on Xvfb's socket and on the browser's DevTools, in tenths of a second. */
   DISPLAY_WAIT_TENTHS: 50,
   DEVTOOLS_WAIT_TENTHS: 300,
@@ -83,6 +84,7 @@ const START_SCRIPT = [
   "set -u",
   'port="$1" display="$2" width="$3" height="$4" state="$HOME/$5"',
   "shift 5",
+  `(cd "$HOME" && ${LINK_SANDBOX_STATE_FOLDER})`,
   'profile="$state/profile"',
   'mkdir -p "$profile" && chmod 700 "$state"',
   // Note that what the start leaves running closes the lock's descriptor, which would otherwise hold the lock for as long as the browser runs.
@@ -96,9 +98,9 @@ const START_SCRIPT = [
   `[ -x "$chrome" ] || { echo 'no Chromium in the image' >&2; exit ${BROWSER_START_EXIT.NO_CHROMIUM}; }`,
   // Xvfb by the pid its own lock file names, checked by name, since a resumed sandbox may have handed that pid to another process.
   'xvfb_pid=$(cat "/tmp/.X$display-lock" 2>/dev/null | tr -d " ")',
-  `if [ -z "$xvfb_pid" ] || [ "$(cat "/proc/$xvfb_pid/comm" 2>/dev/null)" != ${LUKE_BROWSER_PIN.XVFB} ]; then`,
+  `if [ -z "$xvfb_pid" ] || [ "$(cat "/proc/$xvfb_pid/comm" 2>/dev/null)" != ${SANDBOX_BROWSER_PIN.XVFB} ]; then`,
   '  rm -f "/tmp/.X$display-lock" "/tmp/.X11-unix/X$display"',
-  `  setsid ${LUKE_BROWSER_PIN.XVFB} ":$display" -screen 0 "$width"x"$height"x24 -nolisten tcp >"$state/xvfb.log" 2>&1 </dev/null 9>&- &`,
+  `  setsid ${SANDBOX_BROWSER_PIN.XVFB} ":$display" -screen 0 "$width"x"$height"x24 -nolisten tcp >"$state/xvfb.log" 2>&1 </dev/null 9>&- &`,
   "fi",
   "tries=0",
   `until [ -S "/tmp/.X11-unix/X$display" ]; do`,

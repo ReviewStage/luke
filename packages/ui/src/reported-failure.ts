@@ -14,9 +14,7 @@
  * app's, so each names itself as such rather than passing for one
  * (`UNREPORTED`): the person's own input checked ("Required", "Too long"),
  * and a tool's error an agent met, which its transcript keeps as the
- * agent's own record. A place that failed to draw is reported by the root
- * whose error boundary caught it, so it names that too, rather than being
- * reported twice; and a failure on a page that loads nothing to report it
+ * agent's own record. And a failure on a page that loads nothing to report it
  * through, the site's standalone sign-in, connection, and admin pages, says
  * so rather than passing for reported.
  */
@@ -46,8 +44,6 @@ export const UNREPORTED = {
   INPUT: "input",
   /** A tool's error an agent met, kept in its transcript as the agent's record. */
   TOOL: "tool",
-  /** A place that failed to draw, which the error boundary's root reports itself. */
-  BOUNDARY: "boundary",
   /** A failure on a page that loads no reporter: the site's standalone sign-in, connection, and admin pages. */
   NO_REPORTER: "no-reporter",
 } as const;

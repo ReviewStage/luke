@@ -193,7 +193,7 @@ export const SIDE_PANEL_TAB = {
  * may still name: History, whose versions now take the whole window
  * (`desktop-version-history.tsx`), Transcript, Work, and Call, the task's
  * calls with the app, whose calls every agent's tab takes now, the task's
- * Chat channel, gone with Chat, Code, the code its agents showed, gone
+ * Chat, gone with it, Code, the code its agents showed, gone
  * with `show_code`, and Board, the task's whiteboard. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.

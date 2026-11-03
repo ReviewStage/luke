@@ -63,10 +63,18 @@ export const inboxMessage = pgTable(
      * The direct message our Slack bot wrote the member the agent's message
      * waited on (`packages/service/src/slack/thread-dms.ts`), by the
      * conversation it is in and its timestamp, which is what Slack rewrites
-     * it by once the message's ask is answered, withdrawn, or replaced;
-     * null where none was written, and once it was rewritten so.
+     * it by once the message's ask is answered, withdrawn, or replaced, and
+     * then marked settled; the member it went to, and for a reply in an
+     * earlier DM's Slack thread, that DM's timestamp; null where none was
+     * written.
      */
-    slackDm: jsonb("slack_dm").$type<{ readonly channel: string; readonly ts: string }>(),
+    slackDm: jsonb("slack_dm").$type<{
+      readonly channel: string;
+      readonly ts: string;
+      readonly to?: string;
+      readonly thread?: string;
+      readonly settled?: boolean;
+    }>(),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
