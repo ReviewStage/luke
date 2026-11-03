@@ -45,7 +45,7 @@ import {
 } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { ActionMenu, type PanelMenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
@@ -258,7 +258,7 @@ type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 /** A press the ⋯ may take in, and the rows the menu offers in its place. */
 interface OverflowOffer {
   press: OverflowPress;
-  entries: readonly PanelMenuEntry[];
+  entries: readonly MenuEntry[];
 }
 
 /** The presses standing on the card's foot that the stylesheet hid for want of room. */
@@ -492,7 +492,7 @@ export function AgentComposer({
   /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
   /** Rows the + menu offers after MCP servers, its owner's: New task's Task relation. */
-  plus?: readonly PanelMenuEntry[] | undefined;
+  plus?: readonly MenuEntry[] | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
@@ -812,7 +812,7 @@ export function AgentComposer({
   };
 
   // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers, then its owner's.
-  const plusRows: readonly PanelMenuEntry[] = [
+  const plusRows: readonly MenuEntry[] = [
     ...(servers === undefined ? [] : [serversMenuPanel(servers, statuses)]),
     ...plus,
   ];

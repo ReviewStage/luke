@@ -2803,7 +2803,9 @@ function PanelPhoneHead({
                     .groups(opener)
                     .map((group) =>
                       group.map((item) =>
-                        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+                        "items" in item || "panel" in item
+                          ? item
+                          : { ...item, detail: item.detail ?? shown.label },
                       ),
                     );
             return [
