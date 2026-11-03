@@ -11,6 +11,7 @@ import {
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { slackAgentThread } from "@repo/database/schemas/slack-installation";
+import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
@@ -334,11 +335,18 @@ it.layer(getTestDB())("our Slack route", (it) => {
           [{ channel: "C0001", timestamp: "1700000002.000300", name: "eyes" }],
         );
         const [startedAgent] = yield* (yield* Database)
-          .select({ repository: agentTable.repository })
+          .select({ repository: agentTable.repository, metadata: messages.metadata })
           .from(slackAgentThread)
           .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+          .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
           .where(eq(slackAgentThread.channelId, "C0001"));
         assert.equal(startedAgent?.repository, "Acme/Relay");
+        // The first line says Slack carried it, with the member's own words alone, for a window to draw.
+        assert.deepEqual(startedAgent?.metadata, {
+          channel: "slack",
+          words: "find the flakiest test and fix it",
+          url: "https://team.slack.com/archives/C0001/p1",
+        });
       });
     },
   );

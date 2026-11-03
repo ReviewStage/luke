@@ -22,6 +22,7 @@ import {
   type GitHubCheckConclusion,
   type GitHubLineMetadata,
   isFailingConclusion,
+  type SlackLineMetadata,
   type ThreadLineMetadata,
 } from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
@@ -41,7 +42,7 @@ import { useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * line-cards.tsx -- a line steered into an agent drawn from what its metadata says carried it: a thread's line under its head, and GitHub's word as its card.
+ * line-cards.tsx -- a line steered into an agent drawn from what its metadata says carried it: a thread's, a comment's, or a Slack message's line under its head, and GitHub's word as its card.
  *
  * A member's reply, answer, or close on a thread reaches the agent as their
  * words under a header naming the item by its title and key, which is the
@@ -143,6 +144,35 @@ export function CommentLineHead({
   return (
     <SubjectLine lead={COMMENT_LINE_LEAD} fit={fit} data-comment-line="">
       {chip}
+    </SubjectLine>
+  );
+}
+
+/** What a Slack line leads with, as a comment's leads with what it is. */
+export const SLACK_LINE_LEAD = "Message in";
+
+/** What a Slack line's chip names: Slack, whose mark the chip wears for a link to it. */
+export const SLACK_LINE_SUBJECT = "Slack";
+
+/**
+ * The head of a member's message to the Slack bot, drawn in place of the
+ * prompt the agent was handed, as a comment's line is headed: that it is a
+ * message in Slack, and Slack's chip, which opens the message there; Slack
+ * in words where Slack answered no link.
+ */
+export function SlackLineHead({
+  line,
+  fit,
+}: {
+  line: SlackLineMetadata;
+  /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
+  fit?: SubjectFit | undefined;
+}): React.JSX.Element {
+  const doors = useMentionDoors();
+  const chip = line.url === undefined ? undefined : linkChip(line.url, SLACK_LINE_SUBJECT, doors);
+  return (
+    <SubjectLine lead={SLACK_LINE_LEAD} fit={fit} data-slack-line="">
+      {chip ?? SLACK_LINE_SUBJECT}
     </SubjectLine>
   );
 }

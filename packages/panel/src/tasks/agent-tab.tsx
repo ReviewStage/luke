@@ -161,6 +161,7 @@ import {
   type StartingLaunch,
   settledPlanEdits,
   sidebarCallIds,
+  slackLineOf,
   type TurnStretch,
   teammateStarter,
   threadLineOf,
@@ -196,7 +197,13 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { CommentLineHead, GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
+import {
+  CommentLineHead,
+  GitHubLineCard,
+  SlackLineHead,
+  ThreadLineHead,
+  TranscriptAgent,
+} from "./line-cards.js";
 import { CHIP_OR_LINK_FRAME, ChipOrLink, linkChip } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
 import {
@@ -1525,15 +1532,18 @@ export function AgentMessage({
   if (github !== undefined) return <GitHubLineRow message={message} line={github} sender={named} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
-    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the plan or page it is on, its member's words under what it is on, never the instructions the agent was handed.
+    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the plan or page it is on, its member's words under what it is on; a Slack message's by Slack's chip, its member's words alone; never the instructions the agent was handed.
     const thread = threadLineOf(message);
     const comment = commentLineOf(message);
+    const slack = slackLineOf(message);
     const shown =
       comment !== undefined
         ? commentLineWords(comment)
-        : thread === undefined
-          ? words
-          : threadLineWords(words, thread.event);
+        : slack !== undefined
+          ? slack.words
+          : thread === undefined
+            ? words
+            : threadLineWords(words, thread.event);
     // A line open for writing again is written where it stands.
     if (drawnEditor !== undefined) {
       return (
@@ -1554,6 +1564,8 @@ export function AgentMessage({
     const threadHead =
       comment !== undefined ? (
         <CommentLineHead line={comment} fit={received ? SUBJECT_FIT.OWN : undefined} />
+      ) : slack !== undefined ? (
+        <SlackLineHead line={slack} fit={received ? SUBJECT_FIT.OWN : undefined} />
       ) : thread === undefined ? null : (
         <ThreadLineHead line={thread} words={words} fit={received ? SUBJECT_FIT.OWN : undefined} />
       );
@@ -1585,8 +1597,12 @@ export function AgentMessage({
               words={shown}
               copyable={shown !== ""}
               messageId={message.id}
-              // Note that a comment's line is drawn from what it carries rather than its words, so it is written again nowhere, as GitHub's is not.
-              rewind={shown === "" || comment !== undefined ? undefined : REWIND_ACTION.EDIT}
+              // Note that a comment's or a Slack message's line is drawn from what it carries rather than its words, so it is written again nowhere, as GitHub's is not.
+              rewind={
+                shown === "" || comment !== undefined || slack !== undefined
+                  ? undefined
+                  : REWIND_ACTION.EDIT
+              }
             />
           }
         />
