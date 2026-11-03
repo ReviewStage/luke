@@ -45,7 +45,7 @@ import {
  * holds to once. A schedule missed by more than the grace is moved on
  * without a run. At most `MAX_CLAIMS` are claimed a sweep, the soonest due
  * first, so a backlog drains over the minutes after rather than in one
- * function's sixty seconds.
+ * sweep.
  *
  * Then every run still queued from the last hour, the schedules just
  * claimed and any a trigger recorded but did not finish acting on, is acted
