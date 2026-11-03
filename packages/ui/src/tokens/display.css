@@ -12,6 +12,30 @@
   --luke-display-hero-weight: 600;
   --luke-display-hero-tracking: -0.02em;
 
+  /* The landing's own scale, larger than a page's: its one line beside the
+     ball, each feature's heading, and the sentence under either, each
+     stepping down once on a phone. */
+  --luke-display-landing-size: 3.75rem;
+  --luke-display-landing-size-narrow: 2.375rem;
+  --luke-display-landing-leading: 1.03;
+  --luke-display-landing-weight: 700;
+  --luke-display-landing-tracking: -0.01em;
+  --luke-display-feature-size: 2.75rem;
+  --luke-display-feature-size-narrow: 1.875rem;
+  --luke-display-feature-leading: 1.06;
+  --luke-display-lead-size: 1.125rem;
+  --luke-display-lead-size-narrow: 1rem;
+  --luke-display-lead-leading: 1.55;
+
+  /* The landing's devices: a Mac window's corners, and a phone's outer
+     corners and its screen's, which follow them inside the bezel. */
+  --luke-display-window-radius: 0.625rem;
+  --luke-display-phone-radius: 3rem;
+  --luke-display-phone-screen-radius: 2.5rem;
+  --luke-display-island-radius: 0.75rem;
+  --luke-display-phone-radius-narrow: 1.75rem;
+  --luke-display-phone-screen-radius-narrow: 1.4rem;
+
   /* The product's name beside the mark, in the wordmark's face. */
   --luke-display-wordmark-size: 1rem;
   --luke-display-wordmark-weight: 700;

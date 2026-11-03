@@ -53,6 +53,7 @@
 @import "./marks/product-mark.css";
 @import "./marks/provider-mark.css";
 @import "./marks/task-marks.css";
+@import "./components/landing/landing.css";
 @import "./components/public-page/public-page.css";
 @import "./components/saved-tick/saved-tick.css";
 @import "./components/time/time.css";
