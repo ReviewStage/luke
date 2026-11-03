@@ -5,9 +5,10 @@
    reads a box `choice-bar.tsx` measures or a structure no utility on one
    element spells: the thumb's size and place, read from the custom
    properties the row sets on itself as it measures its chosen option; and
-   the fold, which hides an option's name beside its glyph, by the bar's
-   width in a container query keyed by `:has()` on whether one is chosen,
-   or by the bar's measured `data-folded`. The panel's narrow tests read the
+   the fold, which hides an option's name beside its glyph, and any part of
+   its count that folds with it (`data-folds`), by the bar's width in a
+   container query keyed by `:has()` on whether one is chosen, or by the
+   bar's measured `data-folded`. The panel's narrow tests read the
    fold from this sheet with markup of their own. */
 
 @layer components {
@@ -33,6 +34,19 @@
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
       --luke-choice-bar-name: folded;
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /* A count's words that fold (`data-folds`) leave every glyphed option
+       once the bar folds, the chosen one too, so the counts read alike. */
+    .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .luke-choice-bar-option:has(> .luke-choice-bar-icon)
+      .luke-count-part[data-folds] {
       position: absolute;
       overflow: hidden;
       width: 1px;
@@ -88,7 +102,10 @@
      neighbours are not; a reader still has every name. */
   .luke-choice-bar[data-fold="together"][data-folded="true"]
     .luke-choice-bar-icon
-    + .luke-choice-bar-label {
+    + .luke-choice-bar-label,
+  .luke-choice-bar[data-fold="together"][data-folded="true"]
+    .luke-choice-bar-option:has(> .luke-choice-bar-icon)
+    .luke-count-part[data-folds] {
     position: absolute;
     overflow: hidden;
     width: 1px;

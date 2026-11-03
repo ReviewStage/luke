@@ -167,6 +167,10 @@ const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
 /** An option's name beside its glyph, the one a fold draws nowhere. */
 const FOLDABLE_NAME = ".luke-choice-bar-icon + .luke-choice-bar-label";
 
+/** A part of a glyphed option's count that folds with its name (`CountPart.folds`). */
+const FOLDABLE_PART =
+  ".luke-choice-bar-option:has(> .luke-choice-bar-icon) .luke-count-part[data-folds]";
+
 /** The custom property `choice-bar.css` sets on a name its own fold draws nowhere, and what it sets. */
 const NAME_FOLD = "--luke-choice-bar-name";
 const NAME_FOLDED = "folded";
@@ -461,13 +465,13 @@ function optionsWidth(bar: HTMLElement): number {
   return last.offsetLeft + last.offsetWidth + inset;
 }
 
-/** The room the folded options' names would take back: each name's own width and the gap it would stand in. */
+/** The room the folded options' names, and the count parts folding with them, would take back: each one's own width and the gap it would stand in. */
 function foldedNames(bar: HTMLElement): number {
   let room = 0;
-  for (const label of bar.querySelectorAll<HTMLElement>(FOLDABLE_NAME)) {
-    const option = label.parentElement;
-    const gap = option === null ? 0 : Number.parseFloat(getComputedStyle(option).columnGap) || 0;
-    room += label.scrollWidth + gap;
+  for (const folded of bar.querySelectorAll<HTMLElement>(`${FOLDABLE_NAME}, ${FOLDABLE_PART}`)) {
+    const row = folded.parentElement;
+    const gap = row === null ? 0 : Number.parseFloat(getComputedStyle(row).columnGap) || 0;
+    room += folded.scrollWidth + gap;
   }
   return room;
 }

@@ -569,6 +569,11 @@ function tabCount(tab: HTMLElement, name: string): string {
   return (option(tab, name).textContent ?? "").slice(name.length);
 }
 
+/** The lines the header counts after the branches, once it draws them. */
+function headerLines(tab: HTMLElement): string | undefined {
+  return tab.querySelector(".pull-request-lines")?.textContent ?? undefined;
+}
+
 /** How the Checks tab's glyph says its checks went, in its words. */
 function checksGlyph(tab: HTMLElement): string | null | undefined {
   return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
@@ -1888,7 +1893,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
   );
 });
 
-test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
+test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files how many were published", async () => {
   const checks = held<AgentOverviewChecksAnswerView>();
   const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
@@ -1898,7 +1903,7 @@ test("each tab counts what Vespin holds of it: the conversation its comments, re
     "how the checks went, as published, stands before they are read",
   );
   assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
-  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
+  assert.equal(tabCount(tab, "Files changed"), "1");
 
   checks.answer({ pullRequest: CHECKS });
   await settle();
@@ -2172,7 +2177,7 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
     "Expire invitations #42",
     "the title is what Vespin held of the pull request",
   );
-  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
+  assert.equal(tabCount(tab, "Files changed"), "1");
   assert.deepEqual(waiting(tab), [
     "Reading pull request",
     "Reading description",
@@ -3902,7 +3907,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
 
-test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines, and changes it rather than the agent's own", async () => {
+test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines and files, and changes it rather than the agent's own", async () => {
   const asked: unknown[] = [];
   const url = "https://github.com/acme/relay/pull/41";
   const earlier = {
@@ -3912,6 +3917,7 @@ test("a tab naming another pull request of the agent's repository by its number 
     url,
     additions: 9,
     deletions: 2,
+    changedFiles: 3,
   };
   const recorded =
     <A>(kind: string, answer: A) =>
@@ -3952,7 +3958,8 @@ test("a tab naming another pull request of the agent's repository by its number 
     ["pull request", AGENT.id, 41],
     ["conversation", AGENT.id, 41],
   ]);
-  assert.equal(tabCount(tab, "Files changed"), "+9 −2");
+  assert.equal(headerLines(tab), "+9 −2");
+  assert.equal(tabCount(tab, "Files changed"), "3");
   await pressAction(tab, "Close pull request");
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
   assert.deepEqual(changeNumbers, [41]);
@@ -5820,12 +5827,17 @@ const SIZED = [
   ["c.ts", 30, 0],
 ] as const;
 
-/** The plan's agents, the pull request published at the size given (+60 −7 unless told), its changes those three files, read in full unless told, and the member's marks as given. */
+/** The plan's agents, the pull request published at the size given (+60 −7 in 3 files unless told), its changes those three files, read in full unless told, and the member's marks as given. */
 function viewing(
   marked: readonly string[],
-  options: { readonly published?: readonly [number, number]; readonly truncated?: boolean } = {},
+  options: {
+    readonly published?: readonly [number, number];
+    readonly changedFiles?: number;
+    readonly truncated?: boolean;
+  } = {},
 ) {
   const [additions, deletions] = options.published ?? [60, 7];
+  const changedFiles = options.changedFiles ?? SIZED.length;
   const control: AgentsControl = {
     ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
       Promise.resolve({
@@ -5845,7 +5857,7 @@ function viewing(
       }),
     ),
     pullRequests: new Map([
-      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions }],
+      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions, changedFiles }],
     ]),
     readPullRequestViewed: () =>
       Promise.resolve({
@@ -5870,44 +5882,51 @@ function viewedBoxOf(path: string): HTMLInputElement {
   );
 }
 
-/** What the Files changed tab's hint says, once the pointer rests on it. */
-async function filesHint(tab: HTMLElement): Promise<string | undefined> {
-  const files = option(tab, "Files changed");
-  restOn(files);
+/** What the hint over the header's lines says, once the pointer rests on them. */
+async function linesHint(tab: HTMLElement): Promise<string | undefined> {
+  const lines = tab.querySelector<HTMLElement>(".pull-request-lines");
+  if (lines === null) return assert.fail("the header counts the lines");
+  restOn(lines);
   await settle();
-  const hint = files.getAttribute("aria-describedby");
+  // Note that words taking no focus own their hint, which a reader hears at their end.
+  const hint = lines.getAttribute("aria-owns");
   return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
 }
 
-test("Files changed counts what was published until it is first opened; then it counts the lines left to review, the whole in its hint", async () => {
+test("the header counts the lines published until Files changed is first opened; then those left to review, the whole in its hint, as the tab counts the files viewed", async () => {
   const tab = await draw(viewing(["a.ts"]).control);
-  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+  assert.equal(headerLines(tab), "+60 −7");
+  assert.equal(tabCount(tab, "Files changed"), "3");
 
   await choose(tab, "Files changed");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
-  assert.equal(await filesHint(tab), "+60 −7 total");
+  assert.equal(headerLines(tab), "+50 −5 left");
+  assert.equal(await linesHint(tab), "+60 −7 total");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
   await choose(tab, "Conversation");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left", "the count stands on another tab");
+  assert.equal(headerLines(tab), "+50 −5 left", "the count stands on another tab");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
 });
 
 test("ticking a file's Viewed box counts it at once, before GitHub answers, and one GitHub refuses counts again as its mark goes back", async () => {
   const { control } = viewing(["a.ts"]);
   const tab = await draw(control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
+  assert.equal(headerLines(tab), "+50 −5 left");
 
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   act(() => viewedBoxOf("c.ts").click());
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "the tick counts at once");
+  assert.equal(headerLines(tab), "+20 −5 left", "the tick counts at once");
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
   resolve();
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left");
+  assert.equal(headerLines(tab), "+20 −5 left");
 
   changeHeld = undefined;
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Pull request is locked." };
   act(() => viewedBoxOf("b.ts").click());
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "a refused mark counts again");
+  assert.equal(headerLines(tab), "+20 −5 left", "a refused mark counts again");
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
   assert.deepEqual(
     changes.map(([, request]) => request),
     [
@@ -5917,11 +5936,15 @@ test("ticking a file's Viewed box counts it at once, before GitHub answers, and 
   );
 });
 
-test("with every file viewed, or none, Files changed counts the whole and hints nothing more", async () => {
-  for (const marked of [["a.ts", "b.ts", "c.ts"], []]) {
+test("with every file viewed, or none, the header counts the whole and hints nothing more", async () => {
+  for (const [marked, files] of [
+    [["a.ts", "b.ts", "c.ts"], "3/3 viewed"],
+    [[], "3"],
+  ] as const) {
     const tab = await draw(viewing(marked).control, PULL_REQUEST_VIEW.FILES);
-    assert.equal(tabCount(tab, "Files changed"), "+60 −7", `${marked.length} viewed`);
-    assert.equal(option(tab, "Files changed").getAttribute("aria-describedby"), null);
+    assert.equal(headerLines(tab), "+60 −7", `${marked.length} viewed`);
+    assert.equal(tab.querySelector(".pull-request-lines")?.getAttribute("aria-owns"), null);
+    assert.equal(tabCount(tab, "Files changed"), files);
     act(() => root?.unmount());
     root = undefined;
   }
@@ -5929,31 +5952,39 @@ test("with every file viewed, or none, Files changed counts the whole and hints 
 
 test("ticking the last file left counts the whole again, every file viewed", async () => {
   const tab = await draw(viewing(["a.ts", "b.ts"]).control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(tabCount(tab, "Files changed"), "+30 −0 left");
+  assert.equal(headerLines(tab), "+30 −0 left");
   act(() => viewedBoxOf("c.ts").click());
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+  assert.equal(headerLines(tab), "+60 −7");
 });
 
-test("once its files are read, Files changed counts from their own whole, so a pull request pushed to since it was published counts what the read holds", async () => {
-  const tab = await draw(viewing(["a.ts"], { published: [40, 5] }).control);
-  assert.equal(
-    tabCount(tab, "Files changed"),
-    "+40 −5",
-    "until the files land, what was published",
-  );
+test("once its files are read, the header and Files changed count from them, so a pull request pushed to since it was published counts what the read holds", async () => {
+  const tab = await draw(viewing(["a.ts"], { published: [40, 5], changedFiles: 2 }).control);
+  assert.equal(headerLines(tab), "+40 −5", "until the files land, what was published");
+  assert.equal(tabCount(tab, "Files changed"), "2");
   await choose(tab, "Files changed");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
-  assert.equal(await filesHint(tab), "+60 −7 total");
+  assert.equal(headerLines(tab), "+50 −5 left");
+  assert.equal(await linesHint(tab), "+60 −7 total");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
 });
 
 test("where the read stopped short of every file, the whole is what was published, and every file read being viewed still leaves the rest to review", async () => {
   const tab = await draw(
-    viewing(["a.ts", "b.ts", "c.ts"], { published: [100, 20], truncated: true }).control,
+    viewing(["a.ts", "b.ts", "c.ts"], { published: [100, 20], changedFiles: 5, truncated: true })
+      .control,
     PULL_REQUEST_VIEW.FILES,
   );
-  assert.equal(tabCount(tab, "Files changed"), "+40 −13 left");
-  assert.equal(await filesHint(tab), "+100 −20 total");
+  assert.equal(headerLines(tab), "+40 −13 left");
+  assert.equal(await linesHint(tab), "+100 −20 total");
+  assert.equal(tabCount(tab, "Files changed"), "3/5 viewed");
+});
+
+test("where the read stopped short of more files than were published, Files changed counts at least those read", async () => {
+  const tab = await draw(
+    viewing(["a.ts", "b.ts"], { changedFiles: 1, truncated: true }).control,
+    PULL_REQUEST_VIEW.FILES,
+  );
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
 });
 
 /** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
