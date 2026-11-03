@@ -113,8 +113,8 @@ export function LandingPage({
   actions: ReactNode;
   /** The page's `LandingSection`s. */
   children: ReactNode;
-  /** The page's last call: a heading, a sentence, and its calls. */
-  close: { readonly title: ReactNode; readonly lead: ReactNode; readonly actions: ReactNode };
+  /** The page's last call: a heading, an optional sentence, and its calls. */
+  close: { readonly title: ReactNode; readonly lead?: ReactNode; readonly actions: ReactNode };
   /** The site's closing links and notices. */
   footer: ReactNode;
 }): React.JSX.Element {
@@ -139,7 +139,7 @@ export function LandingPage({
             <h2 className="ui-landing-section-title" id={closeId}>
               {close.title}
             </h2>
-            <p className="ui-landing-lead">{close.lead}</p>
+            {close.lead === undefined ? null : <p className="ui-landing-lead">{close.lead}</p>}
           </div>
           <div className="ui-landing-actions">{close.actions}</div>
         </section>
