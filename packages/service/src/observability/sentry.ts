@@ -49,7 +49,7 @@ import {
 import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
-  /** The `luke-web` project's DSN; absent means nothing is sent. */
+  /** The `vespin-web` project's DSN; absent means nothing is sent. */
   DSN: "SENTRY_DSN",
   /** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
   DEPLOYMENT: "VERCEL_ENV",
@@ -62,7 +62,7 @@ const UNNAMED_DEPLOYMENT = "development";
 const SEVERITY_LEVEL = { Fatal: "fatal", Warn: "warning" } as const;
 
 /** How a capture at a promise edge is marked: unhandled, since nothing past the edge was there to handle it. */
-const PROMISE_EDGE_MECHANISM = { type: "luke.promise_edge", handled: false } as const;
+const PROMISE_EDGE_MECHANISM = { type: "vespin.promise_edge", handled: false } as const;
 
 /** A scheduled job Sentry's Crons watches, created from its first check-in rather than by hand. */
 export interface CronMonitor {

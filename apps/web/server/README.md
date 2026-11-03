@@ -868,7 +868,7 @@ invitation stands. Canceling an invitation emails nothing.
 
 ## Sentry
 
-The functions report to Sentry's `luke-web` project, set
+The functions report to Sentry's `vespin-web` project, set
 up as Sentry's own guides set it up. `server/runtime.ts` provides
 `@repo/service/observability/sentry`'s `sentryLayer()`, which is the Effect
 guide's: `Sentry.effectLayer` starts the SDK and registers its
@@ -881,7 +881,7 @@ first check-in.
 
 The SDK runs with Sentry's default data collection, which `PRIVACY.md` and
 root `AGENTS.md`'s "Never" describe. Sentry's Vercel integration, which maps
-this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
+this Vercel project to the `vespin-web` Sentry project, owns `SENTRY_DSN`,
 `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
 names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment, and the SDK reads

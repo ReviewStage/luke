@@ -1031,7 +1031,7 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
-`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
+`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
 production, preview, and development. The web and `dev` are services of that
 one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach both, which matters because the agents read
