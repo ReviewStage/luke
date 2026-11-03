@@ -62,7 +62,7 @@ const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
 /** The platform's script that makes the agent's repository, named so the scripted spawner answers it. */
 const WORKTREE_SCRIPT = "make-the-agents-repository";
 /** The runner's own start on the box, as the platform launches it. */
-const RUNNER = "/opt/luke-host/node/bin/node";
+const RUNNER = "/opt/vespin-host/node/bin/node";
 
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), {

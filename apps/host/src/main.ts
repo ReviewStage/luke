@@ -7,19 +7,15 @@
  * own Node. The same bundle runs on every OS, as `process.platform` says
  * (`hostRuntime`). The account install (`apps/web/install/install.sh`)
  * runs it as the account it is installed in, on Linux and on a Mac alike:
- * each release unpacked under `~/.local/share/luke-host/versions/<version>`,
+ * each release unpacked under `~/.local/share/vespin-host/versions/<version>`,
  * `current` beside them linking to the one that runs, its state under
- * `~/.local/state/luke-host`, which the release's `vespin-host` names
+ * `~/.local/state/vespin-host`, which the release's `vespin-host` names
  * (`vespin-host.sh`), and a systemd user unit or a LaunchAgent running `run`
  * through `current`, and again a minute after any exit. This Mac's host is
  * that same install, which the desktop app starts and stops through launchd
  * (`apps/desktop/src/main/native/host-login-item.ts`).
  *
- * `run` is the command the service runs. A daemon the account install's
- * service started first moves that service over to `vespin-host` where a
- * release before the rename wrote it (`hostServiceMoved`), and where it
- * handed the host over to the new unit, follows nothing while systemd stops
- * its own. A box that never connected says
+ * `run` is the command the service runs. A box that never connected says
  * so and reads its record again every `UNENROLLED_REST`, rather than
  * exiting for its service to start it over; one that did runs the daemon
  * (`@repo/host/daemon`) until the service is stopped, which stops every
@@ -63,7 +59,6 @@ import {
   HOST_CONNECT_OUTCOME,
   HOST_DAEMON_END,
   HOST_SERVICE,
-  HOST_SERVICE_MOVE,
   type HostPairingCode,
   type HostReleases,
   type HostRuntime,
@@ -72,7 +67,6 @@ import {
   hostDaemon,
   hostPlatform,
   hostRuntime,
-  hostServiceMoved,
   hostServiceOf,
   LINUX_HOST,
   readHostDevice,
@@ -99,16 +93,13 @@ const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
 const UNENROLLED_REST = Duration.minutes(1);
 
 /** Where the account install keeps its releases, under the home it is installed in, each in a folder of its own under `versions/` (`vespin-host.sh`'s `ACCOUNT_RELEASES`). */
-const ACCOUNT_RELEASES = { FOLDER: ".local/share/luke-host", VERSIONS: "versions" } as const;
+const ACCOUNT_RELEASES = { FOLDER: ".local/share/vespin-host", VERSIONS: "versions" } as const;
 
 /** The file the kernel names this process's control groups in, a systemd unit's own among them. */
 const CGROUP_FILE = "/proc/self/cgroup";
 
 /** How long systemd may take to take the ask to start the daemon again. */
 const RESTART_ASK = Duration.seconds(10);
-
-/** How long a daemon that handed the host over to the new unit waits for systemd to stop it before it follows after all, which the follower lease keeps from running beside the new unit's daemon. */
-const HANDED_OVER_WAIT = Duration.minutes(1);
 
 /** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
 const CONNECT_EXIT = {
@@ -131,8 +122,7 @@ const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
 /**
  * The account install's releases, where this release's own real path
  * stands in a version folder of them, as `vespin-host.sh`'s `account_home`
- * reads it; none for a development run and an install that came before,
- * neither of which updates itself.
+ * reads it; none for a development run, which does not update itself.
  */
 function accountReleases(): HostReleases | undefined {
   let real: string;
@@ -154,8 +144,7 @@ function accountReleases(): HostReleases | undefined {
 
 /**
  * The OS this bundle runs on, what the daemon does differently there, and
- * where its state lives, under the home its service hands it: the
- * `luke-host` user's from systemd, the member's from launchd.
+ * where its state lives, under the home its service hands it.
  */
 const runtimeOfOs = hostRuntime({
   platform: process.platform,
@@ -259,20 +248,6 @@ const serviceRunning = (runtime: HostRuntime) =>
     });
   });
 
-/** The account install's service moved over to `vespin-host`, where this daemon is that install's and its service started it; how the move ended. */
-const serviceMoved = (service: HostService | undefined) =>
-  Effect.suspend(() => {
-    const releases = accountReleases();
-    if (releases === undefined || service === undefined) {
-      return Effect.succeed(HOST_SERVICE_MOVE.STAYS);
-    }
-    return hostServiceMoved({
-      service,
-      home: releases.folder.slice(0, -ACCOUNT_RELEASES.FOLDER.length - 1),
-      releases: releases.folder,
-    });
-  });
-
 /**
  * The daemon's service asked to start it again at once on the release
  * `current` now names: the systemd user unit it runs under restarted
@@ -282,7 +257,7 @@ const serviceMoved = (service: HostService | undefined) =>
  * said, and the exit leaves the start to the unit's own restart.
  */
 const restartAsked = (service: HostService | undefined) =>
-  service !== HOST_SERVICE.UNIT && service !== HOST_SERVICE.UNIT_BEFORE_RENAME
+  service !== HOST_SERVICE.UNIT
     ? Effect.void
     : Effect.scoped(
         Effect.flatMap(
@@ -308,13 +283,10 @@ const restartAsked = (service: HostService | undefined) =>
         ),
       );
 
-/** `vespin-host run`: the service moved over, then the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
+/** `vespin-host run`: the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
 const run = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const service = yield* serviceRunning(runtime);
-    if ((yield* serviceMoved(service)) === HOST_SERVICE_MOVE.HANDED_OVER) {
-      yield* Effect.sleep(HANDED_OVER_WAIT);
-    }
     const ended = yield* follow(runtime);
     if (ended === HOST_DAEMON_END.UPDATED) yield* restartAsked(service);
     return 0;

@@ -473,7 +473,7 @@ installs Vespin's host program, `vespin-host`, into your account on the Mac, as
 the install command in Settings › Hosts does: the app runs the install script
 our service serves, which puts the host under `~/.local` with a LaunchAgent
 that runs it at each login, whether the app is open or not, and the host keeps
-the secret it acts on in `~/.local/state/luke-host`, readable by you alone.
+the secret it acts on in `~/.local/state/vespin-host`, readable by you alone.
 Every copy of Vespin on your Mac drives that one host. Turning Bring your own
 host off stops it and keeps it from starting at the next login, with its files
 left in place; `vespin-host uninstall` removes it, with the folders of the
