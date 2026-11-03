@@ -34,7 +34,7 @@ import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { GitHubApp } from "./github-app.js";
 import {
@@ -948,7 +948,7 @@ function agentsOf(wake: AgentWake) {
  * webhook answers any.
  */
 export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   wake: AgentWake,
   deliveryId: string,
   appLogin: string | undefined,
@@ -978,7 +978,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
         : deliveryId;
     return yield* Effect.forEach(woken, ({ userId, agent }) =>
       Effect.gen(function* () {
-        const eve = yield* eveFor(userId);
+        const eve = yield* sessionsFor(userId);
         const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
         yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
           text: agentWakeText(wake, agent.branch, inline, checks, agent.githubAccess),

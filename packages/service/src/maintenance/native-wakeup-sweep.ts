@@ -32,7 +32,7 @@ import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { agentLineSender, steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import type { GitHubApp } from "../github/github-app.js";
 
 export const NATIVE_WAKEUP_SWEEP = {
@@ -62,13 +62,13 @@ function wakeupKey(wakeup: ClaimedAgentWakeup): string {
  * since the claim is not sent, and deleted once the send landed; one whose
  * send failed stands for its next delivery.
  */
-const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
+const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
   Effect.gen(function* () {
     const agent = yield* readAgent(wakeup.userId, wakeup.agentId);
     // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
-    const eve = yield* eveFor(wakeup.userId);
+    const eve = yield* sessionsFor(wakeup.userId);
     yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), wakeup.userId, agent.value, {
       text: wakeup.prompt,
       clientKey: wakeupKey(wakeup),
@@ -95,7 +95,7 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
  * minute rather than failing the sweeps after it.
  */
 export const sweepNativeWakeups = /* @__PURE__ */ Effect.fn("web/sweepNativeWakeups")(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   now: Date,
 ): Effect.fn.Return<
   NativeWakeupSweepOutcome,
@@ -114,7 +114,7 @@ export const sweepNativeWakeups = /* @__PURE__ */ Effect.fn("web/sweepNativeWake
     yield* Effect.logWarning(`native wakeups: none were claimed: ${claimed.failure._tag}`);
     return { delivered: 0, failed: 0 };
   }
-  const landed = yield* Effect.forEach(claimed.success, (wakeup) => deliver(eveFor, wakeup), {
+  const landed = yield* Effect.forEach(claimed.success, (wakeup) => deliver(sessionsFor, wakeup), {
     concurrency: NATIVE_WAKEUP_SWEEP.CONCURRENCY,
   });
   const delivered = landed.filter(Boolean).length;

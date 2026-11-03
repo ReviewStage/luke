@@ -21,7 +21,7 @@ import {
 import { agentPublished } from "../agents/coder-host/published.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
@@ -454,12 +454,12 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     // because a wake tells only the agents whose row keeps the finished commit as their head.
     const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
     // Each agent's sessions as the deployment acting for its owner, as an automation's run reaches them.
-    const eveForAccount: EveForAccount = routedSessions;
+    const sessionsForAccount: SessionsForAccount = routedSessions;
     const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
         ? Effect.succeed(0)
         : wakeAgents(
-            eveForAccount,
+            sessionsForAccount,
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,

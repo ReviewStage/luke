@@ -41,15 +41,7 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   },
 } as const;
 
-/**
- * The steps a coding agent's shallow checkout is deepened by: the probe of
- * whether a deepen already finished, the probe of whether the checkout is
- * still shallow, the fetch of the rest of its history, and the mark that
- * the deepen finished, written last.
- */
+/** The step a coding agent's shallow checkout is deepened by: the fetch of the rest of its history. */
 export const DEEPEN_STEP = {
-  PROBE: "probe",
-  SHALLOW: "shallow",
   FETCH: "fetch",
-  MARK: "mark",
 } as const;

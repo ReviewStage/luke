@@ -106,9 +106,6 @@ const REFRESH_SCRIPT = [
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
-/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
-const DEEPENED_RECORD = `${SANDBOX_STATE_FOLDER}/deepened`;
-
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
 const DEEPEN_LOCK_WAIT_SECONDS = 120;
 
@@ -132,9 +129,6 @@ const DEEPEN_SCRIPT = [
   "cd repository",
   `if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow; fi`,
 ].join("\n");
-
-/** The deepen's record written, once its every step is done. */
-const DEEPENED_MARK_SCRIPT = `${LINK_SANDBOX_STATE_FOLDER}; mkdir -p ${SANDBOX_STATE_FOLDER} && touch ${DEEPENED_RECORD}`;
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
@@ -384,14 +378,6 @@ export const deepenRepository = /* @__PURE__ */ Effect.fn("web/deepenRepository"
     }),
   );
   if (fetched.exitCode !== 0) return yield* gitRefusal(fetched);
-});
-
-/** The deepen's record written beside the checkout, once its every step is done. */
-export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(function* (
-  sandbox: RepositorySandbox,
-): Effect.fn.Return<void, RepositoryRefusal> {
-  const marked = yield* deepenStep(sandbox, DEEPENED_MARK_SCRIPT, DEEPEN_STEP.MARK);
-  if (marked.exitCode !== 0) return yield* gitRefusal(marked);
 });
 
 /**

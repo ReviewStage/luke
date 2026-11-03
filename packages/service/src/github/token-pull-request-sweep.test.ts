@@ -79,7 +79,7 @@ function fakeEve() {
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
   };
-  return { sent, eveFor: () => Effect.succeed(sessions) };
+  return { sent, sessionsFor: () => Effect.succeed(sessions) };
 }
 
 /** The words of a message sent to eve. */
@@ -215,7 +215,7 @@ const sweepAt = (
   github: Pick<ReturnType<typeof githubHolding>, "layer">,
   eve: ReturnType<typeof fakeEve>,
 ) =>
-  sweepTokenPullRequests(eve.eveFor, GITHUB_FIXTURE_TOKEN_RING, new Date(at)).pipe(
+  sweepTokenPullRequests(eve.sessionsFor, GITHUB_FIXTURE_TOKEN_RING, new Date(at)).pipe(
     Effect.provide(github.layer),
   );
 

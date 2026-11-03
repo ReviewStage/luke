@@ -12,7 +12,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -62,7 +62,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const eveFor: EveForAccount = routedSessions;
+  const sessionsFor: SessionsForAccount = routedSessions;
   const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
@@ -101,17 +101,19 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     sweepNativeWakeups: (now) =>
-      sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepAgentQueues: () => sweepAgentQueues(eveFor).pipe(Effect.provideContext(startContext)),
+      sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
-      sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
+      sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     sweepTokenPullRequests: (now) =>
-      sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
-        Effect.provideContext(startContext),
-      ),
+      sweepTokenPullRequests(
+        sessionsFor,
+        environment.providerKeyEncryptionKeys,
+        new Date(now),
+      ).pipe(Effect.provideContext(startContext)),
     // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
     sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     // A repository no agent starts on any more keeps no snapshot past its age.

@@ -42,7 +42,7 @@ import { Data, Duration, Effect, Option, type Redacted, Ref, Result, Schema } fr
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { agentPublished } from "../agents/coder-host/published.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import {
   AGENT_WAKE,
   type AgentWake,
@@ -178,7 +178,7 @@ interface Poll {
   readonly member: MemberGitHubToken;
   readonly number: number;
   readonly claimed: ClaimedTokenPullRequest;
-  readonly eveFor: EveForAccount;
+  readonly sessionsFor: SessionsForAccount;
   /** The sweep's instant, in epoch milliseconds. */
   readonly now: number;
   /** How the failed checks it tells read the head's checks: once for all of them (`failedChecksReadOnce`). */
@@ -251,7 +251,7 @@ function tell(
   const { agent, number } = poll;
   const branches = agent.branch === null ? [] : [agent.branch];
   return wakeAgents(
-    poll.eveFor,
+    poll.sessionsFor,
     { ...wake, repository: agent.repository, branches, pullRequest: number },
     key,
     poll.member.githubLogin,
@@ -501,7 +501,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
 const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
   claimed: ClaimedTokenPullRequest,
   ring: Redacted.Redacted | undefined,
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   now: number,
 ): Effect.fn.Return<number, never, PollServices> {
   return yield* Effect.gen(function* () {
@@ -516,7 +516,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
       member,
       number: claimed.pullRequest,
       claimed,
-      eveFor,
+      sessionsFor,
       now,
       readFailedChecks: yield* failedChecksReadOnce,
     };
@@ -537,7 +537,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** Claims the next batch of token agents' pull requests due a poll at `now` and polls each, `CONCURRENCY` at a time. */
 export const sweepTokenPullRequests = /* @__PURE__ */ Effect.fn("web/sweepTokenPullRequests")(
   function* (
-    eveFor: EveForAccount,
+    sessionsFor: SessionsForAccount,
     ring: Redacted.Redacted | undefined,
     now: Date,
   ): Effect.fn.Return<TokenPullRequestSweepOutcome, QueryError | Schema.SchemaError, PollServices> {
@@ -549,7 +549,7 @@ export const sweepTokenPullRequests = /* @__PURE__ */ Effect.fn("web/sweepTokenP
     );
     const told = yield* Effect.forEach(
       claimed,
-      (each) => pollClaimed(each, ring, eveFor, now.getTime()),
+      (each) => pollClaimed(each, ring, sessionsFor, now.getTime()),
       {
         concurrency: TOKEN_PULL_REQUEST_SWEEP.CONCURRENCY,
       },

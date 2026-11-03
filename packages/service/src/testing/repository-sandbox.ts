@@ -42,8 +42,6 @@ export interface SandboxDouble extends RepositorySandbox {
   shallow: boolean;
   /** How many fetches found the checkout shallow and deepened it. */
   deepened: number;
-  /** Whether a deepen wrote its record that it finished. */
-  deepenMarked: boolean;
   /** The repository checked out now, as the sandbox's record names it; nothing before a clone. */
   checkedOut: string | undefined;
   /** The clone's arguments, as the last clone was handed them. */
@@ -81,7 +79,6 @@ export function sandboxDouble(
     policiesDuringFetch: [],
     shallow: false,
     deepened: 0,
-    deepenMarked: false,
     checkedOut: undefined,
     clones: [],
     identities: [],
@@ -90,28 +87,14 @@ export function sandboxDouble(
     run: (run: SandboxRunOptions) => {
       const env = run.env;
       double.runs.push({ command: run.command, workingDirectory: run.workingDirectory, env });
-      // A deepen's steps: the probe of whether one finished, the probe of whether the checkout is shallow, and the fetch of the rest of its history.
-      const deepen = env?.[VARIABLE.DEEPEN];
-      if (deepen === DEEPEN_STEP.PROBE) {
-        return Promise.resolve(result(EXIT.OK, `${double.deepenMarked}\n`));
-      }
-      if (deepen === DEEPEN_STEP.SHALLOW) {
-        if (double.checkedOut === undefined) {
-          return Promise.resolve(result(128, "", "fatal: not a git repository"));
-        }
-        return Promise.resolve(result(EXIT.OK, `${double.shallow}\n`));
-      }
-      if (deepen === DEEPEN_STEP.FETCH) {
+      // A deepen's step: the fetch of the rest of its history.
+      if (env?.[VARIABLE.DEEPEN] === DEEPEN_STEP.FETCH) {
         double.policiesDuringFetch.push(policy);
         if (double.checkedOut === undefined) {
           return Promise.resolve(result(128, "", "fatal: not a git repository"));
         }
         if (double.shallow) double.deepened += 1;
         double.shallow = false;
-        return Promise.resolve(result(EXIT.OK));
-      }
-      if (deepen === DEEPEN_STEP.MARK) {
-        double.deepenMarked = true;
         return Promise.resolve(result(EXIT.OK));
       }
       // The checkout probe: which repository the record names, and whether a checkout stands.
