@@ -49,7 +49,8 @@ export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
  * Whether the window owes setup. An account is new where it is signed in,
  * holds no task, belongs to no team's workspace, and has no agent connected,
  * since nothing runs without one, so an account that has worked before is
- * never set up again on another machine. Once setup has started on this
+ * never set up again on another machine. Finished is the account's, so it
+ * holds on every machine. Once setup has started on this
  * machine it stands until finished, whatever it has connected or made
  * meanwhile; until the agent's read answers, a new account waits on it
  * rather than glimpsing the app.
@@ -57,15 +58,14 @@ export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
 export function setupGate(account: {
   readonly id: string | undefined;
   readonly fresh: boolean;
-  readonly finished: readonly string[];
+  /** Whether the account finished setup, on any machine. */
+  readonly finished: boolean;
   readonly started: boolean;
   readonly personalOnly: boolean;
   /** Whether an agent is connected; nothing while the models are still read. */
   readonly agent: boolean | undefined;
 }): SetupGate {
-  if (account.id === undefined || !account.fresh || account.finished.includes(account.id)) {
-    return SETUP_GATE.NONE;
-  }
+  if (account.id === undefined || !account.fresh || account.finished) return SETUP_GATE.NONE;
   if (account.started) return SETUP_GATE.OWED;
   if (!account.personalOnly) return SETUP_GATE.NONE;
   if (account.agent === undefined) return SETUP_GATE.WAIT;

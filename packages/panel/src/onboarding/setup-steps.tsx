@@ -1,4 +1,6 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_SETTING_SCHEMA } from "@repo/settings";
 import {
   AuthPage,
   BUTTON_VARIANT,
@@ -14,10 +16,12 @@ import {
 } from "@repo/ui";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
+import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { AgentAuthSection } from "../settings/agent-auth-section.js";
 import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GitHubSetup } from "./setup-github.js";
 import {
@@ -37,8 +41,9 @@ import { ToolRows } from "./setup-tools.js";
  * Each card is the sign-in's own, so setup reads as the sign-in going on.
  * The team's workspace, an agent, and GitHub may each be skipped; what an
  * agent needs and was skipped is asked again on Home
- * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on this
- * machine, that the account finished setup, so it stands once.
+ * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on the
+ * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
+ * stands once on every machine.
  */
 
 /** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
@@ -60,6 +65,15 @@ const SETUP_PLACE = keptKey(
   Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
 );
 
+/**
+ * The accounts that finished setup on this device, by id: the account's own
+ * `setupFinished` read ahead of its preferences arriving.
+ */
+const SETUP_FINISHED = keptKey(
+  "app.setupFinished",
+  Schema.fromJsonString(Schema.Array(Schema.String)),
+);
+
 /** Where setup starts. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 
@@ -71,12 +85,20 @@ const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 export function useSetupGate(
   tasks: TasksControl,
   accountId: string | undefined,
-  finished: readonly string[],
+  /** Whether setup was finished in this window, before the account's setting comes back from its write. */
+  finishedHere: boolean,
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
+  const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
+  const finishedOnAccount = useAppSlice(APP_SETTINGS_VIEW)?.setupFinished === true;
+  // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
+  const finished =
+    finishedHere ||
+    finishedOnAccount ||
+    (accountId !== undefined && finishedOnDevice.includes(accountId));
   const { models, modelsRead, readModels, workspaces } = tasks.newTask;
   const fresh = welcomed(tasks);
-  const candidate = fresh && accountId !== undefined && !finished.includes(accountId);
+  const candidate = fresh && accountId !== undefined && !finished;
   useEffect(() => {
     if (candidate && modelsRead.state === MODELS_READ.UNREAD) readModels();
   }, [candidate, modelsRead.state, readModels]);
@@ -96,12 +118,6 @@ export function useSetupGate(
     agent,
   });
 }
-
-/** The accounts that finished setup on this machine, by id. */
-export const SETUP_FINISHED = keptKey(
-  "app.setupFinished",
-  Schema.fromJsonString(Schema.Array(Schema.String)),
-);
 
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
   { value: SETUP_AUDIENCE.ME, label: "Just me" },
@@ -156,7 +172,9 @@ export function SetupSteps({
   accountId: string;
   onFinish: () => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
+  const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   const place = places[accountId] ?? SETUP_START;
   const { audience, team } = place;
   const [creating, setCreating] = useState(false);
@@ -184,7 +202,10 @@ export function SetupSteps({
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
-    // Finished, the account's place is let go of, as setup stands no more.
+    // Finished, the account's place is let go of, as setup stands no more on any machine.
+    // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
+    tell(ACT_KIND.SETTING_UPDATE, { field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
+    keepFinished((finished) => [...finished, accountId]);
     changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
   };

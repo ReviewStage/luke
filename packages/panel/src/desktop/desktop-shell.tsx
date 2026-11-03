@@ -28,7 +28,7 @@ import {
   useDrawerSwipe,
 } from "@repo/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
 import type { AdminView } from "../admin/routing.js";
@@ -39,7 +39,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { SETUP_GATE } from "../onboarding/setup-model.js";
-import { SETUP_FINISHED, SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
+import { SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -54,7 +54,6 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useAdminAccessPending, useCapability } from "../use-app-state.js";
-import { useKept } from "../use-kept.js";
 import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
@@ -722,10 +721,10 @@ export function DesktopShell({
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
-  // A new account is set up once, in the window before the app, until it finishes on this machine.
-  const [setupFinished, , keepSetupFinished] = useKept(SETUP_FINISHED, []);
+  // A new account is set up once, in the window before the app, until it finishes on any machine.
   const signedInId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-  const setup = useSetupGate(tasks, signedInId, setupFinished);
+  const [finishedHere, setFinishedHere] = useState<string>();
+  const setup = useSetupGate(tasks, signedInId, finishedHere === signedInId);
   const inboxKept = useInboxKept(
     tasks.inboxView.open,
     tasks.workspace?.id,
@@ -828,7 +827,7 @@ export function DesktopShell({
             <SetupSteps
               tasks={tasks}
               accountId={signedInId}
-              onFinish={() => keepSetupFinished((finished) => [...finished, signedInId])}
+              onFinish={() => setFinishedHere(signedInId)}
             />
           ) : null}
         </div>
