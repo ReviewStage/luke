@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { RUNNER_LOST_DETAIL } from "@luke/database/models/abandoned-turns";
 import {
   hasRepository,
   latestTurnsOfReached,
@@ -415,19 +416,19 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
-    /** A local agent's launch claimed with a turn queued, then settled unstarted by its device with the refusal given: the agent, and its turn as the store reads it after. */
-    const refusedTurn = (refusal: DeviceLaunchRefusal) =>
+    /**
+     * A local agent's launch claimed, then settled unstarted by its device,
+     * with the refusal given where one is: the agent, and its turn as the
+     * store reads it after. No turn is queued first, because a native turn is
+     * queued by its harness's first event, which a runner that never started
+     * never posts.
+     */
+    const unstartedTurn = (refusal?: DeviceLaunchRefusal) =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
         const { userId, deviceId, agent } = opened;
         const launch = yield* launched(opened);
         yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
-        const writer = yield* storeWriter({ tools: {} });
-        const turnId = randomUUID();
-        yield* writer.enqueueTurn(
-          { userId, conversationId: agent.conversationId },
-          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
-        );
         yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, refusal);
         const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
           agent.conversationId,
@@ -436,10 +437,22 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       });
 
     it.effect(
+      "a launch its Mac settled unstarted with no refusal fails the agent's turn as a lost runner's, though its runner never opened one",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* unstartedTurn();
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(turn?.failure, TURN_FAILURE.MODEL);
+          assert.equal(turn?.failureDetail, RUNNER_LOST_DETAIL);
+        }),
+    );
+
+    it.effect(
       "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended, naming the folder its work is still in",
       () =>
         Effect.gen(function* () {
-          const { agent, turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
+          const { agent, turn } = yield* unstartedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, TURN_FAILURE.SESSION_ENDED);

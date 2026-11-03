@@ -13,9 +13,10 @@
  * once and the row never holds them again.
  */
 
+import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import { readAgent } from "@luke/database/models/agent-store";
+import { latestTurnsOf, readAgent } from "@luke/database/models/agent-store";
 import {
   claimDeviceAgentLine,
   deviceAgentLineStanding,
@@ -27,7 +28,7 @@ import {
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, deviceLayout } from "@luke/database/models/device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { storeWriter } from "@luke/database/models/writer";
+import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -39,6 +40,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
+import { TURN_ORIGIN } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { heldUntil } from "../http/held-read.js";
 import type { StoreFailure } from "../http/store-failure.js";
@@ -192,12 +194,44 @@ function refusedTurn(
 }
 
 /**
+ * The turn a launch's message waits on, queued where its runner never
+ * opened one, for the settle after it to end: where no stop was queued
+ * after the launch, which the service itself ended, and the conversation
+ * holds no turn queued since the launch was written. Note that a native
+ * turn is queued by its harness's first event
+ * (`native-events/runner-events-app.ts`), so a runner that never started
+ * leaves its message awaiting a turn nothing will queue, and the agent
+ * reading as running until that line's grace.
+ */
+const queuedUnopenedTurn = (
+  writer: Pick<StoreWriter, "enqueueTurn">,
+  userId: string,
+  conversationId: string,
+  launch: { readonly createdAt: Date; readonly stopped: boolean },
+) =>
+  Effect.gen(function* () {
+    if (launch.stopped) return;
+    const newest = (yield* latestTurnsOf(userId, [conversationId])).get(conversationId);
+    if (newest !== undefined && newest.queuedAt >= launch.createdAt) return;
+    const turnId = randomUUID();
+    yield* writer.enqueueTurn(
+      { userId, conversationId },
+      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+    );
+  });
+
+/**
  * One line the account's Mac claimed, settled; whether it was. A launch
  * line that was the agent's newest settles its runner as gone, so a turn
  * of the agent's still under way, whose runner posted no END before it
  * ended, as when the app quit or the Mac's switch went off mid-turn, is
  * settled lost (`settleRunnerLostTurns`) and the agent offers Continue
- * rather than running until `TURN_ABANDON`. A launch the Mac settled unstarted
+ * rather than running until `TURN_ABANDON`. A launch whose runner ended
+ * before it opened a turn, as one its Mac settled unstarted, first has the
+ * turn its message waits on queued (`queuedUnopenedTurn`), as a launch that
+ * failed before its runner is (`coder-host/runner-sessions.ts`'s
+ * `launchFailed`), so that turn is settled the same way, whatever the Mac
+ * said of why. A launch the Mac settled unstarted
  * with why (`refusal`) settles its turn in the refusal's words, as a session
  * that ended, since the agent can never run there again, so the agent reads
  * as one only a new agent goes on from. A turn the runner ended itself
@@ -233,6 +267,7 @@ export function settledDeviceAgentLine(
     const agent = yield* readAgent(userId, agentId);
     if (Option.isNone(agent)) return true;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* queuedUnopenedTurn(writer, userId, agent.value.conversationId, newest.value);
     const now = yield* Clock.currentTimeMillis;
     if (refusal === undefined) {
       yield* settleRunnerLostTurns(writer, agent.value.conversationId, now);
