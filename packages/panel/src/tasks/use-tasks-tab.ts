@@ -1656,6 +1656,8 @@ export function useTasksTab(input: {
           bare: true,
           files: panelFileReads,
           pages: panelPages,
+          // Each item is a stop of its own, two of one task among them.
+          stop: inboxChosen?.itemId,
         }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: NO_HOLDS, files: panelFileReads, pages: panelPages }

@@ -3911,11 +3911,12 @@ it.effect(
       yield* passing(Duration.minutes(50));
       tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
-      // The panel filling the window over the column keeps the tab from being viewed again on return.
+      // The panel filling the window over the column keeps the tab from being viewed again on return, the task opened on its tab as a pin opens it.
       act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
+      act(() => tab.control().sidePanel.onShow(TASK.id, SIDE_PANEL_TAB.COMMENTS));
       tab.stand({ tasks: withAgents(IDLE_AGENTS) });
       yield* passing(Duration.minutes(30));
       assert.deepEqual(

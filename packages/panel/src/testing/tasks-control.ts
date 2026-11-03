@@ -313,6 +313,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       tab: SIDE_PANEL_TAB.COMMENTS,
       preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,
+      opened: 0,
       onToggle: ignore,
       onSetOpen: ignore,
       onToggleFullScreen: ignore,
