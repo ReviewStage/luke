@@ -236,7 +236,9 @@ test("the servers stand under Connected and Not connected, each connected one wi
     ["Not connected", ["Mercury"]],
   ]);
   assert.deepEqual(
-    [...container.querySelectorAll(".agent-servers-count")].map((count) => count.textContent),
+    [...container.querySelectorAll(".agent-servers-list .luke-list-row-meta")].map(
+      (count) => count.textContent,
+    ),
     ["1 tool", "4 tools"],
   );
 });

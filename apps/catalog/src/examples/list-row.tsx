@@ -492,13 +492,14 @@ function ListRows(): React.JSX.Element {
           </List>
         </div>
       </CatalogSection>
-      <CatalogSection id="list-row-chevron-over" title="A chevron over words that run to the acts">
+      <CatalogSection id="list-row-chevron-meta" title="A chevron in its metadata's place">
         <div className="catalog-narrow">
           <List label="Servers" density={LIST_DENSITY.COMPACT}>
-            {[LIST_ROW_CHEVRON.ROOM, LIST_ROW_CHEVRON.OVER].map((at) => (
+            {[LIST_ROW_CHEVRON.ROOM, LIST_ROW_CHEVRON.META].map((at) => (
               <ListRow
                 key={at}
                 title="search_issues_across_every_repository_of_an_organization"
+                meta="24 tools"
                 chevron
                 chevronAt={at}
                 actions={<Switch checked label={`Chevron ${at}`} onChange={() => undefined} />}

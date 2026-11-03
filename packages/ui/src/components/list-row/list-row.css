@@ -608,6 +608,47 @@
     }
   }
 
+  /* A chevron in its metadata's place keeps no room: it stands over the
+     metadata's end, and the metadata gives way on its own fade while the
+     chevron shows, so the two swap as one gesture, as a sidebar row's count
+     and ⋯ do. Note that the metadata gives way by its opacity, never its
+     visibility, so a reader reaching the row still hears it. */
+  .luke-list-row-end[data-chevron="meta"] {
+    position: relative;
+  }
+
+  .luke-list-row-end[data-chevron="meta"] > .luke-list-row-chevron {
+    position: absolute;
+    inset-inline-end: 0;
+  }
+
+  .luke-list-row-end[data-chevron="meta"] > .luke-list-row-meta {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-list-row:is(:has(:focus-visible), [data-current="true"])
+    .luke-list-row-end[data-chevron="meta"]
+    > .luke-list-row-meta {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    .luke-list-row:hover .luke-list-row-end[data-chevron="meta"] > .luke-list-row-meta {
+      opacity: 0;
+    }
+  }
+
+  /* Note that a screen with no hover keeps the metadata at rest rather than
+     the chevron every other row shows there, as a finger keeps a sidebar
+     row's count, since a row has no hand on it to swap them. */
+  @media (hover: none) {
+    .luke-list-row:not(:has(:focus-visible), [data-current="true"])
+      .luke-list-row-end[data-chevron="meta"]
+      > .luke-list-row-chevron {
+      opacity: 0;
+    }
+  }
+
   /* A row that goes deeper wears its chevron at its end, shown while the
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {
