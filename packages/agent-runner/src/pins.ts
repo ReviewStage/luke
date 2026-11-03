@@ -25,7 +25,7 @@ export const AGENT_USER = "agent";
  * the sandbox's default user and the CLI's own temp folder
  * (`/tmp/claude-<uid>`) is private to `agent`.
  */
-export const SHARED_FILES_DIRECTORY = "/tmp/luke";
+export const SHARED_FILES_DIRECTORY = "/tmp/shared";
 
 /**
  * Playwright as the image installs it, where every user of every machine

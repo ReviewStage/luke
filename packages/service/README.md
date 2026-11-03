@@ -1131,7 +1131,7 @@ The agent is offered Vespin's own tools on Vespin's MCP server
 runner's bearer, minted at each launch and kept on the agent's row only as
 its hash (`luke-mcp/bearer.ts`), and runs each call as the agent's starter
 through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
-Code sees them as `mcp__luke__<tool>`, Codex as the `luke` server. Its shell,
+Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
@@ -1291,7 +1291,7 @@ credential off the firewall and stops the sandbox, unless a Terminal holds
 it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
 harness and handed to it at every launch) tell the agent to read `AGENTS.md`
 and `CLAUDE.md` first, reread the code the plan names and say where it no
-longer fits, run the repository's checks, work on a `luke/<slug>` branch and
+longer fits, run the repository's checks, work on an `agent/<slug>` branch and
 never push the default branch, and decide on a pull request and its draft
 state itself; the plan is the session's first message, or for an agent started
 on a developer's prompt, the prompt is, the agent is never handed the plan,
@@ -1751,7 +1751,7 @@ among them (`senders`, `moments`, `drafts`, `forks` in
 `@luke/features/automation-wire`): people's events alone, every moment, and
 no draft or fork where it names none. An automation cannot fire itself
 whatever its settings say: a push by Vespin's agents, to a branch or to a pull
-request, fires nothing, and neither does a failed check on a `luke/` branch,
+request, fires nothing, and neither does a failed check on an agent's branch (`agent/`, or `luke/` before it),
 where an agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled

@@ -243,9 +243,12 @@ test("a file of a plan with no repository is written in the form that names none
 
   assert.equal(
     encodeMention({ kind: MENTION_KIND.FOLDER, path: "src" }, place),
-    "luke://folder/src/",
+    "mention://folder/src/",
   );
-  assert.equal(encodeMention({ kind: MENTION_KIND.FILE, path: "a.ts" }, place), "luke://file/a.ts");
+  assert.equal(
+    encodeMention({ kind: MENTION_KIND.FILE, path: "a.ts" }, place),
+    "mention://file/a.ts",
+  );
 });
 
 test("a link that names no mention reads as none", () => {
@@ -553,7 +556,7 @@ test("an MCP server and one of its tools read back as the mention they were writ
       },
       PLACE,
     ),
-    "luke://mcp/sentry/get_issue",
+    "mention://mcp/sentry/get_issue",
   );
 });
 
@@ -760,7 +763,7 @@ test("a server or tool of an account past a provider's first names it by its con
     connection: "notion-2",
     tool: "notion-search",
   } as const;
-  assert.equal(encodeMention(personal, PLACE), "luke://mcp/notion-2/notion-search");
+  assert.equal(encodeMention(personal, PLACE), "mention://mcp/notion-2/notion-search");
   assert.deepEqual(decodeMention("luke://mcp/notion-2/notion-search", REPOSITORY), personal);
   assert.deepEqual(decodeMention("luke://mcp/notion-2", REPOSITORY), {
     kind: MENTION_KIND.SERVER,
@@ -1013,10 +1016,10 @@ test("a date is written in the app's own form, a day, a time with its offset, or
   assert.deepEqual(
     dates.map((date) => encodeMention(date, PLACE)),
     [
-      "luke://date/2026-10-20",
-      "luke://date/2026-10-20T15:00-07:00",
-      "luke://date/2026-10-20T15:00+05:30/2026-10-20T17:00+05:30",
-      "luke://date/2026-10-20/2026-10-24",
+      "mention://date/2026-10-20",
+      "mention://date/2026-10-20T15:00-07:00",
+      "mention://date/2026-10-20T15:00+05:30/2026-10-20T17:00+05:30",
+      "mention://date/2026-10-20/2026-10-24",
     ],
   );
   for (const date of dates) {
@@ -1024,7 +1027,7 @@ test("a date is written in the app's own form, a day, a time with its offset, or
   }
   assert.equal(
     mentionMarkdown(day, "Oct 20, 2026", PLACE),
-    "[@Oct 20, 2026](luke://date/2026-10-20)",
+    "[@Oct 20, 2026](mention://date/2026-10-20)",
   );
 });
 

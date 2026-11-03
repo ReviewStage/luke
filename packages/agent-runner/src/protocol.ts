@@ -83,7 +83,7 @@ export const INSTALLED_SKILLS = {
   /** The plugin's manifest, under the installed folder. */
   MANIFEST: ".claude-plugin/plugin.json",
   /** The plugin's name, which leads each of its skills' names in Claude Code. */
-  PLUGIN: "luke",
+  PLUGIN: "workspace",
 } as const;
 
 /**

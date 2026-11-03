@@ -684,7 +684,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(
           JSON.parse(skills.get("/tmp/luke-installed-skills/.claude-plugin/plugin.json") ?? "")
             .name,
-          "luke",
+          "workspace",
         );
         // Every other key and the body as installed, under the name and description we keep.
         assert.equal(

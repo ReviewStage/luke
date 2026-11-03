@@ -240,7 +240,7 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
     { type: "system", subtype: "init", ...envelope },
     toolUse("toolu_Write", "Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
     toolResult("toolu_Write", "File created"),
-    toolUse("toolu_inbox", "mcp__luke__read_inbox", {}),
+    toolUse("toolu_inbox", "mcp__workspace__read_inbox", {}),
     toolResult("toolu_inbox", '{"status":"accepted","inbox":[]}'),
     toolUse("toolu_Bash", "Bash", {
       command: `sleep 45 && echo ${NONCE}`,
@@ -933,6 +933,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 {
                   type: "tool_use",
                   id: "toolu_look",
+                  // The server's name before its rename, which a stored transcript still holds, read as ours.
                   name: "mcp__luke__look_at_picture",
                   input: {},
                 },
@@ -1312,7 +1313,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         const inbox = {
           type: "mcpToolCall",
           id: "mcp_inbox",
-          server: "luke",
+          server: "workspace",
           tool: "read_inbox",
           status: "inProgress",
           arguments: {},

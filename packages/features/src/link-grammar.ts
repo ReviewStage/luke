@@ -5,7 +5,7 @@ import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the older `luke://` forms.
+ * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the app-only `mention://` forms.
  *
  * This is the one module that knows how an address is spelled. A mention
  * (`mention-link.ts`) names what a link names and reads it through here; a
@@ -93,8 +93,9 @@ import { parsedUrl } from "./parsed-url.js";
  * `https://linear.app/<workspace>/issue/<KEY-123>`, its slug after it or not.
  *
  * The forms written before our links were settled, `luke://<host>/<path>`,
- * are read forever, and kept for what has no page of its own on the web, an
- * MCP server and a date; what each host's path means is the mention's.
+ * are read forever. What has no page of its own on the web, an MCP server
+ * and a date, is written in the same form under `mention://`, which reads
+ * as any `luke://` host does; what each host's path means is the mention's.
  *
  * A link is written into words as `[label](target)`: its label's brackets
  * and backslashes escaped and its line breaks made spaces, so a title
@@ -269,11 +270,17 @@ const LINEAR_ISSUE_STEP = "issue";
 /** A Linear issue's identifier, its team's key and its number, `ENG-123`, as Linear spells it. */
 export const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9_]{0,9}-[1-9]\d{0,8}$/u;
 
-/** The scheme of the forms written before our links were settled. */
+/** The scheme the app's own forms are written in, for what has no page of its own on the web. */
+const MENTION_PROTOCOL = "mention:";
+
+/** The scheme of the forms written before our links were settled, read as `MENTION_PROTOCOL` is. */
 const LEGACY_PROTOCOL = "luke:";
 
-/** What a `luke://` address's host says its path names. */
-export const LEGACY_LINK_HOST = {
+/** The schemes an app-only form is read in. */
+const SCHEME_PROTOCOLS: ReadonlySet<string> = new Set([MENTION_PROTOCOL, LEGACY_PROTOCOL]);
+
+/** What a `mention://` or `luke://` address's host says its path names. */
+export const SCHEME_LINK_HOST = {
   PLAN: "plan",
   FILE: "file",
   FOLDER: "folder",
@@ -281,7 +288,7 @@ export const LEGACY_LINK_HOST = {
   DATE: "date",
 } as const;
 
-export type LegacyLinkHost = (typeof LEGACY_LINK_HOST)[keyof typeof LEGACY_LINK_HOST];
+export type SchemeLinkHost = (typeof SCHEME_LINK_HOST)[keyof typeof SCHEME_LINK_HOST];
 
 /** What marks a link's label as a mention's: `[@Rollout](<target>)`. */
 export const MENTION_SIGIL = "@";
@@ -955,25 +962,25 @@ export function readLinearIssue(target: string): string | undefined {
   return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
 }
 
-/** A `luke://` address read: its host, its path's steps still percent-encoded, and its fragment and query as written. */
-export interface LegacyLink {
+/** A `mention://` or `luke://` address read: its host, its path's steps still percent-encoded, and its fragment and query as written. */
+export interface SchemeLink {
   readonly host: string;
   readonly steps: readonly string[];
   readonly hash: string;
   readonly search: string;
 }
 
-/** The parts of an address in the form written before our links were settled; nothing for any other address. */
-export function readLegacyLink(target: string): LegacyLink | undefined {
+/** The parts of an address in the app's own form, `mention://` or the `luke://` written before it; nothing for any other address. */
+export function readSchemeLink(target: string): SchemeLink | undefined {
   const url = parsedUrl(target);
-  if (url?.protocol !== LEGACY_PROTOCOL) return undefined;
+  if (url === undefined || !SCHEME_PROTOCOLS.has(url.protocol)) return undefined;
   const steps = url.pathname.replace(/^\//u, "").split("/");
   return { host: url.host, steps, hash: url.hash, search: url.search };
 }
 
-/** An address in the app's own form, `luke://<host>/<path>`, its path already spelled as its host reads it. */
-export function legacyLinkOf(host: LegacyLinkHost, path: string): string {
-  return `${LEGACY_PROTOCOL}//${host}/${path}`;
+/** An address in the app's own form, `mention://<host>/<path>`, its path already spelled as its host reads it. */
+export function schemeLinkOf(host: SchemeLinkHost, path: string): string {
+  return `${MENTION_PROTOCOL}//${host}/${path}`;
 }
 
 /** Words as a markdown link's label holds them: each control character, a line break among them, a space, and each bracket and backslash escaped. */

@@ -1,7 +1,7 @@
 /**
  * app.ts -- our MCP server: the tools that touch the app, served to a native harness's agent over streamable HTTP under its runner's bearer.
  *
- * Claude Code (`mcp__luke__<tool>`) and Codex (`mcp_servers.luke`) both reach
+ * Claude Code (`mcp__workspace__<tool>`) and Codex (`mcp_servers.workspace`) both reach
  * it as a standard MCP server: JSON-RPC 2.0 over streamable HTTP, each
  * request one POST answered with one JSON body. It keeps no session: every
  * POST carries the runner's bearer and is admitted on it alone
@@ -38,6 +38,7 @@
 
 import { readAgentOfConversation } from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
+import { WORKSPACE_MCP_SERVER } from "@luke/features/agent-tools";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
@@ -401,7 +402,7 @@ function listLukeTools(
 /** Our own server, over the doors the edge composes. */
 function lukeServer(doors: LukeMcpDoors): McpServer {
   return {
-    name: "luke",
+    name: WORKSPACE_MCP_SERVER,
     instructions: () => Effect.succeedNone,
     listTools: listLukeTools,
     callTool: (admitted, params) => callLukeTool(doors, admitted, params),

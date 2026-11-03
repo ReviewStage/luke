@@ -36,7 +36,7 @@ export const NATIVE_SKILLS_PATH = {
 /** The mode each file is written with; root's install makes them every user's to read. */
 const FILE_MODE = 0o644;
 
-/** The plugin's manifest, which names it, so Claude Code lists its skills as `luke:<name>`. */
+/** The plugin's manifest, which names it, so Claude Code lists its skills as `workspace:<name>`. */
 const MANIFEST = {
   name: INSTALLED_SKILLS.PLUGIN,
   description: `The skills you installed into ${PRODUCT_NAME}.`,
