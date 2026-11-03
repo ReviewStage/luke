@@ -337,7 +337,7 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude");
-  assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
+  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "true");
   assert.equal(radio(dialog, "API key").disabled, true, "no key saved, nothing to pick");
   await press(dialog, "Done");
 
@@ -355,13 +355,13 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
     },
   ]);
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
-  assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "false");
+  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "false");
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with an API key"));
 
-  act(() => radio(dialog, "Subscription").click());
+  act(() => radio(dialog, "Claude plan").click());
   await settle();
   assert.equal(forAgentsSent().at(-1)?.forAgents, true);
-  assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
+  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "true");
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with a subscription"));
 });
 
@@ -452,7 +452,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const field = labeled(card(dialog, "Subscription"), "Claude setup-token");
+  const field = labeled(card(dialog, "Claude plan"), "Claude setup-token");
   assert.equal(field.type, "password");
   assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   assert.ok(
@@ -474,7 +474,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
       key: TOKEN,
     },
   );
-  const plan = card(dialog, "Subscription");
+  const plan = card(dialog, "Claude plan");
   assert.match(plan.textContent ?? "", /Connected/u);
   assert.doesNotMatch(
     dialog.textContent ?? "",
@@ -482,13 +482,13 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     "an unchecked plan reads as a connected one",
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
-  assert.ok(radio(dialog, "Subscription").querySelector(".ui-settings-saved-mark"));
+  assert.ok(radio(dialog, "Claude plan").querySelector(".ui-settings-saved-mark"));
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with a subscription"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
   await press(plan, "Disconnect");
-  assert.match(question().textContent ?? "", /Disconnect your Claude subscription\?/u);
-  assert.equal(actLook("Disconnect"), "danger", "a token he deletes is past undoing");
+  assert.match(question().textContent ?? "", /Disconnect your Claude plan\?/u);
+  assert.equal(actLook("Disconnect"), "danger", "a deleted token is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
@@ -514,8 +514,8 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   const dialog = await open(page, "Claude");
 
   act(() => {
-    button(card(dialog, "Subscription"), "Disconnect").focus();
-    button(card(dialog, "Subscription"), "Disconnect").click();
+    button(card(dialog, "Claude plan"), "Disconnect").focus();
+    button(card(dialog, "Claude plan"), "Disconnect").click();
   });
   await settle();
   await press(question(), "Disconnect");
@@ -530,7 +530,7 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   const page = await mount();
   assert.deepEqual(rowState(page, "Claude"), needsHand("Subscription needs attention"));
   const dialog = await open(page, "Claude");
-  const plan = card(dialog, "Subscription");
+  const plan = card(dialog, "Claude plan");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
   await press(plan, "Replace token");
   const field = labeled(plan, "Claude setup-token");
@@ -539,32 +539,35 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   assert.equal(field.value, "");
 });
 
-test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and how to reconnect", async () => {
+test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, and how to reconnect", async () => {
   held = { keys: [], subscriptions: [{ ...CHATGPT_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("Sign-in expired"));
   const dialog = await open(page, "Codex");
-  assert.match(card(dialog, "Subscription").textContent ?? "", /Sign-in expired\.(?! Sign in)/u);
+  assert.match(
+    card(dialog, "ChatGPT plan").textContent ?? "",
+    /Signed out of ChatGPT\.(?! Continue)/u,
+  );
 });
 
-test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {
+test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {
   const page = await mount();
   const dialog = await open(page, "Codex");
   assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
-  await press(card(dialog, "Subscription"), "Sign in with ChatGPT");
+  await press(card(dialog, "ChatGPT plan"), "Continue with ChatGPT");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
   assert.equal(
     document.querySelectorAll('[role="dialog"]').length,
     1,
     "OpenAI's notice opens no card over the dialog",
   );
-  assert.match(card(dialog, "Subscription").textContent ?? "", /You're using your ChatGPT plan/u);
-  await press(card(dialog, "Subscription"), "Got it");
+  assert.match(card(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
+  await press(card(dialog, "ChatGPT plan"), "Got it");
   assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
   assert.deepEqual(rowState(page, "Codex"), connectedWith("Connected with a subscription"));
-  assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
+  assert.equal(radio(dialog, "ChatGPT plan").getAttribute("aria-checked"), "true");
 
-  await press(card(dialog, "Subscription"), "Disconnect");
+  await press(card(dialog, "ChatGPT plan"), "Disconnect");
   assert.equal(actLook("Disconnect"), "danger", "an ended sign-in is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(
@@ -578,23 +581,23 @@ test("a ChatGPT sign-in waiting on the browser says so without trailing dots, be
   signInOpen = Promise.withResolvers();
   const page = await mount();
   const dialog = await open(page, "Codex");
-  await press(card(dialog, "Subscription"), "Sign in with ChatGPT");
-  const waiting = button(card(dialog, "Subscription"), "Waiting for ChatGPT");
+  await press(card(dialog, "ChatGPT plan"), "Continue with ChatGPT");
+  const waiting = button(card(dialog, "ChatGPT plan"), "Waiting for ChatGPT");
   assert.equal(waiting.getAttribute("aria-busy"), "true");
-  const cancel = button(card(dialog, "Subscription"), "Cancel");
+  const cancel = button(card(dialog, "ChatGPT plan"), "Cancel");
   assert.equal(cancel.getAttribute("data-variant"), BUTTON_VARIANT.QUIET);
-  await press(card(dialog, "Subscription"), "Cancel");
+  await press(card(dialog, "ChatGPT plan"), "Cancel");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN_CANCEL).length, 1);
 });
 
-test("without the sign-in's loopback, Codex's subscription card stands disabled and says why, while its API key card works", async () => {
+test("without the sign-in's loopback, Codex's ChatGPT plan card stands disabled and says why, while its API key card works", async () => {
   const page = await mount(
     DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CHATGPT_SIGN_IN),
   );
   const dialog = await open(page, "Codex");
-  const plan = card(dialog, "Subscription");
-  assert.equal(plan.textContent, "SubscriptionDesktop app only");
-  assert.equal(radio(dialog, "Subscription").disabled, true);
+  const plan = card(dialog, "ChatGPT plan");
+  assert.equal(plan.textContent, "ChatGPT planDesktop app only");
+  assert.equal(radio(dialog, "ChatGPT plan").disabled, true);
   const field = labeled(card(dialog, "API key"), "OpenAI API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
   assert.deepEqual(rowState(page, "Codex"), connectedWith("Connected with an API key"));

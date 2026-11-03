@@ -77,7 +77,7 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
       {missing.agent ? (
         <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect an agent">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            Agents run on your own Claude or Codex plan.
+            Run agents on your ChatGPT or Claude plan, or an API key.
           </Text>
           <AgentAuthSection signedIn onKeys={IGNORE_KEYS} />
         </SettingsSection>

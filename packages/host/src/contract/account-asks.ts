@@ -26,32 +26,32 @@ import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
  */
 export const accountAskActsContract = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: actProcedure(
-    "Could not read your API keys on this system.",
+    "Couldn't read your API keys on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: actProcedure(
-    "Could not save your API key on this system.",
+    "Couldn't save your API key on this system.",
   )
     .input(exactInput(providerKeySaveParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: actProcedure(
-    "Could not remove your API key on this system.",
+    "Couldn't remove your API key on this system.",
   )
     .input(exactInput(providerKeyRemoveParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]: actProcedure(
-    "Could not change your plan's default on this system.",
+    "Couldn't change your plan's default on this system.",
   )
     .input(exactInput(providerKeyForAgentsParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
-    "Could not sign in with ChatGPT on this system.",
+    "Couldn't continue with ChatGPT on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(chatGptSignInAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actProcedure(
-    "Could not cancel the ChatGPT sign-in on this system.",
+    "Couldn't stop waiting for ChatGPT on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),

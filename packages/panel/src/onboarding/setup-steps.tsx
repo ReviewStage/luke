@@ -270,7 +270,7 @@ export function SetupSteps({
       <AuthPage
         mark={<ProductMark />}
         title="Connect an agent"
-        description="Agents run on your own Claude or Codex plan."
+        description="Run agents on your ChatGPT or Claude plan, or an API key."
         foot={foot(agent, true)}
       >
         <AgentAuthSection signedIn onKeys={IGNORE_KEYS} onConnected={onConnected} />
