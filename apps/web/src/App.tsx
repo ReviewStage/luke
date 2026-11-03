@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -67,7 +68,7 @@ export function App(): React.JSX.Element {
       />
       <LandingSection
         title="On every device."
-        lead="The Mac app and the web app show the same tasks and threads."
+        lead={`Use ${PRODUCT_NAME} on Mac or the web.`}
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection
