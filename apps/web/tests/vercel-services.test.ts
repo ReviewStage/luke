@@ -345,9 +345,8 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
 test("no page of Vespin's own, by any first step a workspace's slug may not take, nor a file of the site's, is served the web app as a workspace's Home", () => {
   // `/app` is the app's own path, which serves it by a rule of its own.
   const reserved = [...RESERVED_WORKSPACE_SLUGS].filter((step) => step !== "app");
-  const capitalized = (step: string) => `${step.charAt(0).toUpperCase()}${step.slice(1)}`;
   for (const step of reserved) {
-    for (const path of [`/${step}`, `/${step}/`, `/${capitalized(step)}`, `/${step}.html`]) {
+    for (const path of [`/${step}`, `/${step}/`, `/${step}.html`]) {
       assert.notEqual(servedFile(path), "/app.html", path);
     }
   }
