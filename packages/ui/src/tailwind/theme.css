@@ -1171,6 +1171,11 @@
   --text-picture-caption--line-height: 1.45;
   --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
   --spacing-picture-glyph: 0.95em;
+  /* A page drawn in written words (`page-embed.tsx`): a stand-in's height
+     until the page says how tall it is, then the page's, up to a
+     screenful, past which it scrolls inside its frame. */
+  --spacing-page-embed-stand-in: 240px; /* off-scale: a page's height before it says */
+  --spacing-page-embed: min(var(--page-embed-height), 640px); /* off-scale: a screenful's worth */
   /* Pictures written side by side (`@repo/panel`'s `transcript-pictures`):
      as many to a row as keep each wide enough for a video's bar, the rest
      wrapping under them, a row of few sharing the column's width. */

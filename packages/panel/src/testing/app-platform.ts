@@ -2,6 +2,7 @@
  * app-platform.ts -- what a test's window can do that only its shell can: a fake answering only the calls its test gives it.
  */
 
+import { pageFrameUrl } from "@repo/features/page-frame";
 import { ACT_KIND } from "@repo/host/acts";
 import { pressAct } from "../act.js";
 import type { AppPlatform } from "../app-platform.js";
@@ -11,17 +12,19 @@ import { installAppPlatform } from "../app-platform.js";
  * What a panel a test drives asks of its shell just by standing and being
  * walked through: a menu bar that sends no command, surface events that are
  * counted nowhere, static files served beside the document, as the desktop
- * serves them, and an Admin web page Admin's toolbar opens nowhere. A test
- * that reads any of them answers it itself.
+ * serves them, an Admin web page Admin's toolbar opens nowhere, and a page
+ * an agent showed framed from the service's address, as the web frames it. A
+ * test that reads any of them answers it itself.
  */
 export const QUIET_PANEL: Pick<
   AppPlatform,
-  "onMenuCommand" | "recordSurfaceEvent" | "assetBase" | "adminDashboard"
+  "onMenuCommand" | "recordSurfaceEvent" | "assetBase" | "adminDashboard" | "pageFrameUrl"
 > = {
   onMenuCommand: () => () => undefined,
   recordSurfaceEvent: () => undefined,
   assetBase: () => new URL(".", document.baseURI).href,
   adminDashboard: () => ({ open: () => undefined }),
+  pageFrameUrl,
 };
 
 /**

@@ -219,6 +219,7 @@ import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
+import { ShownPage } from "./shown-page.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
@@ -231,6 +232,7 @@ import {
   isServerCallTool,
   loadedSkill,
   sentWords,
+  shownPageVersion,
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
@@ -898,6 +900,9 @@ function TargetCallView({
   );
 }
 
+/** What a page's frame is titled for tooling where its call names no title. */
+const UNTITLED_PAGE = "Page";
+
 /**
  * What the chip of what a call made is labelled with until the window
  * holds its name: the call's own title, a page's or a thread's or a task's;
@@ -912,7 +917,10 @@ function madeLabel(target: ToolTarget, subject: string | undefined, href: string
 /**
  * A call's row, naming what the call made or is about, a page, the plan, a
  * thread, a task, or a pull request, after its verb by the chip and hover
- * card the window draws for its link anywhere, whose press alone opens it.
+ * card the window draws for its link anywhere, whose press alone opens it;
+ * and under the row of a `show_page`, the page itself at the version the
+ * call showed, live (`shown-page.tsx`), where the place holds the task or
+ * the agent the page is on.
  * Note that a call still running, one that made nothing, and one whose
  * place cannot link what it made draw any call's row through this same
  * view, so a row opened while it runs stays open as its answer lands.
@@ -931,24 +939,33 @@ function MadeCallView({
   const standsOn = useLiveDoors(doors)?.cards?.standsOn;
   const agentId = useContext(TranscriptAgent);
   const { kind, subject } = toolCallView(part);
+  const holder = mentions.holder ?? standsOn;
   const href =
     target === undefined
       ? undefined
-      : targetLink(target, {
-          workspace: mentions.place.workspace,
-          holder: mentions.holder ?? standsOn,
-          agentId,
-        });
+      : targetLink(target, { workspace: mentions.place.workspace, holder, agentId });
   const chip =
     target === undefined || href === undefined
       ? undefined
       : linkChip(href, madeLabel(target, subject, href), mentions);
+  const shown = target?.kind === TOOL_TARGET.PAGE ? shownPageVersion(part) : undefined;
+  // Note that the row stands first in one fragment whether or not a page follows it, so a row opened while its call runs stays open as the page lands.
   return (
-    <ToolCallView
-      part={part}
-      jobs={doors?.jobs}
-      made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
-    />
+    <>
+      <ToolCallView
+        part={part}
+        jobs={doors?.jobs}
+        made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
+      />
+      {shown === undefined || holder === undefined ? null : (
+        <ShownPage
+          place={holder}
+          pageId={shown.page}
+          version={shown.version}
+          title={subject === undefined || subject === "" ? UNTITLED_PAGE : subject}
+        />
+      )}
+    </>
   );
 }
 

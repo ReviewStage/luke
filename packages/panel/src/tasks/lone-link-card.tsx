@@ -20,6 +20,7 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { githubName, MentionChipCard } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
+import { ShownNewestPage } from "./shown-page.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useLinkStanding } from "./use-link-standing.js";
@@ -40,7 +41,9 @@ import { useOpenLink } from "./use-open-link.js";
  * key, state, size, opener, branches, labels, and counts, and a page's
  * the page's own card, a preview of it (`page-card.tsx`), where the window
  * holds the page, or, for a page of an agent on no task, where the agent's
- * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does. Lines
+ * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does.
+ * Where the place hands its doors, an Inbox thread, a page's row has the
+ * page itself under it, live at its newest version (`shown-page.tsx`). Lines
  * of a file are the card an Inbox code block draws (`inbox-code-card.tsx`),
  * read through the doors the place drawing the words hands
  * (`LoneLinkCards`); where it hands none, the link stays its chip. Any
@@ -246,7 +249,17 @@ export function LoneLinkCard({
       );
     }
     case LONE_LINK.PAGE:
-      return <PageRowCard page={lone} target={target} words={words} />;
+      return (
+        <>
+          <PageRowCard page={lone} target={target} words={words} />
+          {doors === undefined ? null : (
+            <ShownNewestPage
+              place={"taskId" in lone ? { taskId: lone.taskId } : { agentId: lone.agentId }}
+              pageId={lone.pageId}
+            />
+          )}
+        </>
+      );
     case LONE_LINK.CODE: {
       if (doors === undefined) return fallback;
       const { repo, path, sha, startLine, endLine } = lone;

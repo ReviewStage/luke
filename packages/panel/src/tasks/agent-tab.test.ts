@@ -856,6 +856,20 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   fakeAppBridge({});
 });
 
+test("a page shown is drawn live under its row, at the version the call showed", () => {
+  const shown = toolPart(
+    "show_page",
+    { title: "Pricing explorer", path: "pricing.html" },
+    { status: "accepted", page: { id: "page-1", version: 2 } },
+  );
+  const { container } = drawn(assistant([shown]), false, TASK_PAGE);
+  const frame = container.querySelector<HTMLIFrameElement>('iframe[title="Pricing explorer"]');
+  assert.equal(
+    frame?.getAttribute("src"),
+    pageFrameUrl({ taskId: TASK_PAGE_ID, pageId: "page-1", version: 2 }),
+  );
+});
+
 test("a call about the plan or another task hangs that task's card as its Plan tab and sidebar row do, and a task the window lists not its name as the row says it", () => {
   const cards = taskCards({
     agents: agentsControl({}),
@@ -1089,6 +1103,9 @@ test("a message from an agent the line keeps no chip of is named by the name its
 
 /** The agent whose transcript a task's page draws. */
 const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The task whose page `TASK_PAGE` is. */
+const TASK_PAGE_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 /** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {

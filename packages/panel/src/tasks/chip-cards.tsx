@@ -190,12 +190,14 @@ function placePages(place: PagePlace): Effect.Effect<readonly PageLine[] | undef
 }
 
 /** One agent's pages, read once for every card hung of it while one stands. */
-const agentPagesAtom = Atom.family((agentId: string) =>
+export const agentPagesAtom = Atom.family((agentId: string) =>
   rendererRuntime.atom(placePages({ agentId })),
 );
 
 /** One plan's pages where the window does not hold them, read once for every card hung of it while one stands. */
-const taskPagesAtom = Atom.family((taskId: string) => rendererRuntime.atom(placePages({ taskId })));
+export const taskPagesAtom = Atom.family((taskId: string) =>
+  rendererRuntime.atom(placePages({ taskId })),
+);
 
 /** A page among pages read as its card is hung; `reading` while the read is out, and `fallback` where it failed or holds no such page. */
 function ReadPageChipCard({
