@@ -101,7 +101,7 @@ function read<S extends Schema.Codec<unknown, unknown>>(
   return Result.getOrUndefined(readServiceAnswer(schema)(unparsedWire(value)));
 }
 
-test("a nod on a notice is a revision, the acknowledgement, and a key, and takes no other answer", () => {
+test("a nod on a notice is a revision, the acknowledgment, and a key, and takes no other answer", () => {
   const nod = { revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" };
   assert.deepEqual(read(inboxAcknowledgeRequestSchema, nod), nod);
   assert.equal(read(inboxAcknowledgeRequestSchema, { ...nod, reply: INBOX_REPLY.DONE }), undefined);

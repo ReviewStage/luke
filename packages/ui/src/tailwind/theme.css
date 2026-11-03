@@ -62,10 +62,6 @@
     280px,
     calc(100% - var(--document-reserve))
   ); /* off-scale: the panel's least width */
-  --spacing-side-panel-no-tabs: max(
-    var(--ui-space-16),
-    calc((100% - 300px) / 2 + var(--ui-space-16))
-  ); /* off-scale: the empty panel's 300px column */
   --spacing-half-container: 50cqi;
   --animate-card-grow-in:
     ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
@@ -114,7 +110,7 @@
   /* The panel's Inbox (`@repo/panel`'s `tasks/inbox-*.tsx`): its two columns
      and the one standing alone; the list's held height while a row leaves;
      the thread's gutter, a list row's 20px, the line through its faces, and
-     the earlier messages' line inset past it; a pick's check centred on its
+     the earlier messages' line inset past it; a pick's check centered on its
      first line; a short field's measure and an answered field's least
      height; and the column's inset
      and the attention mark's glyph a size under a row's. */
@@ -344,7 +340,7 @@
     var(--spacing-select-box) +
     var(--ui-icon-gap)
   );
-  /* How far in from a compact chip's start a box stands centred on the
+  /* How far in from a compact chip's start a box stands centered on the
      chip's mark, as a board card's box stands over its status chip. */
   --spacing-select-box-inset: calc((var(--spacing-chip-compact) - var(--spacing-select-box)) / 2);
   --grid-template-columns-tasks-list: var(--tasks-list-columns);
@@ -714,7 +710,7 @@
      workspace head, its section icons drawn from the file tree's palette
      (the panel's `base.css`), and the picker that chooses one. */
   --spacing-list-held: max(100%, var(--ui-list-held-height, 0px));
-  /* off-scale: centres a line of words on the inline tile's 14px */
+  /* off-scale: centers a line of words on the inline tile's 14px */
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
   --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
@@ -973,7 +969,7 @@
   --spacing-detail-page-inset: var(--ui-detail-page-inset);
   /* A document's title under a bar that leads with a way back (a page
      standing alone in a small window, a phone's head): a section's gap under
-     the way back itself. Note that the bar centres its controls in a row
+     the way back itself. Note that the bar centers its controls in a row
      taller than they are (`toolbar.css`), so what the row leaves under them
      is taken from the gap, or it would stack on it into an empty band
      between the way back and the title. It is read where the page stands,
@@ -1018,7 +1014,7 @@
   /* off-scale: the measure an empty place's glyph, words, and way on wrap
      at, never wider than the room. */
   --container-empty-state: min(280px, 100%);
-  /* A caption's line centred in a control-tall row, as the glyph and Retry
+  /* A caption's line centered in a control-tall row, as the glyph and Retry
      beside it are: an error state's words, a failure note's beside Retry. */
   --spacing-state-row-inset: calc((var(--ui-control-height) - var(--ui-type-caption-leading)) / 2);
   /* A failure note's first row with no press in it: one caption's line. */
@@ -1071,7 +1067,7 @@
      page's version steps, a control's gap less its own edge; a changed
      image's side, two to a row where they fit; a snippet's height before it
      is drawn, from its rows; a file's status letter's tint of its own ink;
-     and the app's own colour, which its name is said in. */
+     and the app's own color, which its name is said in. */
   --spacing-file-tree: min(
     var(--file-tree-width, 264px),
     40%
@@ -1102,7 +1098,7 @@
   --spacing-review-badge: 10px; /* off-scale: a standing's disc at a face's corner */
   /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
      words' field growing from a few lines' height; a branch's chip at its
-     widest; a label's dot in its GitHub colour (`--label-dot`); a line
+     widest; a label's dot in its GitHub color (`--label-dot`); a line
      comment's measure; a boxed entry's inset, its hairline counted
      (`--boxed-inset`); a check's glyph and a deployment's door; and the
      annotation card's measure and columns, which its sheet sets
@@ -1123,7 +1119,7 @@
   --spacing-annotation-gap: var(--annotation-gap);
   --spacing-annotation-more: calc(var(--annotation-face) + var(--annotation-gap));
   --grid-template-columns-annotation-comment: var(--annotation-face) minmax(0, 1fr);
-  /* A file's type icon in Pierre's colour for its type, in the palette the
+  /* A file's type icon in Pierre's color for its type, in the palette the
      panel's base.css repeats from it (`file-type-icon.tsx`). */
   --color-file-icon-gray: var(--file-icon-gray);
   --color-file-icon-red: var(--file-icon-red);
@@ -1139,7 +1135,7 @@
   --color-file-icon-pink: var(--file-icon-pink);
   --color-file-icon-mauve: var(--file-icon-mauve);
   /* A file opened over the window (`attachment-viewer.tsx`): a text file's
-     reading width, centred in the card, never wider than the room the card
+     reading width, centered in the card, never wider than the room the card
      leaves it. */
   --spacing-viewer-text: min(880px, 100%); /* off-scale: a text file's reading width */
   /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
@@ -1149,7 +1145,7 @@
   --spacing-shells-pane: min(208px, 40%); /* off-scale: the shells' list's width */
   /* The composer's popovers: the servers' list at most as tall as the window
      leaves above the composer, a page's head at a pane bar's height, a 12px
-     glyph, and the context's parts in the chart's colours. */
+     glyph, and the context's parts in the chart's colors. */
   --spacing-servers-list: clamp(
     160px,
     var(--ui-stage-height) -

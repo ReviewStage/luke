@@ -287,6 +287,14 @@ export const CodexConfigSchema = Schema.Struct({
    * API key alone asks for; the plan's launch runs none.
    */
   fast: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Whether the agent runs its model's Ultrafast version: Codex's
+   * `ultrafast` service tier, which a launch on an OpenAI API key alone asks
+   * for, over `fast`. The service sends `fast` beside it, so a runner from
+   * before this key, a Mac's or a host's among them, runs the fast tier
+   * rather than the standard one.
+   */
+  ultrafast: Schema.optionalKey(Schema.Boolean),
   /** Our coder instructions, as the thread's `developer_instructions`. */
   developerInstructions: Schema.String,
   threadId: Schema.optionalKey(Schema.String),
@@ -378,14 +386,16 @@ const StopLineSchema = Schema.Struct({
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
  * take is skipped. `fast` turns Claude Code's own fast mode on or off, and
- * Codex's `fast` service tier on an API key from its next turn; Codex on the
- * plan skips it.
+ * Codex's `fast` service tier on an API key from its next turn, and
+ * `ultrafast` Codex's `ultrafast` tier over it, absent where off; Codex on
+ * the plan skips both, and Claude Code `ultrafast`.
  */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),
   model: Schema.optionalKey(Schema.String),
   effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
   fast: Schema.optionalKey(Schema.Boolean),
+  ultrafast: Schema.optionalKey(Schema.Boolean),
 });
 
 /**

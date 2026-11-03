@@ -641,7 +641,7 @@ function typeInto(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** The field labelled `label`. */
+/** The field labeled `label`. */
 function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
   return page.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
 }
@@ -775,7 +775,7 @@ test("the Integrations page's search is cleared when another page is turned to",
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });
 
-test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centred, with no Back and Forward, and the way out leaves as Back did", () => {
+test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centered, with no Back and Forward, and the way out leaves as Back did", () => {
   let exits = 0;
   const page = mount(
     createElement(SettingsHarness, {

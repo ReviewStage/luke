@@ -1,7 +1,7 @@
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import { land } from "@repo/ui/landed";
 import { createContext, useContext, useEffect, useRef } from "react";
-import { centreWithin, scrollerOf } from "../scroll-within.js";
+import { centerWithin, scrollerOf } from "../scroll-within.js";
 
 /**
  * message-links.tsx -- a message's own link: whose transcript a message is of, so its Copy link can name it, and the ask to bring a linked message into view.
@@ -127,7 +127,7 @@ export function useMessageReveal(input: {
       answered.current = asked.ask;
       const scroller = scrollerOf(element);
       if (scroller !== undefined) {
-        centreWithin(scroller, element);
+        centerWithin(scroller, element);
         scroller.dispatchEvent(new Event("scroll"));
       }
       land(element);

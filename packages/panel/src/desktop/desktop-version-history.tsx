@@ -54,7 +54,7 @@ import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
-import { centreWithin } from "../scroll-within.js";
+import { centerWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type ChangedSection,
@@ -574,7 +574,7 @@ function useOpenedRowShown(
     shown.current = true;
     const box = log.current.getBoundingClientRect();
     const line = row.getBoundingClientRect();
-    if (line.top < box.top || line.bottom > box.bottom) centreWithin(log.current, row);
+    if (line.top < box.top || line.bottom > box.bottom) centerWithin(log.current, row);
   }, [selected, rows, log]);
 }
 
@@ -650,7 +650,7 @@ function VersionPage({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_READ)}
             onRetry={versions.onRetry}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             The history could not be read.
           </ErrorState>

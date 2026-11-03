@@ -4,37 +4,57 @@ import { defineRule } from "@oxlint/plugins";
 import { repositoryPathOf } from "../shared/effect-edges.ts";
 import {
   FOLLOW_OPENERS,
-  isFollowKind,
-  isWatchedPanelSource,
-  UNMIGRATED_FOLLOWS,
+  isReadKind,
+  isWatchedSource,
+  UNMIGRATED_READS,
 } from "../shared/host-read-guard.ts";
 
 /**
  * Server data reaches a surface only through `useHostRead`
  * (`packages/panel/src/use-host-read.ts`), over the app-state slice the host
- * fills for each read. Outside that module, panel code opens no follow of
- * its own: no call of `streamFrom` or `followStream`, and no act of a follow
- * kind, handed to a call or read off the act port, nor of a one-shot read
- * whose rows a host read already carries. The files not yet moved
- * are named in `follows-unmigrated.json` with the migration step that moves
- * each, and one that opens none fails, so the list only shrinks.
+ * fills for each read. Outside that module, the panel's and the design
+ * system's code reads none of its own: no call of `streamFrom` or
+ * `followStream`, no act kind `@repo/host`'s `PORT_ACT_USE` declares a READ,
+ * however it is spelled, but as a fixture's answer or a comparison, and no
+ * poll of a promise. The files not yet moved are named in
+ * `reads-unmigrated.json` with the children that move each, and one that
+ * reads nothing fails, so the list only shrinks.
  */
 
-/** The follow kind a member expression names, where it names one: `ACT_KIND.AUTOMATIONS_FOLLOW`. */
-function followKindNamed(node: ESTree.MemberExpression): string | undefined {
+/** The Effect and Stream members that run an effect again and again: a poll, where what they run is a promise. */
+const REPEATERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["Effect", new Set(["forever", "repeat"])],
+  ["Stream", new Set(["fromEffectSchedule"])],
+]);
+
+/** The Effect members that run a promise, such as an act sent on the port. */
+const PROMISE_RUNNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["Effect", new Set(["tryPromise", "promise"])],
+]);
+
+/** The object and member a member expression spells, as `ACT_KIND.TASKS_COMMENTS` or `Effect.forever`, where it spells both by name. */
+function memberNamed(
+  node: ESTree.MemberExpression,
+): { readonly object: string; readonly name: string } | undefined {
   const { object, property } = node;
   if (node.computed || object.type !== "Identifier" || property.type !== "Identifier") {
     return undefined;
   }
-  if (!object.name.endsWith("ACT_KIND")) return undefined;
-  return isFollowKind(property.name) ? property.name : undefined;
+  return { object: object.name, name: property.name };
 }
 
-/** Whether a follow kind stands where it opens a follow: handed to a call, or read off the act port by it. */
-function opensFollow(node: ESTree.MemberExpression): boolean {
+/**
+ * Whether a read kind stands where it reads nothing: an object literal's
+ * computed key, as a fixture answers a kind, or one side of `===` or `!==`,
+ * as a fixture tells which kind it was asked. Anywhere else, a call's
+ * argument, the port's member, or a local it is kept in, it reads.
+ */
+function answersRead(node: ESTree.MemberExpression): boolean {
   const parent = (node as { parent?: ESTree.Node }).parent;
-  if (parent?.type === "CallExpression") return parent.arguments.includes(node);
-  return parent?.type === "MemberExpression" && parent.computed && parent.property === node;
+  if (parent?.type === "Property") return parent.computed && parent.key === node;
+  return (
+    parent?.type === "BinaryExpression" && (parent.operator === "===" || parent.operator === "!==")
+  );
 }
 
 export const noFollowOutsideHostReadRule = defineRule({
@@ -42,44 +62,63 @@ export const noFollowOutsideHostReadRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow opening a follow, or a read a host read replaces, outside useHostRead; the files not yet moved are named with their migration step.",
+        "Disallow reading data a surface shows outside useHostRead; the files not yet moved are named with the children that move them.",
     },
     messages: {
-      newFollow:
+      newRead:
         "`{{what}}` reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) over the app-state slice the host fills for the read (`@repo/host`'s `live-collection.ts`).",
+      newPoll:
+        "`{{what}}` polls a promise, which reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`), which the host keeps current, rather than asking again on a timer.",
       staleListed:
-        "This file is named in `tools/anti-slop/follows-unmigrated.json` but reads nothing outside `useHostRead`. Delete its row.",
+        "This file is named in `tools/anti-slop/reads-unmigrated.json` but reads nothing outside `useHostRead`. Delete its row.",
     },
   },
   createOnce(context) {
-    let follows: { node: ESTree.Node; what: string }[] = [];
+    let reads: { node: ESTree.Node; what: string }[] = [];
+    let repeats: { node: ESTree.Node; what: string }[] = [];
+    let runsPromise = false;
     let listed = false;
 
     return {
       before() {
         const file = repositoryPathOf(context.filename);
-        if (!isWatchedPanelSource(file)) return false;
-        follows = [];
-        listed = UNMIGRATED_FOLLOWS[file] !== undefined;
+        if (!isWatchedSource(file)) return false;
+        reads = [];
+        repeats = [];
+        runsPromise = false;
+        listed = UNMIGRATED_READS[file] !== undefined;
         return true;
       },
       CallExpression(node) {
         const { callee } = node;
         if (callee.type === "Identifier" && FOLLOW_OPENERS.has(callee.name)) {
-          follows.push({ node, what: callee.name });
+          reads.push({ node, what: callee.name });
         }
       },
       MemberExpression(node) {
-        const kind = followKindNamed(node);
-        if (kind !== undefined && opensFollow(node)) follows.push({ node, what: kind });
+        const named = memberNamed(node);
+        if (named === undefined) return;
+        const { object, name } = named;
+        if (object.endsWith("ACT_KIND") && isReadKind(name) && !answersRead(node)) {
+          reads.push({ node, what: name });
+        }
+        if (REPEATERS.get(object)?.has(name)) repeats.push({ node, what: `${object}.${name}` });
+        if (PROMISE_RUNNERS.get(object)?.has(name)) runsPromise = true;
       },
       "Program:exit"(program) {
+        // Note that a repeat counts only beside a promise, because a clock's tick repeats too.
+        const polls = runsPromise ? repeats : [];
         if (listed) {
-          if (follows.length === 0) context.report({ node: program, messageId: "staleListed" });
+          if (reads.length === 0 && polls.length === 0) {
+            context.report({ node: program, messageId: "staleListed" });
+          }
           return;
         }
-        for (const { node, what } of follows) {
-          context.report({ node, messageId: "newFollow", data: { what } });
+        for (const { node, what } of reads) {
+          context.report({ node, messageId: "newRead", data: { what } });
+        }
+        for (const { node, what } of polls) {
+          context.report({ node, messageId: "newPoll", data: { what } });
         }
       },
     };

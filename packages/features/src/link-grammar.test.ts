@@ -103,6 +103,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/agent/${AGENT}/page/${OTHER}`,
   ],
   [{ kind: LINK_PLACE.INBOX }, `${HOME}/inbox`],
+  [{ kind: LINK_PLACE.INBOX, planId: TASK }, `${HOME}/inbox/task/${TASK}`],
   [
     { kind: LINK_PLACE.INBOX_ITEM, planId: TASK, itemId: OTHER },
     `${HOME}/task/${TASK}/inbox/${OTHER}`,
@@ -215,6 +216,10 @@ test("a task's places written under /plan/, as every link before /task/ was, are
   assert.deepEqual(readLink(`${HOME}/plan/${TASK}/version/3`), {
     workspace: "acme",
     place: { kind: LINK_PLACE.VERSION, planId: TASK, revision: 3 },
+  });
+  assert.deepEqual(readLink(`${HOME}/inbox/plan/${TASK}`), {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.INBOX, planId: TASK },
   });
 });
 

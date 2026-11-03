@@ -154,7 +154,7 @@ export const PULL_REQUEST_DEFAULT_MOMENTS: readonly PullRequestMoment[] =
   Object.values(PULL_REQUEST_MOMENT);
 
 /**
- * An event of the automation's repositories. `labels` keeps a labelled
+ * An event of the automation's repositories. `labels` keeps a labeled
  * event to those labels and `branches` an event to those branches (a pull
  * request's base, a push's or a check's branch); an empty or absent list
  * keeps nothing out. `senders` says whose events fire it, people's alone

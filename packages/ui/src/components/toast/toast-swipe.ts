@@ -138,7 +138,7 @@ export function useToastSwipe(onAway: (() => void) | undefined): ToastSwipe {
       if (held === undefined || held.pointer !== event.pointerId || toast === null) return;
       const dx = event.clientX - held.x;
       if (!held.dragging) {
-        // Note that a press travelling up or down first is no swipe, and lets go of the toast.
+        // Note that a press traveling up or down first is no swipe, and lets go of the toast.
         if (Math.abs(dx) < SWIPE_SLOP && Math.abs(event.clientY - held.y) < SWIPE_SLOP) return;
         if (Math.abs(dx) < Math.abs(event.clientY - held.y)) {
           press.current = undefined;

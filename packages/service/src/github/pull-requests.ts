@@ -106,7 +106,7 @@ export interface GitHubPullRequest {
   /** The branch it merges into, and that branch's head as GitHub last counted it, where GitHub named them. */
   readonly baseRef?: string;
   readonly baseSha?: string;
-  /** Its labels, each by its name and its colour as GitHub's six hex digits. */
+  /** Its labels, each by its name and its color as GitHub's six hex digits. */
   readonly labels?: readonly GitHubLabel[];
   /** How many comments it holds, on its conversation and its diff together, where GitHub counted them. */
   readonly comments?: number;
@@ -116,7 +116,7 @@ export interface GitHubPullRequest {
   readonly body?: string;
 }
 
-/** A label as GitHub names it: its name and its colour, six hex digits with no `#`. */
+/** A label as GitHub names it: its name and its color, six hex digits with no `#`. */
 interface GitHubLabel {
   readonly name: string;
   readonly color: string;

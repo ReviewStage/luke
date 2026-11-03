@@ -109,7 +109,7 @@ function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.
     const dismiss = (event: KeyboardEvent) => {
       if (event.key === "Escape") setAnchor(undefined);
     };
-    // Note that focus and keys are heard at the document, because the card is portalled outside the control.
+    // Note that focus and keys are heard at the document, because the card is portaled outside the control.
     document.addEventListener("pointermove", follow);
     document.addEventListener("focusout", refocus);
     document.addEventListener("keydown", dismiss);
@@ -190,7 +190,7 @@ function HoverCards(): React.JSX.Element {
                 <HoverCardRow
                   look={HOVER_CARD_ROW_LOOK.DETAIL}
                   glyph={<FolderIcon />}
-                  label="an-organisation-with-a-long-name/a-repository-named-at-length"
+                  label="an-organization-with-a-long-name/a-repository-named-at-length"
                 />
               </HoverCard>
             }

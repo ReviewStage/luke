@@ -2,12 +2,12 @@ import { ISSUE_STATE, type IssueState } from "@repo/features/github-repositories
 import { CircleCheckIcon, CircleDotIcon, CircleSlashIcon } from "lucide-react";
 
 /**
- * issue-mark.tsx -- a GitHub issue's mark: GitHub's glyph for where it stands, in GitHub's colour for it.
+ * issue-mark.tsx -- a GitHub issue's mark: GitHub's glyph for where it stands, in GitHub's color for it.
  *
  * A link to an issue wears it on its chip, as a link to a pull request
  * wears `pull-request-mark.tsx`'s: open in the success green, closed as done
  * in the merged purple GitHub closes one in, and closed as not planned in
- * the muted ink. The colour is the stylesheet's, keyed on
+ * the muted ink. The color is the stylesheet's, keyed on
  * `data-issue-state` (`planning.css`).
  */
 
@@ -25,7 +25,7 @@ const ISSUE_MARK_WORDS = {
   [ISSUE_STATE.NOT_PLANNED]: "not planned",
 } as const satisfies Record<IssueState, string>;
 
-/** An issue's mark: its glyph for where it stands, coloured for it, and named for a reader who cannot see it. */
+/** An issue's mark: its glyph for where it stands, colored for it, and named for a reader who cannot see it. */
 export function IssueMark({
   issue,
 }: {

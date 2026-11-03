@@ -534,7 +534,7 @@ function AutomationsHead({
   const workspace = tasks.workspace;
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   return room === SHELL_ROOM.NARROW ? (
-    // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centred, and a ⋯.
+    // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centered, and a ⋯.
     <PhoneHead
       place="automations"
       start={
@@ -627,7 +627,7 @@ function ListPage({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
             onRetry={tasks.onRetryWorkspaces}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             {WORKSPACES_UNREAD_LINE}
           </ErrorState>
@@ -635,7 +635,7 @@ function ListPage({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_READ)}
             onRetry={reload}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             {UNREAD_LINE}
           </ErrorState>
@@ -774,7 +774,7 @@ function RunsPage({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
             onRetry={tasks.onRetryWorkspaces}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             {WORKSPACES_UNREAD_LINE}
           </ErrorState>
@@ -782,7 +782,7 @@ function RunsPage({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ)}
             onRetry={reload}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             {RUNS_UNREAD_LINE}
           </ErrorState>
@@ -864,7 +864,7 @@ function UnreadPage({
       <ErrorState
         failure={unreadShown(FAILURE_SURFACE.AUTOMATION_READ)}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {line}
       </ErrorState>

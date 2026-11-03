@@ -99,7 +99,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     operator,
     windows,
     notices,
-    colourCode,
+    colorCode,
     run,
     services: effectServices,
   } = services;
@@ -219,7 +219,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
-          colourCode,
+          colorCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
         },

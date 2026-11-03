@@ -209,7 +209,7 @@ ends in `serverPanic("Unknown sorted set encoding")`. Compile-time facts use
   every mutation. The running system can be asked what it holds, as
   Redis's `DEBUG` command allows.
 
-### Test behaviour as sentences, structure beside the code
+### Test behavior as sentences, structure beside the code
 
 Redis tests are black-box Tcl blocks against a live server, one per
 command per scenario, named as a sentence: `INCR against non existing key`,

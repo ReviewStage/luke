@@ -27,7 +27,7 @@ import { useMemberDirectory } from "../member-directory.js";
  * themself on GitHub, a person's circle or an App's bot's square, by their
  * avatar and a card saying so, our own App's bot among them. A
  * reviewer's face wears where they stand at its corner, a disc in GitHub's
- * own colours with its glyph cut from it: approved a green check, changes
+ * own colors with its glyph cut from it: approved a green check, changes
  * asked for a red cross, a review asked for and not given an amber dot, and
  * a comment or a dismissed review quiet. Every name and word here is
  * the repository's, so the places drawing them are left out of the screen
@@ -55,7 +55,7 @@ const REVIEW_GLYPHS = {
 
 /**
  * The glyph a face's standing wears at its corner, cut from a disc of its
- * colour: a check or a cross a face's corner holds legibly, where the
+ * color: a check or a cross a face's corner holds legibly, where the
  * standing's own glyph beside its words would blur; a review asked for and
  * not given wears the disc alone, as GitHub's waiting dot.
  */
@@ -74,7 +74,7 @@ export function useNamer(): (person: GitHubPerson) => Actor {
 }
 
 /**
- * A reviewer's standing in GitHub's colours, its glyph's ink and its disc's
+ * A reviewer's standing in GitHub's colors, its glyph's ink and its disc's
  * ground: approved green, changes asked for red, a review asked for amber, a
  * comment or a dismissal quiet.
  */
@@ -86,7 +86,7 @@ const REVIEW_TONE = {
   [REVIEW_STATE.DISMISSED]: { ink: "text-muted-foreground", disc: "bg-muted-foreground" },
 } as const satisfies Record<ReviewState, { ink: string; disc: string }>;
 
-/** A reviewer's standing beside the words for it, its glyph in its colour; a GitHub line's card wears it alone in its icon's seat (`line-cards.tsx`). */
+/** A reviewer's standing beside the words for it, its glyph in its color; a GitHub line's card wears it alone in its icon's seat (`line-cards.tsx`). */
 export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
@@ -99,8 +99,8 @@ export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Elemen
 }
 
 /**
- * A reviewer's standing at their face's corner: a disc of its colour, its
- * glyph cut from it in the ground's colour, so a check reads apart from a
+ * A reviewer's standing at their face's corner: a disc of its color, its
+ * glyph cut from it in the ground's color, so a check reads apart from a
  * cross at a face's size; a review asked for is the disc alone, smaller, as
  * GitHub's waiting dot. The badge's own ground rings it off the face.
  */
@@ -120,7 +120,7 @@ function PersonRef({ person }: { person: GitHubPerson }): React.JSX.Element {
   return <ActorRef actor={useNamer()(person)} />;
 }
 
-/** Where a review left its reviewer, its glyph in its colour beside the words for it. */
+/** Where a review left its reviewer, its glyph in its color beside the words for it. */
 export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span

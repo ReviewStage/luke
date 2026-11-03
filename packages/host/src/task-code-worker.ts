@@ -1,11 +1,11 @@
 /**
- * task-code-worker.ts -- the colouring process's side of `task-code-remote.ts`: each block it is sent coloured in turn and answered under its id.
+ * task-code-worker.ts -- the coloring process's side of `task-code-remote.ts`: each block it is sent colored in turn and answered under its id.
  *
- * The desktop's colouring process (`apps/desktop/src/utility/task-code.ts`)
+ * The desktop's coloring process (`apps/desktop/src/utility/task-code.ts`)
  * runs this over its parent port, and so does a test over a Node child's
  * IPC channel; neither is named here. The highlighter is built in this
  * process the first time a block arrives, and a block that cannot be
- * coloured is answered plain, so the asking side always hears back.
+ * colored is answered plain, so the asking side always hears back.
  */
 import { catchAllButInterrupt } from "@repo/runtime/effect";
 import { Effect, Option, Queue, Schema } from "effect";
@@ -17,18 +17,18 @@ import {
   taskCodeRequestSchema,
 } from "./task-code-remote.js";
 
-/** The port the colouring process is asked over: what it is sent, and where it answers. */
+/** The port the coloring process is asked over: what it is sent, and where it answers. */
 export interface TaskCodeParentPort {
   readonly onMessage: (listener: (message: unknown) => void) => void;
   readonly postMessage: (message: unknown) => void;
 }
 
-/** One block coloured and answered, plain where colouring it failed. */
+/** One block colored and answered, plain where coloring it failed. */
 function answerRequest(port: TaskCodeParentPort, request: TaskCodeRequest): Effect.Effect<void> {
   return Effect.map(
     catchAllButInterrupt(highlightSnippet(request.language, request.code), (cause) =>
       Effect.as(
-        Effect.logWarning("Code is drawn plain: it could not be coloured", cause),
+        Effect.logWarning("Code is drawn plain: it could not be colored", cause),
         plainCodeLines(request.code),
       ),
     ),
@@ -50,7 +50,7 @@ export function serveTaskCode(port: TaskCodeParentPort): Effect.Effect<never> {
     return yield* Effect.forever(
       Effect.flatMap(Queue.take(sent), (message) =>
         Option.match(Schema.decodeUnknownOption(taskCodeRequestSchema)(message), {
-          onNone: () => Effect.logWarning("The colouring process was sent what is not a block"),
+          onNone: () => Effect.logWarning("The coloring process was sent what is not a block"),
           onSome: (request) => answerRequest(port, request),
         }),
       ),

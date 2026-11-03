@@ -122,7 +122,7 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
         const { agent, sessionId } = yield* openStarted();
 
         yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(eve)));
-        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 1_000, "Stopping.").pipe(
+        yield* endedAt(agent, RUN_STATUS.CANCELED, T0 + 1_000, "Stopping.").pipe(
           Effect.provide(reporting(eve)),
         );
 

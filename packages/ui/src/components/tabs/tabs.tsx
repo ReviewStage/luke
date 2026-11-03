@@ -96,6 +96,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 const TAB = '[role="tab"]';
 
+/** An anchored tab's pill (`Tab`'s `anchored`). */
+const ANCHORED = '[data-anchored="true"]';
+
 /*
  * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
  * draw theirs: each box's layout, type, and the inks no state changes. Note
@@ -119,7 +122,7 @@ const PILL = "ui-tab flex items-center rounded-control text-label font-label";
 const TAB_BUTTON =
   "ui-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
 
-/** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
+/** A mark at the pill's end, the × or a failed run's, centered on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
   "absolute top-1/2 right-(--ui-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--ui-duration-hover) ease-motion-exit";
 
@@ -228,7 +231,7 @@ function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
  * pill in its own place. Note that the place is read off the tab before it,
  * because the chosen tab is pinned at the strip's edges (tabs.css) and
  * reads where it is stuck rather than where it stands; the strip's scroll
- * behaviour, whether it glides, is the stylesheet's, and a pane sliding in
+ * behavior, whether it glides, is the stylesheet's, and a pane sliding in
  * is never scrolled with it. A strip just drawn is put there at once, as a
  * page opens already scrolled.
  */
@@ -275,9 +278,10 @@ export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
-/** The strip's tabs that move, in order. */
+/** The strip's tabs that move, in order: every one but an anchored tab, which leads the strip where it stands. */
 function movableTabs(strip: HTMLElement | null): HTMLElement[] {
-  return [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+  const tabs = [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+  return tabs.filter((tab) => tab.closest(ANCHORED) === null);
 }
 
 /**
@@ -429,7 +433,7 @@ export function Tabs({
 /**
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `detail`, while given, follows the label in the
- * muted secondary colour, parted from it by a space and no mark, as a
+ * muted secondary color, parted from it by a space and no mark, as a
  * model's effort follows its name, or in the needs-you tone
  * (`STATUS_TONE.ATTENTION`, `detailTone`) where it counts what waits on the
  * reader, as a NavItem's count does. `endMark`, while given, stands at the
@@ -466,6 +470,7 @@ export function Tab({
   editor,
   tabRef,
   preview = false,
+  anchored = false,
   onSelect,
   onKeep,
   onClose,
@@ -496,6 +501,8 @@ export function Tab({
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
   /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
   preview?: boolean;
+  /** Leads its strip and never moves: counted among no moves, dragged by none, and dropped before by none, as a task's Overview. */
+  anchored?: boolean;
   onSelect: () => void;
   /** Keeps a preview as a tab of its own, as a double-click on it asks. */
   onKeep?: (() => void) | undefined;
@@ -594,6 +601,7 @@ export function Tab({
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
       data-preview={String(preview)}
+      data-anchored={String(anchored)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
     >

@@ -687,7 +687,7 @@ function movePinned(
 
 /**
  * Pins a plan's or an agent's row carried into Pinned at `at` among the
- * rows it draws: pinned now, and given a place there, as its neighbours are
+ * rows it draws: pinned now, and given a place there, as its neighbors are
  * where they need one, wherever it lands, on top included
  * (`pinPositionsForInsert`).
  */

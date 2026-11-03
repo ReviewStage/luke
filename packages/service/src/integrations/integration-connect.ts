@@ -367,7 +367,7 @@ export const revokeIntegrationGrant = /* @__PURE__ */ Effect.fn("web/revokeInteg
  * deleting the account asks once its rows are gone: the first account's at
  * every provider this deployment names a connector for, under the
  * account's own user id, whether or not a row still named it, because a
- * sign-in cancelled after Connect took its grant, or a Disconnect whose
+ * sign-in canceled after Connect took its grant, or a Disconnect whose
  * revoke failed, leaves a grant no row names; and every other account's
  * the rows named, under its own subject. Each is asked on the terms of
  * `revokeIntegrationGrant`, so none can fail it.

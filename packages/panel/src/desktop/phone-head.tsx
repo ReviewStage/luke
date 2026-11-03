@@ -21,14 +21,14 @@ import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./ac
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
- * phone-head.tsx -- a phone's page header: one control in each corner and the page's title centred between them.
+ * phone-head.tsx -- a phone's page header: one control in each corner and the page's title centered between them.
  *
  * A narrow room, a phone's, heads a task and each of its places, the Inbox
  * and the Tasks page, the one standard way: the way back, or the one
  * thing the page is for, such as New task, in the start corner; one ⋯ in the
  * end corner holding everything else the page offers; and the title of what
  * is on screen between them. The corners are one control wide each, so the
- * title's centre is the row's, and it truncates between them (`Toolbar`'s
+ * title's center is the row's, and it truncates between them (`Toolbar`'s
  * phone look). A corner's control draws its glyph alone, named still, so a
  * way back (`BackButton`) is its back glyph, hinted "Back to {place}".
  *
@@ -80,9 +80,9 @@ export interface PhoneHeadSlots {
   place: string;
   /** The start corner's one control. */
   start: React.ReactNode;
-  /** What is on screen, centred, or what stands in its place, such as a search's field; none where the page's own header names it, the row then picking that name up (`pickUp`). */
+  /** What is on screen, centered, or what stands in its place, such as a search's field; none where the page's own header names it, the row then picking that name up (`pickUp`). */
   title?: React.ReactNode;
-  /** A document's name, centred once its header has scrolled away; read only where there is no `title`. */
+  /** A document's name, centered once its header has scrolled away; read only where there is no `title`. */
   pickUp?: ToolbarPickUp | undefined;
   /** What names the page's state, after the title on its baseline (an experiment's mark). */
   tag?: React.ReactNode;

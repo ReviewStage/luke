@@ -22,7 +22,7 @@ import { clsx } from "clsx";
  *   `secondary`, `destructive`, `outline`, `ghost`, and `link`: a tone is
  *   said in the badge's glyph's ink, and a neutral badge's words are muted.
  * - `face` is added: the chip's own opaque face inside its hairline
- *   (`plain`), a provider's colour (`filled`, from the custom properties the
+ *   (`plain`), a provider's color (`filled`, from the custom properties the
  *   badge sets inline), or the ink (`lit`).
  * - `dot` is added: a dot of the tone's ink before the words, for a badge in
  *   a tone with no glyph or swatch to say it.

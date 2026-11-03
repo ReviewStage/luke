@@ -17,7 +17,7 @@ import {
  * as a document editor marks a selected block. The document is one Tab
  * stop, at the block its owner names the entry; ↑ and ↓ step to the block
  * before or after, across every block on the page; Return opens the block,
- * and a press on its own words does. A block is a labelled group rather
+ * and a press on its own words does. A block is a labeled group rather
  * than a button, so a screen reader still reads the words inside it. A
  * scrolling code block inside it is taken out of the Tab order, because
  * Chrome makes a scrolling `<pre>` a Tab stop of its own inside the

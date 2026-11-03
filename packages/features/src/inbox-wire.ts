@@ -225,7 +225,7 @@ export const INBOX_RESPONSE = {
   TODO: "task",
   /** Typed fields the developer fills in. */
   FORM: "form",
-  /** Nothing but an acknowledgement: something the developer should know. */
+  /** Nothing but an acknowledgment: something the developer should know. */
   NONE: "none",
 } as const;
 
@@ -484,7 +484,7 @@ function keptRecommendation(choice: Recommending): {
  * What an item asks of the developer, one of six: a choice among options,
  * several where `multiple`, the labels it recommends named; an approval; words,
  * with what the box says while empty; a task; a form of fields, each select
- * naming the option it recommends; or nothing but an acknowledgement.
+ * naming the option it recommends; or nothing but an acknowledgment.
  */
 const inboxResponseSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -743,7 +743,7 @@ export type InboxAnswers = typeof inboxAnswersSchema.Type;
 /**
  * One file the developer's answer carried, as an item names it: the
  * attachment the service keeps it as, which the desktop fetches under the
- * account, its own name, and the media type it travelled as. Note that the
+ * account, its own name, and the media type it traveled as. Note that the
  * type is read as words rather than one of the types a message carries,
  * because a newer service that takes one more type must not leave a
  * desktop behind it unable to read the whole inbox.
@@ -1500,7 +1500,7 @@ export function inboxAnswersRefusal(
  * a pick as a pick, Approve and Decline as a pick of that option, Done as
  * Mark done with every step ticked, since an older desktop shows none to
  * tick, and the rest as they are. The note becomes the answering message's
- * words. An acknowledgement answers no ask, since an item that asks nothing
+ * words. An acknowledgment answers no ask, since an item that asks nothing
  * has none. Note that the answer is not checked here: `inboxAnswersRefusal`
  * reads it against the ask.
  */

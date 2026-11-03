@@ -1,4 +1,5 @@
 import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { LIVE_SOCKET } from "@repo/features/live-wire";
 import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { WORKSPACE_MCP_FUNCTION, WORKSPACE_MCP_PATH } from "@repo/service/agents/workspace-mcp/app";
 import {
@@ -16,8 +17,9 @@ import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the terminal relay and the Browser
- * tab's live view, carry the platform's longest generally available duration.
+ * may run, so the WebSocket functions, the terminal relay, the Browser tab's
+ * live view, and the live reads' socket, carry the platform's longest
+ * generally available duration.
  */
 const WEBSOCKET_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -103,10 +105,12 @@ const GROUPS: readonly GroupDefinition[] = [
   { file: FUNCTION_GROUP.PAGE_SANDBOX, routes: [routeKeyOf(PAGE_LINK_ROUTE.PATH)] },
 ];
 
-/** The WebSocket services, each a function of its own: the terminal relay and the Browser tab's live view. */
-const STANDALONE_ROUTES: readonly string[] = [TERMINAL_RELAY.PATH, BROWSER_LIVE.PATH].map(
-  routeKeyOf,
-);
+/** The WebSocket services, each a function of its own: the terminal relay, the Browser tab's live view, and the live reads' socket. */
+const STANDALONE_ROUTES: readonly string[] = [
+  TERMINAL_RELAY.PATH,
+  BROWSER_LIVE.PATH,
+  LIVE_SOCKET.PATH,
+].map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:

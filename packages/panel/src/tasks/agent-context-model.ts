@@ -87,7 +87,7 @@ export function contextLevel(context: AgentContext): ContextLevel {
   return CONTEXT_LEVEL.ROOM;
 }
 
-/** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not colour alone. */
+/** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not color alone. */
 export function contextHint(context: AgentContext): string {
   const used = `${contextPercent(context)}% of context used`;
   return contextLevel(context) === CONTEXT_LEVEL.ROOM ? used : `${used}, near the limit`;

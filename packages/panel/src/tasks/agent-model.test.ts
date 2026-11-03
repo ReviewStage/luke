@@ -12,7 +12,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { FAILURE_REASON, remedyLabel } from "@repo/features/failure-remedy";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { TASK_MODE } from "@repo/features/task-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
@@ -294,7 +294,7 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its colour", () => {
+test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its color", () => {
   assert.deepEqual(
     Object.values(PULL_REQUEST_STATE).map((state) => pullRequestStateWord({ state })),
     [undefined, "Draft", "Merged", "Closed"],
@@ -307,7 +307,7 @@ test("the row says where the pull request stands only once it is a draft, merged
   );
 });
 
-test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
+test("a fast or Ultrafast version is folded into its base model by its id, read back as the base at that speed, and named in the choice line", () => {
   const model = (id: string, name: string) => ({
     id,
     name,
@@ -320,36 +320,61 @@ test("a fast version is folded into its base model by its id, read back as the b
     model("anthropic/claude-fable-5", "Claude Fable 5"),
     // A suffixed id with no base beside it is a model of its own.
     model("anthropic/claude-haiku-4-fast", "Claude Haiku 4 (Fast)"),
+    { ...model("openai/gpt-6.1-sol", "GPT-6.1 Sol"), provider: MODEL_PROVIDER.OPENAI },
+    {
+      ...model("openai/gpt-6.1-sol-ultrafast", "GPT-6.1 Sol (Ultrafast)"),
+      provider: MODEL_PROVIDER.OPENAI,
+    },
+    { ...model("openai/gpt-6.1-sol-fast", "GPT-6.1 Sol (Fast)"), provider: MODEL_PROVIDER.OPENAI },
   ];
   const offered = offeredModels(models);
   assert.deepEqual(
-    offered.map((each) => [each.model.id, each.fast?.id]),
+    offered.map((each) => [each.model.id, each.fast?.id, each.ultrafast?.id]),
     [
-      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast"],
-      ["anthropic/claude-fable-5", undefined],
-      ["anthropic/claude-haiku-4-fast", undefined],
+      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast", undefined],
+      ["anthropic/claude-fable-5", undefined, undefined],
+      ["anthropic/claude-haiku-4-fast", undefined, undefined],
+      ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-fast", "openai/gpt-6.1-sol-ultrafast"],
     ],
   );
   assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5-fast"), {
     base: "anthropic/claude-opus-5.5",
-    fast: true,
+    speed: MODEL_SPEED.FAST,
   });
   assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5"), {
     base: "anthropic/claude-opus-5.5",
-    fast: false,
+    speed: MODEL_SPEED.STANDARD,
   });
   assert.deepEqual(readModelChoice(models, "anthropic/claude-haiku-4-fast"), {
     base: "anthropic/claude-haiku-4-fast",
-    fast: false,
+    speed: MODEL_SPEED.STANDARD,
   });
-  const [opus, fable] = offered;
-  assert.ok(opus && fable);
-  assert.equal(choiceModelId(opus, true), "anthropic/claude-opus-5.5-fast");
-  assert.equal(choiceModelId(opus, false), "anthropic/claude-opus-5.5");
-  assert.equal(choiceModelId(fable, true), "anthropic/claude-fable-5", "no fast version to name");
+  assert.deepEqual(readModelChoice(models, "openai/gpt-6.1-sol-ultrafast"), {
+    base: "openai/gpt-6.1-sol",
+    speed: MODEL_SPEED.ULTRAFAST,
+  });
+  const [opus, fable, , sol] = offered;
+  assert.ok(opus && fable && sol);
+  assert.equal(choiceModelId(opus, MODEL_SPEED.FAST), "anthropic/claude-opus-5.5-fast");
+  assert.equal(choiceModelId(opus, MODEL_SPEED.STANDARD), "anthropic/claude-opus-5.5");
+  assert.equal(
+    choiceModelId(fable, MODEL_SPEED.FAST),
+    "anthropic/claude-fable-5",
+    "no fast version to name",
+  );
+  assert.equal(choiceModelId(sol, MODEL_SPEED.ULTRAFAST), "openai/gpt-6.1-sol-ultrafast");
+  assert.equal(
+    choiceModelId(opus, MODEL_SPEED.ULTRAFAST),
+    "anthropic/claude-opus-5.5",
+    "no Ultrafast version to name",
+  );
   assert.equal(
     choiceLabel({ model: "anthropic/claude-opus-5.5-fast", effort: "high" }, models),
     "Opus 5.5 High Fast",
+  );
+  assert.equal(
+    choiceLabel({ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }, models),
+    "GPT-6.1 Sol High Ultrafast",
   );
   assert.equal(
     choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),

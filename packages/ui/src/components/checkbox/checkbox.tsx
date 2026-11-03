@@ -17,7 +17,7 @@ import { Checkbox as ShadcnCheckbox } from "../../shadcn/checkbox.js";
  * unavailable box's faded one, its press and Space changing nothing. A box
  * whose words stand beside it already, a task item's marker, is named by a
  * `label` of its own and draws the box alone, which on a coarse pointer
- * takes a press a finger's width across, centred on it. A box with words may
+ * takes a press a finger's width across, centered on it. A box with words may
  * hold a `detail` under them, aligned with them and outside the box's press,
  * such as a to-do step's command in its card, which a press on its Copy
  * leaves unticked.
@@ -46,7 +46,7 @@ const CHECKBOX =
 
 /**
  * A box without words stands on no line of its own, and on a coarse
- * pointer takes a press a finger's width across, centred on it, while it
+ * pointer takes a press a finger's width across, centered on it, while it
  * draws at its own size, as a compact button does.
  */
 const BOX_ALONE =

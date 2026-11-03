@@ -31,7 +31,7 @@ import { WholeFile, type WholeFileHandle, type WholeFileNote } from "./whole-fil
 /**
  * file-tab.tsx -- a File tab: one whole file of the open task's repository, opened from a file named in place, its lines lit and scrolled into view.
  *
- * The file is drawn whole, numbered and coloured as every code is, by
+ * The file is drawn whole, numbered and colored as every code is, by
  * Pierre's diffs (`whole-file.tsx`). The file
  * is read through the service whole (\`ACT_KIND.TASKS_FILE\`, raw), since
  * Pierre numbers a file from its first line, and drawn only near the view,
@@ -98,7 +98,7 @@ async function readWholeText(
 /** A file carries no notes, the same array every render. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
-/** The file drawn whole, the lines it was opened on lit and centred each time it is opened. */
+/** The file drawn whole, the lines it was opened on lit and centered each time it is opened. */
 function FileTextView({
   file,
   held,
@@ -123,7 +123,7 @@ function FileTextView({
 }
 
 /**
- * Why a file read is not drawn, centred in the file's place: a read that did
+ * Why a file read is not drawn, centered in the file's place: a read that did
  * not land, or a refusal that may pass, as a read failure with Retry; any
  * other refusal in the notice's own ink. Note that each is said by the
  * component that draws it.
@@ -147,7 +147,7 @@ function ReadNotice({
       <ErrorState
         failure={unreadShown(FAILURE_SURFACE.FILE_READ)}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {line}
       </ErrorState>

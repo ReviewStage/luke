@@ -5,7 +5,7 @@
 
 @layer components {
   /* A compact chip a finger presses takes the press a finger's target
-     across at least, centred on it, while it draws at its own size, as a
+     across at least, centered on it, while it draws at its own size, as a
      compact button does (`../button/button.css`). A removable chip is a box
      of two presses, its words and its ×, so it keeps each its own. */
   @media (pointer: coarse) {
@@ -91,7 +91,7 @@
   }
 
   /* Note that the dot is drawn only where nothing but the chevron is a
-     glyph, because a leading mark already says the state in its colour. */
+     glyph, because a leading mark already says the state in its color. */
   .ui-chip[data-tone]
   .ui-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
     content: "";

@@ -9,7 +9,7 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as NetAddress from "effect/net/NetAddress";
 import {
-  LOOPBACK_CONSENT_CANCELLED,
+  LOOPBACK_CONSENT_CANCELED,
   type LoopbackConsent,
   type LoopbackConsentCard,
   type LoopbackConsentOptions,
@@ -215,7 +215,7 @@ export function loopbackConsent<Grant extends object>(
       withdrawn = true;
       Deferred.doneUnsafe(
         settled,
-        Exit.succeed<LoopbackConsentOutcome<Grant>>({ reason: LOOPBACK_CONSENT_CANCELLED }),
+        Exit.succeed<LoopbackConsentOutcome<Grant>>({ reason: LOOPBACK_CONSENT_CANCELED }),
       );
     };
 
@@ -286,7 +286,7 @@ export function loopbackConsent<Grant extends object>(
     // and before the withdrawn read below: a press given while it ran is read.
     const challenge = yield* Effect.result(codeChallenge(codeVerifier));
     if (Result.isFailure(challenge)) {
-      return { reason: withdrawn ? LOOPBACK_CONSENT_CANCELLED : SHARED_REASON.CHALLENGE };
+      return { reason: withdrawn ? LOOPBACK_CONSENT_CANCELED : SHARED_REASON.CHALLENGE };
     }
 
     // A press on Cancel given while the port was binding is read back here,
@@ -295,7 +295,7 @@ export function loopbackConsent<Grant extends object>(
     // has been waiting its turn since before the bind would otherwise still
     // be queued when the trip walked past this line and opened the browser.
     yield* Effect.yieldNow;
-    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
+    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELED };
 
     const authorizationUrl = options.authorizationUrl({
       state,
@@ -309,7 +309,7 @@ export function loopbackConsent<Grant extends object>(
     // this module hands the trip's step to: a press it let through — a fiber
     // it woke, a window it drew — is a cancel given before there was ever a
     // tab, so the browser is not opened on it.
-    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
+    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELED };
     const opened = yield* Effect.result(
       Effect.tryPromise(() => Promise.resolve(options.openExternal(authorizationUrl))),
     );

@@ -75,7 +75,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import type { MainTab } from "../tasks/use-main-tabs.js";
+import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCapability } from "../use-app-state.js";
@@ -159,8 +159,9 @@ interface CardLook extends KindLook {
   readonly endMark?: React.JSX.Element | undefined;
 }
 
-/** A tab's look where its strip never drew it in this window: its kind's glyph and word, the Plan's named for its task where the window lists it. */
+/** A tab's look where its strip never drew it in this window: its kind's glyph and word, Overview's its own, the Plan's named for its task where the window lists it. */
 function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined): KindLook {
+  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW });
   if (typeof tab === "string") {
     const plan = task === undefined ? undefined : { name: task.name, status: task.status };
     return tabLook({ kind: TAB_KIND.PANEL, tab, plan });
@@ -465,7 +466,7 @@ export function TabSwitcher({
     });
   });
 
-  // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave cancelled moves nothing, the stops' order included.
+  // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
     const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
     control.leaveGuard.guard(() => {
@@ -640,7 +641,7 @@ export function TabSwitcher({
  * panel's, through the doors that show a tab on a task, opening it first
  * where it is another; the panel shut where the stop had it shut, and
  * filling the window where it did. It is run whole past the leave guard's
- * ask (`go`), so a cancelled leave changes neither pane.
+ * ask (`go`), so a canceled leave changes neither pane.
  */
 function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_KIND.TASK }>): void {
   const { taskId, column, panel, fullScreen } = stop;

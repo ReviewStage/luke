@@ -329,7 +329,7 @@ const DARK_MODE_PLAN = planText({
   Context: "The dashboard is light only, and support hears about it every week.",
   Goal: "- The dashboard follows the system's appearance, with a manual override in **Settings › Profile**.",
   Approach:
-    "- Move the dashboard's colours onto the design tokens the marketing site already uses.\n" +
+    "- Move the dashboard's colors onto the design tokens the marketing site already uses.\n" +
     "- Check every chart against both palettes before it ships.",
 });
 
@@ -1430,7 +1430,7 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
       ranFor: 19 * MINUTE,
       steps: [
         {
-          text: "I'll start from how a membership is modelled today.",
+          text: "I'll start from how a membership is modeled today.",
           call: {
             name: "Read",
             input: { file_path: "src/db/schema/memberships.ts" },

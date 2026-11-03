@@ -104,7 +104,7 @@ export const SIDEBAR_ROW_TIME =
 export const SIDEBAR_ROW_REPOSITORY =
   "sidebar-task-repository mr-item-gap inline-block max-w-sidebar-row-repository overflow-hidden whitespace-nowrap text-muted-foreground";
 
-/** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
+/** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's color where it has one (`pull-request-mark.tsx`). */
 export const TASK_MARK_GLYPH =
   "task-mark-glyph inline-block size-ui-12 flex-none text-muted-foreground";
 

@@ -89,7 +89,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, centred again in the room it leaves, with a chevron at its top right, shown while the
+ * agent's transcript, centered again in the room it leaves, with a chevron at its top right, shown while the
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
@@ -378,13 +378,6 @@ function withCards(
       return card(entry, { kind: TAB_KIND.AGENT, subject, models });
     }
     if (row.id === INBOX_ROW) return card(entry, { kind: TAB_KIND.INBOX, inbox });
-    if (row.id === SIDE_PANEL_TAB.PLAN) {
-      const taskId = tasks.activeTaskId;
-      const standing = openPlanStanding(tasks);
-      const plan =
-        taskId === undefined || standing === undefined ? undefined : { taskId, standing };
-      return card(entry, { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan });
-    }
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
@@ -414,16 +407,16 @@ function withCards(
 /**
  * The rows the summary lists, before their cards: the plan's Inbox leads,
  * counting what waits on the developer, while it holds an item, waiting or
- * settled, or its tab is open, as a panel's kind stands once the plan has
- * used it; then the panel's kinds and what they hold, then the agents.
+ * settled, and opens the window's Inbox narrowed to the plan; then the
+ * panel's kinds and what they hold, then the agents.
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
-  const inboxHolds = inbox.open.length + inbox.settled.length > 0;
+  const taskId = tasks.activeTaskId;
   const inboxRow =
-    inboxHolds || sidePanel.tabs.includes(SIDE_PANEL_TAB.INBOX)
-      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.waiting.length)]
+    taskId !== undefined && inbox.open.length + inbox.settled.length > 0
+      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
@@ -442,10 +435,8 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     ...commentsRow,
     ...panelEntries({
       panel: sidePanel,
-      // The Inbox and Comments stand above, each with its count.
-      kinds: sidePanel.used.filter(
-        (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
-      ),
+      // Comments stand above with their count.
+      kinds: sidePanel.used.filter((kind) => kind !== SIDE_PANEL_TAB.COMMENTS),
       changes,
       pages: tasks.pages ?? [],
       plan: openPlanStanding(tasks),
@@ -876,7 +867,7 @@ export function SummarySkeleton({ mode }: { mode: SummaryMode }): React.JSX.Elem
  * The summary in the plan's column, pinned or as its rail, or nothing where
  * the column spares no rail, and the card while it hangs. The rail lists the panel's kinds alone, one glyph after
  * another under its chevron at one even step, since a glyph tells an agent,
- * a subagent, or a file from its neighbours by nothing a reader could tell
+ * a subagent, or a file from its neighbors by nothing a reader could tell
  * at a glance.
  */
 export function TaskSummary({

@@ -33,7 +33,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
-import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -60,8 +59,8 @@ import { DesktopInbox } from "./desktop-inbox.js";
  * its task's side panel draws opens in that panel beside the Inbox, the
  * Inbox still standing: a file of the task's repository, a page of the
  * task, and a pull request one of its agents opened. A page of another
- * task still leaves for that task. Synthetic workspace, plan, agent, page,
- * and pull request.
+ * task opens there too, and its Open task goes to that task with the page
+ * still chosen. Synthetic workspace, plan, agent, page, and pull request.
  */
 
 // A Markdown block is drawn once the parser has landed, as the panel lands it after its first paint.
@@ -88,6 +87,7 @@ const TASK: TaskSummary = {
   repository: REPOSITORY,
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+const OTHER: TaskSummary = { ...TASK, id: OTHER_TASK, name: "Invitation funnel study" };
 
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -192,6 +192,7 @@ let root: Root | undefined;
 beforeEach(() => {
   window.localStorage.clear();
   readMarks = [];
+  filesRead = [];
   holdFrames();
 });
 
@@ -206,8 +207,15 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
+/** Every file a File tab read, by the task it was read through and its path. */
+let filesRead: string[][] = [];
+
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
+    case ACT_KIND.TASKS_FILE:
+      if ("taskId" in request.payload)
+        filesRead.push([request.payload.taskId, request.payload.path]);
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     case ACT_KIND.AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
@@ -286,7 +294,7 @@ async function inbox(
       createElement(DesktopInbox, {
         tasks: tasksControl({
           workspace: ACME,
-          tasks: [TASK],
+          tasks: [TASK, OTHER],
           liveAgents: [ARCHIVED, AGENT],
           // Both agents' rows keep the pull request they opened, which the list carries beside them.
           listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
@@ -358,7 +366,7 @@ function panelTabs(container: HTMLElement): string[] | undefined {
   );
 }
 
-test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan leaves for that plan", async () => {
+test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan opens there too, its Open task going to that plan with the page chosen", async () => {
   const { container, left } = await inbox();
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 
@@ -371,11 +379,34 @@ test("a pull request, a page, and a file the item names open one after another i
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 
   await pressChip(container, "Old funnel");
-  assert.deepEqual(
-    left.links.map((link) => link.place),
-    [{ kind: "page", planId: OTHER_TASK, pageId: FUNNEL.id }],
+  assert.equal(left.links.length + left.tasks.length, 0, "the Inbox still stands");
+  const notice = container.querySelector('aside[aria-label="Panel"] .ui-tab-notice');
+  assert.equal(notice?.querySelector("p")?.textContent, OTHER.name, "the page's task named");
+  const open = [...(notice?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Open task",
   );
-  assert.equal(panelTabs(container)?.length, 1, "nothing of another plan opens in the panel");
+  assert.ok(open, "with Open task");
+  act(() => open.click());
+  // The task's chip opens it as Open task does.
+  const chip = notice?.querySelector<HTMLElement>("p [data-inline-ref], p button, p a");
+  assert.ok(chip, "the task named by its chip");
+  act(() => chip.click());
+  const went = `${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`;
+  assert.deepEqual(left.went, [went, went]);
+});
+
+test("a file opened on another task reads from that task in the panel standing for this one", async () => {
+  const { container, panel } = await inbox();
+  const ledger = { place: { taskId: OTHER_TASK }, repository: "acme/ledger" };
+  act(() => panel().onPreviewFile({ path: "src/ledger.ts" }, undefined, ledger));
+  await settle();
+  assert.deepEqual(panelTabs(container), ["▸ ledger.ts"]);
+  assert.ok(filesRead.length > 0, "the tab read its file");
+  assert.deepEqual(
+    filesRead.filter(([taskId]) => taskId !== OTHER_TASK),
+    [],
+    "every read went to the task the file was opened on",
+  );
 });
 
 test("a preview beside the Inbox kept by a double-click stands as a tab of its own, so the next link opens beside it", async () => {
@@ -390,31 +421,6 @@ test("a preview beside the Inbox kept by a double-click stands as a tab of its o
   assert.equal(previewTabs(container), 0, "kept");
   await pressChip(container, "invites.ts");
   assert.deepEqual(panelTabs(container), ["#42 Send invitations in batches", "▸ invites.ts"]);
-});
-
-test("a link the item names pressed with ⌘ asks to go to its task, opening what it names there, rather than beside the Inbox", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, left } = await inbox();
-    const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        "[data-inbox-message-text] [data-mention-ref]",
-      ),
-    ].find((each) =>
-      each.querySelector(".ui-inline-ref-label")?.textContent?.includes("Invite funnel"),
-    );
-    assert.ok(chip);
-    act(() => {
-      chip.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-      );
-    });
-    await settle();
-    assert.deepEqual(left.went, [`${TASK.id} ${JSON.stringify({ page: FUNNEL.id })}`]);
-    assert.equal(panelTabs(container), undefined, "nothing opened beside the Inbox");
-  } finally {
-    stop();
-  }
 });
 
 test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
@@ -441,35 +447,7 @@ test("an archived agent's Pull request tab stands beside the Inbox as any other,
   assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
 });
 
-test("a pull request and a file the item names pressed with ⌘ ask to go to the task on the tab a plain press would open, the file drawn there", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, left } = await inbox();
-    const pressWithCommand = async (name: string) => {
-      const chip = [
-        ...container.querySelectorAll<HTMLButtonElement>(
-          "[data-inbox-message-text] [data-mention-ref]",
-        ),
-      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
-      assert.ok(chip, `no chip says ${name}`);
-      act(() => {
-        chip.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-        );
-      });
-      await settle();
-    };
-    await pressWithCommand("relay#42");
-    await pressWithCommand("invites.ts");
-    assert.equal(left.went.length, 2, left.went.join("\n"));
-    assert.match(left.went[0] ?? "", /"changes"/);
-    assert.match(left.went[1] ?? "", /"file"/);
-  } finally {
-    stop();
-  }
-});
-
-test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel, and pressed with ⌘ asks to go to its task on its tab", async () => {
+test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel", async () => {
   const { container, left } = await inbox();
   await pressChip(container, "Batch the invitations");
   const tabs = panelTabs(container);
@@ -483,27 +461,6 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
     "the agent's transcript stands in the panel",
   );
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
-
-  const stop = installPressIntent(window);
-  try {
-    const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        "[data-inbox-message-text] [data-mention-ref]",
-      ),
-    ].find((each) =>
-      each.querySelector(".ui-inline-ref-label")?.textContent?.includes("Batch the invitations"),
-    );
-    assert.ok(chip);
-    act(() => {
-      chip.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-      );
-    });
-    await settle();
-    assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`]);
-  } finally {
-    stop();
-  }
 });
 
 test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the task's column does", async () => {

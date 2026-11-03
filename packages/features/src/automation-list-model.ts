@@ -80,10 +80,10 @@ const RUN_REASON_WORDS = {
 /** Each GitHub event as a trigger's sentence says what happens, after "When". */
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: { what: "a pull request", happens: "is opened" },
-  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: { what: "a pull request", happens: "is labelled" },
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: { what: "a pull request", happens: "is labeled" },
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED]: { what: "a pull request", happens: "is updated" },
   [GITHUB_TRIGGER_EVENT.ISSUE_OPENED]: { what: "an issue", happens: "is opened" },
-  [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: { what: "an issue", happens: "is labelled" },
+  [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: { what: "an issue", happens: "is labeled" },
   [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: { what: "a check", happens: "fails" },
   [GITHUB_TRIGGER_EVENT.PUSH]: { what: "commits", happens: "are pushed" },
 } as const satisfies Record<GitHubTriggerEvent, { what: string; happens: string }>;
@@ -143,7 +143,7 @@ export const AGENT_STATUS_WORDS = {
   [AGENT_STATUS.RUNNING]: "Working",
   [AGENT_STATUS.COMPLETED]: "Finished",
   [AGENT_STATUS.FAILED]: "Failed",
-  [AGENT_STATUS.CANCELLED]: "Stopped",
+  [AGENT_STATUS.CANCELED]: "Stopped",
 } as const satisfies Record<AgentStatus, string>;
 
 /** The order the owners' groups stand in: the workspace's first, as the ones every member shares. */
@@ -291,9 +291,9 @@ export function automationTriggerText(
       const where = repositories.length === 0 ? "" : ` in ${orList(repositories)}`;
       const labels = trigger.labels ?? [];
       const branches = trigger.branches ?? [];
-      const labelled = labels.length === 0 ? "" : ` labelled ${orList(labels)}`;
+      const labeled = labels.length === 0 ? "" : ` labeled ${orList(labels)}`;
       const on = branches.length === 0 ? "" : ` on ${orList(branches)}`;
-      return `When ${words.what}${by} ${happens}${where}${labelled}${on}${also}`;
+      return `When ${words.what}${by} ${happens}${where}${labeled}${on}${also}`;
     }
     case AUTOMATION_TRIGGER.WEBHOOK:
       return "When its webhook is called";

@@ -8,7 +8,7 @@
  * its end, and the read hook drops its answer (`use-admin-read.ts`), as it
  * drops any read it aborted. The app is signed in before it
  * draws, so nothing is held at the gate up front, and a refusal stands in
- * the page as the app's centred failure rather than a sign-in card. The app
+ * the page as the app's centered failure rather than a sign-in card. The app
  * keeps its places in its own history, whose step for each view has an app
  * link of its own (`links-at-hand.ts`), so a screen here keeps its search
  * to itself and an account opens on a press, as a step of that history.
@@ -66,7 +66,7 @@ const APP_ADMIN_READS: AdminReads = {
   favorite: (id, favorite) => askAct(ACT_KIND.ADMIN_FAVORITE, { id, favorite }).catch(() => false),
 };
 
-/** A refusal standing in the view's place, as the app's centred failure, under the place's own toolbar and sections. */
+/** A refusal standing in the view's place, as the app's centered failure, under the place's own toolbar and sections. */
 function GateRefusal({ words }: { words: string }): React.JSX.Element {
   return (
     <AdminCollectionPage
@@ -82,7 +82,7 @@ function GateRefusal({ words }: { words: string }): React.JSX.Element {
             cause: FAILURE_CONDITION.REFUSED,
             refused: true,
           })}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {words}
         </ErrorState>

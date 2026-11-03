@@ -1,5 +1,5 @@
-/* swatch.css -- Swatch: a small colour dot that is a toggle, ringed in the
-   text's ink while its colour is the one chosen. The keyboard's ring is the
+/* swatch.css -- Swatch: a small color dot that is a toggle, ringed in the
+   text's ink while its color is the one chosen. The keyboard's ring is the
    app's reset's, outside the dot, so it never stands for chosen. */
 
 @layer components {

@@ -9,7 +9,7 @@
  * start before any route is imported. The rule is a function of the variables
  * alone, so the local-only routes that mount on the server can hold their own
  * path to it too, and the service reads it again over its own environment
- * (`localServerRefusalRead`) before it honours anything only the local server
+ * (`localServerRefusalRead`) before it honors anything only the local server
  * may turn on (`local-demo.ts`).
  */
 

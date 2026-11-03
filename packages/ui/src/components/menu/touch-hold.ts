@@ -88,7 +88,7 @@ export function useTouchHold() {
       if (event.target instanceof Node && pending.element.contains(event.target)) return;
       stopCounting();
     }
-    // Note that a cancelled touch makes no touchend, so the hold is over with it.
+    // Note that a canceled touch makes no touchend, so the hold is over with it.
     function ended(event: PointerEvent) {
       if (event.pointerId !== press.current?.pointerId) return;
       if (event.type === "pointercancel") held.current = false;

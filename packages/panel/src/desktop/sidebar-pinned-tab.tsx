@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   AGENT_BOUNDS,
   type AgentPullRequest,
@@ -7,7 +6,6 @@ import {
 } from "@repo/features/agent-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import {
   BUTTON_SIZE,
   HOVER_CARD_ROW_LOOK,
@@ -31,21 +29,17 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
-import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useRef } from "react";
-import { askAct } from "../act.js";
+import { useCallback, useRef } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { agentName, RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
+import { useListedPullRequest } from "../tasks/use-agent-pull-request.js";
 import { isAgentPin, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -68,8 +62,8 @@ import { PullRequestLine, RepositoryDetail } from "./task-card.js";
  * is a task card (`task-card.tsx`), drawn from its rows: the tab's whole
  * name after its glyph, then what it is pinned on, the task or the agent,
  * which opens it, and its repository, which opens on GitHub, and for an agent's pin or
- * its Changes' the pull request it opened, which opens in its Pull request tab where the window lists it and on GitHub otherwise, once the one read of
- * it the card makes as it opens lands. A Changes pin on the open task, whose
+ * its Changes' the pull request it opened, as the task list holds it, which opens in its Pull request tab where the window lists it and on GitHub otherwise.
+ * A Changes pin on the open task, whose
  * agent it still holds, hangs the Changes tab's own card instead (`tabCard`),
  * from the pull request the tab reads, and keeps the card above only for the
  * pins that cannot read it. A press opens what it is pinned on, the task
@@ -130,7 +124,7 @@ function pinGone(pin: SidebarPin, tasks: TasksControl): boolean {
  * tab wears it, where it stands included, wherever the window last read the
  * agent (`agent`), and otherwise at rest in the harness it ran in when it
  * was pinned. A Changes pin wears its pull request's mark for where the
- * task's row last read it (`pullRequest`), and a grey icon only where the
+ * task's row last read it (`pullRequest`), and a gray icon only where the
  * row holds none.
  */
 function pinSubject(
@@ -178,7 +172,7 @@ function openPullRequestOf(pin: SidebarPin, tasks: TasksControl): AgentPullReque
  * repository. An agent's own page's pin reads the agent's row, which names
  * its newest pull request alone. Nothing for any other pin, or where the
  * window cannot tell which pull request the pin is of; the pin then keeps
- * the label and the grey icon it was pinned with.
+ * the label and the gray icon it was pinned with.
  */
 function pinPullRequest(
   pin: SidebarPin,
@@ -252,54 +246,13 @@ function pinAgent(pin: SidebarPin, on: PinnedOn, tasks: TasksControl): TaskAgent
 }
 
 /**
- * How long an agent's pull request a pin's card read is kept once no card
- * of it stands: long enough that the pointer coming back over the pins
- * shows it at once, short enough that a card hung later reads afresh.
- */
-const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
-
-/**
- * The pull request an agent opened, as a pin's card reads it: read once as
- * the first card of the agent shows, never for a row only crossed, since a
- * card is mounted only once the pointer has rested (`@repo/ui`'s `Tooltip`), and
- * shared by every card of it while one stands and for
- * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
- * the open task's pull requests (`useListedPullRequests`), so a pin's card
- * landing an answer redraws the card alone, never the task's control and
- * the sidebar with it. A read the service refused, or did not answer, is
- * kept as the failure it is, which the next card asks again over
- * (`PinPullRequest`), so a pull request is never hidden for the read's
- * lifetime by a read that failed.
- */
-const pinPullRequestAtom = Atom.family((agentId: string) =>
-  Atom.setIdleTTL(
-    rendererRuntime.atom(
-      Effect.flatMap(
-        Effect.tryPromise(() => askAct(ACT_KIND.AGENTS_PULL_REQUEST, { agentId })),
-        (answer) =>
-          "failure" in answer
-            ? Effect.fail(answer.failure)
-            : Effect.succeed<AgentPullRequest | undefined>(answer.pullRequest ?? undefined),
-      ),
-    ),
-    PIN_PULL_REQUEST_KEPT,
-  ),
-);
-
-/**
- * The pull request of `agentId`, once its read has landed; nothing before,
- * where it failed, or where the agent opened none. A card that finds a
- * failed read standing as it mounts asks again, once.
+ * The pull request of `agentId`, as the task list holds it
+ * (`useListedPullRequest`), so a pin's card asks the service nothing;
+ * nothing where the agent opened none, or before the list first answers
+ * live.
  */
 function PinPullRequest({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const atom = pinPullRequestAtom(agentId);
-  const read = useAtomValue(atom);
-  const retry = useAtomRefresh(atom);
-  const failedAtMount = useRef(AsyncResult.isFailure(read));
-  useEffect(() => {
-    if (failedAtMount.current) retry();
-  }, [retry]);
-  const pullRequest = AsyncResult.isSuccess(read) ? read.value : undefined;
+  const pullRequest = useListedPullRequest(agentId);
   return pullRequest === undefined ? null : (
     <>
       <HoverCardRule />
@@ -313,8 +266,8 @@ function PinPullRequest({ agentId }: { agentId: string }): React.JSX.Element | n
 /**
  * The card the Changes tab itself hangs (`tabCard`), for a pin of a Changes
  * tab whose agent the open task still holds and whose pull request it has
- * read; none otherwise, where the pin hangs its own card, which reads the
- * pull request as it shows. Note that a pin whose agent is gone hangs none,
+ * read; none otherwise, where the pin hangs its own card, which shows the
+ * pull request the task list holds. Note that a pin whose agent is gone hangs none,
  * since the open task no longer lists it.
  */
 function pinChangesCard(

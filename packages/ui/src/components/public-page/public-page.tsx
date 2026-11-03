@@ -10,7 +10,7 @@ import { TextLink } from "../text-link/text-link.js";
  * does: the margin grid's rails, the bar that floats once the page scrolls
  * holding the caller's banner and its call, and the foot holding the
  * caller's footer over the wordmark in dots, a rule across the rails above
- * it. Its content is on one measure centred in the room, inset by the web
+ * it. Its content is on one measure centered in the room, inset by the web
  * profile's page inset. The page sets no scroll of its own, because a
  * public page is read in the document's, which is what a prerendered page
  * and a browser's find and anchor links expect.
@@ -69,7 +69,7 @@ const WIDTH_CLASS = {
   [PUBLIC_PAGE_WIDTH.WIDE]: "max-w-public-page-wide",
 } as const satisfies Record<PublicPageWidth, string>;
 
-/** A column: the measure centred in the room, inset by the page's gutter, so all three open on one edge. */
+/** A column: the measure centered in the room, inset by the page's gutter, so all three open on one edge. */
 const COLUMN_CLASS = "ui-public-page-column box-border w-full mx-auto px-page-inset";
 
 /**
@@ -126,7 +126,7 @@ export function PublicSection({
 
 /**
  * A picture or a recording standing wider than the column, up to the page's
- * bleed and centred on the page, under a hairline frame. It measures the
+ * bleed and centered on the page, under a hairline frame. It measures the
  * page's own width (`cqw`, read off the page's container) rather than the
  * viewport's, which would count a classic scrollbar's gutter, and keeps the
  * page's inset from either edge, so on a phone it lines up with the words.

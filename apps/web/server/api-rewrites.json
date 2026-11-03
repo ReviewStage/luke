@@ -183,6 +183,14 @@
     "dest": "/api/feedback.mjs"
   },
   {
+    "src": "/api/live/socket",
+    "dest": "/api/live/socket"
+  },
+  {
+    "src": "/api/live/socket\\.js",
+    "dest": "/api/live/socket.js"
+  },
+  {
     "src": "/api/terminal/sessions",
     "dest": "/api/terminal/sessions"
   },

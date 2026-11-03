@@ -17,13 +17,14 @@ import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
  * use-held-inbox-list.ts -- an Inbox's rows and its steps, held still (`use-held-order.ts`) while
  * the list is shown, so the row the reader is on stays where it is.
  *
- * The chosen item's row stays while it is chosen, once the list drew it,
- * though answering or reading it leaves the scope shown, so it goes gray
- * where it stood (`isDone`) rather than leaving under the reader; choosing
- * another row lets it go, and so does another scope or Addressed to, or the list
- * being hidden, so an item settled while it was hidden is gone once the
- * list is shown again. An item the
- * list never drew, chosen by a link, gets no row. While the pointer is over
+ * The chosen item's row stands while it is chosen, though answering or
+ * reading it leaves the scope shown, so it goes gray where it stood
+ * (`isDone`) rather than leaving under the reader, as a mail app keeps the
+ * open thread's row; an item the scope leaves out that a link, or Back,
+ * chooses gets a row the same way, so the reader always sees where they
+ * are. Choosing another item lets it go, and so does another scope or
+ * Addressed to, or the list being hidden, so an item settled while it was
+ * hidden is gone once the list is shown again. While the pointer is over
  * the list every row keeps the place it was first drawn in, when its item
  * changed, so nothing moves under the reader's
  * hand; once it leaves, every row but the chosen one stands where its item
@@ -159,9 +160,11 @@ export function useHeldInboxList(
       const places = heldPlaces(held, chosen, pointing);
       const matching = inboxList(groups, { ...filter, chosen: undefined, places });
       const listed = listedItems(matching).some(({ item }) => item.id === chosen);
-      // Note that the chosen row is kept only once the list drew it, so one chosen from outside the scope never gets a row.
+      // Note that an item just chosen is kept whatever the scope, and one chosen before only while its row stood under the same scope.
+      const chosenNow = last.current === undefined || last.current.from.chosen !== chosen;
       const kept =
-        chosen !== undefined && (listed || (keptLast.current === chosen && sameScope(was, filter)))
+        chosen !== undefined &&
+        (listed || chosenNow || (keptLast.current === chosen && sameScope(was, filter)))
           ? chosen
           : undefined;
       const list =

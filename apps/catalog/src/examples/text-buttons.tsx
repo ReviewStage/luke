@@ -70,7 +70,7 @@ function TextButtons(): React.JSX.Element {
           </Text>
           <Text>
             <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={pressed}>
-              Review all failed deployment checks every morning and summarise them for the team
+              Review all failed deployment checks every morning and summarize them for the team
             </TextButton>
           </Text>
         </div>

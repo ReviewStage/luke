@@ -843,7 +843,7 @@ function turnOutcome(turn: SettledAgentTurn, words: string | undefined): SlackMe
       turn.failure === null ? "The agent failed." : `The agent failed: ${turn.failure}.`,
     );
   }
-  if (turn.status === TURN_STATUS.CANCELLED) return plainReply("The agent was stopped.");
+  if (turn.status === TURN_STATUS.CANCELED) return plainReply("The agent was stopped.");
   if (words === undefined) return plainReply("The agent finished.");
   return { text: slackClipped(words, NOTIFICATION_CHARS), blocks: [slackMarkdownBlock(words)] };
 }

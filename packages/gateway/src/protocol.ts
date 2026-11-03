@@ -48,7 +48,7 @@ export const GATEWAY_METHOD = {
   TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
-  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
+  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and colored here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_TREE: "tasks.tree",

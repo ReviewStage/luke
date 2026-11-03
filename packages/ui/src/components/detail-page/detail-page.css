@@ -52,7 +52,7 @@
      document's: its columns stand across the room on the toolbar's edges,
      where its title's words start and its actions end (`toolbar.css`'s page
      inset, a column's inset and a row's), in any room, so the bar lines up
-     with what it heads rather than with a measure centred under it. A page
+     with what it heads rather than with a measure centered under it. A page
      framed by a bar outside it, a tab's, keeps its measure. Note that the
      columns are named after the toolbar rather than as any child of a page
      that `:has()` one, because a `:has()` over a page whose subject is any
@@ -132,7 +132,7 @@
   }
 
   /* A main column holding nothing but an empty or failed state (an
-     `EmptyState`, or a centred `ErrorState` where the thing could not be
+     `EmptyState`, or a centered `ErrorState` where the thing could not be
      read) fills the column, so the state stands a little above the room's
      middle, as a collection's empty or failed state does. */
   .ui-detail-page-main:has(> .ui-detail-page-content > .ui-empty-state:only-child) {

@@ -207,7 +207,7 @@ export function trailingTrend(counts: readonly number[], days: number): AdminTre
 }
 
 /**
- * Shapes the queried source into the answer, zero-filling and totalling in one
+ * Shapes the queried source into the answer, zero-filling and totaling in one
  * place. The overview is shaped beside it by `buildAdminOverview`, which reads
  * this module's day keys and trends, so the route joins the two.
  */

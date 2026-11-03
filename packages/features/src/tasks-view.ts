@@ -5,7 +5,13 @@ import {
   browserTabsPlaceSchema,
 } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
-import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
+import {
+  type AgentSummary,
+  agentSummarySchema,
+  localAgentRefusalSchema,
+  type TasklessAgent,
+  tasklessAgentSchema,
+} from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -152,18 +158,18 @@ const tasksDocumentSchema = EffectSchema.Struct({
 
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
-/** One run of a line in one colour per appearance, as the host's highlighter split it. */
+/** One run of a line in one color per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
-  /** A `#rrggbb` colour in the dark theme; absent for that theme's own foreground. */
+  /** A `#rrggbb` color in the dark theme; absent for that theme's own foreground. */
   color: EffectSchema.optionalKey(EffectSchema.String),
-  /** A `#rrggbb` colour in the light theme; absent for that theme's own foreground. */
+  /** A `#rrggbb` color in the light theme; absent for that theme's own foreground. */
   lightColor: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type CodeToken = typeof codeTokenSchema.Type;
 
-/** Lines of code as the host coloured them, each a line's runs in order. */
+/** Lines of code as the host colored them, each a line's runs in order. */
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
@@ -252,6 +258,11 @@ export const IDLE_TASKS_VIEW: TasksView = {
   workspaces: [],
   document: { status: TASKS_READ.IDLE },
 };
+
+/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
+export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+  return automationId === null ? agent : { ...agent, automationId };
+}
 
 /**
  * Starting a task, as the window asks it: the service's own start, and
@@ -887,7 +898,7 @@ export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
 
-/** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
+/** A page tab's read of one version's source, as the window hears it: its HTML line by line, colored as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ lines: codeLinesSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),

@@ -79,7 +79,7 @@ import {
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
-  COLOURED_CODE_MAX_CHARS,
+  COLORED_CODE_MAX_CHARS,
   exactId,
   FENCE_LANGUAGE_MAX_CHARS,
   githubAddress,
@@ -99,10 +99,10 @@ function exactText(max: number) {
   );
 }
 
-/** A fenced block to colour: its fence's language and its code, each bounded. */
-const colourCodeParamsSchema = EffectSchema.Struct({
+/** A fenced block to color: its fence's language and its code, each bounded. */
+const colorCodeParamsSchema = EffectSchema.Struct({
   language: exactText(FENCE_LANGUAGE_MAX_CHARS),
-  code: exactText(COLOURED_CODE_MAX_CHARS),
+  code: exactText(COLORED_CODE_MAX_CHARS),
 });
 
 export const tasksActsContract = {
@@ -228,8 +228,8 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskBrowserTabsFollowSchema))
     .output(eventIterator(type<TasksBrowserTabsAnswer>())),
-  [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
-    .input(exactInput(colourCodeParamsSchema))
+  [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actProcedure("Could not color that code on this system.")
+    .input(exactInput(colorCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
   [TASKS_ACT_KIND.TASKS_FIND]: actProcedure("Could not find that task on this system.")
     .input(exactInput(tasksFindParamsSchema))

@@ -5,7 +5,7 @@
  * a page what it answers as a module of finished values), so the pages
  * carry their markup and no parser rides into the site's bundle. Both
  * documents are written in this repository, so their HTML is ours: it is
- * parsed (a release's `<kbd>` keys say a chord) and never sanitised, as a
+ * parsed (a release's `<kbd>` keys say a chord) and never sanitized, as a
  * visitor's words would be.
  */
 

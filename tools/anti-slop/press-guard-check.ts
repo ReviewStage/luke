@@ -6,7 +6,7 @@ import { ARROW_KEY_GUARD_RULE, NAMES_ARROW_KEY } from "./shared/arrow-key-guard.
 import { BUSY_GUARD_RULE } from "./shared/busy-guard.ts";
 import { TYPESCRIPT_SOURCE } from "./shared/effect-edges.ts";
 import { HEADING_GUARD_RULE } from "./shared/heading-guard.ts";
-import { HOST_READ_GUARD_RULE, isWatchedPanelSource } from "./shared/host-read-guard.ts";
+import { HOST_READ_GUARD_RULE, isWatchedSource } from "./shared/host-read-guard.ts";
 import { KEPT_GUARD_RULE } from "./shared/kept-guard.ts";
 import { LIVE_REGION_GUARD_RULE } from "./shared/live-region-guard.ts";
 import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
@@ -46,9 +46,9 @@ import {
  * silence `no-lucide-outside-door` or, where it adds a listener,
  * `no-document-press-listener` or, where it names the window's storage or
  * its helpers, `no-direct-view-storage`, whose baselines are the only way past
- * them, on any of the panel's own TypeScript files holding one that would
- * silence `no-follow-outside-host-read`, whose list of files not yet moved
- * is the only way past it, on any TypeScript file that spells
+ * them, on any of the panel's or the design system's own TypeScript files
+ * holding one that would silence `no-follow-outside-host-read`, whose list of
+ * files not yet moved is the only way past it, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
  * file's baseline is the only way past it, on a vendored shadcn component
  * holding one that would silence `no-shadcn-focus-ring`, on any test file
@@ -171,9 +171,9 @@ const GUARDS = [
   {
     rule: HOST_READ_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
-    watches: (absolute: string) => isWatchedPanelSource(path.relative(REPOSITORY_ROOT, absolute)),
+    watches: (absolute: string) => isWatchedSource(path.relative(REPOSITORY_ROOT, absolute)),
     remedy:
-      "Read server data through useHostRead over the app-state slice the host fills, or name a file not yet moved in tools/anti-slop/follows-unmigrated.json with its migration step",
+      "Read server data through useHostRead over the app-state slice the host fills, or name a file not yet moved in tools/anti-slop/reads-unmigrated.json with the children that move it",
   },
   {
     rule: RETIRED_GUARD_RULE,

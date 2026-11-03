@@ -17,9 +17,10 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { createContext, useId, useRef, useState } from "react";
+import { createContext, useId, useMemo, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
+import { useSteadyDoor } from "../steady-door.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import {
@@ -81,10 +82,15 @@ function moveToSection(
   );
 }
 
-/** A selection of several tasks as a chosen row's menu reads it: how many, and the bar's acts on them all. */
+/**
+ * A selection of several tasks as a chosen row's menu reads it: how many,
+ * and the bar's acts on them all, read as the menu draws. Note that it is
+ * the same while the count stands, so a row held while what it is handed
+ * does (`memo`) holds as the selection moves, and reads the acts newest.
+ */
 export interface ChosenTasks {
   readonly count: number;
-  readonly acts: readonly SelectionAct[];
+  readonly acts: () => readonly SelectionAct[];
 }
 
 /**
@@ -228,9 +234,13 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
       deletion.ask();
     },
   });
+  const actsNow = useSteadyDoor(() => acts);
   // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
-  const several: ChosenTasks | undefined =
-    selected.size > 1 ? { count: selected.size, acts } : undefined;
+  const count = selected.size;
+  const several: ChosenTasks | undefined = useMemo(
+    () => (count > 1 ? { count, acts: actsNow } : undefined),
+    [count, actsNow],
+  );
   return {
     regionId,
     selected,
@@ -256,7 +266,7 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
 export function chosenRowMenu(thing: string, chosen: ChosenTasks, shown: boolean) {
   return {
     thing,
-    groups: selectionMenu(chosen.acts),
+    groups: selectionMenu(chosen.acts()),
     heading: countWords(chosen.count, TERM.TASK),
     shown,
   };

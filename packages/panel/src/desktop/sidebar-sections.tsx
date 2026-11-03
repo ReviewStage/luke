@@ -253,7 +253,10 @@ function undeleteWrites(
  * service. Note that an Undo reads the sections as they stand when it is
  * pressed (`latest`), since it lands renders after the act.
  */
-export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): SectionDialogs {
+export function useSectionDialogs(
+  tasks: Pick<TasksControl, "signedIn" | "taskSections" | "onWriteSections">,
+  surfaceOpen: boolean,
+): SectionDialogs {
   const [ask, setAsk] = useState<SectionAsk | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
@@ -494,11 +497,6 @@ export function newSectionAction(onSelect: () => void): MenuAction {
   return { label: NEW_SECTION, icon: <FolderPlusIcon />, onSelect };
 }
 
-/** A task's name, or none for an agent, which New section's card names as one agent. */
-function memberName(tasks: TasksControl, member: SectionMember): string | undefined {
-  return member.agent ? undefined : tasks.tasks.find((task) => task.id === member.id)?.name;
-}
-
 /**
  * The Move to section of a task's menu or an agent's: the row's workspace's
  * sections, the one it stands in checked, New section to make one with the
@@ -507,10 +505,12 @@ function memberName(tasks: TasksControl, member: SectionMember): string | undefi
  * would, and the toast it answers with offers Undo.
  */
 export function moveToSectionEntry(
-  tasks: TasksControl,
+  tasks: Pick<TasksControl, "taskSections">,
   member: SectionMember,
   workspaceId: string,
   dialogs: Pick<SectionDialogs, "askNew" | "move">,
+  /** The task's name, which New section's card names; none for an agent, which it names as one agent. */
+  name?: string | undefined,
 ): MenuEntry {
   const state = tasks.taskSections;
   const standing = memberSection(state, member);
@@ -540,9 +540,7 @@ export function moveToSectionEntry(
     ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
     items: [
       ...sections,
-      newSectionAction(() =>
-        dialogs.askNew(workspaceId, put, movesInto(1, memberName(tasks, member))),
-      ),
+      newSectionAction(() => dialogs.askNew(workspaceId, put, movesInto(1, name))),
       ...remove,
     ],
   };

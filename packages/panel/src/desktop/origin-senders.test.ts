@@ -13,8 +13,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import type { MainTab } from "../tasks/use-main-tabs.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -160,7 +160,7 @@ function senderLine(place: Element): HTMLElement {
   );
 }
 
-test("a task's agent opens on its plan sent by the task, which opens the plan in the side panel, with the teammate who started the agent", async () => {
+test("a task's agent opens on its plan sent by the task, which opens the plan in the task's Overview, with the teammate who started the agent", async () => {
   const { container, chosen } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
 
   const line = senderLine(container);
@@ -169,7 +169,7 @@ test("a task's agent opens on its plan sent by the task, which opens the plan in
   assert.ok(task, "the task's name is a press");
   act(() => task.click());
 
-  assert.deepEqual(chosen, [SIDE_PANEL_TAB.PLAN]);
+  assert.deepEqual(chosen, [MAIN_TAB.OVERVIEW]);
 });
 
 test("the reader's own agent opens on its plan sent by the task alone, never by them", async () => {

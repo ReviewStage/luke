@@ -145,7 +145,7 @@ export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_W
 export const AGENT_AUTHOR = {
   /** The developer who started the agent, through the GitHub account they signed in with. */
   DEVELOPER: "developer",
-  /** The App: the developer has no GitHub sign-in, or GitHub no longer honours it. */
+  /** The App: the developer has no GitHub sign-in, or GitHub no longer honors it. */
   APP_UNLINKED: "app-unlinked",
   /** The App: the developer's own GitHub account may not push to the repository. */
   APP_NO_PUSH: "app-no-push",
@@ -359,8 +359,8 @@ export const AGENT_STATUS = {
   RUNNING: "running",
   COMPLETED: "completed",
   FAILED: "failed",
-  /** The developer stopped it, or a Stop is on its way to it; anything it pushed stays. */
-  CANCELLED: "cancelled",
+  /** The developer stopped it, or a Stop is on its way to it; anything it pushed stays. Its value keeps the British spelling rows and clients already hold. */
+  CANCELED: "cancelled",
 } as const;
 
 export type AgentStatus = (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS];
@@ -680,7 +680,7 @@ export const QUEUE_CHANGE = {
   ADD: "add",
   /** A queued message written again in its place, its words and files those the edit saved, its edit over. */
   EDIT: "edit",
-  /** A queued message taken into a member's composer to edit, which stops the hand-off at it until the edit is saved or cancelled; or, `held` false, the edit cancelled. */
+  /** A queued message taken into a member's composer to edit, which stops the hand-off at it until the edit is saved or canceled; or, `held` false, the edit canceled. */
   HOLD: "hold",
   DELETE: "delete",
   /** A queued message sent now, steering the turn under way, and taken out of the queue. */
@@ -1175,7 +1175,7 @@ export const agentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(agentSummarySchema),
 });
 
-/** Where a pull request stands on GitHub, as its pill is coloured. */
+/** Where a pull request stands on GitHub, as its pill is colored. */
 export const PULL_REQUEST_STATE = {
   OPEN: "open",
   DRAFT: "draft",
@@ -1722,7 +1722,7 @@ const conversationEntrySchema = EffectSchema.Struct({
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
 
-/** A label on a pull request: its name, and its colour as GitHub spells it, six hex digits with no `#`. */
+/** A label on a pull request: its name, and its color as GitHub spells it, six hex digits with no `#`. */
 const pullRequestLabelSchema = EffectSchema.Struct({
   name: overviewName,
   color: EffectSchema.String,

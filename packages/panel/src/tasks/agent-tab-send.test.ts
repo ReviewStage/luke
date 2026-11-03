@@ -338,8 +338,8 @@ test("a line another hand sent after a stopped turn, its page saying the agent r
   // The tab's summary still says the turn was stopped; the page the line lands on says the agent runs.
   const tab = await drawnTab(
     [handedOn],
-    { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELLED, runtime: AGENT_RUNTIME.CLAUDE_CODE },
-    [AGENT_STATUS.CANCELLED, AGENT_STATUS.RUNNING],
+    { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELED, runtime: AGENT_RUNTIME.CLAUDE_CODE },
+    [AGENT_STATUS.CANCELED, AGENT_STATUS.RUNNING],
   );
   assert.match(tab.container.textContent ?? "", /Stopped/u, "the stopped turn ends on Stopped");
 

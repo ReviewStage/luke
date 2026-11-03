@@ -488,7 +488,7 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual([...policiesSent(answer)], [headers.get("content-security-policy")], path);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], path);
-    // Files changed colours its diffs with Pierre's Highlights, one WebAssembly module, which this alone lets the app compile.
+    // Files changed colors its diffs with Pierre's Highlights, one WebAssembly module, which this alone lets the app compile.
     assert.deepEqual(directives.get("script-src"), ["'self'", "'wasm-unsafe-eval'"], path);
     assert.deepEqual(directives.get("object-src"), ["'none'"], path);
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
@@ -697,7 +697,7 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
     );
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
-    // A chart's colours are an inline sheet `@repo/ui`'s chart writes (`ChartStyle`).
+    // A chart's colors are an inline sheet `@repo/ui`'s chart writes (`ChartStyle`).
     assert.deepEqual(directives.get("style-src"), ["'self'", "'unsafe-inline'"], address);
     // An account's picture is its provider's (`@repo/features/account-picture`).
     assert.deepEqual(

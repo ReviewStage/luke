@@ -11,8 +11,8 @@ import { extendTailwindMerge } from "tailwind-merge";
  *
  * Note that the merge is told the type, length, and corner names
  * `tailwind/theme.css` adds, because tailwind-merge reads a name it does not
- * know as a colour: `text-body` beside `text-foreground` would be dropped as
- * a second text colour, and `px-control-inset` would outlive a later `p-0`.
+ * know as a color: `text-body` beside `text-foreground` would be dropped as
+ * a second text color, and `px-control-inset` would outlive a later `p-0`.
  * The disabled fade (`opacity-disabled`) is told as an opacity, which it
  * would otherwise not read as one, so a later fade would not replace it,
  * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
@@ -266,14 +266,7 @@ const PANEL_SHELL = {
  * summary card's motion), by the group tailwind-merge reads each in.
  */
 const PANEL_SIDE = {
-  spacing: [
-    "half-container",
-    "side-panel",
-    "side-panel-no-tabs",
-    "summary",
-    "summary-card-inset",
-    "summary-rail",
-  ],
+  spacing: ["half-container", "side-panel", "summary", "summary-card-inset", "summary-rail"],
   animate: ["card-grow-in", "card-leave"],
 } as const;
 

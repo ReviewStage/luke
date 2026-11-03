@@ -69,7 +69,7 @@ export const TOOL_STATE = {
 
 export type ToolState = (typeof TOOL_STATE)[keyof typeof TOOL_STATE];
 
-/** How a block of the body is drawn: a command behind its prompt, a patch with its lines coloured, words as they are, or JSON. */
+/** How a block of the body is drawn: a command behind its prompt, a patch with its lines colored, words as they are, or JSON. */
 export const TOOL_BLOCK = {
   COMMAND: "command",
   PATCH: "patch",
@@ -101,7 +101,7 @@ const NO_OUTPUT = "No output";
 const NONE = "(none)";
 
 /** The words that only acknowledge a call, which tell a reader nothing the row does not. */
-const ACKNOWLEDGEMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok"]);
+const ACKNOWLEDGMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok"]);
 
 /** The keys whose `true` only acknowledges a call, as `{ "ok": true }` does; `true` under any other key is an answer. */
 const ACKNOWLEDGING_KEYS: ReadonlySet<string> = new Set(["ok", "success"]);
@@ -426,12 +426,12 @@ function readableBlock(block: ToolBlock): ToolBlock {
 function acknowledges(block: ToolBlock): boolean {
   if (block.kind !== TOOL_BLOCK.JSON) return false;
   const value = blockValue(block);
-  if (!isContainer(value) || Array.isArray(value)) return ACKNOWLEDGEMENTS.has(value);
+  if (!isContainer(value) || Array.isArray(value)) return ACKNOWLEDGMENTS.has(value);
   const entries = Object.entries(value);
   return (
     entries.length > 0 &&
     entries.every(
-      ([key, item]) => ACKNOWLEDGEMENTS.has(item) || (item === true && ACKNOWLEDGING_KEYS.has(key)),
+      ([key, item]) => ACKNOWLEDGMENTS.has(item) || (item === true && ACKNOWLEDGING_KEYS.has(key)),
     )
   );
 }

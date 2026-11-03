@@ -149,6 +149,26 @@ export function useListedPullRequests(
   }, [listed, taskId, agentId]);
 }
 
+/** The pull request the task list holds of one agent, as its row keeps it. */
+const listedPullRequestAtom = Atom.family((agentId: string) =>
+  Atom.map(
+    APP_SLICE.TASKS,
+    (tasks) => tasks?.agentPullRequests?.find((each) => each.agentId === agentId)?.pullRequest,
+  ),
+);
+
+/**
+ * The pull request one agent opened, as the service last synced it onto the
+ * agent's row and the task list carries it, a hover card's whole source of
+ * it, so hanging one asks the service nothing; none where it opened none,
+ * and before the list first answers live. The document keeps a row's
+ * identity while it does not move, so its reader is drawn again only as it
+ * does.
+ */
+export function useListedPullRequest(agentId: string): AgentPullRequest | undefined {
+  return useAppSlice(listedPullRequestAtom(agentId));
+}
+
 /**
  * The line the task list holds of the pull request at `url`, as the service
  * last pushed it, on whichever task names it; none where no task does. The

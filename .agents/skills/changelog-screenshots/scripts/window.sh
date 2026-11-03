@@ -9,7 +9,7 @@ set -euo pipefail
 #
 # The capture is retried until it carries the key window's larger shadow,
 # because macOS refuses the activation while someone is typing elsewhere: leave
-# the Mac alone while a batch runs, or its pictures come out with grey lights.
+# the Mac alone while a batch runs, or its pictures come out with gray lights.
 
 out=${1:?usage: window.sh <out.png> [electron args...]}
 shift
@@ -64,7 +64,7 @@ for attempt in 1 2 3 4 5; do
     printf 'attempt %s: the window was not key (%s px wide)\n' "$attempt" "$width" >&2
 done
 if ((key == 0)); then
-    printf 'error: the window never became key, so %s has grey traffic lights; leave the Mac alone and run again\n' "$out" >&2
+    printf 'error: the window never became key, so %s has gray traffic lights; leave the Mac alone and run again\n' "$out" >&2
     exit 1
 fi
 printf '%s\n' "$out"

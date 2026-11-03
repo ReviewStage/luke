@@ -46,7 +46,7 @@ export type CommentElement = (typeof COMMENT_ELEMENT)[keyof typeof COMMENT_ELEME
 export interface CommentAuthor {
   /** Their name, as the caller's person or agent name helper says it. */
   readonly name: string;
-  /** What their hue is read off, so a rename keeps the colour they are known by. */
+  /** What their hue is read off, so a rename keeps the color they are known by. */
   readonly id?: string | undefined;
   /** Their picture's address; none stands their letter on their hue. */
   readonly picture?: string | undefined;
@@ -70,7 +70,7 @@ const NAME_SAYING = "ui-comment-name flex min-w-0 items-baseline";
 const WHO = "ui-comment-who";
 const SAID = "ui-comment-said flex-none whitespace-pre font-ui-regular text-muted-foreground";
 const TIME = "ui-comment-time flex-none";
-// Note that the trailing slot is the head's line tall, its controls centred on it and standing over its edges, because a control's height would push every comment's words down by a different amount.
+// Note that the trailing slot is the head's line tall, its controls centered on it and standing over its edges, because a control's height would push every comment's words down by a different amount.
 const TRAILING =
   "ui-comment-trailing ms-auto inline-flex h-lh flex-none items-center gap-control-gap self-start";
 const BODY = "ui-comment-body col-start-2 row-start-2 min-w-0 text-body";
@@ -191,7 +191,7 @@ export function Comment({
 
 /** One line of a comment's words while it is read, as wide as the share of the line it is given. */
 export interface CommentSkeletonLine {
-  /** What tells the line from its neighbours, as a list's key. */
+  /** What tells the line from its neighbors, as a list's key. */
   readonly key: string;
   readonly width: string;
 }

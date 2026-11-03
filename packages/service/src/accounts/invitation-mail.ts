@@ -54,7 +54,7 @@ const RESEND = {
 const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
 
 /**
- * The email's colours, light and dark: the brand's own, read off the brand
+ * The email's colors, light and dark: the brand's own, read off the brand
  * table `@repo/brand` generates `@repo/ui`'s palette from, so a change of
  * brand reaches the letter with no second copy to forget. Each is spelled as
  * a plain hex because an email client reads no custom property. The page is
@@ -95,7 +95,7 @@ const PICTURE_DENSITY = 2;
 /**
  * The email's look, inline, since an email client takes inline styles alone:
  * a light letter by default, which the dark-mode block below turns dark where
- * the client honours `prefers-color-scheme`. The layout is tables, which
+ * the client honors `prefers-color-scheme`. The layout is tables, which
  * every client, Outlook's Word engine among them, draws the same. One card
  * holds the workspace's picture, the heading, the inviter's line, the button,
  * and the expiry; the footer stands under it on the page.

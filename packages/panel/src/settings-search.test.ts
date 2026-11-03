@@ -307,9 +307,9 @@ function entryOf(id: string, label: string, ...words: string[]): SettingsSearchE
 
 test("a row named by the query or beginning with it ranks above one whose words are scattered, and one found by its description last", () => {
   const entries = [
-    entryOf("described", "Colours", "Follows the system theme"),
+    entryOf("described", "Colors", "Follows the system theme"),
     entryOf("scattered", "Dark theme for diffs"),
-    entryOf("prefix", "Theme colours"),
+    entryOf("prefix", "Theme colors"),
     entryOf("exact", "Theme"),
   ];
   const found = searchSettings(entries, "theme");
@@ -322,13 +322,13 @@ test("a row named by the query or beginning with it ranks above one whose words 
 
 test("a result marks the letters of its name that the words typed found, and one found by its description marks none", () => {
   const found = searchSettings(
-    [entryOf("diffs", "Dark theme for diffs"), entryOf("colours", "Colours", "System theme")],
+    [entryOf("diffs", "Dark theme for diffs"), entryOf("colors", "Colors", "System theme")],
     "theme",
   );
   const marks = new Map(found?.groups.flatMap((group) => group.items.map((e) => [e.id, e.marks])));
 
   assert.deepEqual(marks.get("diffs"), [{ start: 5, end: 10 }]);
-  assert.deepEqual(marks.get("colours"), []);
+  assert.deepEqual(marks.get("colors"), []);
 });
 
 test("letters typed in order do not find a row: thm no longer finds Theme", () => {

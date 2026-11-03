@@ -68,7 +68,7 @@ import { AgentMark } from "./tasks/tab-look.js";
  * loads, and the first letter of their name on the hue read off their id
  * until then and where it fails, as a workspace's tile does; a member who left keeps their own
  * picture or letter, grayed and muted, their name saying they left, so
- * colour is never the only sign; someone the service names nobody for
+ * color is never the only sign; someone the service names nobody for
  * stands on a quiet outline. Someone GitHub names
  * who is no member stands by their GitHub avatar, a person on a circle and
  * an App's bot on a square, its robot until the avatar loads, and its name
@@ -466,7 +466,7 @@ export function ActorMark({
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // The app wears the working ink on its mark, the colour its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
+        // The app wears the working ink on its mark, the color its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
         actor.kind === ACTOR_KIND.APP &&
           "text-working [&_.ui-product-mark]:size-actor-mark-share! [&_.ui-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
@@ -946,7 +946,7 @@ export function ActorRef({
 }
 
 /**
- * Words naming an actor in one row, centred on its disc: the words and the
+ * Words naming an actor in one row, centered on its disc: the words and the
  * `ActorRef` among them, each word string keeping its own spaces, since a
  * row drops a run of spaces standing alone.
  */

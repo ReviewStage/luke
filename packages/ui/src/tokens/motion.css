@@ -3,7 +3,7 @@
    The durations themselves are `@repo/brand`'s, generated into
    `motion-tokens.css` under their `--ui-*` names. Reduced motion zeroes
    them here rather than component by component, keeping hover feedback's
-   70ms (a colour settling is not motion) and `--ui-late-delay`, a wait that
+   70ms (a color settling is not motion) and `--ui-late-delay`, a wait that
    holds back a blip rather than moving anything, and pauses `--ui-loop-motion`,
    the play state of a loop with no end of its own (a busy button's ring).
    `--ui-scroll-glide` is how a scroller a component moves itself gets

@@ -5,7 +5,7 @@
  * `history.pushState` or `history.replaceState` at the step's address, its
  * state saved beside the entry's index as `{state, idx}`. The entries are
  * also held here, by that index, so the panel reads every step's state
- * without the browser travelling to it, as `@repo/ui/history-adapter`
+ * without the browser traveling to it, as `@repo/ui/history-adapter`
  * promises. A `popstate` is the browser moving by itself: the index it lands
  * on stands, and every listener hears it, so the panel goes there
  * (`navigation-history.ts`). A move of the panel's own stands at once, as the
@@ -123,11 +123,11 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
       ? EMPTY
       : { entries: [{ address: addressHere(), state: loaded.state }], at: 0 };
   const listeners = new Set<() => void>();
-  // The index a traversal of the panel's is travelling to, and the browser's writes and moves waiting on it, in order.
-  let travelling: number | undefined;
+  // The index a traversal of the panel's is traveling to, and the browser's writes and moves waiting on it, in order.
+  let traveling: number | undefined;
   const waiting: (() => void)[] = [];
   const drain = () => {
-    while (travelling === undefined) {
+    while (traveling === undefined) {
       const next = waiting.shift();
       if (next === undefined) return;
       next();
@@ -210,13 +210,13 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
 
   const onPopState = (event: PopStateEvent) => {
     const saved = savedEntry<State>(event);
-    if (travelling === undefined) {
+    if (traveling === undefined) {
       stand(landed(saved));
       return;
     }
     // Note that a traversal of the panel's own already stands, so landing where it went only lets what waits on it through.
-    const arrived = saved?.idx === travelling;
-    travelling = undefined;
+    const arrived = saved?.idx === traveling;
+    traveling = undefined;
     if (!arrived) {
       // Landing elsewhere is the browser's word over the panel's: with nothing waiting the entries held are the browser's,
       // and otherwise what waited to be written after the move is dropped, and with it what the entries around knew.
@@ -253,10 +253,10 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): BrowserHis
       if (delta === 0 || at < 0 || at >= snapshot.entries.length) return;
       const target = base + at;
       inTurn(() => {
-        travelling = target;
+        traveling = target;
         if (browserDid(() => window.history.go(delta))) return;
         // What waited on the move was written for the entry it went to, which the browser never reached.
-        travelling = undefined;
+        traveling = undefined;
         waiting.length = 0;
         stayed = true;
       });

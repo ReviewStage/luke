@@ -4,7 +4,7 @@ import { linkFace, shortUrl } from "./link-face.js";
 
 /**
  * link-face.test.ts -- a bare address says its host and path, folded past
- * the bound, and a labelled link says its label. Synthetic addresses.
+ * the bound, and a labeled link says its label. Synthetic addresses.
  */
 
 test("an address says its host and path, without its scheme, its www., or its fragment", () => {
@@ -69,7 +69,7 @@ test("a link whose words are its address says it cut short, however the words sp
   });
 });
 
-test("a labelled link says its label", () => {
+test("a labeled link says its label", () => {
   assert.deepEqual(
     linkFace("https://docs.stripe.com/guides/idempotent_requests", "idempotency guide"),
     {

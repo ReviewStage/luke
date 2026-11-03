@@ -5,7 +5,7 @@ set -euo pipefail
 # state kept under --user-data-dir, so a Vespin already running never holds the
 # single-instance lock against the shot, and every window resized to
 # $APP_SHOT_SIZE and focused a few seconds in, because the traffic lights only
-# draw in colour on the key window. $APP_SHOT_ZOOM (default 1) makes the
+# draw in color on the key window. $APP_SHOT_ZOOM (default 1) makes the
 # window that many times larger and zooms its page to match, so the layout is
 # the same $APP_SHOT_SIZE points drawn with that many times the pixels: a
 # close-up's capture, sharp where a crop of a plain one would be enlarged.

@@ -23,7 +23,7 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
  * The press opens the preferred microphone (the Mac's own over a
  * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
- * WebM at the wire's bitrate, measured by an analyser the strip draws,
+ * WebM at the wire's bitrate, measured by an analyzer the strip draws,
  * whose audio context the press itself makes, as Safari on iOS requires.
  * Finishing hands the clip to main in one act, and main to our service,
  * which has OpenAI hear it and answers the words; the renderer never
@@ -32,7 +32,7 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
  * (`../plan-editor/composer-editor.ts`), spaced from the words around them,
  * never over the draft, and the box takes the caret back after them; words a
  * full box has no room for are not put in at all.
- * Cancelling, or a press elsewhere that unmounts the box, drops the clip
+ * Canceling, or a press elsewhere that unmounts the box, drops the clip
  * unsent. The recording stops itself a second short of the wire's two
  * minutes on a deadline of its own, kept on the renderer's runtime rather
  * than on the recorder's events, which a hidden page may hold back. ✓ waits for the microphone
@@ -73,8 +73,8 @@ const RECORDER_SLICE_MS = 1_000;
 /** The length a recording stops itself at: a second short of the bound, so the clip lands inside it. */
 const DICTATION_AUTO_STOP = Duration.millis(DICTATION_BOUNDS.MAX_DURATION_MS - 1_000);
 
-/** The analyser's window: enough samples for a steady level at a frame's rate. */
-const ANALYSER_FFT_SIZE = 1_024;
+/** The analyzer's window: enough samples for a steady level at a frame's rate. */
+const ANALYZER_FFT_SIZE = 1_024;
 
 /** One recording as it stands: what was opened for it, and what it has written. */
 interface Recording {
@@ -91,7 +91,7 @@ export interface DictationControl {
   /** Whether the account is known to have no OpenAI API key, when `start` opens Settings › Agents instead. */
   keyMissing: boolean;
   /** What the strip measures; nothing until the microphone is open. */
-  analyser: AnalyserNode | undefined;
+  analyzer: AnalyserNode | undefined;
   /** When the recording began on the page's clock; nothing until the microphone is open, which is when ✓ takes a press. */
   startedAt: number | undefined;
   start: () => void;
@@ -135,7 +135,7 @@ export function useDictation(input: {
   const keyMissing = useOpenAiKeyMissing();
   const openApiKeys = useOpenApiKeys();
   const [phase, setPhase] = useState<DictationPhase>(DICTATION_PHASE.IDLE);
-  const [analyser, setAnalyser] = useState<AnalyserNode | undefined>(undefined);
+  const [analyzer, setAnalyzer] = useState<AnalyserNode | undefined>(undefined);
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
   // Note that each press and each cancel is a generation of its own, because
   // a microphone opening or an answer arriving late must find the dictation
@@ -170,7 +170,7 @@ export function useDictation(input: {
     marked.current?.release();
     marked.current = undefined;
     setDeadline(idle);
-    setAnalyser(undefined);
+    setAnalyzer(undefined);
     setStartedAt(undefined);
     setPhase(DICTATION_PHASE.IDLE);
     latest.current.onNote(note);
@@ -188,7 +188,7 @@ export function useDictation(input: {
 
   const transcribe = async (clip: Recording, durationMs: number) => {
     setPhase(DICTATION_PHASE.TRANSCRIBING);
-    setAnalyser(undefined);
+    setAnalyzer(undefined);
     const bytes = new Uint8Array(
       await new Blob(clip.chunks, { type: DICTATION_AUDIO_TYPE }).arrayBuffer(),
     );
@@ -267,7 +267,7 @@ export function useDictation(input: {
     // format, so the microphone is let go there too rather than left lit.
     try {
       const measured = context.createAnalyser();
-      measured.fftSize = ANALYSER_FFT_SIZE;
+      measured.fftSize = ANALYZER_FFT_SIZE;
       context.createMediaStreamSource(stream).connect(measured);
       // Safari on iOS may suspend the context as the microphone takes the audio session.
       if (context.state !== "running") context.resume().catch(() => undefined);
@@ -289,7 +289,7 @@ export function useDictation(input: {
       recorder.start(RECORDER_SLICE_MS);
       recording.current = standing;
       setDeadline(rendererRuntime.atom(Effect.sleep(DICTATION_AUTO_STOP)));
-      setAnalyser(measured);
+      setAnalyzer(measured);
       setStartedAt(standing.startedAt);
     } catch {
       release({ stream, context });
@@ -340,5 +340,5 @@ export function useDictation(input: {
     return false;
   };
 
-  return { phase, keyMissing, analyser, startedAt, start, finish, cancel, onFieldKey };
+  return { phase, keyMissing, analyzer, startedAt, start, finish, cancel, onFieldKey };
 }

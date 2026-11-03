@@ -53,7 +53,7 @@ type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest | Sc
  * GET serves one attachment of the plan as its bytes, to the members of the
  * plan's workspace alone: a picture or a video its text names, under the
  * media type the service sniffed it to be as it was kept, or else a file one
- * of its comments carries, under the type it travelled as. An attachment of a plan the
+ * of its comments carries, under the type it traveled as. An attachment of a plan the
  * account does not reach, or of another plan, is not found, as a plan is.
  */
 const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint")(function* (

@@ -79,7 +79,7 @@ type StreamRefusal = (typeof STREAM_REFUSAL)[keyof typeof STREAM_REFUSAL];
 /**
  * The stream read whole as one picture: sniffed once its signature is in,
  * and stopped where it is no image or runs past the bound. The reader is
- * cancelled however the read ends, so a stream refused, or one that failed
+ * canceled however the read ends, so a stream refused, or one that failed
  * mid-way, holds nothing open behind it.
  */
 const readImageStream = Effect.fnUntraced(function* <Type extends string>(

@@ -13,7 +13,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
-import { cancelledTurn } from "../agents/coder-host/stop.js";
+import { canceledTurn } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
@@ -173,13 +173,13 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
         yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
 
-        const cancelled = yield* cancelledTurn(
-          Effect.succeed({ cancel: () => Effect.die("no turn runs, so nothing is cancelled") }),
+        const canceled = yield* canceledTurn(
+          Effect.succeed({ cancel: () => Effect.die("no turn runs, so nothing is canceled") }),
           storeWriter({ tools: CODER_TOOL_SET }),
           agent,
         ).pipe(Effect.provide(githubReaching([]).layer));
         yield* sweepAt(DUE, eve);
-        assert.equal(cancelled, false);
+        assert.equal(canceled, false);
         assert.deepEqual(sentTo(eve, sessionId), []);
       }),
   );

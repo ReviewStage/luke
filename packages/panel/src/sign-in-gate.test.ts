@@ -105,12 +105,12 @@ test("with no provider kept, no button wears the Last used badge", () => {
 });
 
 test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes the wait back", () => {
-  let cancelled = 0;
+  let canceled = 0;
   const container = mount(
     gate({
       waiting: ACCOUNT_PROVIDER.GITHUB,
       lastUsed: ACCOUNT_PROVIDER.GITHUB,
-      onCancel: () => (cancelled += 1),
+      onCancel: () => (canceled += 1),
     }),
   );
   const waiting = button(container, "Waiting for browser");
@@ -125,7 +125,7 @@ test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes 
     [waiting],
   );
   act(() => button(container, "Cancel").click());
-  assert.equal(cancelled, 1);
+  assert.equal(canceled, 1);
 });
 
 test("the wait on the browser is announced politely, and taken back once the wait ends", () => {

@@ -3,7 +3,7 @@
  *
  * Throwaway (`README.md`). Sidebar open, side panel closed, no call, the
  * summary folded to its rail: the plan's column alone, its document
- * centred, "Edited by Luke during your call · 4m ago" over the title, and
+ * centered, "Edited by Luke during your call · 4m ago" over the title, and
  * each section's byline (Luke, the coding agent, and you, minutes to an hour
  * ago) as the app draws it at rest: under the pointer.
  */

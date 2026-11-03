@@ -9,7 +9,7 @@ void React;
  * provider-mark.tsx -- the official mark of every provider an account signs in with or connects, as its own brand publishes it.
  *
  * Brand marks, not glyphs of ours: each is the brand's own vector, verbatim
- * from the press kit cited above it, never redrawn, in the colours its usage
+ * from the press kit cited above it, never redrawn, in the colors its usage
  * rules allow. A mark the brand shows monochrome is drawn in `currentColor`,
  * so it reads in the ink of whatever row or card it stands in; a brand that
  * names one ink per ground wears an `integration-mark-*` class, and each app
@@ -68,7 +68,7 @@ interface MarkProps {
 }
 
 /**
- * Google's G in its four official colours, as Google's sign-in branding
+ * Google's G in its four official colors, as Google's sign-in branding
  * guidelines draw it (https://developers.google.com/identity/branding-guidelines),
  * on either ground.
  */
@@ -117,7 +117,7 @@ function ChatGptMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Maps's pin in its five official colours, verbatim from the product
+ * Google Maps's pin in its five official colors, verbatim from the product
  * logo Google serves for Maps
  * (https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg),
  * in a box cropped to the pin, on either ground.
@@ -150,7 +150,7 @@ function GoogleMapsMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Docs's page in its official colours, verbatim from the product logo
+ * Google Docs's page in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/docs_2020q4/v12/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -171,7 +171,7 @@ function GoogleDocsMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Sheets's page in its official colours, verbatim from the product logo
+ * Google Sheets's page in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -193,7 +193,7 @@ function GoogleSheetsMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Slides's page in its official colours, verbatim from the product logo
+ * Google Slides's page in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -212,7 +212,7 @@ function GoogleSlidesMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Forms's page in its official colours, verbatim from the product logo
+ * Google Forms's page in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/forms_2020q4/v6/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -234,7 +234,7 @@ function GoogleFormsMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Drive's triangle in its official colours, verbatim from the product logo
+ * Google Drive's triangle in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -271,7 +271,7 @@ function GoogleDriveMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Calendar's 31 in its official colours, verbatim from the product logo
+ * Google Calendar's 31 in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -296,7 +296,7 @@ function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Google Meet's camera in its official colours, verbatim from the product logo
+ * Google Meet's camera in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/meet_2020q4/v8/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -322,7 +322,7 @@ function GoogleMeetMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * Gmail's M in its official colours, verbatim from the product logo
+ * Gmail's M in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -346,7 +346,7 @@ function GmailMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * YouTube's play button in its official colours, verbatim from the product logo
+ * YouTube's play button in its official colors, verbatim from the product logo
  * Google serves for it
  * (https://www.gstatic.com/images/branding/productlogos/youtube/v9/192px.svg),
  * in the box every Google mark here is cropped to, on either ground.
@@ -366,7 +366,7 @@ function YouTubeMark({ className }: MarkProps): React.JSX.Element {
 /**
  * X's logo, verbatim from the icon x.com serves
  * (https://abs.twimg.com/responsive-web/client-web/icon-svg.ea5ff4aa.svg);
- * X shows it in one colour, black or white, so it is drawn in
+ * X shows it in one color, black or white, so it is drawn in
  * `currentColor` for either ground, in a box cropped to the letter.
  */
 function XMark({ className }: MarkProps): React.JSX.Element {
@@ -389,8 +389,8 @@ function XMark({ className }: MarkProps): React.JSX.Element {
 
 /**
  * LinkedIn's "in" square, the glyph the About page's founder links drew, in
- * a box that is the square itself. LinkedIn shows its mark in one colour on
- * a one-colour ground, so it is drawn in `currentColor` for either ground.
+ * a box that is the square itself. LinkedIn shows its mark in one color on
+ * a one-color ground, so it is drawn in `currentColor` for either ground.
  */
 function LinkedInMark({ className }: MarkProps): React.JSX.Element {
   return (
@@ -434,7 +434,7 @@ function ExecutorMark({ className }: MarkProps): React.JSX.Element {
 
 /**
  * GitHub's mark, the Octicon GitHub publishes as its logo
- * (https://github.com/logos); GitHub's guidance shows it in one colour, so it
+ * (https://github.com/logos); GitHub's guidance shows it in one color, so it
  * is drawn in `currentColor` for either ground.
  */
 function GitHubMark({ className }: MarkProps): React.JSX.Element {
@@ -480,7 +480,7 @@ function GranolaMark({ className }: MarkProps): React.JSX.Element {
  * Linear's logomark, verbatim from `logo-light.svg` in Linear's brand assets
  * (https://linear.app/brand,
  * https://static.linear.app/design-assets/Linear-Brand-Assets.zip), which
- * Linear publishes as a single-colour mark in light and dark; drawn in
+ * Linear publishes as a single-color mark in light and dark; drawn in
  * `currentColor` for either ground.
  */
 function LinearMark({ className }: MarkProps): React.JSX.Element {
@@ -569,13 +569,13 @@ function NotionMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
- * PostHog's full-colour logomark, verbatim from `posthog-logomark.svg` in
+ * PostHog's full-color logomark, verbatim from `posthog-logomark.svg` in
  * PostHog's brand package (https://github.com/PostHog/brand, served at
  * https://brand.posthog.com/logo/posthog-logomark.svg), in its gradients on
  * a white rounded square on either ground. PostHog's rules
  * (https://brand.posthog.com/logo) keep the gradient mark off a dark ground
- * and refuse a recoloured part, such as the hedgehog's face turned white,
- * so the square is what lets the colour mark stand on a dark row with its
+ * and refuse a recolored part, such as the hedgehog's face turned white,
+ * so the square is what lets the color mark stand on a dark row with its
  * face intact; on a light row it is the row's own white. Its gradients' ids
  * are this mark's own, so two marks on one page never paint with each
  * other's.
@@ -716,7 +716,7 @@ function PostHogMark({ className }: MarkProps): React.JSX.Element {
  * Sentry's glyph, verbatim from the logo generator on Sentry's branding page
  * (https://sentry.io/branding/, Glyph with no clear space), whose brand guide
  * (https://live.standards.site/sentry) uses the glyph alone where space is
- * short. Sentry publishes it in one colour, its dark blurple on a light
+ * short. Sentry publishes it in one color, its dark blurple on a light
  * ground and white on a dark one, so it is drawn in `currentColor` with
  * `.integration-mark-sentry` (`styles/desktop.css`) setting which.
  */
@@ -737,7 +737,7 @@ function SentryMark({ className }: MarkProps): React.JSX.Element {
 /**
  * Slack's mark, verbatim from `SLA-Slack-icon-RGB.svg` in the Slack Media Kit
  * logos (https://slack.com/media-kit, served from Salesforce's asset library
- * at https://salesforce.widencollective.com/c/yn6bxnam), in the four colours
+ * at https://salesforce.widencollective.com/c/yn6bxnam), in the four colors
  * Slack's logo rules keep (https://slack.com/terms-of-service/slack-brand:
  * "Don't use different colors", "Don't use old versions").
  */

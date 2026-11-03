@@ -8,8 +8,8 @@ import { cn } from "../cn.js";
  * allows, so a later `shadcn add dialog` reads as a small diff. Our
  * changes: the content stands in Base UI's `Viewport`, which is the dimmed
  * window itself, the palette's scrim fading in on the dialog's own beat and
- * laid out as a grid that centres the card, which a press on and a drag
- * over are heard by, rather than fixed at the screen's centre over an
+ * laid out as a grid that centers the card, which a press on and a drag
+ * over are heard by, rather than fixed at the screen's center over an
  * overlay of its own; the overlay stands unpainted under it, the press
  * Base UI reads as outside the card. So the card fades in under its fading
  * window as it always has, and a card never taller than the window keeps

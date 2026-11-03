@@ -62,7 +62,7 @@
      is signed in as Dean Stratakos with his GitHub photo, shows no Update pill
      or other development chrome, and dates everything minutes or days before
      the capture, never the fixture's 1970 or an hours-long timer. Its data is
-     synthetic: the acme organisation, its teal mark, and its repositories,
+     synthetic: the acme organization, its teal mark, and its repositories,
      never a real account's titles, branches, or conversations. -->
 
 Vespin is an inbox for all your coding agents. These are its notable changes,
@@ -137,7 +137,7 @@ Finish setting up, over New task, until it's done.
   ([#6507](https://github.com/ReviewStage/vespin/pull/6507),
   [#6510](https://github.com/ReviewStage/vespin/pull/6510))
 - Fixed a Settings page or version history that failed to draw standing off
-  centre ([#6491](https://github.com/ReviewStage/vespin/pull/6491))
+  center ([#6491](https://github.com/ReviewStage/vespin/pull/6491))
 - Fixed a reply under one of Vespin's Slack DMs starting a stray agent rather
   than answering that Inbox thread
   ([#6550](https://github.com/ReviewStage/vespin/pull/6550))
@@ -149,7 +149,7 @@ Finish setting up, over New task, until it's done.
 - Updated vespin.dev's Download and the README to download Vespin.dmg
   ([#6481](https://github.com/ReviewStage/vespin/pull/6481))
 - Updated vespin.dev to hold its content to a standard width on a wide
-  window, and to list Vespin as an organisation in search results
+  window, and to list Vespin as an organization in search results
   ([#6486](https://github.com/ReviewStage/vespin/pull/6486),
   [#6495](https://github.com/ReviewStage/vespin/pull/6495))
 
@@ -284,7 +284,7 @@ notifications in Settings › Workspace turns your DMs off.
 - Installing Vespin's GitHub App links your GitHub account in the same trip
   ([#6391](https://github.com/ReviewStage/vespin/pull/6391))
 - Settings › Integrations names each connected account by the provider's own
-  name for it, such as an email, a workspace, or an organisation, in a muted
+  name for it, such as an email, a workspace, or an organization, in a muted
   line beside the provider, as an agent's Integrations menu does
   ([#6323](https://github.com/ReviewStage/vespin/pull/6323),
   [#6368](https://github.com/ReviewStage/vespin/pull/6368),
@@ -357,7 +357,7 @@ notifications in Settings › Workspace turns your DMs off.
   [#6224](https://github.com/ReviewStage/vespin/pull/6224),
   [#6314](https://github.com/ReviewStage/vespin/pull/6314))
 - Every Inbox count, in the sidebar, a task's Inbox tab, and a phone's tab
-  bar, wears one needs-you colour
+  bar, wears one needs-you color
   ([#6191](https://github.com/ReviewStage/vespin/pull/6191))
 - The media viewer shows a video's first frame in its strip, a picture at its
   own shape in a chip, and a row of pictures wraps rather than squeezing
@@ -622,7 +622,7 @@ finished turn's "Worked for" card gives its clock and its tokens.
 - A code block in an agent's message is headed by its language's name, such
   as TypeScript or Shell, and its file icon
   ([#6007](https://github.com/ReviewStage/luke/pull/6007))
-- A pull request's chip names its number, its state, and its coloured mark,
+- A pull request's chip names its number, its state, and its colored mark,
   leaving its title to its hover card and to rows with room for it
   ([#6016](https://github.com/ReviewStage/luke/pull/6016))
 - Agents write every pull request they name as a mention, which draws as a
@@ -655,7 +655,7 @@ finished turn's "Worked for" card gives its clock and its tokens.
   ([#5911](https://github.com/ReviewStage/luke/pull/5911))
 - Every Inbox row leads with its task or agent in bold on its first line, the
   time at that line's end, then its title and preview, and the open row is
-  tinted in the accent colour, in place of the view menu's Second line switch
+  tinted in the accent color, in place of the view menu's Second line switch
   ([#6003](https://github.com/ReviewStage/luke/pull/6003),
   [#6019](https://github.com/ReviewStage/luke/pull/6019),
   [#6083](https://github.com/ReviewStage/luke/pull/6083))
@@ -847,7 +847,7 @@ finished turn's "Worked for" card gives its clock and its tokens.
   [#5976](https://github.com/ReviewStage/luke/pull/5976))
 - Updated PRIVACY.md for session replay, which records only while you're
   signed in and is filed under your name and email, and for usage counts, each
-  labelled with the platform it came from
+  labeled with the platform it came from
   ([#6046](https://github.com/ReviewStage/luke/pull/6046),
   [#6048](https://github.com/ReviewStage/luke/pull/6048),
   [#6049](https://github.com/ReviewStage/luke/pull/6049),
@@ -873,7 +873,7 @@ address in an agent's browser for you.
 
 Every task row, in the sidebar, Recent, ⌘K, and the Tasks page's List and
 Columns, wears one icon for how its agents stand: failed as a red triangle,
-working, or its pull request in GitHub's colour, a closed one included. It
+working, or its pull request in GitHub's color, a closed one included. It
 takes the place of the Tasks page's working count and pull request chips.
 ([#5601](https://github.com/ReviewStage/luke/pull/5601),
 [#5605](https://github.com/ReviewStage/luke/pull/5605),
@@ -1116,10 +1116,10 @@ it as a button.
   diff's View options menu
   ([#5848](https://github.com/ReviewStage/luke/pull/5848))
 - Fixed View options' rows sitting on their cards' edges, and a file's or
-  page's source drawing as a grey card inside its tab
+  page's source drawing as a gray card inside its tab
   ([#5579](https://github.com/ReviewStage/luke/pull/5579))
 - Fixed ticked task lists in a pull request's description, a review comment,
-  or an agent's message fading to pale grey in the light theme
+  or an agent's message fading to pale gray in the light theme
   ([#5585](https://github.com/ReviewStage/luke/pull/5585))
 - Fixed the Pull request tab's Conversation heading being cut mid-word on a
   phone, and its folded title sliding sideways to its Edit title pencil
@@ -1515,7 +1515,7 @@ when you use the keyboard.
   ([#4913](https://github.com/ReviewStage/luke/pull/4913),
   [#5336](https://github.com/ReviewStage/luke/pull/5336))
 - A done task is green, orange means only that something needs you, and the
-  sidebar's Inbox count wears the same colour
+  sidebar's Inbox count wears the same color
   ([#4934](https://github.com/ReviewStage/luke/pull/4934))
 - The open task shows its live status, assignee, and repository, and an open
   Pull request tab re-reads its checks and merge box as its pull request moves
@@ -1643,10 +1643,10 @@ when you use the keyboard.
   [#5309](https://github.com/ReviewStage/luke/pull/5309))
 - Back and Forward list their steps from the keyboard, a tab's × names what
   it closes, and queued, unread, and a full context differ by more than
-  colour ([#5201](https://github.com/ReviewStage/luke/pull/5201),
+  color ([#5201](https://github.com/ReviewStage/luke/pull/5201),
   [#5204](https://github.com/ReviewStage/luke/pull/5204))
 - Every phone page has at most one control in each top corner and its title
-  centred, and the Inbox and every list screen open on their list
+  centered, and the Inbox and every list screen open on their list
   ([#4914](https://github.com/ReviewStage/luke/pull/4914),
   [#4907](https://github.com/ReviewStage/luke/pull/4907),
   [#4912](https://github.com/ReviewStage/luke/pull/4912),
@@ -2276,7 +2276,7 @@ sets it up.
 - Ticking every step of an Inbox to-do counts as Mark done
   ([#4275](https://github.com/ReviewStage/luke/pull/4275))
 - When GitHub refuses your token, Luke offers Update GitHub token, or
-  Authorize token for an organisation with single sign-on
+  Authorize token for an organization with single sign-on
   ([#4164](https://github.com/ReviewStage/luke/pull/4164))
 - The web app has the Terminal tab
   ([#4357](https://github.com/ReviewStage/luke/pull/4357),
@@ -2340,7 +2340,7 @@ sets it up.
 - Fixed menus and submenus running past a narrow panel's edge
   ([#4639](https://github.com/ReviewStage/luke/pull/4639),
   [#4649](https://github.com/ReviewStage/luke/pull/4649))
-- Fixed code blocks drawn without colour after the colouring process exited
+- Fixed code blocks drawn without color after the coloring process exited
   ([#4394](https://github.com/ReviewStage/luke/pull/4394))
 - Fixed app.notion.com links drawn as plain links
   ([#4602](https://github.com/ReviewStage/luke/pull/4602))
@@ -2540,7 +2540,7 @@ follow a link straight to one of its review threads.
   ([#3870](https://github.com/ReviewStage/luke/pull/3870))
 - Fixed a comment's suggested change not drawn as Files changed draws a diff
   ([#3838](https://github.com/ReviewStage/luke/pull/3838))
-- Fixed a pull request's mark not wearing its state's colour
+- Fixed a pull request's mark not wearing its state's color
   ([#3864](https://github.com/ReviewStage/luke/pull/3864))
 - Fixed Open on this Mac on a merged pull request whose branch was deleted, and
   two opens at once clashing over the clone
@@ -2970,7 +2970,7 @@ card.
 
 A coding agent starts another coding agent on its own task or on any task of
 its workspace, which `list_tasks` finds, and the new agent reports back to it.
-The @ list offers every coding agent of the workspace, labelled by its task,
+The @ list offers every coding agent of the workspace, labeled by its task,
 and coding agents write mentions too. Luke and coding agents read any page of
 the workspace with `read_page`, so a page mention points at the page rather
 than carrying it. An agent can archive or unarchive another, and the archived
@@ -3465,7 +3465,7 @@ press opens Luke and which says what to check when nothing opens.
 - A repository out of reach says why under the composer and offers what mends
   it ([#2573](https://github.com/ReviewStage/luke/pull/2573),
   [#2588](https://github.com/ReviewStage/luke/pull/2588))
-- A sign-in Connect cancelled or refused says so, with Try again
+- A sign-in Connect canceled or refused says so, with Try again
   ([#2595](https://github.com/ReviewStage/luke/pull/2595),
   [#2604](https://github.com/ReviewStage/luke/pull/2604))
 - The repository chip says when a workspace's GitHub was removed or suspended
@@ -4329,7 +4329,7 @@ goes through the Luke GitHub App too.
 
 - Fixed Settings' toolbar ending Reset to defaults short of the edge
   ([#1925](https://github.com/ReviewStage/luke/pull/1925))
-- Fixed glyph and labelled buttons drawing in several styles across the window
+- Fixed glyph and labeled buttons drawing in several styles across the window
   ([#1929](https://github.com/ReviewStage/luke/pull/1929))
 
 ### Misc

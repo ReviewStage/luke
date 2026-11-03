@@ -20,10 +20,12 @@
 
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { TOOLBAR_LOOK } from "@repo/ui";
+import { askScroll } from "@repo/ui/scroll-asked";
 import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
+import { centerWithin, scrollerOf } from "../scroll-within.js";
 
 /**
  * The Inbox's two columns, the list as wide as it was last dragged and the
@@ -160,6 +162,19 @@ export interface InboxChoosing {
   readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
+/** The box the list's rows scroll in, found by a row it draws; none where it draws none or nothing scrolls. */
+function listScroller(rows: InboxRowPresses): HTMLElement | undefined {
+  const row = rows.first();
+  return row === undefined ? undefined : scrollerOf(row);
+}
+
+/** Whether the row given stands whole in the box it scrolls in. */
+function standsWithin(box: HTMLElement, row: HTMLElement): boolean {
+  const outer = box.getBoundingClientRect();
+  const inner = row.getBoundingClientRect();
+  return inner.top >= outer.top && inner.bottom <= outer.bottom;
+}
+
 /** Which columns stand: both where split, else the item chosen, or the list while none is. */
 function shownColumns(single: boolean, chosen: string | undefined): InboxColumnsShown {
   if (!single) return INBOX_COLUMNS.BOTH;
@@ -176,7 +191,10 @@ function shownColumns(single: boolean, chosen: string | undefined): InboxColumns
  * never left in what cannot be seen. K and J hand it to the row of the item
  * they step to while the list stands, so ↑↓ go on from there, and leave it
  * where it is while the item stands alone. Note that the keyboard is moved before
- * the window paints, while the hidden control still holds it.
+ * the window paints, while the hidden control still holds it. An item chosen
+ * from outside the list, by a link or Back, brings its row into view without
+ * the keyboard, or stands the list where it was as the item was left, so Back
+ * after a link lands where the reader was, as a mail app does.
  */
 export function useInboxColumns(chosen: string | undefined, choosing: InboxChoosing): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
@@ -189,6 +207,9 @@ export function useInboxColumns(chosen: string | undefined, choosing: InboxChoos
   const stepped = useRef(false);
   // Note that the way back chooses nothing, so the item it left is kept for the keyboard to land on its row.
   const left = useRef<string | undefined>(undefined);
+  // The list's scroll as each item was left, which Back to the item stands again, and the item chosen when it was last read.
+  const scrolls = useRef(new Map<string, number>());
+  const chosenLast = useRef<string | undefined>(chosen);
   const rows = useInboxRowPresses();
   const ref = useCallback(
     (element: HTMLElement | null) => {
@@ -202,6 +223,27 @@ export function useInboxColumns(chosen: string | undefined, choosing: InboxChoos
   useLayoutEffect(() => {
     onSingle?.(single);
   }, [single, onSingle]);
+
+  // Note that this runs before the keyboard is handed on below, which lets go of the press and the step it reads.
+  useLayoutEffect(() => {
+    const was = chosenLast.current;
+    chosenLast.current = chosen;
+    if (was === chosen || shown === INBOX_COLUMNS.ITEM) return;
+    const list = listScroller(rows);
+    if (list === undefined) return;
+    if (was !== undefined) scrolls.current.set(was, list.scrollTop);
+    // A row's press, K, and J stand on a row in sight already; a link or Back chooses from outside the list.
+    if (chosen === undefined || pressed.current || stepped.current) return;
+    const kept = scrolls.current.get(chosen);
+    if (kept !== undefined) {
+      askScroll(list);
+      list.scrollTop = kept;
+      return;
+    }
+    const row = rows.find(chosen);
+    if (row !== undefined && standsWithin(list, row)) return;
+    if (!rows.bringIn(chosen, () => undefined) && row !== undefined) centerWithin(list, row);
+  }, [chosen, shown, rows]);
 
   useLayoutEffect(() => {
     const held = view.current;

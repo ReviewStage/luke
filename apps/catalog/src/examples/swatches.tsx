@@ -4,8 +4,8 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * swatches.tsx -- a row of colour swatches as a picker draws them: the
- * struck-through dot for no colour first, then each colour, the one chosen
+ * swatches.tsx -- a row of color swatches as a picker draws them: the
+ * struck-through dot for no color first, then each color, the one chosen
  * ringed.
  */
 
@@ -18,7 +18,7 @@ const COLORS = [
 function Swatches(): React.JSX.Element {
   const [chosen, setChosen] = useState<string | undefined>("Green");
   return (
-    <CatalogSection id="swatches-row" title="Choosing a colour">
+    <CatalogSection id="swatches-row" title="Choosing a color">
       <div style={{ display: "flex", gap: 6 }}>
         <Swatch
           label="No color"

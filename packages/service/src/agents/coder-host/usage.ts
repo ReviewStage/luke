@@ -1,11 +1,8 @@
 import type { TurnUsageRow } from "@repo/database/models/agent-store";
 import type { AgentUsage } from "@repo/features/agent-wire";
+import { standardModelIdOf } from "@repo/features/models-wire";
 import type { RunUsage } from "../../core.js";
-import {
-  type OfferedModel,
-  standardModelIdOf,
-  tokensCostUsd,
-} from "../../providers/model-catalog.js";
+import { type OfferedModel, tokensCostUsd } from "../../providers/model-catalog.js";
 
 /**
  * usage.ts -- what a coding agent has cost: its turns' tokens summed, and their price where the catalog lists one for every model they ran on.

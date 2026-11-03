@@ -148,7 +148,7 @@ const turnOf = (
   status: TurnStatus,
   ago: number,
   options: {
-    readonly cancelled?: boolean;
+    readonly canceled?: boolean;
     readonly settled?: boolean;
     readonly failure?: string;
   } = {},
@@ -165,7 +165,7 @@ const turnOf = (
         queuedAt: new Date(NOW - ago),
         startedAt: new Date(NOW - ago + 1000),
         settledAt: options.settled === true ? new Date(NOW - ago + 60_000) : null,
-        cancelRequestedAt: options.cancelled === true ? new Date(NOW - ago + 2000) : null,
+        cancelRequestedAt: options.canceled === true ? new Date(NOW - ago + 2000) : null,
         ...(options.failure === undefined ? undefined : { failure: options.failure }),
       })
       .returning({ id: turns.id });
@@ -407,7 +407,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* turnOf(done, TURN_STATUS.SETTLED, 50 * 60_000, { settled: true });
         yield* recordAgentPublished(owner, done.id, PUBLISHED);
         const stopping = yield* openAgent(teammate, { taskId: plan.id }, 30 * 60_000);
-        yield* turnOf(stopping, TURN_STATUS.RUNNING, 20 * 60_000, { cancelled: true });
+        yield* turnOf(stopping, TURN_STATUS.RUNNING, 20 * 60_000, { canceled: true });
         yield* openAgent(owner, { taskId: plan.id }, 60_000);
         yield* openAgent(owner, { taskId: plan.id }, STARTING_GRACE_MILLIS + 60_000);
         const messaged = yield* openAgent(owner, { taskId: plan.id }, 40 * 60_000);

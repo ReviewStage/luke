@@ -146,7 +146,7 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
       }),
       ["acme/api", "acme/web", "acme/ledger"],
     ),
-    "When a pull request by anyone is opened or marked ready in acme/api, acme/web, or acme/ledger labelled bug or p1 on main, drafts and forks included",
+    "When a pull request by anyone is opened or marked ready in acme/api, acme/web, or acme/ledger labeled bug or p1 on main, drafts and forks included",
   );
   assert.equal(
     automationTriggerText(

@@ -232,7 +232,7 @@ interface MessageFile {
   readonly bytes: Uint8Array;
 }
 
-/** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
+/** A file an item's answer carried as a read answers it: the type it traveled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
   readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;

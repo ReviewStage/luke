@@ -10,7 +10,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * floats a column short of the edge beside an empty check room. The glyph
  * has a hole cut under the dot (`status-dot.css`), so the dot reads apart
  * from its strokes on any ground the row stands on. The glyph and its dot say their words to a
- * reader and on hover, since a colour alone says nothing to a reader or an
+ * reader and on hover, since a color alone says nothing to a reader or an
  * eye that cannot tell the inks apart.
  */
 

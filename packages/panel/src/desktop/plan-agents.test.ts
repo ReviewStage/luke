@@ -17,7 +17,10 @@ import { PlanAgents } from "./plan-agents.js";
  * plan-agents.test.ts -- the plan's agents list those at work first, then
  * the newest started; a row opens its agent, its pull request's chip opens
  * the pull request and not the agent, and a task with no agent draws no
- * list. Synthetic agents throughout.
+ * list; on a phone the group ends with New agent, even on a task with no
+ * agent, and the task's Inbox follows it only while something waits there,
+ * on a task that starts no agent too.
+ * Synthetic agents throughout.
  */
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -64,8 +67,12 @@ afterEach(() => {
 });
 
 /** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says; every agent and pull request it opens recorded. */
-function mount(agents: readonly AgentSummary[], folded = false) {
-  const opened: { agents: string[]; pullRequests: string[] } = { agents: [], pullRequests: [] };
+function mount(agents: readonly AgentSummary[], folded = false, waiting?: number, starts = true) {
+  const opened: { agents: string[]; pullRequests: string[]; phone: string[] } = {
+    agents: [],
+    pullRequests: [],
+    phone: [],
+  };
   const control = agentsControl({
     agents,
     agentIds: agents.map((each) => each.id),
@@ -99,6 +106,17 @@ function mount(agents: readonly AgentSummary[], folded = false) {
         folded,
         onOpenAgent: (agentId) => opened.agents.push(agentId),
         onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
+        phone:
+          waiting === undefined
+            ? undefined
+            : {
+                starts: starts
+                  ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
+                  : [],
+                archived: null,
+                waiting,
+                onOpenInbox: () => opened.phone.push("inbox"),
+              },
       }),
     ),
   );
@@ -119,7 +137,7 @@ test("the agents at work come first, then the newest, each saying where it runs,
   );
   assert.ok(chip !== null);
   act(() => chip.click());
-  assert.deepEqual(opened, { agents: [], pullRequests: [NEWEST.id] });
+  assert.deepEqual(opened, { agents: [], pullRequests: [NEWEST.id], phone: [] });
   const press = [...list.querySelectorAll("button")].find((button) =>
     button.textContent?.includes(OLDEST.title),
   );
@@ -139,4 +157,32 @@ test("the group starts folded unless the page says otherwise, its head counting 
 test("a task with no agent draws no list", () => {
   const { host } = mount([]);
   assert.equal(host.querySelector('[aria-label="Agents"]'), null);
+});
+
+test("on a phone the group ends with New agent even on a task with no agent, and the task's Inbox follows only while something waits there", () => {
+  const press = (host: HTMLElement, words: string) => {
+    const found = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.textContent?.includes(words),
+    );
+    assert.ok(found !== undefined, `the group offers ${words}`);
+    act(() => found.click());
+  };
+  const none = mount([], false, 0);
+  assert.match(none.host.querySelector('[aria-label="Agents"]')?.textContent ?? "", /New agent/u);
+  assert.doesNotMatch(none.host.textContent ?? "", /need/u, "no Inbox row while nothing waits");
+  press(none.host, "New agent");
+  assert.deepEqual(none.opened.phone, ["new agent"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const waiting = mount([OLDEST], false, 2);
+  press(waiting.host, "2 threads need you");
+  assert.deepEqual(waiting.opened.phone, ["inbox"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // A task whose agents are all archived starts none, and its waiting threads still stand.
+  const archived = mount([], false, 1, false);
+  press(archived.host, "1 thread needs you");
+  assert.deepEqual(archived.opened.phone, ["inbox"]);
 });

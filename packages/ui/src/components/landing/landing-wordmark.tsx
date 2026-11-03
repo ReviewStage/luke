@@ -10,7 +10,7 @@ import { bayerAt, fitCanvas, heldStill, paintLoop, roleChannels } from "./landin
  * foot's width rather than a size in pixels, and the foot keeps one aspect
  * ratio, so a phone draws the same word in the same number of dots as a
  * desktop, only smaller. Where a pointer passes, the dots it crosses, and a
- * few around them that were dark, take the theme's greys up to its ink, a
+ * few around them that were dark, take the theme's grays up to its ink, a
  * chrome dithered as flatly as the copper, and fade back to copper as the
  * trail ages. Under reduced motion it is drawn once and the trail is off.
  * Decorative: a canvas with no words of its own, which a reader passes over.
@@ -25,7 +25,7 @@ const FIT = { WIDTH: 0.94, TOP: 0.08 } as const;
 /** The pointer's trail: how long a point of it lasts, its reach as a share of the foot's width, and how many points it keeps. */
 const TRAIL = { LIFE: 0.9, REACH: 0.035, POINTS: 32 } as const;
 
-/** The chrome's greys, darkest first: the theme's muted words, its body words, and its ink. */
+/** The chrome's grays, darkest first: the theme's muted words, its body words, and its ink. */
 const CHROME_ROLES = ["--ui-color-text-muted", "--ui-color-text-body", "--ui-color-ink"] as const;
 
 /** A point the pointer passed, in CSS pixels of the foot, and when, in seconds. */
@@ -84,7 +84,7 @@ function maskOf(shape: MaskShape, width: number, height: number): Uint8ClampedAr
   return context.getImageData(0, 0, width, height).data;
 }
 
-/** A colour as CSS from channels between 0 and 1. */
+/** A color as CSS from channels between 0 and 1. */
 function css([r, g, b]: readonly [number, number, number]): string {
   return `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
 }
@@ -149,12 +149,12 @@ function dotPainter(
         const shade = 0.34 + 0.06 * Math.sin(j * 1.08 + i * 0.06) + light * 0.55 + touch * 0.5;
         const threshold = bayerAt(i, j);
         if (shade <= threshold) continue;
-        // Note that a touched dot takes a chrome grey picked by the same dither, so the trail stays flat, never a gradient.
-        const grey = Math.min(
+        // Note that a touched dot takes a chrome gray picked by the same dither, so the trail stays flat, never a gradient.
+        const gray = Math.min(
           chrome.length - 1,
           Math.floor(touch * chrome.length + threshold * 0.999),
         );
-        context.fillStyle = touch > 0.08 ? (chrome[grey] ?? copper) : copper;
+        context.fillStyle = touch > 0.08 ? (chrome[gray] ?? copper) : copper;
         context.fillRect(x - dot / 2, y - dot / 2, dot, dot);
       }
     }

@@ -77,7 +77,7 @@ export function Spinner({
   );
 }
 
-/** A region still being read: the ring at the region's size, centred in the room it fills. */
+/** A region still being read: the ring at the region's size, centered in the room it fills. */
 export function SpinnerRegion({
   label,
   delay = true,

@@ -158,12 +158,12 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
           [answer.repository, answer.branch, answer.pullRequest?.number],
           ["acme/relay", "invites-42", 42],
         );
-        const labelled = yield* ask(
+        const labeled = yield* ask(
           { method: HTTP_METHOD.POST, path: "/api/pull-requests/action", body: LABEL },
           member,
           42,
         );
-        assert.deepEqual(labelled, {
+        assert.deepEqual(labeled, {
           status: HOSTED_HTTP_STATUS.OK,
           text: JSON.stringify({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
         });

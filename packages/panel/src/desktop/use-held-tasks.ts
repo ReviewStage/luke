@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@repo/features/task-wire";
+import { sameShape } from "@repo/features/turn-rows";
 import {
   filterValues,
   TASKS_FILTER_FIELD,
@@ -27,11 +28,17 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * as it stops waiting, so a change carried holds its new place and one
  * refused goes back to where the task stands. A task new to the list, or
  * one the filter or the completed window left out, stands where it is now,
- * and one gone from it is gone.
+ * and one gone from it is gone. The groups as last drawn are handed back
+ * while a draw lays them out alike, so what reads them, a group's leaving
+ * rows (`useLeaving`) and the page's motion (`ListMotion`'s `change`), is
+ * moved only by a draw that moved a task.
  */
 
 /** No task waiting on the view. */
 const NO_TASKS: ReadonlySet<string> = new Set();
+
+/** How deep two layouts of the page are read alike (`sameShape`): each group's head, and each of its tasks as the same task. */
+const LAID_OUT_DEPTH = 2;
 
 /** What decides where the page stands its tasks: the workspace listed, the filter, and the display's layout of them. */
 interface HeldTasksView {
@@ -98,9 +105,13 @@ export function useHeldTasks(
       },
     },
   );
+  // Note that the groups are made anew on every draw, though they lay the same tasks out alike.
+  const laidOut = useRef(groups);
+  const steady = sameShape(laidOut.current, groups, LAID_OUT_DEPTH) ? laidOut.current : groups;
   // Note that this runs after the held order keeps its places, so a task that stopped waiting is placed anew once before it holds still.
   useLayoutEffect(() => {
     waited.current = tasks.pendingTasks ?? NO_TASKS;
+    laidOut.current = steady;
   });
-  return groups;
+  return steady;
 }

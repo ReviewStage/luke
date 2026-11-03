@@ -146,7 +146,7 @@ test("turning Fast on in the chip's menu leaves the menu where it stood", () => 
   assert.equal(menuLeft(view), opened, "turning Fast off again keeps it in place");
 });
 
-/** The catalog `coder-agent-tools.test.ts`'s runtime tests read: Opus with its fast version and two windows, Sonnet, and a GPT model with its fast version. */
+/** The catalog `coder-agent-tools.test.ts`'s runtime tests read: Opus with its fast version and two windows, Sonnet, and a GPT model with its fast and Ultrafast versions. */
 const RUNTIME_MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -176,6 +176,12 @@ const RUNTIME_MODELS: readonly CatalogModel[] = [
   {
     id: "openai/gpt-6.1-sol-fast",
     name: "GPT-6.1 Sol Fast",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
+  {
+    id: "openai/gpt-6.1-sol-ultrafast",
+    name: "GPT-6.1 Sol (Ultrafast)",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
   },
@@ -226,7 +232,7 @@ function openMenuOn(
   return { models: listed, foot, menu };
 }
 
-test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither but Fast where its API key pays, while an eve agent's offers every model with both", () => {
+test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither but a Speed choice of Standard, Fast, and Ultrafast in Fast's place where its API key pays, while an eve agent's offers every model with both", () => {
   const claudeCode = openMenuOn(AGENT_RUNTIME.CLAUDE_CODE);
   const codex = openMenuOn(AGENT_RUNTIME.CODEX);
   const codexOnApiKey = openMenuOn(
@@ -247,11 +253,11 @@ test("on a Claude Code agent the menu offers Claude models alone with Fast and n
 
   assert.equal(codex.models.length, 1, codex.models.join(" | "));
   assert.match(codex.models[0] ?? "", /GPT-6\.1 Sol/u);
-  assert.doesNotMatch(codex.foot, /Fast|Context/u);
+  assert.doesNotMatch(codex.foot, /Fast|Speed|Context/u);
 
   assert.equal(codexOnApiKey.models.length, 1, codexOnApiKey.models.join(" | "));
-  assert.match(codexOnApiKey.foot, /Fast/u);
-  assert.doesNotMatch(codexOnApiKey.foot, /Context/u);
+  assert.match(codexOnApiKey.foot, /Speed\s*Standard/u);
+  assert.doesNotMatch(codexOnApiKey.foot, /Fast|Context/u);
 
   assert.equal(eve.models.length, 3, eve.models.join(" | "));
   assert.match(eve.models[2] ?? "", /GPT-6\.1 Sol/u);

@@ -1,3 +1,4 @@
+import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   AlertIcon,
   BoardIcon,
@@ -11,6 +12,7 @@ import {
   TabCard,
   TabCards,
   Tabs,
+  TaskStatusMark,
   TEXT_TONE,
   TerminalIcon,
   Text,
@@ -23,7 +25,9 @@ import { CatalogSection } from "../section";
 /**
  * tabs.tsx -- a strip of tabs to choose, close, and drag along, the chosen
  * one raised: one with a count after its name, one marked failed, one that
- * something arrived on, and a preview; the same strip in a narrow row, where
+ * something arrived on, and a preview; the same strip on the frame, led by
+ * the task it heads, its status mark and name, anchored where no drag or
+ * close reaches it; the same strip in a narrow row, where
  * it scrolls along with the chosen tab pinned; and a switcher's row of recent
  * cards, a still and glyphs, one chosen and the screen here dimmed.
  */
@@ -38,6 +42,8 @@ interface SampleTab {
   readonly failed?: boolean;
   readonly unread?: boolean;
   readonly preview?: boolean;
+  /** Leads the strip and never moves or closes: the task the strip heads. */
+  readonly anchored?: boolean;
 }
 
 const SAMPLE_TABS: readonly SampleTab[] = [
@@ -56,8 +62,22 @@ const SAMPLE_TABS: readonly SampleTab[] = [
   { id: "board", icon: <BoardIcon />, label: "token-refresh.ts", preview: true },
 ];
 
-/** The tabs in their order now, the one at `from` taken to `to`. */
+/** The frame's strip: the task it heads first, by its status mark and name, then its tabs. */
+const FRAME_TABS: readonly SampleTab[] = [
+  {
+    id: "task",
+    icon: <TaskStatusMark status={TASK_STATUS.IN_PROGRESS} />,
+    label: "Refresh tokens before they expire",
+    anchored: true,
+  },
+  ...SAMPLE_TABS.filter((tab) => tab.id !== "plan"),
+];
+
+/** The tabs in their order now, the one at `from` taken to `to`, counted after the anchored tabs, which never move. */
 function movedTabs(tabs: readonly SampleTab[], from: number, to: number): SampleTab[] {
+  const lead = tabs.filter((tab) => tab.anchored === true).length;
+  from += lead;
+  to += lead;
   const moved = [...tabs];
   const [taken] = moved.splice(from, 1);
   if (taken !== undefined) moved.splice(to, 0, taken);
@@ -72,7 +92,7 @@ function Strip({
   narrow?: boolean;
   frame?: boolean;
 }): React.JSX.Element {
-  const [tabs, setTabs] = useState<readonly SampleTab[]>(SAMPLE_TABS);
+  const [tabs, setTabs] = useState<readonly SampleTab[]>(frame ? FRAME_TABS : SAMPLE_TABS);
   const [chosen, setChosen] = useState("agent");
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   return (
@@ -101,6 +121,7 @@ function Strip({
             }
             unread={tab.unread === true && !seen.has(tab.id)}
             preview={tab.preview === true}
+            anchored={tab.anchored === true}
             selected={tab.id === chosen}
             onSelect={() => {
               setChosen(tab.id);
@@ -111,11 +132,15 @@ function Strip({
                 was.map((each) => (each.id === tab.id ? { ...each, preview: false } : each)),
               )
             }
-            onClose={() => {
-              const rest = tabs.filter((each) => each.id !== tab.id);
-              setTabs(rest);
-              if (tab.id === chosen) setChosen(rest[0]?.id ?? "");
-            }}
+            onClose={
+              tab.anchored === true
+                ? undefined
+                : () => {
+                    const rest = tabs.filter((each) => each.id !== tab.id);
+                    setTabs(rest);
+                    if (tab.id === chosen) setChosen(rest[0]?.id ?? "");
+                  }
+            }
           />
         ))}
       </Tabs>

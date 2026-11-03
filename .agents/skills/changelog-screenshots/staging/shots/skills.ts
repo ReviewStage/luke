@@ -98,7 +98,7 @@ const SKILL_MD = [
   "1. Create `src/mail/templates/<name>-email.tsx`, exporting the component",
   "   and a `subject(props)`. A subject names the workspace:",
   "   `Join ${workspace.name} on Relay`.",
-  "2. Wrap the body in `<Layout>` from `./layout.tsx`. Never set colours or",
+  "2. Wrap the body in `<Layout>` from `./layout.tsx`. Never set colors or",
   "   fonts inline; the layout's theme carries them.",
   "3. Export a `text(props)` part beside it. Postmark sends both, and spam",
   "   filters mark down a message without one.",
@@ -123,8 +123,8 @@ const SKILL_MD = [
   "Update a snapshot only when the change to the email is the point.",
 ];
 
-/** GitHub's dark and light colours, as main colours markdown. */
-const COLOUR = {
+/** GitHub's dark and light colors, as main colors markdown. */
+const COLOR = {
   HEADING: { color: "#79c0ff", lightColor: "#0550ae" },
   KEY: { color: "#7ee787", lightColor: "#116329" },
   CODE: { color: "#a5d6ff", lightColor: "#0a3069" },
@@ -133,55 +133,55 @@ const COLOUR = {
   COMMAND: { color: "#d2a8ff", lightColor: "#8250df" },
 } as const;
 
-type Colour = (typeof COLOUR)[keyof typeof COLOUR];
+type Color = (typeof COLOR)[keyof typeof COLOR];
 
-/** One run of a line, coloured or in the theme's own foreground. */
-function run(text: string, colour?: Colour): CodeToken {
-  return colour === undefined ? { text } : { text, ...colour };
+/** One run of a line, colored or in the theme's own foreground. */
+function run(text: string, color?: Color): CodeToken {
+  return color === undefined ? { text } : { text, ...color };
 }
 
-/** A line's prose, its `code` spans coloured. */
+/** A line's prose, its `code` spans colored. */
 function prose(text: string): CodeToken[] {
   return text
     .split(/(`[^`]*`)/u)
     .filter((piece) => piece !== "")
-    .map((piece) => (piece.startsWith("`") ? run(piece, COLOUR.CODE) : run(piece)));
+    .map((piece) => (piece.startsWith("`") ? run(piece, COLOR.CODE) : run(piece)));
 }
 
-/** One line of the SKILL.md coloured as markdown, knowing whether it stands in the frontmatter or a fence. */
-function colourLine(line: string, place: { front: boolean; fence: boolean }): CodeToken[] {
+/** One line of the SKILL.md colored as markdown, knowing whether it stands in the frontmatter or a fence. */
+function colorLine(line: string, place: { front: boolean; fence: boolean }): CodeToken[] {
   if (line === "") return [];
-  if (line === "---" || line.startsWith("```")) return [run(line, COLOUR.MUTED)];
+  if (line === "---" || line.startsWith("```")) return [run(line, COLOR.MUTED)];
   if (place.front) {
     const colon = line.indexOf(":");
     return [
-      run(line.slice(0, colon), COLOUR.KEY),
+      run(line.slice(0, colon), COLOR.KEY),
       run(line.slice(colon, colon + 2)),
-      run(line.slice(colon + 2), COLOUR.CODE),
+      run(line.slice(colon + 2), COLOR.CODE),
     ];
   }
   if (place.fence) {
     const hash = line.indexOf("#");
     const [command = "", ...rest] = line.slice(0, hash).split(" ");
     return [
-      run(command, COLOUR.COMMAND),
+      run(command, COLOR.COMMAND),
       run(` ${rest.join(" ")}`),
-      run(line.slice(hash), COLOUR.MUTED),
+      run(line.slice(hash), COLOR.MUTED),
     ];
   }
-  if (line.startsWith("#")) return [run(line, COLOUR.HEADING)];
+  if (line.startsWith("#")) return [run(line, COLOR.HEADING)];
   const marker = /^(\d+\.|-) /u.exec(line)?.[0];
   if (marker !== undefined)
-    return [run(marker, COLOUR.MARKER), ...prose(line.slice(marker.length))];
+    return [run(marker, COLOR.MARKER), ...prose(line.slice(marker.length))];
   return prose(line);
 }
 
-/** The SKILL.md's lines, coloured. */
+/** The SKILL.md's lines, colored. */
 function skillLines(): CodeLines {
   const place = { front: false, fence: false };
   return SKILL_MD.map((line, index) => {
     if (line === "---") place.front = index === 0;
-    const tokens = colourLine(line, place);
+    const tokens = colorLine(line, place);
     if (line.startsWith("```")) place.fence = !place.fence;
     return tokens;
   });

@@ -82,7 +82,7 @@ const TERMINAL_RELAY_BOUNDS = {
   CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
   /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the shell attaches without waiting longer, so what was sent reaches it rather than piling up. */
   HELD_MAX_BYTES: 1024 * 1024,
-  /** The environment the shell's PTY starts in: a terminal that speaks colour, and text that is UTF-8. */
+  /** The environment the shell's PTY starts in: a terminal that speaks color, and text that is UTF-8. */
   ENV: ["TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8"],
 } as const;
 

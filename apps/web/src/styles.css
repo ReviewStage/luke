@@ -29,7 +29,7 @@
 /* Only the tokens the page actually draws with, and a token nothing reads is
    drift waiting to happen. Every value is a shared role's, merely aliased
    here, so the utilities and the plain-CSS blocks draw the same vocabulary.
-   No colour is aliased: the page and the admin dashboard spell a role
+   No color is aliased: the page and the admin dashboard spell a role
    directly (`text-(--ui-color-text-muted)`), and the chart configs read
    `--ui-color-chart-*`. */
 @theme inline {
@@ -51,7 +51,7 @@
   font-synthesis: none;
 }
 
-/* An integration whose brand publishes its one-colour mark in named inks
+/* An integration whose brand publishes its one-color mark in named inks
    wears them by the ground (`@repo/ui`'s `marks/provider-mark.tsx`). The one
    page that draws an integration's mark, its landing, is on the dark ground,
    so these are the dark inks: Executor's, Notion's, and Sentry's white,

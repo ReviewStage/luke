@@ -10,7 +10,7 @@
  *
  * A query is matched against the element's text read as one string, so a
  * match runs across the inline spans a line is drawn in, as a word split
- * over a code line's coloured tokens is, but never from one line or
+ * over a code line's colored tokens is, but never from one line or
  * paragraph into the next: text in another block is set apart by a line
  * break, which a query, typed in a one-line field, never holds. What is
  * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`. A closed
@@ -42,7 +42,7 @@ const FIND_HIGHLIGHT = {
 
 type FindHighlight = (typeof FIND_HIGHLIGHT)[keyof typeof FIND_HIGHLIGHT];
 
-/** The tags whose text runs on into its neighbours' on one line; any other element sets its text apart. */
+/** The tags whose text runs on into its neighbors' on one line; any other element sets its text apart. */
 const INLINE_TAGS = new Set([
   "A",
   "ABBR",

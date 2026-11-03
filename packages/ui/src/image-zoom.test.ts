@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   FITTED_VIEW,
-  FRAME_CENTRE,
+  FRAME_CENTER,
   type FramePoint,
   IMAGE_ZOOM,
   type ImageFrame,
@@ -30,7 +30,7 @@ const FRAME: ImageFrame = {
 
 const NATURAL = { width: 2400, height: 1200 };
 
-/** Where the picture's point now under `at` lies on the fitted picture, from its centre. */
+/** Where the picture's point now under `at` lies on the fitted picture, from its center. */
 function pictureUnder(view: ImageView, at: FramePoint): FramePoint {
   return { x: (at.x - view.x) / view.scale, y: (at.y - view.y) / view.scale };
 }
@@ -64,19 +64,19 @@ test("a pinch in and out again comes back to the picture fitted", () => {
 
 test("a zoom goes no further out than fitted and no further in than the most", () => {
   assert.deepEqual(zoomedByStep(FITTED_VIEW, FRAME, -1), FITTED_VIEW);
-  assert.deepEqual(zoomedByWheel(FITTED_VIEW, FRAME, 500, FRAME_CENTRE), FITTED_VIEW);
-  const most = zoomedTo(FITTED_VIEW, FRAME, 100, FRAME_CENTRE);
+  assert.deepEqual(zoomedByWheel(FITTED_VIEW, FRAME, 500, FRAME_CENTER), FITTED_VIEW);
+  const most = zoomedTo(FITTED_VIEW, FRAME, 100, FRAME_CENTER);
   assert.equal(most.scale, IMAGE_ZOOM.MOST);
   assert.equal(zoomedByStep(most, FRAME, 1).scale, IMAGE_ZOOM.MOST);
 });
 
 test("a mouse wheel's notch zooms by a step, not a leap", () => {
-  const notch = zoomedByWheel(FITTED_VIEW, FRAME, -100, FRAME_CENTRE);
+  const notch = zoomedByWheel(FITTED_VIEW, FRAME, -100, FRAME_CENTER);
   assert.ok(notch.scale > 1 && notch.scale < 2, `one notch zoomed to ${String(notch.scale)}`);
 });
 
 test("a zoomed picture moves no further than to bring its edge to the frame's", () => {
-  const zoomed = zoomedTo(FITTED_VIEW, FRAME, 2, FRAME_CENTRE);
+  const zoomed = zoomedTo(FITTED_VIEW, FRAME, 2, FRAME_CENTER);
   const far = pannedBy(zoomed, FRAME, 10_000, -10_000);
   // At twice, the picture is 1600 by 800 in an 800 by 500 frame.
   assert.equal(far.x, 400, "its left edge stands at the frame's left");
@@ -86,20 +86,20 @@ test("a zoomed picture moves no further than to bring its edge to the frame's", 
   assert.equal(back.y, 150);
 });
 
-test("a picture narrower than its frame along an axis stays centred along it", () => {
+test("a picture narrower than its frame along an axis stays centered along it", () => {
   const tall: ImageFrame = {
     frame: { width: 800, height: 500 },
     fitted: { width: 200, height: 500 },
   };
   const zoomed = zoomedTo(FITTED_VIEW, tall, 2, { x: 100, y: 200 });
-  assert.equal(zoomed.x, 0, "400 wide in 800 stays centred");
+  assert.equal(zoomed.x, 0, "400 wide in 800 stays centered");
   assert.ok(zoomed.y !== 0, "1000 tall in 500 follows the pointer");
   assert.equal(pannedBy(zoomed, tall, 300, 0).x, 0);
 });
 
-test("a fitted picture cannot be moved, nor does a zoom out leave it off centre", () => {
+test("a fitted picture cannot be moved, nor does a zoom out leave it off center", () => {
   assert.deepEqual(pannedBy(FITTED_VIEW, FRAME, 50, 50), FITTED_VIEW);
-  const zoomed = pannedBy(zoomedTo(FITTED_VIEW, FRAME, 3, FRAME_CENTRE), FRAME, 300, 200);
+  const zoomed = pannedBy(zoomedTo(FITTED_VIEW, FRAME, 3, FRAME_CENTER), FRAME, 300, 200);
   let view = zoomed;
   for (let step = 0; step < 4; step += 1) view = zoomedByStep(view, FRAME, -1);
   assert.deepEqual(view, FITTED_VIEW);
@@ -119,5 +119,5 @@ test("a press zooms a fitted picture to its own pixels there, and a zoomed one b
 
 test("a press on a picture fitted at about its own size still zooms it, to twice", () => {
   const small = { width: 820, height: 410 };
-  assert.equal(pressedAt(FITTED_VIEW, FRAME, small, FRAME_CENTRE).scale, IMAGE_ZOOM.PRESS_LEAST);
+  assert.equal(pressedAt(FITTED_VIEW, FRAME, small, FRAME_CENTER).scale, IMAGE_ZOOM.PRESS_LEAST);
 });

@@ -4,7 +4,7 @@ import { act } from "react";
  * phone-head.ts -- a phone's header read as a reader meets it (`desktop/phone-head.tsx`): each corner's controls by name and the title between them, and the ⋯'s items once it is pressed.
  */
 
-/** A phone's header as it reads: the start corner's controls, the title centred between the corners, and the end corner's controls. */
+/** A phone's header as it reads: the start corner's controls, the title centered between the corners, and the end corner's controls. */
 export interface ReadPhoneHead {
   readonly start: readonly string[];
   readonly title: string | undefined;

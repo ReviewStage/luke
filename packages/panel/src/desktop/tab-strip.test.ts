@@ -47,7 +47,7 @@ function pointerMedia(finger: boolean) {
 /** Every move the strip asked for, as its place before and after. */
 let moves: [number, number][] = [];
 
-/** The pill of the tab labelled `label`. */
+/** The pill of the tab labeled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === label,

@@ -32,17 +32,17 @@ function classRules(source: string, file = MODULE): readonly StyleRule[] {
 }
 
 describe("a stylesheet", () => {
-  it("refuses a colour literal in a rule, and passes a token", () => {
+  it("refuses a color literal in a rule, and passes a token", () => {
     expect(sheetRules(".a { color: #fff; background: rgba(0, 0, 0, 0.5); }")).toEqual([
-      STYLE_RULE.COLOUR,
-      STYLE_RULE.COLOUR,
+      STYLE_RULE.COLOR,
+      STYLE_RULE.COLOR,
     ]);
     expect(sheetRules(".a { color: var(--ui-color-text); border-color: currentColor; }")).toEqual(
       [],
     );
   });
 
-  it("passes a colour where a token is defined, a brand's ink, and a mask's alpha", () => {
+  it("passes a color where a token is defined, a brand's ink, and a mask's alpha", () => {
     const css = `
       :root { --file-icon-red: light-dark(#d52c36, #ff6762); }
       :root[data-ui-theme="dark"] { --ink: #fff; }
@@ -51,8 +51,8 @@ describe("a stylesheet", () => {
     expect(sheetRules(css)).toEqual([]);
   });
 
-  it("refuses a colour under a selector that only starts at :root", () => {
-    expect(sheetRules(":root .a { color: #000; }")).toEqual([STYLE_RULE.COLOUR]);
+  it("refuses a color under a selector that only starts at :root", () => {
+    expect(sheetRules(":root .a { color: #000; }")).toEqual([STYLE_RULE.COLOR]);
   });
 
   it("refuses a literal font size or weight, and passes the type roles", () => {
@@ -263,7 +263,7 @@ describe("a stylesheet", () => {
     }`;
     const violations = styleViolations(SHEET, css, NAMES);
     expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
-      [STYLE_RULE.COLOUR, 5],
+      [STYLE_RULE.COLOR, 5],
       [STYLE_RULE.RADIUS, 6],
     ]);
   });
@@ -292,8 +292,8 @@ describe("a module's class strings", () => {
       STYLE_RULE.RADIUS,
       STYLE_RULE.DURATION,
       STYLE_RULE.EASING,
-      STYLE_RULE.COLOUR,
-      STYLE_RULE.COLOUR,
+      STYLE_RULE.COLOR,
+      STYLE_RULE.COLOR,
     ]);
   });
 

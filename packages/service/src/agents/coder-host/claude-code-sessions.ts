@@ -34,6 +34,7 @@ import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-ke
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { MODEL_SPEED } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -241,7 +242,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         executable: layout.claudeExecutable ?? CLAUDE_EXECUTABLE,
         model: model.modelId,
         ...(effort === undefined ? undefined : { effort }),
-        ...(model.fast ? { fast: true } : undefined),
+        ...(model.speed === MODEL_SPEED.FAST ? { fast: true } : undefined),
         append: yield* options.instructions(agent, layout),
         ...(resume === undefined ? undefined : { resume }),
         ...(rewindBefore === undefined ? undefined : { rewindBefore }),
@@ -272,7 +273,9 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
       lines: [
         {
           type: INPUT_LINE.MODEL,
-          ...(model === undefined ? undefined : { model: model.modelId, fast: model.fast }),
+          ...(model === undefined
+            ? undefined
+            : { model: model.modelId, fast: model.speed === MODEL_SPEED.FAST }),
           ...(effort === undefined ? undefined : { effort }),
         },
       ],

@@ -75,7 +75,7 @@ export const verbatimJsonSchema = <S extends Schema.Top>(
   node: JsonSchemaNode,
 ): S["Rebuild"] => schema.annotate({ [WIRE_ANNOTATION.JSON_SCHEMA]: node });
 
-/** A struct's fields with the keys a mapping names travelling under the names it gives them. */
+/** A struct's fields with the keys a mapping names traveling under the names it gives them. */
 type WireKeyedFields<F extends Schema.Struct.Fields, M extends WireKeyMapping<F>> = {
   [K in keyof F as K extends keyof M ? (M[K] extends string ? M[K] : K) : K]: F[K];
 };
@@ -93,7 +93,7 @@ const renamed =
     ) as To;
 
 /**
- * A struct read under the keys its code names, travelling under the wire's
+ * A struct read under the keys its code names, traveling under the wire's
  * own name for each key the mapping names. Note that the wire side is the
  * struct's own fields under the wire's keys, rather than Effect's
  * `encodeKeys`, because that encodes each field as its encoded form alone,

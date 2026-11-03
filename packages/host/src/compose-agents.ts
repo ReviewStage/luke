@@ -1088,7 +1088,7 @@ function composed(
         const { itemId, ...request } = yield* readParams(
           agentInboxAnswerParamsSchema,
           params,
-          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
+          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgment, and the nod's key",
         );
         // Note that who and when are read once, since the change is drawn again over each answer a read takes while it stands.
         const [by, at] = [reader(), kernel.now()];

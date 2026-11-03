@@ -27,8 +27,8 @@ import { type FileMatch, fileMatches, matchFrom } from "./file-find.js";
  *
  * The diff bundle draws the file (`../diff-view/index.ts`'s `mountFile`),
  * loaded the first time code is shown: only the lines near the view, in a
- * shadow root of its own, coloured off the window's thread, plain until the
- * colours land. The wait stands until Pierre has drawn the lines, not only
+ * shadow root of its own, colored off the window's thread, plain until the
+ * colors land. The wait stands until Pierre has drawn the lines, not only
  * until the bundle lands, because the first file a window opens is drawn
  * only once its highlighting has loaded, and the tab would stand blank
  * between the two. The look is the diffs' own (`file-diff.tsx`'s
@@ -61,7 +61,7 @@ interface ReadNote {
   readonly words: string;
 }
 
-/** What the file's owner asks of it once drawn: a run of lines centred, and the lines the reader picked. */
+/** What the file's owner asks of it once drawn: a run of lines centered, and the lines the reader picked. */
 export interface WholeFileHandle {
   readonly revealLines: (range: FileLineRange) => void;
   readonly pickedLines: () => FileLineRange | undefined;
@@ -265,7 +265,7 @@ function useWholeFileFind(
 /**
  * A whole file drawn by the diff bundle in the place it fills, scrolling
  * there: `text` named `name`, read at `revision`, `lit` lit, each of `notes`
- * under its line. `reveal` centres a run of lines each time its `at`
+ * under its line. `reveal` centers a run of lines each time its `at`
  * changes, once the file is drawn.
  */
 export function WholeFile({
@@ -286,7 +286,7 @@ export function WholeFile({
   notes: readonly WholeFileNote[];
   /** The line a find starts from, the first of the lines the tab was opened on. */
   findFrom: number;
-  /** A run of lines to centre, again each time `at` changes; none leaves the file at its top. */
+  /** A run of lines to center, again each time `at` changes; none leaves the file at its top. */
   reveal?: { readonly range: FileLineRange; readonly at: number } | undefined;
   handleRef?: RefObject<WholeFileHandle | null> | undefined;
   /**
@@ -370,7 +370,7 @@ export function WholeFile({
           surface: FAILURE_SURFACE.FILE_READ,
           cause: Cause.squash(loaded.cause),
         })}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
         onRetry={retry}
       >
         {FILE_LOAD_FAILED}

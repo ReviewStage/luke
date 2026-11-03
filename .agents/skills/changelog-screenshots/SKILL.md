@@ -117,7 +117,7 @@ Every picture, whatever it shows:
 - Times counted back from launch (`now - 4 minutes`), because the fixture's
   own timestamps draw "Dec 31, 1969" and "Working… 146h". A running turn
   started seconds before launch reads "Working… 20s".
-- Synthetic data on the acme organisation: its repositories (`acme/relay`,
+- Synthetic data on the acme organization: its repositories (`acme/relay`,
   `acme/ledger`, `acme/web`), its teal two-peak mark as the owner picture,
   believable tasks, agents, diffs, and dialogue about one feature
   ("Teammate invitations"). Model ids from the repository's real catalog.
@@ -175,7 +175,7 @@ own `--user-data-dir` and the window opens at 1600 by 1000 points and focused.
 `window.sh` launches the build in fixture mode, captures the real window with
 its shadow and traffic lights, and quits it. It retries until the window was
 key; tell the developer before a batch, because typing elsewhere during it
-leaves grey traffic lights. It parks the pointer on the menu bar first, since
+leaves gray traffic lights. It parks the pointer on the menu bar first, since
 a window as large as the screen otherwise draws a hover wherever the pointer
 rests. macOS refuses every window capture ("could not create image from
 window") while the screen is locked: check
@@ -226,7 +226,7 @@ electron . --user-data-dir=<tmp> --fixture smoke --expanded --profile shot-<name
 ```
 
 Frame it with a layout: `--layout top` hangs the panel flush from the top of
-the standard canvas, centred, as it hung from the notch, and takes a crop
+the standard canvas, centered, as it hung from the notch, and takes a crop
 counted from where a standard window's corner would be (the panel's top is at
 y = -90); `--layout bleed` lays a full-display overlay across the wallpaper.
 Both take `--zoom 2` for the 4x capture.
