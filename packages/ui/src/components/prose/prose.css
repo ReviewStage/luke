@@ -191,8 +191,11 @@
      where the reader cannot tick it) stands in the bullet's gutter, exactly where the box alone stands, at
      the words' size; on a coarse pointer its label takes a press a finger's
      width across and as tall, centred on the box (`checkbox.css`). The
-     plan's editor gives its own label the same press. */
-  .ui-markdown li.task-list-item > .ui-markdown-task {
+     plan's editor gives its own label the same press. A loose list's item
+     holds its words in a paragraph, the box among them, which stands in the
+     same gutter. */
+  .ui-markdown li.task-list-item > .ui-markdown-task,
+  .ui-markdown li.task-list-item > p:first-child > .ui-markdown-task {
     position: absolute;
     top: calc((1lh - 0.95em) / 2);
     left: -1.45em;
