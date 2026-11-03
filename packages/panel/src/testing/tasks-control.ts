@@ -322,6 +322,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onToggleAskedAnswered: () => undefined,
       onChoose: ignore,
       onShow: ignore,
+      onCarry: ignore,
       onClose: ignore,
       onCloseOn: ignore,
       onMove: ignore,

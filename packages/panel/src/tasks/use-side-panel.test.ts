@@ -528,6 +528,46 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   }
 });
 
+test("a link in the panel to an agent elsewhere carries the panel to the agent's task as it stands, where another move there starts it shut", () => {
+  const PAGE = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const AGENT_TASK = "6c8e0a2b-4d6f-4b8d-9f1a-3c5e7a9b1d2f";
+  let control: SidePanelControl | undefined;
+  function Probe({ on }: { on: string }) {
+    control = useSidePanel(
+      undefined,
+      on === TASK
+        ? { id: TASK, holds: {}, bare: true, pages: { taskId: TASK } }
+        : { id: on, holds: {}, pages: { taskId: on } },
+      [],
+      [],
+      [],
+      [],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (on: string) => act(() => root.render(createElement(Probe, { on })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+  const pagesDrawn = () =>
+    panel().strip.flatMap((tab) => (typeof tab === "object" && "page" in tab ? [tab.page] : []));
+
+  render(TASK);
+  act(() => panel().onPreview({ page: PAGE }, { taskId: OTHER_TASK }));
+  act(() => panel().onCarry());
+  render(AGENT_TASK);
+  assert.ok(panel().open, "the panel still open beside the agent's task");
+  assert.deepEqual(panel().tab, { page: PAGE });
+  assert.deepEqual(pagesDrawn(), [PAGE], "the page drawn there, read on its own task");
+  assert.deepEqual(panel().pages[0]?.place, { taskId: OTHER_TASK });
+
+  render(OTHER_AGENT);
+  assert.equal(panel().open, false, "a move with nothing carried starts the next stop shut");
+});
+
 test("a page of another task opens beside the Inbox item, drawn there, and Open task lands on that task with the page still chosen and the panel open", () => {
   const PAGE = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
   let control: SidePanelControl | undefined;

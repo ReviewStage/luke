@@ -731,6 +731,12 @@ export interface SidePanelControl {
   onKeep: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
+  /**
+   * Keeps the panel as it stands across the next stop the window arrives
+   * at, as a link pressed in the panel to an agent elsewhere asks: the page
+   * or file it shows stands on that stop's panel too, read where it was.
+   */
+  onCarry: () => void;
   /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the task that still stands, else its neighbour, the one after it where there is one; closing the last the strip draws shuts the panel. */
   onClose: (tab: SidePanelTab) => void;
   /** Closes a fixed tab on the task given, open or not, as `onClose` closes one on the open task: what a task New task started with an agent asks of its plan's. */
@@ -1147,6 +1153,41 @@ function withPagePlaced(
   if (standing.place !== undefined) return held;
   const pages = held.pages.map((each) => (each === standing ? { ...each, place } : each));
   return { ...held, pages };
+}
+
+/**
+ * The state with the page or file the panel shows standing where it reads
+ * now, before the panel is carried to another stop: a page on the panel's
+ * own place, a file read through the panel's own (`withShownCarried`).
+ */
+function withShownPlaced(
+  held: HeldState,
+  pagePlace: PagePlace | undefined,
+  reads: FileReads | undefined,
+): HeldState {
+  const { tab } = held;
+  if (tab === undefined) return held;
+  if (isPageTab(tab)) return withPagePlaced(held, tab, pagePlace);
+  if (!isFileTab(tab) || reads === undefined) return held;
+  const files = held.files.map((each) =>
+    each.path === tab.file && each.reads === undefined ? { ...each, reads } : each,
+  );
+  return { ...held, files };
+}
+
+/** The state with the page or file the panel shows drawn on the panel `on` stands for, as the panel is carried there, read where it was. */
+function withShownCarried(held: HeldState, on: string): HeldState {
+  const { tab } = held;
+  if (tab === undefined) return held;
+  if (isPageTab(tab)) {
+    const pages = held.pages.map((each) => (sameTab(each, tab) ? { ...each, shownOn: on } : each));
+    return { ...held, pages };
+  }
+  if (!isFileTab(tab)) return held;
+  const files = held.files.map((each) =>
+    each.path === tab.file ? { ...each, browsedOn: on } : each,
+  );
+  return { ...held, files };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -1950,6 +1991,8 @@ export function useSidePanel(
   const [asked, setAsked] = useState<
     { task: string; tab: SidePanelTab; carry: boolean } | undefined
   >(undefined);
+  // Whether the panel is to stand as it is across the next stop arrived at (`SidePanelControl.onCarry`).
+  const [carrying, setCarrying] = useState(false);
   // How many times a door naming a thing opened it here (`SidePanelControl.opened`).
   const [opened, setOpened] = useState(0);
   const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
@@ -2054,7 +2097,10 @@ export function useSidePanel(
   const stop = task.stop ?? taskId;
   const [standing, setStanding] = useState(stop);
   if (standing !== stop) {
-    if (asked?.carry === true && asked.task === taskId) setAsked({ ...asked, carry: false });
+    if (carrying) {
+      setCarrying(false);
+      if (taskId !== undefined) update((held) => withShownCarried(held, taskId));
+    } else if (asked?.carry === true && asked.task === taskId) setAsked({ ...asked, carry: false });
     else if (state.open) update((held) => (held.open ? { ...held, open: false } : held));
     setStanding(stop);
   }
@@ -2153,6 +2199,10 @@ export function useSidePanel(
     },
     [update, drawn, taskId, stop],
   );
+  const onCarry = useCallback(() => {
+    setCarrying(true);
+    update((held) => withShownPlaced(held, pagePlace, fileReads));
+  }, [update, pagePlace, fileReads]);
   const onClose = useCallback(
     (tab: SidePanelTab) =>
       update((held) => {
@@ -2371,6 +2421,7 @@ export function useSidePanel(
     onNewTabAnswered,
     onChoose,
     onShow,
+    onCarry,
     onClose,
     onCloseOn,
     onMove,

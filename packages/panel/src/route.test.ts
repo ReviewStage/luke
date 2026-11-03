@@ -101,10 +101,16 @@ it.each<[string, string, Here, Route]>([
     NOTHING,
   ],
   [
-    "an Inbox item of an agent on no task: another pull request of its repository, the window's",
+    "an Inbox item of an agent on no task: another pull request of its repository, by its number in its agent's tab",
     "https://github.com/acme/relay/pull/41",
     TASKLESS_ITEM,
-    NOTHING,
+    preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
+  ],
+  [
+    "an Inbox item: a page under its agent's own pull request's, in that agent's own Pull request tab",
+    `${PR}/files`,
+    ITEM,
+    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "an Inbox item: a long run of slashes, read at once as any address no pull request matches",
@@ -283,6 +289,12 @@ it.each<[string, string, Here, Route]>([
     `${APP}/plan/${OTHER}/page/${PAGE}`,
     ON_TASK,
     preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
+  ],
+  [
+    "a task: another task's agent, the window's, which opens it in the middle",
+    `${APP}/plan/${OTHER}/agent/${OTHER}`,
+    ON_TASK,
+    NOTHING,
   ],
   ["a task: a file of its repository, the window's", FILE, ON_TASK, NOTHING],
   [

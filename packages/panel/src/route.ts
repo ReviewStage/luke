@@ -42,13 +42,13 @@ import {
  *   it draws: a file of any repository, read through the item's workspace
  *   where it is not the item's own, a page of any task or agent on no
  *   task, read on its own place where it is not the item's, an archived
- *   agent's Changes, one of its task's
- *   agents' transcripts, at a message of it where the link names one, a
- *   review thread of one of its agents' pull requests, and a pull request
- *   one of its agents opened, or another of its task's repository by its
- *   number. An agent of its task the panel does not draw, an archived one,
- *   goes to the task on its tab. Another Inbox item is chosen in the Inbox
- *   the item stands in, rather than in its task's Inbox tab.
+ *   agent's Changes, one of its task's agents' transcripts, at a message of
+ *   it where the link names one, a review thread of one of its agents' pull
+ *   requests, and a pull request as `pullRequestBeside` opens it. An agent
+ *   of its task the panel does not draw, an archived one, goes to the task
+ *   on its tab; any other agent is the window's, which opens it in the
+ *   middle. Another Inbox item is chosen in the Inbox the item stands in,
+ *   rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
  *   any other of their repository by its number in their first agent's; and
@@ -378,27 +378,41 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
 }
 
 /**
- * An address pressed on an Inbox item, whose panel stands for what holds the
- * item, so nothing opens there before an item is chosen. Note that a pull
- * request of the repository opens by its number only on an item of a task,
- * and in its first agent's tab even where it is under the page of one an
- * agent opened; a task's page and an agent's answer both otherwise.
+ * A pull request pressed on a surface: one an agent it holds opened, however
+ * its page is spelled, a page under it among them, opens in that agent's
+ * Pull request tab, and any other of its repository, such as one an agent
+ * opened before moving to another branch, in its first agent's by its
+ * number; one of another repository is the window's. An Inbox item, a task's
+ * page and an agent's answer it alike, an archived agent's pull request,
+ * merged or not, opening its tab too.
  */
+function pullRequestBeside(
+  address: Extract<Address, { readonly kind: typeof ADDRESS.PULL_REQUEST }>,
+  here: Holding,
+): Route {
+  const opened = openedBy(here, here.heldIds ?? here.agentIds);
+  const agentId = pullRequestAgentOf(address.href, opened);
+  if (agentId !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId });
+  if (!ofRepository(address.repository, here.repository)) return NOTHING;
+  // A page under an agent's own pull request's, its files say, is still that agent's.
+  const owner = opened.find(
+    (each) => repositoryPullRequestOf(each.url, here.repository) === address.number,
+  );
+  if (owner !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId: owner.agentId });
+  const first = here.agentIds?.[0];
+  return first === undefined
+    ? NOTHING
+    : preview({ kind: THING.PULL_REQUEST, agentId: first, number: address.number });
+}
+
+/** An address pressed on an Inbox item, whose panel stands for what holds the item, so nothing opens there before an item is chosen. */
 function besideItem(address: Address, here: InboxItemHere): Route {
   if (here.taskId === undefined && here.agentId === undefined) return NOTHING;
   switch (address.kind) {
     case ADDRESS.PLACE:
       return itemPlace(address.link, here);
-    case ADDRESS.PULL_REQUEST: {
-      const agentId = pullRequestAgentOf(address.href, openedBy(here));
-      if (agentId !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId });
-      const first = here.agentIds?.[0];
-      return ofRepository(address.repository, here.repository) &&
-        first !== undefined &&
-        here.taskId !== undefined
-        ? preview({ kind: THING.PULL_REQUEST, agentId: first, number: address.number })
-        : NOTHING;
-    }
+    case ADDRESS.PULL_REQUEST:
+      return pullRequestBeside(address, here);
     // A file of the item's repository, which the panel reads through the task it stands for, or through the workspace and repository of an agent with none;
     // a file of another repository opens there too, read through the item's workspace.
     case ADDRESS.FILE: {
@@ -429,30 +443,13 @@ function pageBeside(at: LinkPlace, here: AgentsHere): Route {
 }
 
 /**
- * An address pressed on a task's page or an agent's: a pull request one of
- * its agents opened, however its page is spelled, opens in that agent's Pull
- * request tab, and any other of its repository, such as one an agent opened
- * before moving to another branch, in its first agent's by its number; a
- * page of another place beside it (`pageBeside`); any other address is the
- * window's. An archived agent's pull request, merged or not, opens its tab
- * too.
+ * An address pressed on a task's page or an agent's: a pull request as
+ * `pullRequestBeside` opens it, and a page of another place beside it
+ * (`pageBeside`); any other address is the window's.
  */
 function besideAgents(address: Address, here: AgentsHere): Route {
   if (address.kind === ADDRESS.PLACE) return pageBeside(address.link.place, here);
-  if (address.kind !== ADDRESS.PULL_REQUEST) return NOTHING;
-  const opened = openedBy(here, here.heldIds ?? here.agentIds);
-  const agentId = pullRequestAgentOf(address.href, opened);
-  if (agentId !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId });
-  if (!ofRepository(address.repository, here.repository)) return NOTHING;
-  // A page under an agent's own pull request's, its files say, is still that agent's.
-  const owner = opened.find(
-    (each) => repositoryPullRequestOf(each.url, here.repository) === address.number,
-  );
-  if (owner !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId: owner.agentId });
-  const first = here.agentIds?.[0];
-  return first === undefined
-    ? NOTHING
-    : preview({ kind: THING.PULL_REQUEST, agentId: first, number: address.number });
+  return address.kind === ADDRESS.PULL_REQUEST ? pullRequestBeside(address, here) : NOTHING;
 }
 
 /** The address as written, for the browser; nothing for a place handed rather than written. */

@@ -6,6 +6,7 @@ import {
   type AgentStatus,
   type AgentSummary,
 } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -95,6 +96,7 @@ import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { ADDRESS, type Address } from "../route.js";
 import { centreWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import {
@@ -153,7 +155,7 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
+import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
   DRAWN_KINDS,
   type DrawnTabs,
@@ -2647,6 +2649,20 @@ export function SidePanel({
       ? undefined
       : taskOfTab?.tasks.find((each) => each.id === tabTask);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
+  // An agent another place holds, pressed in the tab shown, opens in the middle as the window goes
+  // there, and the panel goes along as it stands, so the page read beside it stays.
+  const { heldIds } = agents;
+  const { onCarry } = panel;
+  const carryToAgent = useCallback(
+    (address: Address) => {
+      if (address.kind !== ADDRESS.PLACE) return;
+      const { place } = address.link;
+      if (place.kind !== LINK_PLACE.AGENT && place.kind !== LINK_PLACE.MESSAGE) return;
+      if (heldIds === undefined || heldIds.includes(place.agentId)) return;
+      onCarry();
+    },
+    [heldIds, onCarry],
+  );
   // Note that only one tab panel stands at a time, so the one pair of ids serves whichever tab is chosen.
   const tabId = useId();
   const panelId = useId();
@@ -2688,6 +2704,7 @@ export function SidePanel({
       label="Panel"
       banner={banner}
       switched={switched}
+      onLeavingHere={carryToAgent}
       head={
         <>
           {switched && ownActivity !== undefined && phone !== undefined ? (
@@ -2985,6 +3002,7 @@ function PanelFrame({
   banner,
   switched = false,
   head,
+  onLeavingHere,
   children,
 }: Omit<SidePanelDrawing, "panel"> & {
   panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
@@ -3000,6 +3018,8 @@ function PanelFrame({
   switched?: boolean;
   /** Drawn under the row: a phone's header in the bar's place, where the panel heads itself (`SidePanel`'s `phone`), and the line naming the task of a tab of another task. */
   head?: React.ReactNode;
+  /** Hears an address pressed in the tab shown that the window goes to, past the place around (`OnLeavingHere`); none where nothing listens. */
+  onLeavingHere?: ((address: Address) => void) | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
@@ -3045,7 +3065,11 @@ function PanelFrame({
         </div>
         {head}
         {panel.fullScreen ? banner : null}
-        {children}
+        {onLeavingHere === undefined ? (
+          children
+        ) : (
+          <OnLeavingHere leaving={onLeavingHere}>{children}</OnLeavingHere>
+        )}
         {/* Last, so the drag region of the row above does not take the
             edge's top from it. Full screen has no edge to drag. */}
         {panel.fullScreen ? null : <ResizeEdge edge={edge} />}
