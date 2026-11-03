@@ -287,6 +287,17 @@ test("the column's strip leads with the task itself, named as the list names it 
   assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
 });
 
+test("the column's first tab hangs the task's card, as its sidebar row does", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
+  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
+  assert.ok(tab, "the strip leads with the task's tab");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.ok(card, "the task's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
+  assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
+});
+
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
   const container = await mount({

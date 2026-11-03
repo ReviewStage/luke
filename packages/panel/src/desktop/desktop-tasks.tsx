@@ -777,12 +777,8 @@ function PlanDocument({
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
   );
-  // A task the head names, a crumb or a related row, opens as a link to it does (`route.ts`), straight where no window opens places.
-  const openTask = useSteadyDoor((taskId: string) =>
-    openPlace === undefined
-      ? selectTask(taskId)
-      : openPlace({ kind: LINK_PLACE.TASK, planId: taskId }),
-  );
+  // A task the head names, a crumb or a related row, opens where it was left, as a sidebar row opens it, rather than as a link to its Overview does.
+  const openTask = useSteadyDoor(selectTask);
   const changeBlock = useSteadyDoor(
     openedId === undefined
       ? undefined

@@ -19,6 +19,7 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
+import type { ReadLink } from "@luke/features/link-grammar";
 import {
   PLAN_ACTOR,
   TASK_PRIORITY,
@@ -45,6 +46,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import {
   type FixedSidePanelTab,
   PULL_REQUEST_VIEW,
@@ -455,6 +457,62 @@ test("a plan's document opens on its path, its repository as plain words, then i
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a sub-task's row opens the task where it was left, as a sidebar row does, never a link to its Overview", () => {
+  fakeAppPlatform(QUIET_PANEL);
+  fakeAppBridge({});
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
+  const home = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const child = {
+    ...TASK,
+    id: "task-child",
+    name: "Invite emails",
+    number: 2,
+    parentTaskId: TASK.id,
+  };
+  const selected: string[] = [];
+  const linked: ReadLink[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => linked.push(link) },
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              tasks: [{ ...TASK, number: 1 }, child],
+              listRead: true,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              workspaces: [home],
+              workspace: home,
+              sidePanel: DOCUMENT_PANEL,
+              onSelect: (taskId) => selected.push(taskId),
+            }),
+          }),
+        ),
+      ),
+    ),
+  );
+  const row = container.querySelector<HTMLElement>(`[data-task-id='${child.id}']`);
+  act(() => row?.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
+
+  assert.deepEqual(selected, [child.id], "the task opens on the tab it was left on");
+  assert.deepEqual(linked, [], "no link to its Overview is followed");
   act(() => root.unmount());
   container.remove();
 });

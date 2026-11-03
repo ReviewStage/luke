@@ -63,6 +63,7 @@ import {
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
+import { tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
@@ -282,7 +283,7 @@ interface DrawnTab {
  * says more, so it keeps its failed mark in the pencil's place.
  */
 function agentTabs(input: {
-  task: Pick<TaskSummary, "name" | "status">;
+  task: Pick<TaskSummary, "id" | "name" | "status">;
   main: MainTabsControl;
   agents: AgentsControl;
   unread: readonly StripTab[];
@@ -301,12 +302,17 @@ function agentTabs(input: {
   });
   const overview = {
     tab: MAIN_TAB.OVERVIEW,
-    // Note that the first tab names the task by its status mark and name, since no bar over the column names it.
+    // Note that the first tab names the task by its status mark and name, since no bar over the column names it, and hangs the task's card, as the Plan tab did.
     look: {
-      ...look(
-        MAIN_TAB.OVERVIEW,
-        tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name }),
-      ),
+      ...look(MAIN_TAB.OVERVIEW, {
+        ...tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name }),
+        card: tabCard({
+          kind: TAB_KIND.PLAN,
+          taskId: task.id,
+          name: task.name,
+          status: task.status,
+        }),
+      }),
       anchored: true,
     },
     close: undefined,
