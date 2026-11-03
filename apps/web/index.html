@@ -67,8 +67,11 @@
          Organization names Vespin's logo and what Vespin is, so a search
          for the name finds this product rather than one spelled like it.
          The logo is the app icon the manifest already serves, at 512 pixels,
-         past Google's 112-pixel floor. A data block runs nothing, so the
-         site's script-src policy leaves it alone. -->
+         past Google's 112-pixel floor. The two stand apart rather than the
+         WebSite naming the Organization as its publisher, because a reader
+         folds a referenced node into the one that names it, and Google's
+         Rich Results Test then finds no Organization at the top. A data
+         block runs nothing, so the site's script-src policy leaves it alone. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -77,8 +80,7 @@
             "@type": "WebSite",
             "@id": "https://vespin.dev/#website",
             "name": "Vespin",
-            "url": "https://vespin.dev/",
-            "publisher": { "@id": "https://vespin.dev/#organization" }
+            "url": "https://vespin.dev/"
           },
           {
             "@type": "Organization",
