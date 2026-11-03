@@ -2066,10 +2066,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksCommentsParamsSchema,
           params,
-          "reading a plan's comments names the plan and a cursor",
+          "reading a plan's comments names the plan, the page where it reads one's, and a cursor",
         );
         if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.comments(read.planId, read.after));
+        const answer = yield* served(client.comments(read.planId, read.after, read.pageId));
         return carried<TasksCommentsAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>

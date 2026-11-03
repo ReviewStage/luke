@@ -41,6 +41,7 @@ import {
   useResizeEdge,
 } from "@luke/ui";
 import { ListIcon } from "@luke/ui/icons";
+import { usePlanComments } from "@luke/ui/plan-comments";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -1739,6 +1740,29 @@ function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefi
 }
 
 /** What the chosen tab shows. */
+/**
+ * A page's tab, with the page's comment threads where it stands on a task,
+ * read and written through the plan's comment doors naming the page; a page
+ * an agent on no task showed has none.
+ */
+function TaskPagePane({
+  doors,
+  ...pane
+}: Omit<Parameters<typeof PagePane>[0], "comments"> & {
+  doors: NonNullable<Parameters<typeof PagePane>[0]["comments"]>["doors"];
+}): React.JSX.Element {
+  const { act } = useAct();
+  const control = usePlanComments({
+    planId: "taskId" in pane.place ? pane.place.taskId : undefined,
+    pageId: pane.page.id,
+    shown: true,
+    readComments: (params) => act(ACT_KIND.TASKS_COMMENTS, params),
+    startComment: (params) => act(ACT_KIND.TASKS_COMMENT_START, params),
+    actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
+  });
+  return <PagePane {...pane} comments={control === undefined ? undefined : { control, doors }} />;
+}
+
 function TabContent({
   tab,
   taskId,
@@ -1876,7 +1900,7 @@ function TabContent({
     return page === undefined ? (
       <SpinnerRegion delay label={readingWords("the page")} />
     ) : (
-      <PagePane
+      <TaskPagePane
         key={page.id}
         place={pagePlace}
         page={page}
@@ -1884,6 +1908,13 @@ function TabContent({
           act(ACT_KIND.TASKS_PAGE_SOURCE, { ...pagePlace, pageId: page.id, version })
         }
         findActive={findActive}
+        doors={{
+          agents: {
+            control: agents,
+            onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+          },
+          me: agents.me,
+        }}
       />
     );
   }

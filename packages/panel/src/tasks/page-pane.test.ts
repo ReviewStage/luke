@@ -4,9 +4,18 @@ import assert from "node:assert/strict";
 import { LINK_ORIGIN } from "@luke/features/link-home";
 import type { pageFindAnswerSchema } from "@luke/features/page-find";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@luke/features/page-pick";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import type { PlanCommentsControl } from "@luke/ui/plan-comments";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -62,6 +71,7 @@ function mount(
   read: ReadPageSource = readSource,
   findActive = true,
   place: PagePlace = { taskId: TASK },
+  comments?: Parameters<typeof PagePane>[0]["comments"],
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -88,7 +98,13 @@ function mount(
                 held = actions;
               },
             },
-            createElement(PagePane, { place, page: listed, readSource: read, findActive }),
+            createElement(PagePane, {
+              place,
+              page: listed,
+              readSource: read,
+              findActive,
+              comments,
+            }),
           ),
         ),
       ),
@@ -307,7 +323,10 @@ function framePosts(frame: HTMLIFrameElement): unknown[] {
 }
 
 /** A message posted to the panel's window from `from`, as a frame's page posts one. */
-function postFrom(from: Window | null, data: typeof pageFindAnswerSchema.Type): void {
+function postFrom(
+  from: Window | null,
+  data: typeof pageFindAnswerSchema.Type | typeof pagePickAnswerSchema.Type,
+): void {
   act(() => {
     window.dispatchEvent(new MessageEvent("message", { data, source: from }));
   });
@@ -466,4 +485,82 @@ test("on a phone the page draws no bar, and the task's header's ⋯ offers every
   handed.press("View options");
   const sheet = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
   assert.match(sheet.textContent ?? "", /View options.*Word wrap/);
+});
+
+test("Comment asks the frame for an element, an element holding threads is pinned, the element picked opens a comment quoting its words, and a press in the page lets go of it", async () => {
+  const path = "body > p:nth-of-type(1)";
+  const thread: PlanCommentThread = {
+    id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
+    scope: PLAN_COMMENT_SCOPE.ELEMENT,
+    quote: "Invites sent",
+    page: { id: FUNNEL.id, version: 3, element: path },
+    section: "",
+    status: PLAN_COMMENT_STATUS.OPEN,
+    entries: [
+      {
+        id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e62",
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
+        words: "Per week?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+  const control: PlanCommentsControl = {
+    planId: TASK,
+    threads: [thread],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async () => ({ note: "not in this test" }),
+    act: async () => true,
+  };
+  const { container, frame, press } = mount(
+    FUNNEL,
+    readSource,
+    true,
+    { taskId: TASK },
+    {
+      control,
+      doors: { agents: undefined, me: "u-dean" },
+    },
+  );
+  const posted = framePosts(frame());
+  const box = { left: 10, top: 20, right: 200, bottom: 40 };
+
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, marks: [{ path, box }] });
+  await press("Comment on the page");
+  // The press in the frame is the developer's, which the window holds as the pick lands.
+  vi.stubGlobal("navigator", { ...navigator, userActivation: { isActive: true } });
+  postFrom(frame().contentWindow, {
+    type: PAGE_PICK_TYPE,
+    picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
+  });
+
+  assert.deepEqual(posted, [
+    { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, marks: [{ path }] },
+    { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.START },
+    { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.STOP },
+  ]);
+  assert.ok(
+    container.querySelector('button.luke-comment-pin[aria-label="1 comment"]'),
+    "the element is pinned",
+  );
+  const field = container.querySelector(".page-comment-float");
+  assert.ok(field, "the comment is started by the element");
+  assert.match(field.textContent ?? "", /Totals/);
+
+  // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
+  postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
+  const standing = container.querySelector(
+    ".luke-rect-float:not([data-leaving]) .page-comment-float",
+  );
+  assert.ok(standing === null, "the comment being started goes");
 });

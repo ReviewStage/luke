@@ -16,13 +16,15 @@ import {
   type PlanCommentEntry,
   type PlanCommentEntryKind,
   type PlanCommentFile,
+  type PlanCommentPageStart,
   type PlanCommentRefusal,
+  type PlanCommentStart,
   type PlanCommentStartRequest,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
 } from "@luke/features/plan-comment-wire";
 import { planSections } from "@luke/features/plan-document";
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -30,6 +32,7 @@ import { Database } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
 import { user } from "../schemas/auth.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
+import { planPageVersion } from "../schemas/plan-page.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
@@ -60,6 +63,13 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * the comment's cascade. Each names the plan and its workspace beside the
  * comment, so it moves with the plan, and is read back by any member of
  * that workspace (`readPlanCommentFile`).
+ *
+ * A thread on one of the task's pages is the task's as any other: it is
+ * started on a version the task holds of the page, under the same lock and
+ * the same key, and every write to a thread by its id is the same. What
+ * sets it apart is what reads it: the plan's threads are read without the
+ * pages', and a page's alone (`readPlanCommentThreads`), each subject held
+ * to its own bound of threads, and no save of the plan's text moves it.
  */
 
 /**
@@ -75,11 +85,12 @@ export type PlanCommentWriterRef =
       readonly agentId: string;
     };
 
-/** What a write to a plan's comments came to: done, with what it answers, or no plan or thread the account reaches. */
+/** What a write to a plan's comments came to: done, with what it answers, or no plan, thread, or page the account reaches. */
 export const PLAN_COMMENT_OUTCOME = {
   DONE: "done",
   NO_TASK: "no-plan",
   NO_THREAD: "no-thread",
+  NO_PAGE: "no-page",
 } as const;
 
 export type PlanCommentOutcome =
@@ -90,7 +101,8 @@ export type PlanCommentOutcome =
       readonly repeated?: true;
     }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_TASK }
-  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_THREAD };
+  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_THREAD }
+  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_PAGE };
 
 /** Where one thread stands, without what it says: what a held read compares between looks. */
 export interface PlanCommentStamp {
@@ -107,6 +119,9 @@ const ThreadRowSchema = Schema.Struct({
   anchorFrom: Schema.NullOr(Schema.Number),
   anchorTo: Schema.NullOr(Schema.Number),
   section: Schema.String,
+  pageId: Schema.NullOr(Schema.String),
+  pageVersion: Schema.NullOr(Schema.Number),
+  pageElement: Schema.NullOr(Schema.String),
   status: Schema.Literals(Object.values(PLAN_COMMENT_STATUS)),
   revision: Schema.Number,
   createdAt: InstantColumnSchema,
@@ -122,11 +137,22 @@ const THREAD_COLUMNS = {
   anchorFrom: planCommentThread.anchorFrom,
   anchorTo: planCommentThread.anchorTo,
   section: planCommentThread.section,
+  pageId: planCommentThread.pageId,
+  pageVersion: planCommentThread.pageVersion,
+  pageElement: planCommentThread.pageElement,
   status: planCommentThread.status,
   revision: planCommentThread.revision,
   createdAt: planCommentThread.createdAt,
   updatedAt: planCommentThread.updatedAt,
 };
+
+/** Which of the task's threads a read takes: the plan's where it names no page, or the page's it names. */
+const SubjectSchema = Schema.NullOr(Schema.String);
+
+/** The threads on one subject of the task: the plan's where `pageId` is null, the page's it names otherwise. */
+function onSubject(pageId: string | null): SQL {
+  return pageId === null ? isNull(planCommentThread.pageId) : eq(planCommentThread.pageId, pageId);
+}
 
 const EntryRowSchema = Schema.Struct({
   id: Schema.String,
@@ -184,13 +210,15 @@ const findReachableTask = SqlSchema.findOneOption({
     ),
 });
 
+/** The task's threads: the ones named, of any subject, or every one of the subject named. */
 const findThreads = SqlSchema.findAll({
   Request: Schema.Struct({
     taskId: Schema.String,
     ids: Schema.optional(Schema.Array(Schema.String)),
+    pageId: Schema.optional(SubjectSchema),
   }),
   Result: ThreadRowSchema,
-  execute: ({ taskId, ids }) =>
+  execute: ({ taskId, ids, pageId }) =>
     Database.use((db) =>
       db
         .select(THREAD_COLUMNS)
@@ -199,6 +227,7 @@ const findThreads = SqlSchema.findAll({
           and(
             eq(planCommentThread.taskId, taskId),
             ids === undefined ? undefined : inArray(planCommentThread.id, [...ids]),
+            pageId === undefined ? undefined : onSubject(pageId),
           ),
         )
         .orderBy(asc(planCommentThread.createdAt), asc(planCommentThread.id)),
@@ -220,14 +249,14 @@ const findEntries = SqlSchema.findAll({
 });
 
 const findStamps = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, pageId: SubjectSchema }),
   Result: Schema.Struct({
     id: Schema.String,
     revision: Schema.Number,
     status: Schema.String,
     updatedAt: InstantColumnSchema,
   }),
-  execute: ({ userId, taskId }) =>
+  execute: ({ userId, taskId, pageId }) =>
     Database.use((db) =>
       db
         .select({
@@ -238,19 +267,41 @@ const findStamps = SqlSchema.findAll({
         })
         .from(planCommentThread)
         .innerJoin(task, eq(task.id, planCommentThread.taskId))
-        .where(and(eq(planCommentThread.taskId, taskId), taskReachableBy(userId))),
+        .where(
+          and(eq(planCommentThread.taskId, taskId), onSubject(pageId), taskReachableBy(userId)),
+        ),
     ),
 });
 
+/** How many threads one subject of the task holds, the plan or one page, resolved ones among them. */
 const countThreads = SqlSchema.findOne({
-  Request: Schema.Struct({ taskId: Schema.String }),
+  Request: Schema.Struct({ taskId: Schema.String, pageId: SubjectSchema }),
   Result: Schema.Struct({ count: Schema.Number }),
-  execute: ({ taskId }) =>
+  execute: ({ taskId, pageId }) =>
     Database.use((db) =>
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(planCommentThread)
-        .where(eq(planCommentThread.taskId, taskId)),
+        .where(and(eq(planCommentThread.taskId, taskId), onSubject(pageId))),
+    ),
+});
+
+/** The title of one version of one of the task's pages, where the task holds it. */
+const findTaskPageVersion = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, pageId: Schema.String, version: Schema.Number }),
+  Result: Schema.Struct({ title: Schema.String }),
+  execute: ({ taskId, pageId, version }) =>
+    Database.use((db) =>
+      db
+        .select({ title: planPageVersion.title })
+        .from(planPageVersion)
+        .where(
+          and(
+            eq(planPageVersion.taskId, taskId),
+            eq(planPageVersion.pageId, pageId),
+            eq(planPageVersion.version, version),
+          ),
+        ),
     ),
 });
 
@@ -391,11 +442,17 @@ function threadOf(
     row.anchorFrom === null || row.anchorTo === null
       ? undefined
       : { anchor: { from: row.anchorFrom, to: row.anchorTo } };
+  const element = row.pageElement === null ? undefined : { element: row.pageElement };
+  const page =
+    row.pageId === null || row.pageVersion === null
+      ? undefined
+      : { page: { id: row.pageId, version: row.pageVersion, ...element } };
   return {
     id: row.id,
     scope: row.scope,
     quote: row.quote,
     ...anchor,
+    ...page,
     section: row.section,
     status: row.status,
     entries: entries
@@ -407,10 +464,13 @@ function threadOf(
   };
 }
 
-/** The plan's threads, or the ones named, with their entries. */
-function threadsOf(taskId: string, ids?: readonly string[]): TaskStoreEffect<PlanCommentThread[]> {
+/** The threads of one subject of the task, or the ones named of any, with their entries. */
+function threadsOf(
+  taskId: string,
+  of: { readonly ids: readonly string[] } | { readonly pageId: string | null },
+): TaskStoreEffect<PlanCommentThread[]> {
   return Effect.gen(function* () {
-    const rows = yield* findThreads(ids === undefined ? { taskId } : { taskId, ids });
+    const rows = yield* findThreads({ taskId, ...of });
     if (rows.length === 0) return [];
     const entries = yield* findEntries({ taskId, threadIds: rows.map((row) => row.id) });
     const comments = entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
@@ -531,7 +591,7 @@ function movedOn(
 
 /** The thread answered as it now stands. */
 function answered(taskId: string, threadId: string): TaskStoreEffect<PlanCommentOutcome> {
-  return Effect.map(threadsOf(taskId, [threadId]), ([thread]) =>
+  return Effect.map(threadsOf(taskId, { ids: [threadId] }), ([thread]) =>
     thread === undefined
       ? { status: PLAN_COMMENT_OUTCOME.NO_THREAD }
       : { status: PLAN_COMMENT_OUTCOME.DONE, answer: { thread } },
@@ -566,39 +626,119 @@ function mayDeleteThread(starter: EntryRow, writer: PlanCommentWriterRef): boole
   return starter.actor !== PLAN_COMMENT_ACTOR.MEMBER && writer.actor === PLAN_COMMENT_ACTOR.MEMBER;
 }
 
-/** The plan's threads, oldest first, each with its entries; nothing where the account reaches no such plan. */
+/** The plan's threads, or the named page's, oldest first, each with its entries; nothing where the account reaches no such plan. */
 export function readPlanCommentThreads(
   userId: string,
   taskId: string,
+  pageId?: string,
 ): TaskStoreEffect<Option.Option<readonly PlanCommentThread[]>> {
   return Effect.gen(function* () {
     const reached = yield* findReachableTask({ userId, taskId });
     if (Option.isNone(reached)) return Option.none();
-    return Option.some(yield* threadsOf(taskId));
+    return Option.some(yield* threadsOf(taskId, { pageId: pageId ?? null }));
   });
 }
 
-/** Where each of the plan's threads stands, read without its words; none where the account reaches no such plan. */
+/** One of the task's threads by its id, the plan's or a page's, with its entries; nothing where the account reaches no such plan or the plan no such thread. */
+export function readPlanCommentThread(
+  userId: string,
+  taskId: string,
+  threadId: string,
+): TaskStoreEffect<Option.Option<PlanCommentThread>> {
+  return Effect.gen(function* () {
+    const reached = yield* findReachableTask({ userId, taskId });
+    if (Option.isNone(reached)) return Option.none();
+    const [thread] = yield* threadsOf(taskId, { ids: [threadId] });
+    return Option.fromNullishOr(thread);
+  });
+}
+
+/** Where each of the plan's threads, or the named page's, stands, read without its words; none where the account reaches no such plan. */
 export function planCommentStamps(
   userId: string,
   taskId: string,
+  pageId?: string,
 ): TaskStoreEffect<readonly PlanCommentStamp[]> {
-  return Effect.map(findStamps({ userId, taskId }), (rows) =>
+  return Effect.map(findStamps({ userId, taskId, pageId: pageId ?? null }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+  );
+}
+
+/** Where a thread being started stands, as its row keeps it. */
+type ThreadPlace = Pick<
+  typeof planCommentThread.$inferInsert,
+  | "scope"
+  | "quote"
+  | "anchorFrom"
+  | "anchorTo"
+  | "section"
+  | "pageId"
+  | "pageVersion"
+  | "pageElement"
+>;
+
+/** A thread placed on the words the request measured in its text, carried over to the plan's text as saved; refused where none of them stand there now. */
+function placedOnPlan(
+  text: string,
+  request: PlanCommentStartRequest,
+): ThreadPlace | PlanCommentOutcome {
+  const anchor = spanWithin(request.anchor, request.text.length)
+    ? textChange(request.text, text)(request.anchor)
+    : undefined;
+  if (anchor === undefined) return refused(PLAN_COMMENT_REFUSAL.NO_WORDS);
+  return {
+    scope: request.scope,
+    quote: request.quote,
+    anchorFrom: anchor.from,
+    anchorTo: anchor.to,
+    section: sectionAt(text, anchor.from),
+  };
+}
+
+/**
+ * A thread placed on the version of the task's page the request names: on
+ * the element it picked there, or on words selected in one, or on the whole
+ * page, quoted by the version's title; no page where the task holds no such
+ * version.
+ */
+function placedOnPage(
+  taskId: string,
+  request: PlanCommentPageStart,
+): TaskStoreEffect<ThreadPlace | PlanCommentOutcome> {
+  return Effect.map(
+    findTaskPageVersion({ taskId, pageId: request.page.id, version: request.page.version }),
+    Option.match({
+      onNone: () => ({ status: PLAN_COMMENT_OUTCOME.NO_PAGE }) as const,
+      onSome: ({ title }) => {
+        const on = { pageId: request.page.id, pageVersion: request.page.version };
+        const { element } = request;
+        if (element === undefined) {
+          return { ...on, scope: PLAN_COMMENT_SCOPE.PAGE, quote: title, section: "" };
+        }
+        return {
+          ...on,
+          scope: element.words === true ? PLAN_COMMENT_SCOPE.WORDS : PLAN_COMMENT_SCOPE.ELEMENT,
+          quote: element.quote,
+          section: element.section,
+          pageElement: element.path,
+        };
+      },
+    }),
   );
 }
 
 /**
  * A thread started on the plan with its first comment, anchored to the words
- * the request measured in its text, carried over to the text as saved.
- * Refused where the plan holds its bound of threads, or where none of the
- * words stand in the text now; the thread a key already started where the
- * request was taken before.
+ * the request measured in its text, carried over to the text as saved, or on
+ * a version of one of the task's pages. Refused where the plan, or the page,
+ * holds its bound of threads, or where none of the words stand in the text
+ * now; no page where the task holds no such version; the thread a key
+ * already started where the request was taken before.
  */
 export function startPlanCommentThread(
   writer: PlanCommentWriterRef,
   taskId: string,
-  request: PlanCommentStartRequest,
+  request: PlanCommentStart,
 ): TaskStoreEffect<PlanCommentOutcome> {
   return inTransaction(
     Effect.gen(function* () {
@@ -606,28 +746,25 @@ export function startPlanCommentThread(
       if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_TASK } as const;
       const taken = yield* findKeyedThread({ taskId, clientKey: request.clientKey });
       if (Option.isSome(taken)) return yield* answeredAgain(taskId, taken.value.threadId);
-      const { count } = yield* countThreads({ taskId }).pipe(
-        Effect.catchTag("NoSuchElementError", Effect.die),
-      );
+      const onPage = "page" in request;
+      const { count } = yield* countThreads({
+        taskId,
+        pageId: onPage ? request.page.id : null,
+      }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
       if (count >= PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN) {
         return refused(PLAN_COMMENT_REFUSAL.TOO_MANY);
       }
-      const text = locked.value.text;
-      const anchor = spanWithin(request.anchor, request.text.length)
-        ? textChange(request.text, text)(request.anchor)
-        : undefined;
-      if (anchor === undefined) return refused(PLAN_COMMENT_REFUSAL.NO_WORDS);
+      const placed = onPage
+        ? yield* placedOnPage(taskId, request)
+        : placedOnPlan(locked.value.text, request);
+      if ("status" in placed) return placed;
       const id = randomUUID();
       const now = yield* DateTime.nowAsDate;
       yield* Database.use((db) =>
         db.insert(planCommentThread).values({
+          ...placed,
           id,
           taskId,
-          scope: request.scope,
-          quote: request.quote,
-          anchorFrom: anchor.from,
-          anchorTo: anchor.to,
-          section: sectionAt(text, anchor.from),
           status: PLAN_COMMENT_STATUS.OPEN,
           revision: 0,
           createdAt: now,
@@ -888,7 +1025,7 @@ export function movePlanCommentAnchors(
   reported?: ReportedAnchors,
 ): TaskStoreEffect<void> {
   return Effect.gen(function* () {
-    const rows = yield* findThreads({ taskId });
+    const rows = yield* findThreads({ taskId, pageId: null });
     if (rows.length === 0) return;
     const change = textChange(before, after);
     const fromReport = reported === undefined ? undefined : textChange(reported.text, after);

@@ -157,6 +157,7 @@
     "./page-policy": "./src/page-policy.js",
     "./page-find": "./src/page-find.js",
     "./page-link": "./src/page-link.js",
+    "./page-pick": "./src/page-pick.js",
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",

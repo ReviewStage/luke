@@ -10,6 +10,12 @@ import {
 } from "@luke/features/page-find";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_LINK_TYPE, pageLinkPressSchema } from "@luke/features/page-link";
+import {
+  PAGE_PICK_ACT,
+  PAGE_PICK_TYPE,
+  type PagePickAsk,
+  pagePickAnswerSchema,
+} from "@luke/features/page-pick";
 import { Effect, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { pageResponse } from "./page-protocol";
@@ -18,7 +24,8 @@ import { pageResponse } from "./page-protocol";
  * The find a page is served with, as the side panel drives it: a page served
  * by the `luke-page:` scheme, drawn in a frame of the test's window, asked to
  * search and step as the panel's find bar asks, and answering with its tally
- * and its selection; and the link pressed in it, handed to the panel. jsdom lays nothing out, so where a match stands on
+ * and its selection; the link pressed in it, handed to the panel; and the
+ * element a comment is on, picked in it at the panel's asking. jsdom lays nothing out, so where a match stands on
  * screen is the one thing answered for it: every match below the fold, and
  * a scroll into view recorded on the element that holds it. Synthetic pages.
  */
@@ -31,11 +38,15 @@ interface DrawnPage {
   readonly frame: HTMLIFrameElement;
   readonly posted: Posted[];
   readonly scrolled: string[];
-  readonly ask: (ask: PageFindAsk, from?: MessageEventSource | null) => void;
+  readonly ask: (ask: PageFindAsk | PagePickAsk, from?: MessageEventSource | null) => void;
 }
 
-/** What the page may post to the panel: the find's answer, or a link pressed. */
-const postedSchema = Schema.Union([pageFindAnswerSchema, pageLinkPressSchema]);
+/** What the page may post to the panel: the find's answer, a link pressed, or an element picked. */
+const postedSchema = Schema.Union([
+  pageFindAnswerSchema,
+  pageLinkPressSchema,
+  pagePickAnswerSchema,
+]);
 
 type Posted = typeof postedSchema.Type;
 
@@ -111,7 +122,7 @@ function drawServed(html: string): DrawnPage {
       scrolled.push(this.id);
     },
   });
-  const ask = (asked: PageFindAsk, from: MessageEventSource | null = framed.parent) =>
+  const ask = (asked: PageFindAsk | PagePickAsk, from: MessageEventSource | null = framed.parent) =>
     framed.dispatchEvent(new MessageEvent("message", { data: asked, source: from }));
   const drawnPage = { frame, posted, scrolled, ask };
   drawn.push(drawnPage);
@@ -361,11 +372,66 @@ it.effect(
       ].map(press);
 
       assert.deepEqual(prevented, [true, false, true, true, true, true, true]);
-      assert.deepEqual(posted, [
-        { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
-        { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
-        { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
-        { type: PAGE_LINK_TYPE, href: "mailto:dean@example.com" },
-      ]);
+      assert.deepEqual(
+        posted.filter((message) => message.type === PAGE_LINK_TYPE),
+        [
+          { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
+          { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
+          { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
+          { type: PAGE_LINK_TYPE, href: "mailto:dean@example.com" },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a pick asked of the page takes the next press for itself and hands the panel the element's path, words, section, and box; the press after it is the page's, said to the panel; and the elements marked are said where they stand, or none where the page holds none",
+  () =>
+    Effect.gen(function* () {
+      const { frame, ask, posted } = yield* draw(
+        [
+          "<!doctype html><h2>Totals</h2>",
+          "<div><p>Week one</p><p>12 <b>sent</b></p></div>",
+          "<script>addEventListener('click', () => { document.body.dataset.pressed = 'yes'; });</script>",
+        ].join("\n"),
+      );
+      const page = frame.contentDocument ?? assert.fail();
+      const pressed = page.querySelectorAll("p")[1] ?? assert.fail();
+      const press = () =>
+        pressed.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+      ask({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.START });
+      press();
+
+      assert.deepEqual(posted.at(-1), {
+        type: PAGE_PICK_TYPE,
+        picked: {
+          path: "body > div:nth-of-type(1) > p:nth-of-type(2)",
+          quote: "12 sent",
+          section: "Totals",
+          box: { left: 0, top: 0, right: 0, bottom: 0 },
+        },
+      });
+      assert.equal(page.body.dataset.pressed, undefined, "the page heard no press while picking");
+      press();
+      assert.equal(page.body.dataset.pressed, "yes");
+      assert.deepEqual(
+        posted.slice(1),
+        [{ type: PAGE_PICK_TYPE, pressed: true }],
+        "the page's press is said",
+      );
+
+      ask({
+        type: PAGE_PICK_TYPE,
+        act: PAGE_PICK_ACT.MARK,
+        marks: [{ path: "body > h2:nth-of-type(1)" }, { path: "#gone" }],
+      });
+      assert.deepEqual(posted.at(-1), {
+        type: PAGE_PICK_TYPE,
+        marks: [
+          { path: "body > h2:nth-of-type(1)", box: { left: 0, top: 0, right: 0, bottom: 0 } },
+          { path: "#gone", box: null },
+        ],
+      });
     }),
 );

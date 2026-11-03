@@ -173,7 +173,7 @@ function drawn(
     onRetry: () => undefined,
     notes,
     start: async (start) => {
-      started.push(start);
+      if (!("page" in start)) started.push(start);
       return { note: "not in this test" };
     },
     act: async (thread, action) => {
@@ -217,12 +217,12 @@ function drawn(
   return { container, asked, started, documentsShown, notes, rethread };
 }
 
-/** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
-function wide<Drawn>(draw: () => Drawn): Drawn {
+/** What `draw` drew with the column stood `across` wide, by default wide enough for its margin, since jsdom lays nothing out. */
+function wide<Drawn>(draw: () => Drawn, across = 1400): Drawn {
   const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
     configurable: true,
-    get: () => 1400,
+    get: () => across,
   });
   try {
     return draw();
@@ -1229,12 +1229,16 @@ test("a reply's field empties as it is sent, and a refused reply takes the words
   assert.notEqual(keys[3], keys[2]);
 });
 
-test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy", async () => {
+test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy, and one the thread already holds is drawn there alone", async () => {
   const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
-  const { container, asked } = drawn(
+  const { container, asked, rethread } = drawn(
     "page",
     THREADS,
     () => answers[asked.length - 1]?.promise ?? true,
+    PLAN,
+    undefined,
+    undefined,
+    "u-dean",
   );
   act(() =>
     container
@@ -1263,6 +1267,31 @@ test("replies sent before the first answers each stand as Sending and go one at 
   await act(async () => answers[0]?.resolve(true));
   assert.deepEqual(sent(), ["Not for v1.", "Maybe v2."]);
   assert.deepEqual(sending(), ["Maybe v2."]);
+  // The read brings the reply before its send answers, as one that wakes an agent may.
+  rethread(
+    THREADS.map((thread) =>
+      thread.id === ID.OPEN
+        ? {
+            ...thread,
+            entries: [
+              ...thread.entries,
+              {
+                id: "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a",
+                kind: PLAN_COMMENT_ENTRY.COMMENT,
+                writer: {
+                  actor: PLAN_COMMENT_ACTOR.MEMBER,
+                  by: { userId: "u-dean", name: "Dean" },
+                },
+                words: "Maybe v2.",
+                at: 2,
+              },
+            ],
+          }
+        : thread,
+    ),
+  );
+  const shown = [...card.querySelectorAll(".comment-words")].map((words) => words.textContent);
+  assert.equal(shown.filter((words) => words === "Maybe v2.").length, 1);
   await act(async () => answers[1]?.resolve(true));
   assert.deepEqual(sending(), []);
 });
@@ -2052,4 +2081,11 @@ test("an edit emptied and saved asks to delete the comment, and only the confirm
   assert.deepEqual(asked, [
     { thread: ID.OPEN, action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD } },
   ]);
+});
+
+test("a scroller with room for the reading width and one margin, but not one on each side of the centred column, folds its threads to counts rather than running a card past its edge", () => {
+  const { container } = wide(() => drawn("page"), 1200);
+
+  assert.ok(container.querySelector(".comment-count"), "the threads are counted at their lines");
+  assert.equal(container.querySelector(".comment-margin"), null, "no margin stands");
 });

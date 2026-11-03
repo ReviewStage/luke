@@ -8,9 +8,11 @@ import {
   startPlanCommentThread,
   withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
+import { readPageById } from "@luke/database/models/plan-pages";
 import { readTaskHeader, readTaskWorkspace } from "@luke/database/models/task-store";
 import { TOPIC } from "@luke/database/sync/notification";
 import { askedInWords } from "@luke/features/mention-link";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -24,6 +26,7 @@ import {
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
+import { afterResponse } from "../http/after-response.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -56,8 +59,19 @@ import {
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
  * or an archived one for a write, answers as not found, and a thread the plan
- * does not hold as not found too. A member's comment that mentions one of
- * the task's agents with \`@\` hands each the thread (\`mentionsHandedOver\`).
+ * does not hold as not found too. A member's comment reaches the agents in
+ * its thread, each the thread handed to it (\`mentionsHandedOver\`): every
+ * agent a comment was handed to before and every one that answered in it,
+ * and each one of the task's agents its words mention with \`@\`, which
+ * joins it.
+ *
+ * A page of the task is commented on through the same doors: the read names
+ * the page to read its threads in the plan's place, and a start names the
+ * page and the version it is on. The agent that showed the page's newest
+ * version, its writer, is in every thread on the page from the start, so a
+ * comment reaches whoever revises the page; one in a thread that cannot
+ * take it, an archived agent say, is said back as not sent, the comment
+ * posted all the same.
  *
  * The read stays a long-held JSON answer: the hold is the route's own,
  * `heldUntilMoved` under the coding agents' hold, and nothing the handler
@@ -79,9 +93,10 @@ function planCommentsPast(
   userId: string,
   taskId: string,
   after: string,
+  pageId: string | undefined,
 ): Effect.Effect<Option.Option<PlanCommentsAnswer>, StoreFailure, DatabaseServices> {
   return heldUntilMoved(
-    planCommentStamps(userId, taskId),
+    planCommentStamps(userId, taskId, pageId),
     after,
     [
       [TOPIC.TASK, taskId],
@@ -90,7 +105,7 @@ function planCommentsPast(
     CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
   ).pipe(
-    Effect.andThen(readPlanCommentThreads(userId, taskId)),
+    Effect.andThen(readPlanCommentThreads(userId, taskId, pageId)),
     Effect.map(Option.map((threads) => ({ threads, cursor: cursorOf(threads) }))),
   );
 }
@@ -152,13 +167,87 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The thread handed to each of the task's standing agents a member's words
- * mention with \`@\`; an agent of another task, or an archived one, is a
- * reference, which asks no one, and so is the app's own assistant, which no
- * task has any more. Each ask is written under a key drawn from the words'
- * own, so the words sent again ask no one twice. A hand-over that does not
- * land is taken back, the words posted all the same. Answers the ones asked
- * who could not take it.
+ * The writer of the page a thread is on: the agent that showed its newest
+ * version, or the app where it showed it; none for a thread on the plan, or
+ * a page shown before who showed it was kept.
+ */
+const pageWriterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  thread: PlanCommentThread,
+): Effect.fn.Return<PlanCommentAsked | undefined, HostedRefusal, DatabaseServices> {
+  if (thread.page === undefined) return undefined;
+  const found = yield* hostedStoreOrUnavailable(readPageById(userId, thread.page.id, undefined));
+  const shownBy = Option.getOrUndefined(found)?.page.shownBy;
+  if (shownBy === undefined) return undefined;
+  return shownBy.kind === PAGE_SHOWER.AGENT
+    ? { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: shownBy.agentId }
+    : { actor: PLAN_COMMENT_ACTOR.LUKE };
+});
+
+/** One the thread is handed to, and whether a hand-over that could not land is said back, as one asked whatever the words say is. */
+interface HandOver {
+  readonly to: PlanCommentAsked;
+  readonly owed: boolean;
+}
+
+/**
+ * The agents in a thread, in the order they joined it: on a page's thread
+ * the page's writer from the start, then each agent a comment was handed to
+ * and each that answered in it.
+ */
+function agentsIn(
+  thread: PlanCommentThread,
+  writer: PlanCommentAsked | undefined,
+): readonly PlanCommentAsked[] {
+  const joined = thread.entries.flatMap((entry) => {
+    const agentId =
+      entry.kind === PLAN_COMMENT_ENTRY.ASKED
+        ? entry.asked?.agentId
+        : entry.kind === PLAN_COMMENT_ENTRY.COMMENT &&
+            entry.writer.actor === PLAN_COMMENT_ACTOR.AGENT
+          ? entry.writer.agentId
+          : undefined;
+    return agentId === undefined ? [] : [{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId }];
+  });
+  return writer === undefined ? joined : [writer, ...joined];
+}
+
+/**
+ * Whom a member's comment hands its thread to: the one rule of who a comment
+ * wakes, for the plan's threads and the pages' alike, which is that a thread
+ * reaches the agents in it (\`agentsIn\`), and each agent its words mention
+ * with \`@\` joins it. One already in the thread that cannot take it, an
+ * archived one say, is said back as not sent; a mention of one that cannot
+ * take it is a reference, which asks no one.
+ */
+function handedTo(
+  thread: PlanCommentThread,
+  words: string,
+  writer: PlanCommentAsked | undefined,
+): readonly HandOver[] {
+  const handOvers = new Map<string | undefined, HandOver>();
+  for (const to of agentsIn(thread, writer)) {
+    if (!handOvers.has(to.agentId)) handOvers.set(to.agentId, { to, owed: true });
+  }
+  for (const agentId of askedInWords(words)) {
+    if (!handOvers.has(agentId)) {
+      handOvers.set(agentId, { to: { actor: PLAN_COMMENT_ACTOR.AGENT, agentId }, owed: false });
+    }
+  }
+  return [...handOvers.values()];
+}
+
+/**
+ * The thread handed to each of the task's standing agents the comment reaches
+ * (\`handedTo\`); an agent of another task, or an archived one, cannot take
+ * it, and neither can the app's own assistant, which no task has any more.
+ * Who can take it is read before the answer, which says back the ones in the
+ * thread who could not; the hand-overs themselves run past it
+ * (\`afterResponse\`), because waking an idle agent resumes its sandbox, which
+ * can outlast the member's request, and a comment posted must never read as
+ * not posted. Each ask is written under a key drawn from the words' own, so
+ * the words sent again ask no one twice; a hand-over that does not land is
+ * taken back and logged, the words posted all the same.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: PlanCommentsProcedureSeams,
@@ -167,47 +256,59 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   comment: MentioningComment,
 ) {
   const { userId, taskId } = comment;
-  const tos: readonly PlanCommentAsked[] = askedInWords(comment.words).map((agentId) => ({
-    actor: PLAN_COMMENT_ACTOR.AGENT,
-    agentId,
-  }));
+  // Note that a page that could not be read names no writer, so the comment asks only those its thread and words name.
+  const writer = yield* pageWriterOf(userId, thread).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
   const unsent: PlanCommentAsked[] = [];
-  for (const to of tos) {
-    const landed = yield* Effect.gen(function* () {
-      const agent = yield* askableAgent(userId, taskId, to);
-      if (agent === undefined) return true;
-      const ask = {
-        action: PLAN_COMMENT_ACTION.ASK,
-        clientKey: mentionKey(comment.clientKey, to),
-        to,
-      } as const;
-      const outcome = yield* hostedStoreOrUnavailable(
-        actOnPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId },
-          taskId,
-          thread.id,
-          ask,
-        ),
-      );
-      if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
-        return false;
-      }
-      yield* askHandedOver(seams, request, {
-        userId,
-        taskId,
-        thread: outcome.answer.thread,
-        clientKey: ask.clientKey,
-        words: comment.words,
-        to: agent,
-      });
-      return true;
-    }).pipe(
-      // Note that one mention not taken leaves the others, and the words, as they are, and is said back.
-      Effect.catch(() => Effect.succeed(false)),
+  const taking: { readonly to: PlanCommentAsked; readonly agent: CommentRecipient }[] = [];
+  for (const { to, owed } of handedTo(thread, comment.words, writer)) {
+    const agent = yield* askableAgent(userId, taskId, to).pipe(
+      Effect.catch(() => Effect.succeed(undefined)),
     );
-    if (!landed) unsent.push(to);
+    if (agent !== undefined) taking.push({ to, agent });
+    else if (owed) unsent.push(to);
   }
+  yield* afterResponse(
+    "a comment's hand-over",
+    Effect.forEach(
+      taking,
+      ({ to, agent }) =>
+        handedOver(seams, request, thread, comment, to, agent).pipe(
+          // Note that one hand-over not taken leaves the others, and the words, as they are.
+          Effect.catch((refusal) =>
+            Effect.logWarning(`a comment's hand-over was not taken: ${String(refusal)}`),
+          ),
+        ),
+      { discard: true },
+    ),
+  );
   return unsent;
+});
+
+/** The ask written in the thread and the thread handed to the agent, under a key drawn from the comment's own. */
+const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlanCommentsProcedureSeams,
+  request: Request,
+  thread: PlanCommentThread,
+  comment: MentioningComment,
+  to: PlanCommentAsked,
+  agent: CommentRecipient,
+) {
+  const { userId, taskId } = comment;
+  const ask = { action: PLAN_COMMENT_ACTION.ASK, clientKey: mentionKey(comment.clientKey, to), to };
+  const outcome = yield* hostedStoreOrUnavailable(
+    actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
+  );
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) return;
+  yield* askHandedOver(seams, request, {
+    userId,
+    taskId,
+    thread: outcome.answer.thread,
+    clientKey: ask.clientKey,
+    words: comment.words,
+    to: agent,
+  });
 });
 
 /**
@@ -244,11 +345,18 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const page =
+    thread.page === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readPageById(userId, thread.page.id, undefined));
   const text = commentAskMessage({
     taskId,
     taskName: task.value.name,
     thread,
     sender: asked?.writer.by?.name ?? "A member",
+    ...(page === undefined || Option.isNone(page)
+      ? undefined
+      : { page: { title: page.value.page.title, newestVersion: page.value.newestVersion } }),
   });
   const threadId = thread.id;
   yield* handCommentAskOver(seams, request, { userId, to, clientKey, text, threadId, words }).pipe(
@@ -268,7 +376,12 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
     read: member.read.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const read = yield* hostedStoreOrUnavailable(
-        planCommentsPast(context.userId, taskId, input.after ?? PLAN_COMMENTS_CURSOR_START),
+        planCommentsPast(
+          context.userId,
+          taskId,
+          input.after ?? PLAN_COMMENTS_CURSOR_START,
+          input.page === undefined ? undefined : yield* pathUuid(input.page),
+        ),
       );
       if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return read.value;

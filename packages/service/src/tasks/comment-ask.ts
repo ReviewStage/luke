@@ -11,6 +11,7 @@ import {
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -20,9 +21,10 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 /**
  * comment-ask.ts -- a plan's comment thread sent to one of the task's agents: the words it is handed over in, and the hand-over.
  *
- * A member's \`@\` of one of the task's agents in a comment hands the thread
- * itself over as the request: who wrote what in it, the words of the plan it
- * is on, and what the agent is to do with it, which is to read the thread
+ * A member's comment hands its thread over to each agent in it, one an \`@\`
+ * of the comment's adds among them (`plan-comments-procedures.ts`'s
+ * `handedTo`), as the request: who wrote what in it, the words of the plan
+ * it is on, and what the agent is to do with it, which is to read the thread
  * and the plan and answer in the thread, and nothing more of what it
  * discusses. The agent hears it as a message from the member who sent it,
  * through the one steer path every message to an agent takes
@@ -33,9 +35,14 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * typed message and mints as the member's own principal
  * (`eve-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
- * sent again is handed over once. A comment that mentions no agent hands
- * nothing to anyone, an \`@\` of the app's own name among it, and an agent's own reply
- * never does.
+ * sent again is handed over once. A comment in a thread no agent is in
+ * that mentions none hands nothing to anyone, an \`@\` of the app's own name
+ * among it, and an agent's own reply never does.
+ *
+ * A thread on one of the task's pages is handed over the same way, the
+ * page's writer in it from the start, in words that name the page, the
+ * version the thread was left on, and the element it is on, and ask the
+ * agent to show the page's next version where the thread asks for a change.
  */
 
 /** How long a comment of the thread may run in the words it is handed over in, so a long thread stays a message. */
@@ -49,6 +56,8 @@ export interface CommentAsk {
   readonly thread: PlanCommentThread;
   /** The member who sent it, by the name the service holds. */
   readonly sender: string;
+  /** The page a page's thread is on, by its newest version's title and number; none for a thread on the plan. */
+  readonly page?: { readonly title: string; readonly newestVersion: number };
 }
 
 /** Who wrote an entry, as the words handed over name them: the app's own name among them only in a thread written before the task's own assistant was gone. */
@@ -69,21 +78,50 @@ function oneComment(words: string): string {
   return flat.length > COMMENT_CHARS ? `${flat.slice(0, COMMENT_CHARS)}…` : flat;
 }
 
+/** What a thread on the plan is on, as the words handed over say it. */
+function planPlace(thread: PlanCommentThread): string {
+  const where = thread.section === "" ? "" : ` (section "${thread.section}")`;
+  return thread.anchor === undefined
+    ? `On words since deleted from the plan: "${thread.quote}"${where}`
+    : `On: "${thread.quote}"${where}`;
+}
+
+/** What a thread on a page is on, as the words handed over say it: the version it was left on, and its element there, or the whole page. */
+function pagePlace(
+  thread: PlanCommentThread,
+  on: NonNullable<PlanCommentThread["page"]>,
+  page: NonNullable<CommentAsk["page"]>,
+): string {
+  const newest = on.version === page.newestVersion ? "" : `, whose newest is ${page.newestVersion}`;
+  const version = `version ${on.version} of page ${on.id}${newest}`;
+  if (on.element === undefined) return `On the whole page, ${version}.`;
+  const where = thread.section === "" ? "" : ` (section "${thread.section}")`;
+  return `On the element \`${on.element}\` of ${version}: "${thread.quote}"${where}`;
+}
+
 /** The words a thread is handed over in: what it is on, each comment by its writer, and what to do with it. */
 export function commentAskMessage(ask: CommentAsk): string {
-  const { thread } = ask;
-  const where = thread.section === "" ? "" : ` (section "${thread.section}")`;
-  const on =
-    thread.anchor === undefined
-      ? `On words since deleted from the plan: "${thread.quote}"${where}`
-      : `On: "${thread.quote}"${where}`;
+  const { thread, page } = ask;
   const comments = thread.entries
     .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT && entry.words !== undefined)
     .map((entry) => `${writerName(entry)}: ${oneComment(entry.words ?? "")}`);
-  const lead = `${ask.sender} sent you a comment thread on the plan "${ask.taskName}" to answer (thread ${thread.id}).`;
+  const reply = `answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}"`;
+  const only = "Answer what the thread asks; do not act on anything else it discusses.";
   // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
-  const doing = `Read the thread, then answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}". Answer what the thread asks; do not act on anything else it discusses.`;
-  return [lead, on, "", ...comments, "", doing].join("\n");
+  if (thread.page === undefined || page === undefined) {
+    const lead = `${ask.sender} sent you a comment thread on the plan "${ask.taskName}" to answer (thread ${thread.id}).`;
+    return [
+      lead,
+      planPlace(thread),
+      "",
+      ...comments,
+      "",
+      `Read the thread, then ${reply}. ${only}`,
+    ].join("\n");
+  }
+  const lead = `${ask.sender} sent you a comment thread on the page "${page.title}" of the task "${ask.taskName}" to answer (thread ${thread.id}).`;
+  const doing = `Read the thread and the page with \`${AGENT_TOOL.READ_PAGE}\`, then ${reply}. Where it asks for a change to the page, show the page's next version with \`${AGENT_TOOL.SHOW_PAGE}\` and page "${thread.page.id}" before you answer. ${only}`;
+  return [lead, pagePlace(thread, thread.page, page), "", ...comments, "", doing].join("\n");
 }
 
 /** What a hand-over needs: eve as the member reaches it. */

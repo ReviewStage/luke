@@ -1,6 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import type { FrameBox, PagePicked } from "@luke/features/page-pick";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
@@ -10,6 +11,7 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentEntry,
+  type PlanCommentStart,
   type PlanCommentThread,
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
@@ -37,6 +39,7 @@ import {
   CONFIRM_LOSS,
   Comment,
   type CommentAuthor,
+  CommentPin,
   CommentsIcon,
   ComposerBody,
   ComposerFoot,
@@ -49,6 +52,7 @@ import {
   ErrorState,
   FailureNote,
   Fill,
+  HoverCard,
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
@@ -57,6 +61,8 @@ import {
   MoreButton,
   moreLabel,
   PaneBar,
+  POPOVER_SIDE,
+  RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
@@ -100,6 +106,7 @@ import {
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
+import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@luke/ui/reply-quote";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -146,6 +153,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { centreWithin } from "../scroll-within.js";
 import { type SendQueue, useSendQueue } from "../send-queue.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
@@ -161,6 +169,7 @@ import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
+import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -352,9 +361,6 @@ function MarginSlot({
 /** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
 const MARGIN_ROOM = 48 + 288;
 
-/** The page's inset on each side of the document, as `--page-inset` spends it. */
-const PAGE_INSETS = 2 * 40;
-
 /** The reading width, as `--luke-page-measure` spends it. */
 const READING_WIDTH = 720;
 
@@ -410,6 +416,8 @@ const COMMENT_WORDS = {
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the plan",
+  SHOW_ELEMENT: "Show on the page",
+  WHOLE_PAGE: "Whole page",
   SENDING: "Sending",
   DISCARD: "Discard",
   NOT_SENT: "This comment could not be sent.",
@@ -957,6 +965,7 @@ function MentionCommentText({
       onPasteCut={onPasteCut}
       onTrigger={() => undefined}
       chip={() => null}
+      quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
       mentions={{
         onTrigger: picker.onTrigger,
         chip: (mention, node) => (
@@ -1433,7 +1442,13 @@ function GoneQuote({
   );
 }
 
-/** A thread's quote over it: its words, or a press that shows them in the plan where it is offered. */
+/** What a thread's quote says: the words of the plan it is on; on a page, the way to what it is on, which its comments quote, or that it is on the whole page. */
+function quoteWords(thread: PlanCommentThread): string {
+  if (thread.page === undefined) return thread.quote;
+  return thread.page.element === undefined ? COMMENT_WORDS.WHOLE_PAGE : COMMENT_WORDS.SHOW_ELEMENT;
+}
+
+/** A thread's quote over it: its words, or a press that shows them in the plan, or its element on the page, where it is offered. */
 function ThreadQuote({
   thread,
   gone = false,
@@ -1446,15 +1461,17 @@ function ThreadQuote({
   if (onShowWords === undefined) {
     return (
       <blockquote className={QUOTE_CLASS} data-gone={gone}>
-        {thread.quote}
+        {quoteWords(thread)}
       </blockquote>
     );
   }
   return (
     <blockquote className={QUOTE_CLASS} data-gone={gone}>
-      <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
+      <Tooltip
+        label={thread.page === undefined ? COMMENT_WORDS.SHOW_WORDS : COMMENT_WORDS.SHOW_ELEMENT}
+      >
         <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
-          {thread.quote}
+          {quoteWords(thread)}
         </LineButton>
       </Tooltip>
     </blockquote>
@@ -1554,7 +1571,8 @@ function ThreadCard({
   const replies = useReplyQueue();
   const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
   const [first] = comments;
-  const gone = thread.anchor === undefined;
+  // Note that a page's thread stands on no words of the plan, so it never reads as having lost them.
+  const gone = thread.anchor === undefined && thread.page === undefined;
   const note = doors.control.notes.get(thread.id);
   // Whether a press on the card at rest opened it, which is what hands its reply the caret; a thread open from the first, as every one in the Comments tab, takes none.
   const [pressed, setPressed] = useState(false);
@@ -1646,8 +1664,15 @@ function ThreadCard({
               <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
             ),
           )}
+          {/* Note that a reply the thread already holds, read before its send answered, is drawn there alone. */}
           {replies.lines
-            .filter((reply) => reply.threadId === thread.id)
+            .filter(
+              (reply) =>
+                reply.threadId === thread.id &&
+                !comments.some(
+                  (entry) => writtenByReader(entry, doors.me) && entry.words === reply.send.words,
+                ),
+            )
             .map((reply) => (
               <SendingComment key={reply.send.key} reply={reply} doors={doors} now={now} />
             ))}
@@ -1691,32 +1716,45 @@ function ThreadCard({
   );
 }
 
-/** The thread being started, its field focused, which posts its first comment. */
+/** A thread's first comment as its field sends it, under the key it keeps while it is sent again. */
+interface FirstComment {
+  readonly clientKey: string;
+  readonly words: string;
+  readonly attachments?: readonly AgentAttachment[];
+}
+
+/**
+ * The thread being started, its field focused, which posts its first
+ * comment: on the plan's words, or on a page or one of its elements, as
+ * `begin` makes the start of it.
+ */
 function PendingCard({
-  pending,
+  on,
+  place = THREAD_PLACE.MARGIN,
+  head,
   doors,
-  text,
+  begin,
   onStarted,
   onCancel,
 }: {
-  pending: PendingThread;
+  /** What the thread is started on, which its unsent words are kept under. */
+  on: { readonly quote: string; readonly scope: PlanCommentThread["scope"] };
+  place?: ThreadPlace;
+  /** What stands over the field, the quote where its words are not beside it. */
+  head?: ReactNode;
   doors: ThreadDoors;
-  /** The plan's text the thread's words are measured in. */
-  text: string;
+  begin: (first: FirstComment) => PlanCommentStart;
   onStarted: (thread: PlanCommentThread) => void;
   onCancel: () => void;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   return (
-    <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
+    <CommentCard place={place} open data-thread={PENDING_THREAD}>
+      {head}
       <ReplyField
         label={COMMENT_WORDS.ADD}
-        place={{
-          kind: DRAFT_PLACE.PLAN_COMMENT,
-          planId: doors.control.planId,
-          on: { quote: pending.quote, scope: pending.scope },
-        }}
+        place={{ kind: DRAFT_PLACE.PLAN_COMMENT, planId: doors.control.planId, on }}
         sending={sending}
         autoFocus
         failure={note}
@@ -1724,16 +1762,13 @@ function PendingCard({
         variant={REPLY_VARIANT.FIRST}
         onSend={async (words, clientKey, attachments) => {
           setSending(true);
-          const started = await doors.control.start({
-            clientKey,
-            scope: pending.scope,
-            quote: pending.quote,
-            anchor: { from: pending.from, to: pending.to },
-            // Note that words started on in the editor are measured in its text, which the service lays over the saved one.
-            text: pending.text ?? text,
-            words,
-            ...(attachments.length === 0 ? undefined : { attachments }),
-          });
+          const started = await doors.control.start(
+            begin({
+              clientKey,
+              words,
+              ...(attachments.length === 0 ? undefined : { attachments }),
+            }),
+          );
           setSending(false);
           if ("note" in started) {
             setNote(started.note);
@@ -1745,6 +1780,21 @@ function PendingCard({
       />
     </CommentCard>
   );
+}
+
+/** The start of a thread on the plan's words a pending card makes, measured in the plan's text. */
+function planBegin(
+  pending: PendingThread,
+  text: string,
+): (first: FirstComment) => PlanCommentStart {
+  return (first) => ({
+    ...first,
+    scope: pending.scope,
+    quote: pending.quote,
+    anchor: { from: pending.from, to: pending.to },
+    // Note that words started on in the editor are measured in its text, which the service lays over the saved one.
+    text: pending.text ?? text,
+  });
 }
 
 /** Where words drawn inside `root` stand in its drawn text, from its start to the point. */
@@ -1792,7 +1842,7 @@ function threadedWhole(block: HTMLElement): boolean {
 }
 
 /** A thread started on the editor's words, its quote held to the bound the service keeps. */
-function editorPending(span: EditorSpan, scope: PlanCommentThread["scope"]): PendingThread {
+function editorPending(span: EditorSpan, scope: PendingThread["scope"]): PendingThread {
   return { ...span, scope, quote: span.quote.slice(0, PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
@@ -2003,12 +2053,12 @@ export function PlanCommentLayer({
     wide,
   );
 
-  // The margin folds where the scroller has no room for it beside the reading width.
+  // The margin folds where the scroller has no room for it beside the reading width. Note that the column stands centred, so the margin's room must stand on both its sides, or the card runs past the scroller's edge.
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return;
     const measure = () => {
-      setWide(element.clientWidth >= READING_WIDTH + MARGIN_ROOM + PAGE_INSETS);
+      setWide(element.clientWidth >= READING_WIDTH + 2 * MARGIN_ROOM);
       setCardRoom(Math.max(0, element.clientHeight - 2 * VIEW_EDGE));
       // Note that a scroller drawn shorter or taller resizes no card that already fits, so the open one is measured into the new view here.
       setResized((count) => count + 1);
@@ -2390,9 +2440,9 @@ export function PlanCommentLayer({
   const pendingCard =
     pending === undefined ? null : (
       <PendingCard
-        pending={pending}
+        on={pending}
         doors={doors}
-        text={text}
+        begin={planBegin(pending, text)}
         onCancel={close}
         onStarted={startedFromPending}
       />
@@ -2462,9 +2512,9 @@ export function PlanCommentLayer({
                 />
               ) : card.pending !== undefined ? (
                 <PendingCard
-                  pending={card.pending}
+                  on={card.pending}
                   doors={doors}
-                  text={text}
+                  begin={planBegin(card.pending, text)}
                   onCancel={close}
                   onStarted={startedFromPending}
                 />
@@ -2704,6 +2754,72 @@ const NO_COMMENTS = {
 } as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
 /**
+ * The threads a list draws, each whole, under what is drawn over them: why
+ * they could not be read, that there are none, or stand-in cards while they
+ * are read. The Comments tab and a page's comments both list theirs so.
+ */
+function ThreadList({
+  control,
+  listed,
+  empty,
+  doors,
+  lead,
+  onShowWords,
+}: {
+  control: PlanCommentsControl;
+  listed: readonly PlanCommentThread[];
+  empty: { readonly title: string; readonly line: string | undefined };
+  doors: ThreadDoors;
+  /** What stands over the threads, a thread being started say; nothing is said of an empty list under it. */
+  lead?: ReactNode;
+  /** What a thread's quote shows when pressed; none where it is only words. */
+  onShowWords: (thread: PlanCommentThread) => (() => void) | undefined;
+}): React.JSX.Element {
+  const none = !control.failed && listed.length === 0 && control.read && lead === undefined;
+  return (
+    <div
+      className="comments-list box-border px-luke-16 pt-luke-16 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
+      data-empty={none ? "" : undefined}
+    >
+      {lead === undefined ? null : <CommentsRow>{lead}</CommentsRow>}
+      {control.failed ? (
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
+          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          onRetry={control.onRetry}
+        >
+          The comments could not be read.
+        </ErrorState>
+      ) : listed.length === 0 ? (
+        control.read ? (
+          lead === undefined ? (
+            <EmptyState icon={<CommentsIcon />} title={empty.title}>
+              {empty.line}
+            </EmptyState>
+          ) : null
+        ) : (
+          <CommentsSkeleton />
+        )
+      ) : (
+        listed.map((thread) => (
+          <CommentsRow key={thread.id}>
+            {/* Note that every thread stands whole here, its replies and its field, its quote the way to what it is on. */}
+            <ThreadCard
+              thread={thread}
+              open
+              place={THREAD_PLACE.LIST}
+              quote
+              doors={doors}
+              onShowWords={onShowWords(thread)}
+            />
+          </CommentsRow>
+        ))
+      )}
+    </div>
+  );
+}
+
+/**
  * The side panel's Comments tab: the plan's threads, open or resolved, each
  * under the section it is on and its quote. An open thread's press shows the
  * plan and opens it beside its words; a resolved one opens where it is
@@ -2768,9 +2884,138 @@ export function PlanCommentsTab({
           }
         />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          <ThreadList
+            control={control}
+            listed={listed}
+            empty={NO_COMMENTS[filter]}
+            doors={full}
+            onShowWords={(thread) =>
+              openThread(thread)
+                ? () => {
+                    onShowDocument();
+                    reveal(thread.id);
+                  }
+                : undefined
+            }
+          />
+        </ScrollArea>
+      </WordsDatePickerRoom>
+    </Fill>
+  );
+}
+
+/** What a thread being started on a page stands on: the element it was started from, picked or holding the words selected, and where it stood in the frame; neither for the whole page. */
+export interface PageCommentOn {
+  readonly element:
+    | {
+        readonly path: string;
+        readonly quote: string;
+        readonly section: string;
+        readonly words?: true;
+      }
+    | undefined;
+  readonly box: FrameBox | undefined;
+}
+
+/** What a page's thread being started is kept under in its draft: the page, one for each page. */
+function pageDraftOn(pageId: string) {
+  return { quote: pageId, scope: PLAN_COMMENT_SCOPE.PAGE } as const;
+}
+
+/** The draft a page's thread being started is written in, one for each page, the quotes it was started from among its words. */
+export function pageDraftPlace(planId: string, pageId: string): PlanCommentPlace {
+  return { kind: DRAFT_PLACE.PLAN_COMMENT, planId, on: pageDraftOn(pageId) };
+}
+
+/** A comment's words with `words` quoted after them, as the agent box's Reply lays a quote in, and an empty line under it to write on. */
+export function withQuote(text: string, words: string): string {
+  const kept = messageBlocks(text).filter(
+    (block) => block.kind === MESSAGE_BLOCK.QUOTE || block.lines.some((line) => line.trim() !== ""),
+  );
+  return messageText([
+    ...kept,
+    { kind: MESSAGE_BLOCK.QUOTE, words: replyOf(words) },
+    { kind: MESSAGE_BLOCK.WORDS, lines: [""] },
+  ]);
+}
+
+/** What a page's comments column says over a list holding nothing. */
+const NO_PAGE_COMMENTS = {
+  title: "No comments",
+  line: "Press Comment, then an element of the page, to start a thread with the agent that wrote it.",
+} as const;
+
+/** What commenting on a page says and offers. */
+export const PAGE_COMMENT_WORDS = {
+  COMMENT: "Comment on the page",
+  PICKING: "Press an element of the page to comment on it",
+  WHOLE_PAGE: "Whole page",
+  SHOW_RESOLVED: "Show resolved",
+  HIDE_RESOLVED: "Hide resolved",
+} as const;
+
+/** What a page's comments hold or keep open, and what keeps a card standing by the page open as it is pressed: its own boxes, a pin, and a menu or a question one of them opened. */
+const KEEPS_PAGE_CARD_OPEN = `${KEEPS_THREAD_OPEN}, .page-comment-pin`;
+
+function keepsPageCardOpen(target: Node): boolean {
+  return target instanceof Element && target.closest(KEEPS_PAGE_CARD_OPEN) !== null;
+}
+
+/** Whether a comment's words hold any of the writer's own, past what they quote. */
+export function ownWordsIn(text: string): boolean {
+  return messageBlocks(text).some(
+    (block) => block.kind === MESSAGE_BLOCK.WORDS && block.lines.some((line) => line.trim() !== ""),
+  );
+}
+
+/**
+ * A page's comments in a column beside it, as the plan's margin draws its
+ * own: each thread's card at rest, open ones first and the resolved under a
+ * quiet press at their foot; a card pressed opens where it stands, raised,
+ * with its field, its element outlined on the page, and a press anywhere
+ * but a card, or in the page, closes it, as a press away closes a plan's.
+ * A thread opened from its pin on the page opens here while the column
+ * stands, brought into the column's view.
+ */
+export function PageComments({
+  control,
+  doors,
+  open,
+  onOpen,
+}: {
+  /** The page's threads, as `usePlanComments` holds them for the page. */
+  control: PlanCommentsControl;
+  doors: Omit<ThreadDoors, "control">;
+  /** The threads open, by their ids. */
+  open: readonly string[] | undefined;
+  /** Opens the thread, or closes the one open where none is handed. */
+  onOpen: (thread: PlanCommentThread | undefined) => void;
+}): React.JSX.Element {
+  const [resolvedShown, setResolvedShown] = useState(false);
+  const opened = control.threads.filter(openThread);
+  const resolved = control.threads.filter((thread) => !openThread(thread));
+  const listed = resolvedShown ? [...opened, ...resolved] : opened;
+  const full = { ...doors, control };
+  const none = !control.failed && control.read && control.threads.length === 0;
+  const list = useRef<HTMLDivElement>(null);
+  usePressAway(NO_LAYER, () => undefined, {
+    onPressAway: open === undefined ? undefined : () => onOpen(undefined),
+    holds: keepsPageCardOpen,
+  });
+  // The card opened from its pin is brought into the column's view, the column alone moving.
+  const first = open?.[0];
+  useLayoutEffect(() => {
+    const card = list.current?.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
+    if (first === undefined || list.current === null || card === null || card === undefined) return;
+    centreWithin(list.current, card);
+  }, [first]);
+  return (
+    <Fill className="page-comments relative h-full">
+      <WordsDatePickerRoom>
+        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
             className="comments-list box-border px-luke-16 pt-luke-16 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
-            data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
+            data-empty={none ? "" : undefined}
           >
             {control.failed ? (
               <ErrorState
@@ -2780,39 +3025,296 @@ export function PlanCommentsTab({
               >
                 The comments could not be read.
               </ErrorState>
-            ) : listed.length === 0 ? (
-              control.read ? (
-                <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
-                  {NO_COMMENTS[filter].line}
-                </EmptyState>
-              ) : (
-                <CommentsSkeleton />
-              )
+            ) : none ? (
+              <EmptyState icon={<CommentsIcon />} title={NO_PAGE_COMMENTS.title}>
+                {NO_PAGE_COMMENTS.line}
+              </EmptyState>
+            ) : !control.read ? (
+              <CommentsSkeleton />
             ) : (
               listed.map((thread) => (
                 <CommentsRow key={thread.id}>
-                  {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
                   <ThreadCard
                     thread={thread}
-                    open
-                    place={THREAD_PLACE.LIST}
-                    quote
+                    open={open?.includes(thread.id) === true}
+                    place={THREAD_PLACE.MARGIN}
                     doors={full}
-                    onShowWords={
-                      openThread(thread)
-                        ? () => {
-                            onShowDocument();
-                            reveal(thread.id);
-                          }
-                        : undefined
-                    }
+                    onOpen={() => onOpen(thread)}
+                    onClose={() => onOpen(undefined)}
                   />
                 </CommentsRow>
               ))
+            )}
+            {resolved.length === 0 ? null : (
+              <CommentsRow>
+                <TextButton
+                  tone={TEXT_BUTTON_TONE.QUIET}
+                  onClick={() => setResolvedShown(!resolvedShown)}
+                >
+                  {resolvedShown
+                    ? PAGE_COMMENT_WORDS.HIDE_RESOLVED
+                    : `${PAGE_COMMENT_WORDS.SHOW_RESOLVED} (${resolved.length})`}
+                </TextButton>
+              </CommentsRow>
             )}
           </div>
         </ScrollArea>
       </WordsDatePickerRoom>
     </Fill>
   );
+}
+
+/** A box of the frame as the window measures it, from where the frame's room stands; none where either is not drawn. */
+function inWindow(room: HTMLElement | null, box: FrameBox | undefined): FrameBox | undefined {
+  if (room === null || box === undefined) return undefined;
+  const at = room.getBoundingClientRect();
+  return {
+    left: at.left + box.left,
+    top: at.top + box.top,
+    right: at.left + box.right,
+    bottom: at.top + box.bottom,
+  };
+}
+
+/** Where a thread on the whole page is started: the frame's top edge. */
+const PAGE_TOP: FrameBox = { left: 0, top: 0, right: 0, bottom: 0 };
+
+/** The open threads on each element of the page, by its path, in the order they were started; a thread on the whole page is on none. */
+export function threadsByElement(
+  threads: readonly PlanCommentThread[],
+): ReadonlyMap<string, readonly PlanCommentThread[]> {
+  const by = new Map<string, PlanCommentThread[]>();
+  for (const thread of threads) {
+    const path = thread.page?.element;
+    if (path === undefined || !openThread(thread)) continue;
+    by.set(path, [...(by.get(path) ?? []), thread]);
+  }
+  return by;
+}
+
+/** A comment's first line, as a pin's preview says it. */
+function firstLine(words: string): string {
+  const said = messageBlocks(words).find((block) => block.kind === MESSAGE_BLOCK.WORDS);
+  const line =
+    said?.kind === MESSAGE_BLOCK.WORDS ? said.lines.find((each) => each.trim() !== "") : undefined;
+  return line ?? words;
+}
+
+/**
+ * The pin of the threads on one element: the bubble wearing the face of
+ * whoever started the first, told over it by that comment's writer and
+ * first line, as the plan's comments draw a comment.
+ */
+function PagePin({
+  threads,
+  doors,
+  open,
+  onOpen,
+  onHint,
+}: {
+  threads: readonly PlanCommentThread[];
+  doors: Omit<ThreadDoors, "control">;
+  open: boolean;
+  onOpen: () => void;
+  onHint: (over: boolean) => void;
+}): React.JSX.Element | null {
+  const now = useMinute();
+  const first = threads[0]?.entries.find((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
+  const fallback: PlanCommentWriter = { actor: PLAN_COMMENT_ACTOR.MEMBER };
+  const { author } = useWriter(first?.writer ?? fallback, doors.agents);
+  const comments = threads.length;
+  return (
+    <CommentPin
+      author={author}
+      count={comments}
+      label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
+      open={open}
+      onPress={onOpen}
+      onHover={onHint}
+      preview={
+        first === undefined ? null : (
+          <HoverCard>
+            <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
+              <div className="comment-clamp line-clamp-2">{firstLine(first.words ?? "")}</div>
+            </WrittenComment>
+          </HoverCard>
+        )
+      }
+    />
+  );
+}
+
+/**
+ * A page's comments over the page itself, as the plan's folded margin draws
+ * its own: each element holding open threads pinned with the face of who
+ * started them, the pointer over a pin outlining its element faintly and
+ * told the first comment, and a press opening its threads in a card by the
+ * element, where the column beside the page does not stand to open them in;
+ * the thread being started, in a card by the element it was started from;
+ * while the page is picking an element, a line saying so, with Whole page
+ * and Cancel; and Reply by words selected in the page, which quotes them
+ * into the comment being written, or starts one on the element holding
+ * them. A card closes on a press away, a press in the page among them, as a
+ * plan's does. It stands over the frame's room, where every box the frame
+ * says it measured in its own viewport stands as it is, and takes no press
+ * but its own.
+ */
+export function PageCommentLayer({
+  control,
+  doors,
+  page,
+  room,
+  marks,
+  selected,
+  picking,
+  pending,
+  open,
+  floats,
+  onOpen,
+  onHint,
+  onReply,
+  onWholePage,
+  onStopPick,
+  onStarted,
+  onCancel,
+}: {
+  control: PlanCommentsControl;
+  doors: Omit<ThreadDoors, "control">;
+  /** The page and the version shown, which a thread is started on. */
+  page: { readonly id: string; readonly version: number };
+  /** The frame's room, which the layer fills. */
+  room: RefObject<HTMLElement | null>;
+  /** Where each element holding threads stands in the frame, by its path; none where the page holds it no more. */
+  marks: ReadonlyMap<string, FrameBox | null>;
+  /** The words selected in the page, as the frame said them. */
+  selected: PagePicked | undefined;
+  picking: boolean;
+  pending: PageCommentOn | undefined;
+  /** The threads open, by their ids. */
+  open: readonly string[] | undefined;
+  /** Whether threads open in a card by their element here, rather than in the column beside the page. */
+  floats: boolean;
+  onOpen: (threads: readonly string[] | undefined) => void;
+  /** Told the element whose pin the pointer is over, or none as it leaves. */
+  onHint: (path: string | undefined) => void;
+  onReply: (selected: PagePicked) => void;
+  onWholePage: () => void;
+  onStopPick: () => void;
+  onStarted: (thread: PlanCommentThread) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const full = { ...doors, control };
+  const byElement = threadsByElement(control.threads);
+  const opened = control.threads.filter((thread) => open?.includes(thread.id) === true);
+  const at = opened[0]?.page?.element;
+  const starting = useRef<HTMLDivElement>(null);
+  const pins = [...byElement].flatMap(([path, threads]) => {
+    const box = marks.get(path);
+    // Note that an element scrolled up out of the frame is pinned nowhere until it comes back, and one below it stands past the room's foot, which clips it.
+    if (box === undefined || box === null || box.bottom < 0) return [];
+    return [{ path, threads, box }];
+  });
+  return (
+    <div className="page-comment-layer">
+      {pins.map(({ path, threads, box }) => (
+        // Note that the bubble's pointed corner, its upper end one, touches its element's top start corner, kept inside the room's edges.
+        <span
+          key={path}
+          className="page-comment-pin"
+          style={{
+            left: `max(${box.left}px, var(--luke-space-24))`,
+            top: Math.max(box.top, 0),
+          }}
+        >
+          <PagePin
+            threads={threads}
+            doors={doors}
+            open={threads.some((thread) => open?.includes(thread.id) === true)}
+            onOpen={() =>
+              onOpen(
+                threads.some((thread) => open?.includes(thread.id) === true)
+                  ? undefined
+                  : threads.map((thread) => thread.id),
+              )
+            }
+            onHint={(over) => onHint(over ? path : undefined)}
+          />
+        </span>
+      ))}
+      <RectFloat
+        open={floats && opened.length > 0}
+        anchor={() =>
+          inWindow(room.current, at === undefined ? PAGE_TOP : (marks.get(at) ?? undefined))
+        }
+        side={POPOVER_SIDE.BELOW}
+        onPressAway={() => onOpen(undefined)}
+        holds={keepsPageCardOpen}
+      >
+        <div className="page-comment-float">
+          {opened.map((thread) => (
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              open
+              place={THREAD_PLACE.FLOAT}
+              doors={full}
+            />
+          ))}
+        </div>
+      </RectFloat>
+      <RectFloat
+        open={pending !== undefined}
+        anchor={() => inWindow(room.current, pending?.box ?? PAGE_TOP)}
+        side={POPOVER_SIDE.BELOW}
+        // Note that a comment being sent, or holding files or a dictation, which no draft keeps, stands through a press away, as a plan's does.
+        onPressAway={() => {
+          if (starting.current?.querySelector('[data-held="true"]') === null) onCancel();
+        }}
+        holds={keepsPageCardOpen}
+      >
+        {pending === undefined ? null : (
+          <div ref={starting} className="page-comment-float">
+            <PendingCard
+              on={pageDraftOn(page.id)}
+              place={THREAD_PLACE.FLOAT}
+              doors={full}
+              begin={(first) => ({
+                ...first,
+                page: { id: page.id, version: page.version },
+                ...(pending.element === undefined ? undefined : { element: pending.element }),
+              })}
+              onStarted={onStarted}
+              onCancel={onCancel}
+            />
+          </div>
+        )}
+      </RectFloat>
+      {picking ? (
+        <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR} className="page-comment-hint">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            {PAGE_COMMENT_WORDS.PICKING}
+          </Text>
+          <Button onClick={onWholePage}>{PAGE_COMMENT_WORDS.WHOLE_PAGE}</Button>
+          <Button onClick={onStopPick}>{COMMENT_WORDS.CANCEL}</Button>
+        </MenuSurface>
+      ) : selected === undefined ? null : (
+        <SelectedReply room={room} selected={selected} onReply={onReply} />
+      )}
+    </div>
+  );
+}
+
+/** Reply by the words selected in the page, where they stand in the window. */
+function SelectedReply({
+  room,
+  selected,
+  onReply,
+}: {
+  room: RefObject<HTMLElement | null>;
+  selected: PagePicked;
+  onReply: (selected: PagePicked) => void;
+}): React.JSX.Element | null {
+  const box = inWindow(room.current, selected.box);
+  if (box === undefined) return null;
+  return <ReplyPress place={pressPlace(box)} onReply={() => onReply(selected)} />;
 }

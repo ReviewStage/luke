@@ -367,6 +367,67 @@
   }
 }
 
+/* A page's comments (page-pane.tsx) stand in a column beside the page, a
+   comment card's width and the list's insets wide, past a hairline; in a
+   panel too narrow for both, the column stands over the page instead, and
+   steps aside while the page is picked in or a thread is open on it. */
+.page-comments-column {
+  display: flex;
+  width: calc(var(--comment-card-width) + 2 * var(--luke-space-16));
+  flex: none;
+  border-left: 1px solid var(--luke-color-border);
+  background: var(--luke-color-ground);
+}
+
+@container side-panel (width < 640px) {
+  .page-comments-column {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    border-left: none;
+  }
+
+  .page-comments-column[data-aside] {
+    display: none;
+  }
+}
+
+/* A page's comments over the page (plan-comments.tsx's PageCommentLayer):
+   the layer takes no press but its own; each pin's pointed corner, its
+   upper right one, touches its element's top left corner, the pin beside it, the line comment mode says stands over the page's
+   top, and a card by an element is a comment card's width. */
+.page-comment-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page-comment-layer > * {
+  pointer-events: auto;
+}
+
+.page-comment-pin {
+  position: absolute;
+  display: flex;
+  translate: -100% 0;
+}
+
+.page-comment-hint {
+  position: absolute;
+  top: var(--luke-space-12);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding-inline-start: var(--luke-space-12);
+}
+
+.page-comment-float {
+  width: var(--comment-card-width);
+  max-width: 100%;
+}
+
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
    a page's white, or a file's ground in a theme of its own, would stand to a
    square corner at the rounded sheet's. A page's room, its frame or its

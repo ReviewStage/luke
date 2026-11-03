@@ -14,8 +14,9 @@
  * account the link was minted for, under the reach its mint was held to, and
  * answered under the policy every server of a page answers with
  * (`@luke/features/page-policy`), framed by the app's own origins alone, with
- * our scripts ahead of it, the find's (`@luke/features/page-find`) and
- * the link's (`@luke/features/page-link`).
+ * our scripts ahead of it, the find's (`@luke/features/page-find`), the
+ * link's (`@luke/features/page-link`), and the pick's
+ * (`@luke/features/page-pick`).
  *
  * A link refused for any reason, its signature, its sandbox, its lapse, or the
  * account's reach, is answered not found alike, so a refusal says nothing of

@@ -5,6 +5,7 @@ import {
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   type PlanCommentWriterRef,
+  readPlanCommentThread,
   readPlanCommentThreads,
 } from "@luke/database/models/plan-comments";
 import {
@@ -30,7 +31,11 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * comment-tools.ts -- a plan's comments as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
+ * comment-tools.ts -- a plan's comments, and its task's pages', as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
+ *
+ * A thread on one of the task's pages is the task's as a plan's thread is,
+ * so it is answered and settled by its id the same way; `read_comments`
+ * reads a page's threads where it names the page, and the plan's otherwise.
  *
  * An agent reads the threads for context at any time, but replies only where
  * someone sent a thread to it (`comment-ask.ts`), which its instructions say;
@@ -74,6 +79,12 @@ const readCommentedTask = readEither(Schema.Struct({ taskId: wireUuidSchema }), 
 
 const READ_INPUT = Schema.Struct({
   taskId: TASK_ID,
+  page: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `One of the task's pages, by the id ${AGENT_TOOL.SHOW_PAGE} answered or a mention of it names, to read its threads instead of the plan's.`,
+    ),
+  ),
   status: Schema.optionalKey(
     describeWire(
       Schema.Literals(Object.values(PLAN_COMMENT_STATUS)),
@@ -104,8 +115,8 @@ const UPDATE_INPUT = Schema.Struct({
 export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
   description:
-    "Read the comment threads on the plan of the task taskId names, your own task or any other of your workspace: each thread's id, the words of the plan it is on and their section, " +
-    "whether those words were since deleted, and every comment with who wrote it, when, and the names of the files it carries. Open threads unless you ask " +
+    "Read the comment threads on the plan of the task taskId names, your own task or any other of your workspace, or on one of its pages where you name the page: each thread's id, the words of the plan it is on and their section, " +
+    "whether those words were since deleted, and every comment with who wrote it, when, and the names of the files it carries. A page's thread names the version it was left on and the element it is on, by its words and its path, or none for the whole page. Open threads unless you ask " +
     "for resolved ones. Reading asks nothing of you: reply only to a thread someone sent you.",
   inputSchema: READ_INPUT,
 } as const;
@@ -178,12 +189,19 @@ function threadRead(thread: PlanCommentThread): WireRecord {
           ? PRODUCT_NAME
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));
+  // Note that a page's thread stands on no words of the plan, so it names its page in their place.
+  const where =
+    thread.page !== undefined
+      ? { page: thread.page }
+      : thread.anchor === undefined
+        ? { onWordsDeleted: true }
+        : undefined;
   return {
     thread: thread.id,
     state: thread.status,
     section: thread.section,
     on: thread.quote,
-    ...(thread.anchor === undefined ? { onWordsDeleted: true } : undefined),
+    ...where,
     comments,
     ...(asked.length === 0 ? undefined : { asked }),
   };
@@ -193,7 +211,8 @@ function threadRead(thread: PlanCommentThread): WireRecord {
 function written(outcome: PlanCommentOutcome): WireRecord {
   if (outcome.status === PLAN_COMMENT_OUTCOME.NO_TASK)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
-  if (outcome.status === PLAN_COMMENT_OUTCOME.NO_THREAD)
+  // Note that no tool starts a thread, so no write of one finds no page; a thread it names is the task's or none.
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
   const { answer } = outcome;
   if ("refused" in answer) return commentToolRejected(answer.refused);
@@ -215,8 +234,9 @@ export function runCommentTool(
       case AGENT_TOOL.READ_COMMENTS: {
         const read = readEither(READ_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
+        const { page } = read.success;
         const status = read.success.status ?? PLAN_COMMENT_STATUS.OPEN;
-        const threads = yield* readPlanCommentThreads(writer.userId, taskId);
+        const threads = yield* readPlanCommentThreads(writer.userId, taskId, page);
         if (Option.isNone(threads)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
         return {
           status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -226,9 +246,8 @@ export function runCommentTool(
       case AGENT_TOOL.REPLY_TO_COMMENT: {
         const read = readEither(REPLY_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
-        const threads = yield* readPlanCommentThreads(writer.userId, taskId);
-        const thread = Option.getOrUndefined(threads)?.find(
-          (each) => each.id === read.success.thread,
+        const thread = Option.getOrUndefined(
+          yield* readPlanCommentThread(writer.userId, taskId, read.success.thread),
         );
         if (thread?.status === PLAN_COMMENT_STATUS.RESOLVED)
           return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
