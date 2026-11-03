@@ -883,8 +883,15 @@ finished signing in, and, while a sign-in is under way, when it began and a
 one-time value that matches its return. We also keep a name for each
 account, which Settings › Integrations shows beside the service's: the name
 the service gives that account's workspace when Vercel Connect hands us its
-token, the account's email where the service answers it instead (Google's,
-below), or one you give it in Settings › Integrations. An agent handed more than one account
+token; where that names none, the name the service itself answers for the
+account, read with the same token, from Google's API for Google's products
+(below), and otherwise through one tool of the service's own MCP server that
+only reads: your organization's or workspace's name for Mercury, Neon, Notion,
+PostHog, Sentry, and Supabase (Neon, Sentry, and Supabase only where you belong
+to one organization there), and your email there for Granola, Vercel, and
+Y Combinator; or one you give it in Settings › Integrations. Of what the
+service answers we keep only that name, and a read that fails is not tried
+again for five minutes. An agent handed more than one account
 at a service is told each one's name, so it can ask which you mean and say
 which it used. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are

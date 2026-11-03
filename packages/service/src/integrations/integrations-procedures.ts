@@ -130,6 +130,7 @@ import {
   type McpTool,
   type McpToolsFailure,
   type McpToolsFailureReason,
+  readMcpTool,
 } from "./mcp-tools.js";
 
 /** What the integrations procedures ask of the deployment: the store, the clock, the minting, and the caller's resolver. */
@@ -345,20 +346,18 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** How long the read of whose account a token is may take before the account is left for the next statuses read. */
 const ACCOUNT_NAME_TIMEOUT = Duration.seconds(2);
 
-/**
- * The account's name as its provider answers it with the account's token
- * (`integrations.ts`'s `ACCOUNT_NAME`), kept as a grant's name is kept
- * (`accountNameLine`), or nothing where the answer holds none; fails where
- * the provider could not be read, whose cause is dropped unread.
- */
-const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
-  read: AccountNameRead,
+/** How long the same read through the provider's MCP server may take, its session's opening and end included. */
+const ACCOUNT_NAME_TOOL_TIMEOUT = Duration.seconds(4);
+
+/** The provider's API's answer to whose account a token is, read with it, where it answered with success. */
+const apiAccountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  url: string,
   token: Redacted.Redacted,
-): Effect.fn.Return<string | undefined, unknown, HttpClient.HttpClient> {
+): Effect.fn.Return<unknown, unknown, HttpClient.HttpClient> {
   const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-  const answer = yield* client
+  return yield* client
     .execute(
-      HttpClientRequest.get(read.URL).pipe(
+      HttpClientRequest.get(url).pipe(
         HttpClientRequest.bearerToken(Redacted.value(token)),
         HttpClientRequest.acceptJson,
       ),
@@ -368,7 +367,33 @@ const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
       Effect.scoped,
       Effect.timeout(ACCOUNT_NAME_TIMEOUT),
     );
-  return Option.getOrUndefined(Option.flatMapNullishOr(read.NAME(answer), accountNameLine));
+});
+
+/**
+ * The account's name as its provider answers it with the account's token
+ * (`integrations.ts`'s `ACCOUNT_NAME`), from its API or through its own MCP
+ * server, kept as a grant's name is kept (`accountNameLine`), or nothing
+ * where the answer holds none; fails where the provider could not be read,
+ * whose cause is dropped unread.
+ */
+const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
+  provider: IntegrationProvider,
+  read: AccountNameRead,
+  token: Redacted.Redacted,
+): Effect.fn.Return<string | undefined, unknown, HttpClient.HttpClient> {
+  const name =
+    "URL" in read
+      ? read.NAME(yield* apiAccountAnswer(read.URL, token))
+      : read.NAME(
+          yield* readMcpTool(
+            INTEGRATION[provider].MCP_URL,
+            Redacted.value(token),
+            read.TOOL,
+            read.ARGUMENTS,
+            ACCOUNT_NAME_TOOL_TIMEOUT,
+          ),
+        );
+  return Option.getOrUndefined(Option.flatMapNullishOr(name, accountNameLine));
 });
 
 /**
@@ -413,7 +438,7 @@ const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   const named =
     accountName !== undefined || ACCOUNT_NAME === undefined
       ? Result.succeed(undefined)
-      : yield* Effect.result(providerAccountName(ACCOUNT_NAME, token));
+      : yield* Effect.result(providerAccountName(row.provider, ACCOUNT_NAME, token));
   const unanswered = Result.isFailure(named) || named.success === undefined;
   if (ACCOUNT_NAME !== undefined && accountName === undefined && unanswered) {
     const read: UnnamedRead = { at: seams.now(), connectedAt: grant };
@@ -448,24 +473,29 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   settles: boolean,
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const held = providerRows(rows, provider);
-  const settled = yield* Effect.forEach(held, (row) => {
-    if (!settles) {
-      const standing: Standing = { status: storedStanding(seams, row) };
-      return Effect.succeed({ row, standing });
-    }
-    return Effect.gen(function* () {
-      const standing = yield* standingStatus(seams, connector, row);
-      // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
-      const settled =
-        standing.accountName !== undefined && (row.label === undefined || row.label === "")
-          ? { ...row, label: standing.accountName }
-          : row;
-      return {
-        row: yield* labelledRow(seams, unnamed, connector, settled, standing.status),
-        standing,
-      };
-    });
-  });
+  // Note that accounts are settled side by side, because each may wait on its provider's bound for its name.
+  const settled = yield* Effect.forEach(
+    held,
+    (row) => {
+      if (!settles) {
+        const standing: Standing = { status: storedStanding(seams, row) };
+        return Effect.succeed({ row, standing });
+      }
+      return Effect.gen(function* () {
+        const standing = yield* standingStatus(seams, connector, row);
+        // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
+        const settled =
+          standing.accountName !== undefined && (row.label === undefined || row.label === "")
+            ? { ...row, label: standing.accountName }
+            : row;
+        return {
+          row: yield* labelledRow(seams, unnamed, connector, settled, standing.status),
+          standing,
+        };
+      });
+    },
+    { concurrency: "unbounded" },
+  );
   const first = settled.find(({ row }) => row.connectionName === provider);
   return {
     status: first?.standing.status ?? INTEGRATION_STATUS.DISCONNECTED,
@@ -502,18 +532,22 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     status: INTEGRATION_STATUS.UNAVAILABLE,
     accounts: [],
   };
-  const standings = yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
-    Effect.map(
-      INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
-        ? Effect.map(
-            githubIntegrationStatus(userId),
-            (status): ProviderStanding => ({ status, accounts: [] }),
-          )
-        : connect[provider].configured
-          ? providerStanding(seams, unnamed, connect[provider], provider, rows, settles)
-          : Effect.succeed(unavailable),
-      (standing) => ({ provider, ...standing }),
-    ),
+  const standings = yield* Effect.forEach(
+    INTEGRATION_PROVIDER_LIST,
+    (provider) =>
+      Effect.map(
+        INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
+          ? Effect.map(
+              githubIntegrationStatus(userId),
+              (status): ProviderStanding => ({ status, accounts: [] }),
+            )
+          : connect[provider].configured
+            ? providerStanding(seams, unnamed, connect[provider], provider, rows, settles)
+            : Effect.succeed(unavailable),
+        (standing) => ({ provider, ...standing }),
+      ),
+    // Note that providers are read side by side, so the read waits on the slowest provider's bound rather than their sum.
+    { concurrency: "unbounded" },
   );
   const integrations = Object.fromEntries(
     standings.map(({ provider, status }) => [provider, status]),

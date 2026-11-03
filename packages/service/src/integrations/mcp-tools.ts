@@ -21,7 +21,10 @@
  * The same session serves a native agent's integration servers
  * (`connection-door.ts`): `listMcpToolSchemas` reads each tool with the
  * schemas the server declared, untouched, and `callMcpTool` finds one tool
- * by name and calls it, answering the server's own result.
+ * by name and calls it, answering the server's own result. `readMcpTool`
+ * calls a tool the caller already knows the server holds without listing
+ * first, under a bound the caller gives, for whose account a token is
+ * (`integrations.ts`'s `ACCOUNT_NAME`).
  *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
@@ -225,6 +228,21 @@ export type McpToolCall =
 type ListedTool = (typeof ToolsPage.Type)["tools"][number];
 const decodePage = Schema.decodeUnknownOption(ToolsPage);
 const decodeWireValue = Schema.decodeUnknownOption(WireValueSchema);
+
+/** A tool's result as the spec writes it: whether it is the tool's own error, its structured content, and its content blocks. */
+const decodeToolResult = Schema.decodeUnknownOption(
+  Schema.Struct({
+    isError: Schema.optionalKey(Schema.Boolean),
+    structuredContent: Schema.optionalKey(Schema.Unknown),
+    content: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+  }),
+);
+
+const decodeTextBlock = Schema.decodeUnknownOption(
+  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+);
+
+const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 /** The JSON-RPC answers a response carries: its body whole, or each event's `data:` lines joined. */
 function answersOf(contentType: string, body: string): readonly RpcAnswerType[] {
@@ -527,3 +545,51 @@ export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function
     }),
   );
 });
+
+/**
+ * One call of the tool `name` at the server at `url`, with `input`, under
+ * the bearer `token`, without listing the server's tools first, the whole
+ * within `timeout`: the server's own result, which may be its tool's error;
+ * why no call was made as `inMcpSession` says. For a read the caller knows
+ * the server holds, where a list would cost more than the call.
+ */
+export const readMcpTool = /* @__PURE__ */ Effect.fn("web/readMcpTool")(function* (
+  url: string,
+  token: string,
+  name: string,
+  input: WireRecord,
+  timeout: Duration.Input,
+): Effect.fn.Return<WireValue, McpToolsFailure, HttpClient.HttpClient> {
+  return yield* inMcpSession(url, token, timeout, (send) =>
+    Effect.gen(function* () {
+      const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });
+      const answered = Option.getOrUndefined(decodeWireValue(result));
+      if (answered === undefined) return yield* unreadable;
+      return answered;
+    }),
+  );
+});
+
+/** Each text block of a tool's result, in order; none where the result is the tool's own error. */
+export function toolResultTexts(result: WireValue): readonly string[] {
+  const read = Option.getOrUndefined(decodeToolResult(result));
+  if (read === undefined || read.isError === true) return [];
+  return (read.content ?? []).flatMap((block) =>
+    Option.toArray(Option.map(decodeTextBlock(block), (text) => text.text)),
+  );
+}
+
+/**
+ * What a tool's result answered as JSON: its structured content where it
+ * sent one, then each text block that is JSON, in order; none where the
+ * result is the tool's own error.
+ */
+export function toolResultJson(result: WireValue): readonly unknown[] {
+  const read = Option.getOrUndefined(decodeToolResult(result));
+  if (read === undefined || read.isError === true) return [];
+  const structured = read.structuredContent !== undefined ? [read.structuredContent] : [];
+  return [
+    ...structured,
+    ...toolResultTexts(result).flatMap((text) => Option.toArray(decodeJsonText(text))),
+  ];
+}

@@ -49,6 +49,7 @@ import {
   readIntegrationSignIn,
   renameIntegrationConnection,
 } from "./integration-store.js";
+import { INTEGRATION } from "./integrations.js";
 import {
   type IntegrationsAppSeams,
   integrationsApp,
@@ -143,6 +144,36 @@ function githubServer(listed: () => readonly string[]) {
     return Response.json({ jsonrpc: "2.0", id: message.id, result });
   });
   return { layer, bearers };
+}
+
+/** A provider's MCP server that answers `tool` with `text` only to the bearer `token`, and refuses everything else. */
+function accountNameServer(token: string, tool: string, text: string) {
+  return fakeHttpClientLayer(async (_url, init) => {
+    if (new Headers(init.headers).get("authorization") !== `Bearer ${token}`) {
+      return new Response(null, { status: 401 });
+    }
+    // The session's end, and a notification, answer nothing.
+    if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
+    // SAFETY: the client sends one JSON-RPC message per request.
+    const message = JSON.parse(await new Response(init.body).text()) as {
+      id?: number;
+      method: string;
+      params?: { name?: string };
+    };
+    if (message.id === undefined) return new Response(null, { status: 202 });
+    if (message.method === "tools/call" && message.params?.name !== tool) {
+      return Response.json({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32602, message: "Unknown tool" },
+      });
+    }
+    const result =
+      message.method === "tools/call"
+        ? { content: [{ type: "text", text }] }
+        : { protocolVersion: "2025-06-18", capabilities: {} };
+    return Response.json({ jsonrpc: "2.0", id: message.id, result });
+  });
 }
 
 /**
@@ -924,18 +955,18 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const userId = yield* openAccount("pat@unnamed.example");
         yield* beginIntegrationSignIn(
           userId,
-          firstIntegrationAccount(userId, NOTION),
+          firstIntegrationAccount(userId, SLACK),
           `state-unnamed-${userId}`,
         );
-        yield* completeIntegrationSignIn(userId, NOTION, `state-unnamed-${userId}`);
-        const unnamed = yield* standing(NOTION_CONNECTOR);
+        yield* completeIntegrationSignIn(userId, SLACK, `state-unnamed-${userId}`);
+        const unnamed = yield* standing(SLACK_CONNECTOR);
         const read = yield* unnamed.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.deepEqual(
           accountsIn(read.body).map((account) => account.label),
           [undefined],
         );
         // Asked once: a grant that names the workspace later is not asked again for it.
-        const naming = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+        const naming = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
           names: () => "Acme",
         });
         const after = yield* naming.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
@@ -979,6 +1010,111 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         // The name is kept: a Google that no longer answers still leaves it.
         down = true;
         assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+      }),
+  );
+
+  // Each provider's answer is shaped as its MCP server answered it when checked, over made-up values.
+  it.effect.each([
+    [
+      INTEGRATION_PROVIDER.GRANOLA,
+      "get_account_info",
+      JSON.stringify({
+        email: "ana@granola.example",
+        active_workspace: { id: "w-1", display_name: "Acme" },
+        workspaces: [{ id: "w-1", display_name: "Acme" }],
+      }),
+      "ana@granola.example",
+    ],
+    [
+      INTEGRATION_PROVIDER.MERCURY,
+      "getOrganization",
+      JSON.stringify({
+        organization: { id: "o-1", kind: "business", legalBusinessName: "Acme Inc.", dbas: [] },
+      }),
+      "Acme Inc.",
+    ],
+    [
+      INTEGRATION_PROVIDER.NEON,
+      "list_organizations",
+      JSON.stringify([{ id: "org-acme", name: "Acme", handle: "acme" }]),
+      "Acme",
+    ],
+    [
+      NOTION,
+      "notion-get-self",
+      JSON.stringify({
+        workspace: { id: "ws-1", name: "Acme HQ" },
+        user: { type: "person", id: "u-1", name: "Ana", email: "ana@notion.example" },
+      }),
+      "Acme HQ",
+    ],
+    [
+      INTEGRATION_PROVIDER.POSTHOG,
+      "organization-get",
+      'id: org-1\nname: Acme\nslug: acme\ncreated_at: "2026-01-01T00:00:00Z"\nteams[1]{id,name}:\n  1,Web',
+      "Acme",
+    ],
+    [
+      INTEGRATION_PROVIDER.SENTRY,
+      "find_organizations",
+      JSON.stringify({ organizations: [{ slug: "acme" }], hasMore: false, nextCursor: null }),
+      "acme",
+    ],
+    [
+      INTEGRATION_PROVIDER.SUPABASE,
+      "list_organizations",
+      JSON.stringify({ organizations: [{ id: "o-1", slug: "o-1", name: "Acme" }] }),
+      "Acme",
+    ],
+    // An account in several organizations, with no email to call it by, stays unnamed rather than take one of them.
+    [
+      INTEGRATION_PROVIDER.SUPABASE,
+      "list_organizations",
+      JSON.stringify({
+        organizations: [
+          { id: "o-1", slug: "o-1", name: "Acme" },
+          { id: "o-2", slug: "o-2", name: "Globex" },
+        ],
+      }),
+      undefined,
+    ],
+    [
+      INTEGRATION_PROVIDER.VERCEL,
+      "get_auth_user",
+      JSON.stringify({ result: { user: { email: "ana@vercel.example", username: "ana" } } }),
+      "ana@vercel.example",
+    ],
+    [
+      INTEGRATION_PROVIDER.YCOMBINATOR,
+      "profile",
+      JSON.stringify({
+        name: "profile",
+        result: {
+          status: "success",
+          profile: { email: "ana@yc.example", company: { name: "Acme" } },
+        },
+      }),
+      "ana@yc.example",
+    ],
+  ] as const)(
+    "a %s account whose grant names nothing is called by what its MCP server's %s answers",
+    ([provider, tool, text, expected]) =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount(`ana-${randomUUID()}@${provider}-names.example`);
+        const state = `state-${provider}-names-${userId}`;
+        yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, provider), state);
+        yield* completeIntegrationSignIn(userId, provider, state);
+        const variable = INTEGRATION[provider].CONNECTOR_VARIABLE;
+        const group = yield* standing(
+          { [variable]: `oauth/${provider}` },
+          undefined,
+          accountNameServer(`token_${userId}`, tool, text),
+        );
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(read.body).map((account) => account.label),
+          [expected],
+        );
       }),
   );
 
