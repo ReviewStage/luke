@@ -23,9 +23,9 @@ import {
   withIntegrationEvent,
   withIntegrationFilters,
   withRepository,
-} from "@luke/features/automation-draft-model";
-import { automationTriggerText, parseAutomationClock } from "@luke/features/automation-list-model";
-import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
+} from "@repo/features/automation-draft-model";
+import { automationTriggerText, parseAutomationClock } from "@repo/features/automation-list-model";
+import { readSchedule, SCHEDULE_REFUSAL } from "@repo/features/automation-schedule";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
@@ -33,7 +33,7 @@ import {
   type AutomationCreateParams,
   type AutomationDeletedView,
   type AutomationView,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_BOUNDS,
   AUTOMATION_SCOPE,
@@ -50,27 +50,27 @@ import {
   type IntegrationTriggerFilters,
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
-} from "@luke/features/automation-wire";
-import { readerZone } from "@luke/features/date-mention";
+} from "@repo/features/automation-wire";
+import { readerZone } from "@repo/features/date-mention";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
+} from "@repo/features/integration-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@repo/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
   type SentryLevel,
   type SentryTriggerEvent,
-} from "@luke/features/trigger-catalog";
+} from "@repo/features/trigger-catalog";
 import {
   andList,
   INTEGRATION_LABEL,
@@ -79,10 +79,10 @@ import {
   readFailedWords,
   readingWords,
   TERM,
-} from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BackButton,
   BUTTON_VARIANT,
@@ -149,12 +149,12 @@ import {
   useConfirmDialog,
   useMenu,
   useMinute,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
-import { inputProblem, UNREPORTED } from "@luke/ui/reported-failure";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
+import { inputProblem, UNREPORTED } from "@repo/ui/reported-failure";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
 import {
@@ -389,7 +389,7 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /**
  * An automation's on/off switch, the list row's and the editor's alike. It
  * reads the automation as the host draws it, which a press turns at once and
- * a write the service refuses turns back (`@luke/host`'s
+ * a write the service refuses turns back (`@repo/host`'s
  * `automation-collections.ts`), and says why in a FAILED toast, as a settings
  * switch does; it never rests for a write. Writes to one automation go to the
  * service in the order pressed, which the host keeps.
@@ -864,7 +864,7 @@ function ScheduleRows({
                     />
                   ) : (
                     <span
-                      className={`${AUTOMATION_FIELD} automation-time-field [[data-luke-profile=web]_&]:w-automation-time`}
+                      className={`${AUTOMATION_FIELD} automation-time-field [[data-ui-profile=web]_&]:w-automation-time`}
                     >
                       <ClockField
                         inputRef={time}
@@ -944,7 +944,7 @@ const SKELETON_NAME = { TITLE: "160px" } as const;
 const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
 
 /** An icon press's width, the ⋯'s and the Runs toggle's, as tall as it is wide. */
-const ICON_PRESS_WIDTH = "var(--luke-control-height)";
+const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
 /** What an automation's placeholder page says to a reader while the list is first read. */
 const READING_AUTOMATION = "Reading the automation…";
@@ -1295,7 +1295,7 @@ function EditorToolbar({
 const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: string }[] = [
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
-    value: GITHUB_SENDER.LUKE_AGENTS,
+    value: GITHUB_SENDER.APP_AGENTS,
     label: `From ${PRODUCT_NAME}'s agents`,
     detail: `What ${PRODUCT_NAME}'s agents open, as you or as the workspace's GitHub App.`,
   },
@@ -2486,7 +2486,7 @@ export function AutomationPageSkeleton({
 }
 
 /** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
-const SETUP_COLUMN = ".luke-detail-page-main";
+const SETUP_COLUMN = ".ui-detail-page-main";
 
 /** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {

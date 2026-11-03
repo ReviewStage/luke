@@ -10,18 +10,18 @@
   /* A card, clipped to its corners so its head's hover fill follows them and
      a ring inside it is drawn inside its control, in the caption's type; a
      card whose head holds controls is its frame, so they stand inside it. */
-  :is(.luke-disclosure, .luke-disclosure-frame):is([data-look="card"], [data-look="dock"]) {
-    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  :is(.ui-disclosure, .ui-disclosure-frame):is([data-look="card"], [data-look="dock"]) {
+    --ui-focus-ring-offset: var(--ui-focus-ring-inset);
     overflow: clip;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
-    background: var(--luke-color-fill-hover);
-    font-size: var(--luke-type-caption-size);
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-control-radius);
+    background: var(--ui-color-fill-hover);
+    font-size: var(--ui-type-caption-size);
   }
 
   /* A dock stands on the card ground a list's card does, so two docks stacked over the composer read as one system. */
-  :is(.luke-disclosure, .luke-disclosure-frame)[data-look="dock"] {
-    background: var(--luke-color-surface);
+  :is(.ui-disclosure, .ui-disclosure-frame)[data-look="dock"] {
+    background: var(--ui-color-surface);
   }
 
   /* A head with controls of its own (`DisclosureFrame`): one row of the
@@ -30,10 +30,10 @@
      middle cell and its body the row under all three. Note that a closed
      body's box is the platform's, hidden and no height, so a closed fold is
      the row alone. */
-  .luke-disclosure-frame {
-    --luke-disclosure-gap: var(--luke-icon-gap);
-    --luke-disclosure-inset-start: 0px;
-    --luke-disclosure-inset-end: 0px;
+  .ui-disclosure-frame {
+    --ui-disclosure-gap: var(--ui-icon-gap);
+    --ui-disclosure-inset-start: 0px;
+    --ui-disclosure-inset-end: 0px;
     display: grid;
     min-width: 0;
     align-items: center;
@@ -42,11 +42,11 @@
     isolation: isolate;
   }
 
-  .luke-disclosure-frame[data-fill="actions"] {
+  .ui-disclosure-frame[data-fill="actions"] {
     grid-template-columns: auto auto minmax(0, 1fr);
   }
 
-  .luke-disclosure-frame > details {
+  .ui-disclosure-frame > details {
     display: grid;
     min-width: 0;
     align-self: stretch;
@@ -56,123 +56,123 @@
     grid-template-rows: subgrid;
   }
 
-  .luke-disclosure-frame > details > summary {
+  .ui-disclosure-frame > details > summary {
     min-width: 0;
     align-self: stretch;
     grid-column: 2;
     grid-row: 1;
   }
 
-  .luke-disclosure-frame > details::details-content {
+  .ui-disclosure-frame > details::details-content {
     min-width: 0;
     grid-column: 1 / -1;
     grid-row: 2;
   }
 
-  .luke-disclosure-lead,
-  .luke-disclosure-actions {
+  .ui-disclosure-lead,
+  .ui-disclosure-actions {
     display: flex;
     min-width: 0;
     align-items: center;
     align-self: stretch;
-    gap: var(--luke-disclosure-gap);
+    gap: var(--ui-disclosure-gap);
     grid-row: 1;
   }
 
-  .luke-disclosure-lead {
-    padding-inline: var(--luke-disclosure-inset-start) var(--luke-disclosure-gap);
+  .ui-disclosure-lead {
+    padding-inline: var(--ui-disclosure-inset-start) var(--ui-disclosure-gap);
     grid-column: 1;
   }
 
-  .luke-disclosure-actions {
-    padding-inline: var(--luke-disclosure-gap) var(--luke-disclosure-inset-end);
+  .ui-disclosure-actions {
+    padding-inline: var(--ui-disclosure-gap) var(--ui-disclosure-inset-end);
     grid-column: 3;
   }
 
   /* The row's inset, a summary's own at each end, goes to the cell standing
      at that end (the summary drops its own there, `disclosure.tsx`), and the
      summary meets the cell at the row's gap. */
-  .luke-disclosure-frame:has(> details > .luke-disclosure-summary:not([data-look])) {
-    --luke-disclosure-inset-start: var(--luke-space-4);
-    --luke-disclosure-inset-end: var(--luke-space-4);
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look])) {
+    --ui-disclosure-inset-start: var(--ui-space-4);
+    --ui-disclosure-inset-end: var(--ui-space-4);
   }
 
-  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="head"]) {
-    --luke-disclosure-inset-start: var(--luke-space-12);
-    --luke-disclosure-inset-end: var(--luke-space-12);
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary[data-look="head"]) {
+    --ui-disclosure-inset-start: var(--ui-space-12);
+    --ui-disclosure-inset-end: var(--ui-space-12);
   }
 
   /* A row's start is a step shorter than its end, because the chevron's
      press there keeps a step of its own around its glyph, so the glyph and
      the last words at the end stand the same inset from either edge. */
-  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"]) {
-    --luke-disclosure-gap: var(--luke-space-8);
-    --luke-disclosure-inset-start: var(--luke-space-8);
-    --luke-disclosure-inset-end: var(--luke-space-12);
-    color: var(--luke-color-text);
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary[data-look="row"]) {
+    --ui-disclosure-gap: var(--ui-space-8);
+    --ui-disclosure-inset-start: var(--ui-space-8);
+    --ui-disclosure-inset-end: var(--ui-space-12);
+    color: var(--ui-color-text);
     white-space: nowrap;
   }
 
   /* The row's fill under the pointer, across the cells and the summary
      alike, as one row wears it; a transcript's line leaves its fill to its
      fold's skin. The rule under an open file row is the frame's too. */
-  .luke-disclosure-frame::before {
+  .ui-disclosure-frame::before {
     z-index: -1;
     align-self: stretch;
-    border-radius: var(--luke-control-radius);
+    border-radius: var(--ui-control-radius);
     content: "";
     grid-column: 1 / -1;
     grid-row: 1;
-    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"])::before {
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary[data-look="row"])::before {
     border-radius: 0;
   }
 
-  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="head"])::before {
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary[data-look="head"])::before {
     border-radius: 0;
   }
 
   /* Note that each of these selectors holds no comma inside its brackets,
      because the touch-density test reads a rule's selectors by its commas. */
-  .luke-disclosure-frame:has(
-    > details > .luke-disclosure-summary:not([data-look="transcript"]):hover
+  .ui-disclosure-frame:has(
+    > details > .ui-disclosure-summary:not([data-look="transcript"]):hover
   )::before {
-    background: var(--luke-color-fill-strong);
+    background: var(--ui-color-fill-strong);
   }
 
-  .luke-disclosure-frame:has(
-    > details > .luke-disclosure-summary:not([data-look="transcript"])
-  ):has(> :not(details):hover)::before {
-    background: var(--luke-color-fill-strong);
+  .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look="transcript"])):has(
+    > :not(details):hover
+  )::before {
+    background: var(--ui-color-fill-strong);
   }
 
-  .luke-disclosure-frame:has(
-    > details > .luke-disclosure-summary[data-look="row"][aria-expanded="true"]
+  .ui-disclosure-frame:has(
+    > details > .ui-disclosure-summary[data-look="row"][aria-expanded="true"]
   ) {
-    box-shadow: inset 0 -1px 0 var(--luke-color-border);
+    box-shadow: inset 0 -1px 0 var(--ui-color-border);
   }
 
   /* Inline, so that a chevron after words inside a line (a text button's
      "3 tools") stays on the words' line rather than dropping under them as a
      block would; in a summary, itself a flex row, it is a flex item either way. */
-  .luke-disclosure-turn {
+  .ui-disclosure-turn {
     display: inline-flex;
     flex: none;
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
     /* The chevron turns on the beat the body unrolls on, so the fold reads
        as one gesture rather than two that settle apart. */
-    transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+    transition: transform var(--ui-duration-pane) var(--ui-motion-pane);
   }
 
-  .luke-disclosure-turn > svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
+  .ui-disclosure-turn > svg {
+    width: var(--ui-control-icon);
+    height: var(--ui-control-icon);
     flex: none;
   }
 
-  .luke-disclosure-turn[data-open="true"] {
+  .ui-disclosure-turn[data-open="true"] {
     transform: rotate(90deg);
   }
 
@@ -185,21 +185,21 @@
      as it streams is unrolled by a fraction of its own box rather than a size
      it was measured at. Only the press marks the root, so a find opening a
      fold onto a match, or a row drawn again, appears at once. */
-  [data-disclosure="opening"] > .luke-disclosure-body {
+  [data-disclosure="opening"] > .ui-disclosure-body {
     animation:
-      luke-disclosure-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
-      luke-disclosure-unroll var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+      ui-disclosure-fade var(--ui-duration-quick) var(--ui-motion-pane) backwards,
+      ui-disclosure-unroll var(--ui-duration-pane) var(--ui-motion-pane) backwards;
   }
 
-  [data-disclosure="closing"] > .luke-disclosure-body {
-    animation: luke-disclosure-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  [data-disclosure="closing"] > .ui-disclosure-body {
+    animation: ui-disclosure-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
     /* Note that the hold waits on every motion the body runs, and a body that
        held focus would start the scrollbar's own fade as it lost it, so the
        exit is the one motion it has. */
     transition: none;
   }
 
-  @keyframes luke-disclosure-fade {
+  @keyframes ui-disclosure-fade {
     from {
       opacity: 0;
     }
@@ -207,7 +207,7 @@
 
   /* Note that the clip names both ends, because a clip cannot be interpolated
      from none: it would flip halfway through instead. */
-  @keyframes luke-disclosure-unroll {
+  @keyframes ui-disclosure-unroll {
     from {
       clip-path: inset(0 0 100% 0);
     }
@@ -216,7 +216,7 @@
     }
   }
 
-  @keyframes luke-disclosure-leave {
+  @keyframes ui-disclosure-leave {
     to {
       opacity: 0;
     }

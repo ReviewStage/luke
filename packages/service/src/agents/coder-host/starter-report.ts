@@ -5,7 +5,7 @@
  * reports to its starter by message; one whose turn ends before it does,
  * or whose report `message_agent` refused, would leave its starter waiting
  * on a message that never comes. So the store writer's settle of a coding
- * agent's turn (`@luke/database/models/writer`'s `SettledTurnListener`) hands
+ * agent's turn (`@repo/database/models/writer`'s `SettledTurnListener`) hands
  * the turn's final words to the starter here, as the message the agent would
  * have sent (`agent-message.ts`): under the agent's own name, opening on
  * who sent it and how its turn ended, completed, failed with why, or
@@ -18,16 +18,16 @@
  * itself (`read_agent`). A starter archived or gone is told by no one.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgent, readAgentOfConversation } from "@luke/database/models/agent-store";
-import { readMessageByClientId } from "@luke/database/models/message-reads";
-import { type SettledAgentTurn, storeWriter } from "@luke/database/models/writer";
-import { AGENT_MESSAGE_LEAD, agentMessageReplyLine } from "@luke/features/agent-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentName } from "@luke/features/model-label";
-import { causeKind } from "@luke/runtime/effect";
-import { TURN_STATUS } from "@luke/wire";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type Agent, readAgent, readAgentOfConversation } from "@repo/database/models/agent-store";
+import { readMessageByClientId } from "@repo/database/models/message-reads";
+import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
+import { AGENT_MESSAGE_LEAD, agentMessageReplyLine } from "@repo/features/agent-wire";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { agentName } from "@repo/features/model-label";
+import { causeKind } from "@repo/runtime/effect";
+import { TURN_STATUS } from "@repo/wire";
+import type { StoredUIMessage } from "@repo/wire/ui-messages";
 import { isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";

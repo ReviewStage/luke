@@ -95,8 +95,8 @@ import {
 } from "./protocol.js";
 import { oneShotDueAt } from "./wakeups.js";
 
-/** The name our MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
-const MCP_SERVER = "luke";
+/** The name our MCP server is registered under, so its tools reach the model as `mcp__workspace__<tool>` (`@repo/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
+const MCP_SERVER = "workspace";
 
 /**
  * The variables no command the agent runs may see: the plan's token, every

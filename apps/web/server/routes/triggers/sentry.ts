@@ -1,4 +1,4 @@
-import { triggerIngressApp } from "@luke/service/triggers/trigger-ingress-app";
+import { triggerIngressApp } from "@repo/service/triggers/trigger-ingress-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**

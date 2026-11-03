@@ -1,5 +1,5 @@
-import type { Failure } from "@luke/features/failure-remedy";
-import { TASK_BOUNDS, type TaskStanding, type TaskSummary } from "@luke/features/task-wire";
+import type { Failure } from "@repo/features/failure-remedy";
+import { TASK_BOUNDS, type TaskStanding, type TaskSummary } from "@repo/features/task-wire";
 import {
   ANNOUNCE,
   CHIP_LOOK,
@@ -7,7 +7,7 @@ import {
   InlineEdit,
   type InlineEditEnd,
   usePressAway,
-} from "@luke/ui";
+} from "@repo/ui";
 import { Fragment, type RefObject, useMemo, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
 import type { QuickAddInto, TasksControl } from "../tasks/use-tasks-tab.js";

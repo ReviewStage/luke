@@ -78,7 +78,7 @@ import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
 /** How tall a list engine's box stands: capped as every list is, or filling the column it stands in. */
 export const COMBOBOX_LIST_HEIGHT = {
-  /** At most `--luke-combobox-list-max`, as a list under a field stands. */
+  /** At most `--ui-combobox-list-max`, as a list under a field stands. */
   CAPPED: "capped",
   /** Whatever room is left in the flex column it stands in, as a palette's results fill its card. */
   FILL: "fill",
@@ -158,30 +158,30 @@ export function ComboboxOptionItem({
       onClick={
         option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
       }
-      className={cn("luke-combobox-option", COMBOBOX_ITEM)}
+      className={cn("ui-combobox-option", COMBOBOX_ITEM)}
       style={undefined}
     >
       {option.lead === undefined ? null : (
-        <span className={cn("luke-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
+        <span className={cn("ui-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
       )}
       {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (
-        <span className={cn("luke-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
+        <span className={cn("ui-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}
       {/* Note that the name and its detail fade where the row cuts them short, as every cut line of the app does, rather than ending in an ellipsis. */}
-      <span className={cn("luke-combobox-option-label", COMBOBOX_ITEM_LABEL)}>
+      <span className={cn("ui-combobox-option-label", COMBOBOX_ITEM_LABEL)}>
         <OneLine>{option.label}</OneLine>
       </span>
       {/* Note that the first of the detail, the hint, and the end to stand pushes the rest to the row's end. */}
       {option.detail === undefined ? null : (
-        <span className={cn("luke-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
+        <span className={cn("ui-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
           <OneLine>{option.detail}</OneLine>
         </span>
       )}
       {option.hint === undefined ? null : (
         <span
           className={cn(
-            "luke-combobox-option-hint",
+            "ui-combobox-option-hint",
             COMBOBOX_ITEM_HINT,
             option.detail === undefined && "ml-auto",
           )}
@@ -192,7 +192,7 @@ export function ComboboxOptionItem({
       {option.opens === true || option.current === true ? (
         <span
           className={cn(
-            "luke-combobox-option-end",
+            "ui-combobox-option-end",
             COMBOBOX_ITEM_END,
             option.detail === undefined && option.hint === undefined && "ml-auto",
           )}
@@ -267,7 +267,7 @@ export function ComboboxListBox({
       tabIndex={-1}
       {...engine}
       {...fade}
-      className={cn("luke-combobox-list", fade.className, COMBOBOX_LIST)}
+      className={cn("ui-combobox-list", fade.className, COMBOBOX_LIST)}
       style={undefined}
       data-slot="combobox-list"
       data-height={height}
@@ -376,7 +376,7 @@ export function ComboboxList({
       ref={list}
       id={listId}
       {...marks}
-      className={cn("luke-combobox-list", marks.className, COMBOBOX_LIST)}
+      className={cn("ui-combobox-list", marks.className, COMBOBOX_LIST)}
       data-slot="combobox-list"
       role="listbox"
       aria-label={label}
@@ -407,7 +407,7 @@ export function ComboboxList({
               <Text
                 as={TEXT_ELEMENT.DIV}
                 variant={TEXT_VARIANT.GROUP}
-                className={cn("luke-combobox-heading", COMBOBOX_HEADING)}
+                className={cn("ui-combobox-heading", COMBOBOX_HEADING)}
                 aria-hidden="true"
               >
                 {group.label}
@@ -418,12 +418,10 @@ export function ComboboxList({
         );
       })}
       {options.length === 0 && empty !== undefined ? (
-        <p className={cn("luke-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
+        <p className={cn("ui-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}
       {note === undefined || note === null ? null : (
-        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>
-          {note}
-        </div>
+        <div className={cn("ui-combobox-note", COMBOBOX_EMPTY, "flex-col gap-ui-4")}>{note}</div>
       )}
     </div>
   );
@@ -499,7 +497,7 @@ export function Combobox({
   });
 
   return (
-    <div className={cn("luke-combobox", COMBOBOX_WELL)} data-open={shown}>
+    <div className={cn("ui-combobox", COMBOBOX_WELL)} data-open={shown}>
       <input
         ref={ref}
         type="text"

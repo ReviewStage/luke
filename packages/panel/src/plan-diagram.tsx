@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   Button,
   CARD_CORNER,
@@ -9,8 +9,8 @@ import {
   IMAGE_OPENING,
   PictureTile,
   PortalFence,
-} from "@luke/ui";
-import { DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
+} from "@repo/ui";
+import { DIAGRAM_DRAWING } from "@repo/ui/diagram-contract";
 import { type ReactNode, useContext, useState } from "react";
 import { DIAGRAM_REFUSED_LINE } from "./bundle-loader.js";
 import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";
@@ -48,7 +48,7 @@ const FULL_SCREEN_LABEL = "Full screen";
 
 /** A figure's head: what it is, in the caption's size and the muted ink, and its presses at the row's end. */
 const HEAD_CLASS =
-  "plan-diagram-head mb-control-gap flex items-center justify-between text-caption-inline font-luke-semibold text-muted-foreground";
+  "plan-diagram-head mb-control-gap flex items-center justify-between text-caption-inline font-ui-semibold text-muted-foreground";
 
 /** The shell standing as one pane, a phone's, which the stylesheet reads off its `data-room` (`shell-room.ts`). */
 const NARROW_ROOM = '[data-room="narrow"]';

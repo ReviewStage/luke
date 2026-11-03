@@ -1,4 +1,4 @@
-import type { DeviceAgentUpdate } from "@luke/features";
+import type { DeviceAgentUpdate } from "@repo/features";
 import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
@@ -7,10 +7,10 @@ import {
   type DevicePlatform,
   HOST_UPDATE,
   HOST_UPDATE_FAILURE_MAX_CHARS,
-} from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballUrl } from "@luke/features/host-release";
-import { hostVersionMeets, readHostVersion } from "@luke/features/host-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/device-agent-wire";
+import { HOST_TARGET, type HostTarget, hostTarballUrl } from "@repo/features/host-release";
+import { hostVersionMeets, readHostVersion } from "@repo/features/host-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   Deferred,
   Duration,

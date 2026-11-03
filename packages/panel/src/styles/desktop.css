@@ -4,30 +4,30 @@
 
 :root {
   /* A tab's own bar under a tab strip and its hairline: a control's height
-     with --luke-space-4 above and below it. Every tab that leads with a bar, in
+     with --ui-space-4 above and below it. Every tab that leads with a bar, in
      the side panel or in a task's column, stands it this tall, so moving
      between tabs never moves the content under the bar. */
-  --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
+  --secondary-bar-height: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px);
   /* The spacing scale, one control's box, corner, and glyph, the gaps
      between controls, list items, and sections, a page's inset and measure, a
      menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
      and the window's sidebar, well, and workspace hues are the desktop
-     profile's roles in `@luke/ui` (`tokens/profiles.css`, `palettes.css`),
-     read here by their own names (`--luke-space-8`, `--luke-control-height`,
-     `--luke-color-identity-1`, …). Every
+     profile's roles in `@repo/ui` (`tokens/profiles.css`, `palettes.css`),
+     read here by their own names (`--ui-space-8`, `--ui-control-height`,
+     `--ui-color-identity-1`, …). Every
      padding, margin, and gap in the window is one of those steps or a name
      built from them, below or in shell.css (docs/DESIGN.md). */
   /* A row's own small act at its end (a sidebar plan's Pin, a version's ⋯). */
-  --sidebar-plan-mark: var(--luke-space-24);
+  --sidebar-plan-mark: var(--ui-space-24);
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
   /* The margin a comment thread stands in beside the reading width, and the
      gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
-  --comment-margin-gap: var(--luke-space-48);
+  --comment-margin-gap: var(--ui-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
-  /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
+  /* The floating layers are `--ui-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all. */
 }
 
@@ -37,7 +37,7 @@
    height their middle sits at, its y plus half a 14px light. The lights never
    scale with the page, so their width is divided by the zoom; main moves them
    down with it instead, so their middle stays where it is drawn here. */
-:root[data-luke-profile="desktop"] {
+:root[data-ui-profile="desktop"] {
   --traffic-lights-end: calc(79px / var(--zoom));
   --traffic-lights-middle: 25px;
   --title-bar-middle: var(--traffic-lights-middle);
@@ -45,12 +45,12 @@
      the first this far past the green light: about what the lights leave
      between themselves. The buttons stand edge to edge, so each glyph is as
      far from the next as the first is from the light, and the row reads as one. */
-  --title-bar-inset: var(--luke-space-8);
+  --title-bar-inset: var(--ui-space-8);
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
   /* Where the lights end below, half a light under their middle, and where a
-     card the window's size starts (`@luke/ui`'s Dialog): a gap under them. */
+     card the window's size starts (`@repo/ui`'s Dialog): a gap under them. */
   --traffic-lights-bottom: calc(var(--traffic-lights-middle) + 7px);
-  --luke-dialog-window-top: calc(var(--traffic-lights-bottom) + var(--luke-space-16));
+  --ui-dialog-window-top: calc(var(--traffic-lights-bottom) + var(--ui-space-16));
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
@@ -60,27 +60,27 @@
    (`window-full-screen.ts`). */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
-  --luke-dialog-window-top: initial;
+  --ui-dialog-window-top: initial;
 }
 
 html,
 body,
 #root {
-  background: var(--luke-color-ground);
+  background: var(--ui-color-ground);
 }
 
 /* The Mac panel window's page is clear under the shell, whose frame tint and
    solid sheet paint everything there is, so the window's sidebar material
    (`panel-manager.ts`) frosts through the frame. */
-:root[data-luke-profile="desktop"]:has(.desktop-shell),
-:root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
+:root[data-ui-profile="desktop"]:has(.desktop-shell),
+:root[data-ui-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
   background: transparent;
 }
 
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
-   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, shown
+   rounded thumb in the muted `--ui-color-scrollbar` ink and no track at all, shown
    while the pointer is over the scroller or focus is in it. Note that the
    track is named transparent rather than left to the engine, because macOS
    set to always show scroll bars (or a mouse attached) draws Chromium's
@@ -102,7 +102,7 @@ body,
 
   *:hover,
   *:focus-within {
-    scrollbar-color: var(--luke-color-scrollbar) transparent;
+    scrollbar-color: var(--ui-color-scrollbar) transparent;
   }
 }
 
@@ -114,18 +114,18 @@ body,
      The panel writes the top, the inset, and the visible height on the root
      (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
      window and what is measured by the stage's height is measured by
-     `100vh` (`@luke/ui`'s `tokens/viewport.css`). It keeps off a phone's
+     `100vh` (`@repo/ui`'s `tokens/viewport.css`). It keeps off a phone's
      notch and home indicator too, where its page is drawn under them
      (`viewport-fit=cover`); everywhere else those insets are zero. */
-  top: calc(var(--luke-viewport-top) + env(safe-area-inset-top, 0px));
+  top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px));
   right: env(safe-area-inset-right, 0px);
-  bottom: max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px));
+  bottom: max(var(--ui-keyboard-inset), env(safe-area-inset-bottom, 0px));
   left: env(safe-area-inset-left, 0px);
   /* Its edges size it, not base.css's whole-window measure. */
   width: auto;
   height: auto;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
+  color: var(--ui-color-text);
+  font-size: var(--ui-type-body-size);
 }
 
 .desktop-stage {
@@ -141,13 +141,13 @@ body,
    same by their own width as well as a narrow room's (`column-split.ts`),
    their list or its item the screen's one column. The one shown stands
    alone, so no edge parts it from the other. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
-:where(:root)[data-luke-room="narrow"] :is(.desktop-settings, .desktop-version-history),
+:where(:root)[data-ui-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
+:where(:root)[data-ui-room="narrow"] :is(.desktop-settings, .desktop-version-history),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-:where(:root)[data-luke-room="narrow"]
+:where(:root)[data-ui-room="narrow"]
   .desktop-shell
   :is(.desktop-settings, .desktop-version-history)
   > [hidden],
@@ -155,7 +155,7 @@ body,
   display: none;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
+:where(:root)[data-ui-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"]
   > :is(.settings-pages, .version-log) {
   border-right: 0;
@@ -163,28 +163,28 @@ body,
 
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
   display: none;
 }
 
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
    field stops growing at a smaller share of what is seen
-   (`--luke-stage-height`) than the two fifths every room keeps (tasks.css),
+   (`--ui-stage-height`) than the two fifths every room keeps (tasks.css),
    short of its eight lines, and scrolls past it, so the words written to and
    the box writing them both keep a part of the screen. Home's card keeps its
    five lines under the cap, since Home scrolls. New task's dialog portals out
    of the shell, so it reads the shell's room off the document's root
    (`stage-room.ts`), and its Start stays in the card above the keyboard. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-field,
-[data-luke-room="narrow"] .new-task .agent-composer-field {
-  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
+:where(:root)[data-ui-room="narrow"] .desktop-shell .agent-composer-field,
+[data-ui-room="narrow"] .new-task .agent-composer-field {
+  --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.3);
 }
 
 /* A thread opened over a narrow room's plan spans the column rather than
    standing a margin card's width at its right over the words, so its reply
    box has the column's room. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .comment-float {
-  left: calc(var(--luke-space-6) * -1);
+:where(:root)[data-ui-room="narrow"] .desktop-shell .comment-float {
+  left: calc(var(--ui-space-6) * -1);
   width: auto;
 }
 
@@ -196,7 +196,7 @@ body,
   top: var(--desktop-bar-height);
   bottom: 0;
   left: 0;
-  width: var(--luke-space-6);
+  width: var(--ui-space-6);
 }
 
 /* Note that the side panel of the Inbox kept hidden between visits (`desktop-shell.tsx`) stands nowhere. */
@@ -205,14 +205,14 @@ body,
 ) .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel:not([data-inbox-shown="false"] > [data-page="inbox"] *))
   .title-bar-controls[data-edge="end"] {
-  --title-bar-ground: var(--luke-color-well);
+  --title-bar-ground: var(--ui-color-well);
 }
 
 /* Every page stands its top row on the frame (shell.css), so the toggle at
    the right and, while the sidebar is folded, the buttons at the left rest
    on the frame as those rows do, with no ground of their own. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: transparent;
@@ -229,7 +229,7 @@ body,
 .title-bar-controls[data-edge="end"] {
   right: var(--panel-toggle-right);
   left: auto;
-  border-radius: var(--luke-control-radius);
+  border-radius: var(--ui-control-radius);
   background: var(--title-bar-ground);
 }
 
@@ -240,7 +240,7 @@ body,
    the column's own ground. At the column's least width they still end short
    of the sidebar toggle's cluster. */
 .title-bar-controls[data-edge="column"] {
-  --title-bar-ground: var(--luke-color-sidebar);
+  --title-bar-ground: var(--ui-color-sidebar);
   right: var(--column-inset);
   left: auto;
 }
@@ -255,7 +255,7 @@ body,
   scale: calc(24 / 22);
 }
 
-.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .luke-working-mark {
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .ui-working-mark {
   scale: calc(16 / 13);
 }
 
@@ -277,13 +277,13 @@ body,
 .sidebar-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-list-gap);
+  gap: var(--ui-list-gap);
 }
 
 .sidebar-skeleton-row {
-  padding: var(--luke-item-gap) var(--row-inset);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-label-leading);
+  padding: var(--ui-item-gap) var(--row-inset);
+  font-size: var(--ui-type-body-size);
+  line-height: var(--ui-type-label-leading);
 }
 
 /* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
@@ -292,9 +292,9 @@ body,
 .sidebar-tasks > li {
   position: relative;
   transition:
-    transform var(--luke-duration-fast) var(--luke-spring-fast),
-    background-color var(--luke-duration-hover) var(--luke-motion-exit),
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
+    transform var(--ui-duration-fast) var(--ui-spring-fast),
+    background-color var(--ui-duration-hover) var(--ui-motion-exit),
+    opacity var(--ui-duration-quick) var(--ui-motion-exit);
 }
 
 /* A row being dragged stays in its list as its own placeholder, faded, and
@@ -309,9 +309,9 @@ body,
    place and width, and moved only by its transform, frame for frame, so it
    eases nothing and takes no pointer. */
 [data-carried="true"] {
-  --carried-ground: var(--luke-color-sidebar);
+  --carried-ground: var(--ui-color-sidebar);
   position: fixed;
-  z-index: calc(var(--luke-z-menu) - 1);
+  z-index: calc(var(--ui-z-menu) - 1);
   margin: 0;
   pointer-events: none;
 }
@@ -320,14 +320,13 @@ body,
    was dragged from, ringed so it reads over either pane, and a shadow
    beneath. The sidebar's rows and its sections share it; a board's card is
    a card (`Card`), whose copy keeps the card's own frame. */
-[data-lifted="true"]:not(.luke-card) {
-  border-radius: var(--luke-control-radius);
+[data-lifted="true"]:not(.ui-card) {
+  border-radius: var(--ui-control-radius);
   background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--carried-ground);
+    linear-gradient(var(--ui-color-fill-strong), var(--ui-color-fill-strong)), var(--carried-ground);
   box-shadow:
-    0 0 0 1px var(--luke-color-border-strong),
-    0 4px 12px var(--luke-color-shadow);
+    0 0 0 1px var(--ui-color-border-strong),
+    0 4px 12px var(--ui-color-shadow);
   transition: none;
 }
 
@@ -340,7 +339,7 @@ body,
    below the one before it. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository {
-  margin-top: var(--luke-control-gap);
+  margin-top: var(--ui-control-gap);
 }
 
 /* A group leaving is laid over the place it held as it slides out
@@ -352,7 +351,7 @@ body,
 }
 
 .sidebar-group > .sidebar-repository:not([data-leaving]) ~ .sidebar-repository:not([data-leaving]) {
-  margin-top: var(--luke-control-gap);
+  margin-top: var(--ui-control-gap);
 }
 
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
@@ -361,12 +360,12 @@ body,
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
   transition:
-    transform var(--luke-duration-fast) var(--luke-spring-fast),
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
+    transform var(--ui-duration-fast) var(--ui-spring-fast),
+    opacity var(--ui-duration-quick) var(--ui-motion-exit);
 }
 
 .sidebar-sections > .sidebar-sections-item[data-lifted="true"] {
-  border-radius: var(--luke-radius-8);
+  border-radius: var(--ui-radius-8);
 }
 
 .sidebar-sections[data-dragging="true"] {
@@ -376,9 +375,9 @@ body,
 /* The section, or Tasks, a row is carried over is washed while it is, and a
    line stands where the row would land among a section's tasks. A board's
    column is a card (`Card`), which rings and washes itself. */
-[data-row-drop][data-drop-target="true"]:not(.luke-card) {
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
+[data-row-drop][data-drop-target="true"]:not(.ui-card) {
+  border-radius: var(--ui-radius-8);
+  background: var(--ui-color-fill-hover);
 }
 
 .sidebar-tasks > li:is([data-drop-before="true"], [data-drop-after="true"])::after {
@@ -387,7 +386,7 @@ body,
   left: var(--row-inset);
   height: 2px;
   border-radius: 1px;
-  background: var(--luke-color-focus-ring);
+  background: var(--ui-color-focus-ring);
   content: "";
   pointer-events: none;
 }
@@ -406,26 +405,26 @@ body,
 /* off-scale: 280px, where the update pill's word stops fitting beside a name as long as "Ada Lovelace", which would otherwise end faded short at the default sidebar's 264px; the offline pill folds at the same width */
 @container sidebar-foot (width < 280px) {
   .sidebar-update {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
-[data-luke-profile="desktop"] .offline-mark {
+[data-ui-profile="desktop"] .offline-mark {
   -webkit-app-region: no-drag;
 }
 
 .desktop-shell .title-bar-controls .offline-mark {
-  width: var(--luke-control-height);
-  height: var(--luke-control-height);
+  width: var(--ui-control-height);
+  height: var(--ui-control-height);
   justify-content: center;
   padding: 0;
-  border-radius: var(--luke-control-radius);
+  border-radius: var(--ui-control-radius);
   background: none;
 }
 
 .desktop-shell .title-bar-controls .offline-mark svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+  width: var(--ui-control-icon);
+  height: var(--ui-control-icon);
 }
 
 .desktop-shell .title-bar-controls .offline-mark-word {
@@ -437,8 +436,8 @@ body,
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     3 *
-    var(--luke-control-height) +
-    var(--luke-control-gap)
+    var(--ui-control-height) +
+    var(--ui-control-gap)
   );
 }
 
@@ -479,28 +478,28 @@ body,
 .desktop-main {
   --panel-toggle-clearance: calc(
     var(--panel-toggle-right) +
-    var(--luke-control-height) +
-    var(--luke-control-gap) -
+    var(--ui-control-height) +
+    var(--ui-control-gap) -
     var(--sheet-gap)
   );
 }
 
 /* Beneath the side panel's toggle, at the window's top right, the toolbar
-   stops short of it (`--luke-toolbar-end-at`). Only a plan's page draws the
+   stops short of it (`--ui-toolbar-end-at`). Only a plan's page draws the
    toggle, so Settings' rows end as far in as they start. */
 .desktop-shell[data-panel-toggle="true"] .desktop-main {
-  --luke-toolbar-end-at: var(--panel-toggle-clearance);
+  --ui-toolbar-end-at: var(--panel-toggle-clearance);
 }
 
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
    the window's, and the panel's own row leaves the toggle its room. On the
    frame its last control ends on one line with its sheet's edge below. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
-  --luke-toolbar-end-at: var(--column-inset);
+  --ui-toolbar-end-at: var(--column-inset);
 }
 
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
-  --luke-toolbar-end-at: 0px;
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
+  --ui-toolbar-end-at: 0px;
 }
 
 /* On the frame the plan's first tab starts on one line with its sheet's
@@ -508,75 +507,75 @@ body,
    sidebar folded it starts past the title bar's buttons, measured from the
    sheet's edge, a gap in from the window's. A bar further in the column, a
    task's Inbox tab's, sets its own start. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
-  --luke-toolbar-start-at: 0px;
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
+  --ui-toolbar-start-at: 0px;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"]
   > .desktop-main
   .desktop-task-main {
-  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
+  --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
    controls give way before its tabs do: where the column is narrowest the
    agents' Retry draws its glyph alone (`FoldingButton`). */
 /* off-scale: 320px, the column's narrowest */
-@container luke-toolbar (width < 320px) {
+@container ui-toolbar (width < 320px) {
   .main-tabs {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
-[data-luke-profile="desktop"] .luke-button,
-[data-luke-profile="desktop"] .luke-chip,
-[data-luke-profile="desktop"] .luke-choice-bar-option,
-[data-luke-profile="desktop"] .luke-nav-item,
-[data-luke-profile="desktop"] .inbox-crumbs {
+[data-ui-profile="desktop"] .ui-button,
+[data-ui-profile="desktop"] .ui-chip,
+[data-ui-profile="desktop"] .ui-choice-bar-option,
+[data-ui-profile="desktop"] .ui-nav-item,
+[data-ui-profile="desktop"] .inbox-crumbs {
   -webkit-app-region: no-drag;
 }
 
 /* Buttons --------------------------------------------------------------------- */
 
-/* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
+/* A glyph of `@repo/ui`'s own drawn outside a button, at the control's
    glyph size; in the `base` layer, so a shared component holding one sizes
    it as its own. */
 @layer base {
   .icon-button-glyph {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
+    width: var(--ui-control-icon);
+    height: var(--ui-control-icon);
     flex: 0 0 auto;
   }
 }
 
 /* Plan actions ---------------------------------------------------------- */
 
-/* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
-   looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
+/* The window's own menu is `@repo/ui`'s `Menu` (`action-menu.tsx`), its
+   looks drawn by `@repo/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
    from, and its presses claimed back from the toolbar's drag strip it sits
    over. */
-.luke-menu {
-  z-index: var(--luke-z-menu);
+.ui-menu {
+  z-index: var(--ui-z-menu);
 }
 
-[data-luke-profile="desktop"] .luke-menu {
+[data-ui-profile="desktop"] .ui-menu {
   -webkit-app-region: no-drag;
 }
 
-.luke-menu[data-layer="dialog"] {
-  z-index: calc(var(--luke-z-dialog) + 1);
+.ui-menu[data-layer="dialog"] {
+  z-index: calc(var(--ui-z-dialog) + 1);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
 
-/* A notice about the whole plan (`task-banner.tsx`), `@luke/ui`'s strip:
+/* A notice about the whole plan (`task-banner.tsx`), `@repo/ui`'s strip:
    the workspace it names reads at the line's own weight. */
 .task-banner-words .workspace-ref {
   max-width: none;
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
+  color: var(--ui-color-text);
+  font-weight: var(--ui-weight-medium);
 }
 
 /* The document ------------------------------------------------------------- */
@@ -591,7 +590,7 @@ body,
    over the one a side panel gives a transcript's log. */
 .desktop-agent,
 .desktop-inbox {
-  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
+  --reading-room: calc((100% - var(--ui-page-measure)) / 2);
   position: relative;
 }
 
@@ -636,9 +635,9 @@ body,
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */
-.agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
+.agent-origin > .ui-message-line > .ui-message-line-sender > .actor-words {
   flex-wrap: wrap;
-  row-gap: var(--luke-list-gap);
+  row-gap: var(--ui-list-gap);
 }
 
 /* A teammate's call at its divider: their mark and name, then when it
@@ -654,22 +653,22 @@ body,
    stands on the column's own ground rather than the panel's. */
 .desktop-agent .conversation-scroll,
 .desktop-inbox .conversation-scroll {
-  --luke-button-ground: var(--luke-color-ground);
+  --ui-button-ground: var(--ui-color-ground);
 }
 
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .plan-unit.version-added {
-  padding-left: var(--luke-list-inset);
-  border-left: 2px solid color-mix(in srgb, var(--luke-color-complete) 70%, transparent);
+  padding-left: var(--ui-list-inset);
+  border-left: 2px solid color-mix(in srgb, var(--ui-color-complete) 70%, transparent);
 }
 
 .desktop-document .plan-unit.version-removed {
-  padding-left: var(--luke-list-inset);
-  border-left: 2px solid color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
-  color: var(--luke-color-text-muted);
+  padding-left: var(--ui-list-inset);
+  border-left: 2px solid color-mix(in srgb, var(--ui-color-danger) 60%, transparent);
+  color: var(--ui-color-text-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--ui-color-danger) 60%, transparent);
 }
 
 /* Its column is a `ScrollArea` with nothing scrolling sideways, since
@@ -678,7 +677,7 @@ body,
    room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
 .desktop-document .plan-document-body {
-  padding: var(--luke-page-inset);
+  padding: var(--ui-page-inset);
   /* Room for the last line to scroll clear of what floats over the column's foot. */
   padding-bottom: 140px; /* off-scale */
 }
@@ -690,14 +689,14 @@ body,
    yet, as the desktop's inset does, so the words never move when the first
    comment lands, and a plan and its versions keep one width. */
 .desktop-document {
-  --comment-gutter: var(--luke-page-inset);
+  --comment-gutter: var(--ui-page-inset);
 }
 
-[data-luke-profile="web"] .desktop-document {
-  --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
+[data-ui-profile="web"] .desktop-document {
+  --comment-gutter: calc(var(--ui-touch-target) + 2 * var(--ui-space-2));
 }
 
-[data-luke-profile="web"] .desktop-document .plan-document-body {
+[data-ui-profile="web"] .desktop-document .plan-document-body {
   padding-right: var(--comment-gutter);
 }
 
@@ -706,22 +705,22 @@ body,
    keeps its end's, which holds the comment gutter, as the web's does. */
 @container plan-document (width < 480px) {
   .desktop-document .plan-document-body {
-    padding-left: var(--luke-page-inset-narrow);
+    padding-left: var(--ui-page-inset-narrow);
   }
 }
 
 .desktop-document .plan-body,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
-  max-width: var(--luke-page-measure);
+  max-width: var(--ui-page-measure);
   margin-right: auto;
   margin-left: auto;
 }
 
 .desktop-document .plan-body {
-  color: var(--luke-color-text-body);
-  font-size: var(--luke-type-reading-size);
-  line-height: var(--luke-type-reading-leading);
+  color: var(--ui-color-text-body);
+  font-size: var(--ui-type-reading-size);
+  line-height: var(--ui-type-reading-leading);
 }
 
 /* A plan is a document rather than a message, so its sections breathe: its
@@ -737,26 +736,26 @@ body,
 /* A task's key stands tight over its title, and its status and priority
    chips close under it, as one head rather than three blocks. */
 .desktop-document .plan-body > .plan-task-key + * {
-  margin-top: var(--luke-list-gap);
+  margin-top: var(--ui-list-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing {
-  margin-top: var(--luke-block-gap);
+  margin-top: var(--ui-block-gap);
 }
 
-.desktop-document .luke-markdown-heading {
-  color: var(--luke-color-text);
+.desktop-document .ui-markdown-heading {
+  color: var(--ui-color-text);
 }
 
 /* Each section is named by a heading with room above it rather than a rule
    under it; a plan's title is its page's header (`PageHeader`), not a
    heading of the text. Note that the headings keep prose's own scale and
-   weight (`@luke/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
+   weight (`@repo/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
    steps, as they do in every other note. An h3 that follows a block inside
    a section stands the same room above it, so it never sits on the list or
    paragraph before it; one straight under a heading stays close to it. */
-.desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]),
-.desktop-document :not(.luke-markdown-heading) + .luke-markdown-heading[data-level="3"] {
+.desktop-document .ui-markdown-heading:is([data-level="1"], [data-level="2"]),
+.desktop-document :not(.ui-markdown-heading) + .ui-markdown-heading[data-level="3"] {
   margin-top: 1.6em;
 }
 
@@ -766,7 +765,7 @@ body,
    wears them by the ground: Executor's and Notion's pure white on dark and
    pure black on light, Sentry's white on dark and its dark blurple on light,
    Neon's two greens, and Mercury's near-white on dark and near-black on
-   light (`@luke/ui`'s `marks/provider-mark.tsx`). */
+   light (`@repo/ui`'s `marks/provider-mark.tsx`). */
 :root {
   --integration-ink-executor: light-dark(#000, #fff);
   --integration-ink-mercury: light-dark(#272735, #f4f5f9);
@@ -797,18 +796,18 @@ body,
 
 /* A tool's page reached from its server's list leads its head with the way
    back, folded to its glyph (`integration-tool-list.tsx`). */
-.integration-tool-detail-head:has(.luke-button) {
-  --luke-fold: folded;
-  padding-left: var(--luke-item-gap);
+.integration-tool-detail-head:has(.ui-button) {
+  --ui-fold: folded;
+  padding-left: var(--ui-item-gap);
 }
 
 /* What a tool does, rendered as markdown: its emphasis, headings, and code
    in the full ink, its headings at the words' own size. */
-.integration-tool-description-whole :is(strong, .luke-markdown-heading, code) {
-  color: var(--luke-color-text);
+.integration-tool-description-whole :is(strong, .ui-markdown-heading, code) {
+  color: var(--ui-color-text);
 }
 
-.integration-tool-description-whole .luke-markdown-heading {
+.integration-tool-description-whole .ui-markdown-heading {
   margin-top: 0.9em;
   font-size: 1em;
 }
@@ -818,7 +817,7 @@ body,
   .integration-tool-parameter {
     display: grid;
     grid-template-columns: minmax(150px, 34%) 1fr;
-    column-gap: var(--luke-block-gap);
+    column-gap: var(--ui-block-gap);
   }
 
   .integration-tool-parameter-required {
@@ -833,7 +832,7 @@ body,
    the window's, so it keeps its own inset though the side panel's toggle
    stands at the window's top right. */
 .inbox-view[data-columns="both"] .inbox-tasks {
-  --luke-toolbar-end-at: var(--column-inset);
+  --ui-toolbar-end-at: var(--column-inset);
 }
 
 /* While the sidebar is folded the window's Inbox's list is its first column, so its
@@ -848,7 +847,7 @@ body,
   > .page-find
   > .inbox-view
   .inbox-tasks {
-  --luke-toolbar-centre: on;
+  --ui-toolbar-centre: on;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"]
@@ -857,7 +856,7 @@ body,
   > .page-find
   > .inbox-view[data-columns="list"]
   .inbox-tasks {
-  --luke-toolbar-centre: off;
+  --ui-toolbar-centre: off;
 }
 
 /* A task's own Inbox draws in the side panel (`inboxBody` reaches `SidePanel`
@@ -867,11 +866,11 @@ body,
    the tab's own bar, as tall as every other tab's (`PaneBar`) and on its
    ground, rather than a top row. */
 .side-panel-content .inbox-view {
-  --luke-toolbar-start-at: var(--column-inset);
-  --luke-toolbar-end-at: var(--column-inset);
-  --luke-toolbar-height: var(--secondary-bar-height);
-  --luke-toolbar-block-inset: var(--luke-tight-gap);
-  --luke-toolbar-ground: var(--luke-color-fill-hover);
+  --ui-toolbar-start-at: var(--column-inset);
+  --ui-toolbar-end-at: var(--column-inset);
+  --ui-toolbar-height: var(--secondary-bar-height);
+  --ui-toolbar-block-inset: var(--ui-tight-gap);
+  --ui-toolbar-ground: var(--ui-color-fill-hover);
 }
 
 /* A group's room above it counts only the groups still in the layout, so a
@@ -884,7 +883,7 @@ body,
 .inbox-tasks-body
   > .sidebar-repository:not([data-leaving])
   ~ .sidebar-repository:not([data-leaving]) {
-  margin-top: var(--luke-control-gap);
+  margin-top: var(--ui-control-gap);
 }
 
 /* A comment holding a form's composer field lets what stands over the
@@ -898,11 +897,11 @@ body,
    a field's frame, its line at the field's insets, growing a line at a time
    to eight. */
 .inbox-field-composer .agent-composer-field {
-  --agent-composer-field-block: calc(2 * var(--luke-item-gap));
+  --agent-composer-field-block: calc(2 * var(--ui-item-gap));
 }
 
 .inbox-field-composer .agent-composer-input {
-  padding: var(--luke-item-gap) var(--luke-control-inset);
+  padding: var(--ui-item-gap) var(--ui-control-inset);
 }
 
 /* The reader's draft reply, the thread's last comment: the box stands in
@@ -916,7 +915,7 @@ body,
    its first column, so its bar, led by the way back, leaves the title bar's
    buttons their room. */
 .inbox-view-items {
-  --luke-toolbar-start-at: initial;
+  --ui-toolbar-start-at: initial;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"]
@@ -925,15 +924,15 @@ body,
   > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items {
-  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
+  --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* Automations ---------------------------------------------------------------- */
 
 /* A narrow room's row says when it runs next in the line under its name,
    a failure's mark leading the line as it leads an agent's end line. */
-.automation-group .luke-list-row-description > .failed-mark {
-  margin-right: var(--luke-tight-gap);
+.automation-group .ui-list-row-description > .failed-mark {
+  margin-right: var(--ui-tight-gap);
   vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
 
@@ -946,7 +945,7 @@ body,
 /* off-scale: 880px, where the editor's acts stop fitting beside its name */
 @container automation-toolbar (width < 880px) {
   .automation-toolbar > * {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 
   .automation-toolbar .automation-editor-status {
@@ -960,7 +959,7 @@ body,
 /* off-scale: 600px, where the Automations toolbar's acts stop fitting */
 @container automations-toolbar (width < 600px) {
   .automations-acts {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
@@ -970,9 +969,9 @@ body,
 .automation-prompt-skeleton {
   height: calc(
     var(--automation-prompt-rows) *
-    var(--luke-type-body-leading) +
+    var(--ui-type-body-leading) +
     2 *
-    var(--luke-space-6) +
+    var(--ui-space-6) +
     2px
   );
 }
@@ -986,7 +985,7 @@ body,
   height: var(--desktop-bar-height);
 }
 
-[data-luke-profile="desktop"]
+[data-ui-profile="desktop"]
   .desktop-shell[data-room="wide"][data-sidebar-collapsed="true"]
   .automation-runs-screen::before {
   -webkit-app-region: drag;
@@ -1003,7 +1002,7 @@ body,
   margin-left: var(--sheet-gap);
 }
 
-[data-luke-profile="desktop"]
+[data-ui-profile="desktop"]
   .desktop-shell[data-room="wide"]
   > [data-single="true"]
   > :not(nav)::before {
@@ -1037,7 +1036,7 @@ body,
 /* off-scale: 300px, where the find bar's tally gives the field its room */
 @container find-scope (width < 300px) {
   .find-scope > .find-bar {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
@@ -1045,10 +1044,10 @@ body,
    fills the place as the page did, and its bar stands under the page's
    toolbar, clear of the toolbar's own buttons. */
 .page-find > .find-bar {
-  top: calc(var(--desktop-bar-height) + var(--luke-space-8));
+  top: calc(var(--desktop-bar-height) + var(--ui-space-8));
 }
 
-[data-luke-profile="desktop"] .find-bar {
+[data-ui-profile="desktop"] .find-bar {
   -webkit-app-region: no-drag;
 }
 
@@ -1058,17 +1057,17 @@ body,
    `.side-panel-keeps`, which lays nothing out but stands between the scope
    and the tab, so the tab is looked for there too. */
 .find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
-  top: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px + var(--luke-space-8));
+  top: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px + var(--ui-space-8));
 }
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */
 ::highlight(find-match) {
-  background-color: var(--luke-color-find-match);
+  background-color: var(--ui-color-find-match);
 }
 
 ::highlight(find-current) {
-  background-color: var(--luke-color-find-current);
-  color: var(--luke-color-on-find-current);
+  background-color: var(--ui-color-find-current);
+  color: var(--ui-color-on-find-current);
 }
 
 /* Version history ------------------------------------------------------------ */
@@ -1076,7 +1075,7 @@ body,
 /* The view's title heads the versions' pane rather than the column, so it
    slides away with them and the sections' own head stands in its place. */
 .version-log-pane {
-  transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+  transition: transform var(--ui-duration-pane) var(--ui-motion-pane);
 }
 
 /* The sections' pane is a scroller of the sidebar's kind, its reach already
@@ -1093,7 +1092,7 @@ body,
 
 /* Nothing stands below a version, so it needs no room under its last line. */
 .version-page .desktop-document .plan-document-body {
-  padding-bottom: var(--luke-page-inset);
+  padding-bottom: var(--ui-page-inset);
 }
 
 /* The side panel ----------------------------------------------------------- */
@@ -1123,15 +1122,15 @@ body,
 .desktop-task > .agent-page[hidden],
 .desktop-task > .page-find[hidden] {
   visibility: hidden;
-  transition: visibility 0s linear var(--luke-duration-pane);
+  transition: visibility 0s linear var(--ui-duration-pane);
 }
 
 /* The run's bar under an automation's agent's bar (`automation-agent-run.tsx`)
    is a tab's (`PaneBar`), but it stands under the page's toolbar rather than
    a tab strip, so it starts its glyph a column's inset further in, on one
    line with the toolbar's first crumb. */
-.agent-page > .luke-pane-bar {
-  padding-inline: calc(var(--column-inset) + var(--luke-list-inset));
+.agent-page > .ui-pane-bar {
+  padding-inline: calc(var(--column-inset) + var(--ui-list-inset));
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
@@ -1145,17 +1144,17 @@ body,
      panel's toggle above it, as far in from that edge, and beside an open
      panel on one line with the toolbar's last button, as far in from the
      panel's. */
-  --summary-rail-width: calc(var(--luke-control-height) + 2 * var(--column-inset));
+  --summary-rail-width: calc(var(--ui-control-height) + 2 * var(--column-inset));
 }
 
 .task-summary[data-mode="rail"] > .task-summary-chevron {
   align-self: center;
-  margin-bottom: calc(var(--luke-list-gap) - var(--luke-focus-ring-reach));
+  margin-bottom: calc(var(--ui-list-gap) - var(--ui-focus-ring-reach));
 }
 
 .task-summary[data-mode="rail"] .task-summary-rows {
   align-items: center;
-  gap: var(--luke-list-gap);
+  gap: var(--ui-list-gap);
 }
 
 /* The pinned summary's chevron and the card's stand on the rail's own, and
@@ -1170,19 +1169,19 @@ body,
 .task-summary-collapse {
   opacity: 0;
   transition:
-    opacity var(--luke-duration-hover) var(--luke-motion-exit),
-    background-color var(--luke-duration-hover) var(--luke-motion-exit),
-    color var(--luke-duration-hover) var(--luke-motion-exit);
+    opacity var(--ui-duration-hover) var(--ui-motion-exit),
+    background-color var(--ui-duration-hover) var(--ui-motion-exit),
+    color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
-  --luke-button-ground: var(--luke-color-ground);
+  --ui-button-ground: var(--ui-color-ground);
   position: absolute;
   z-index: 1;
   top: var(--column-inset);
   right: var(--column-inset);
-  border-radius: var(--luke-control-radius);
-  background-color: var(--luke-button-ground);
+  border-radius: var(--ui-control-radius);
+  background-color: var(--ui-button-ground);
 }
 
 /* Each chevron's box is its button alone, which carries its look. */
@@ -1224,17 +1223,17 @@ body,
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  .luke-group-header-head,
-.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
-  margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
+  .ui-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .ui-group-header-head {
+  margin-right: calc(var(--ui-control-height) + var(--ui-tight-gap));
 }
 
 .task-summary-archived-agent > .task-summary-row {
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
 }
 
 .task-summary-archived-agent:hover > .task-summary-row {
-  background: var(--luke-color-fill-hover);
+  background: var(--ui-color-fill-hover);
 }
 
 /* The marks stay while the row's menu stands open from its ⋯, as a list row's acts do. */
@@ -1306,7 +1305,7 @@ body,
 }
 
 /* A drag the edge's snap took away from under the pointer is still the
-   edge's (`@luke/ui`'s ResizeEdge marks the root), so the whole window wears
+   edge's (`@repo/ui`'s ResizeEdge marks the root), so the whole window wears
    its cursor and selects nothing. Note that this stays out of the layers,
    so it wins over every cursor the window draws. */
 :root[data-edge-drag] {
@@ -1323,9 +1322,9 @@ body,
    the gutters rather than reaching a finger's full width, because past them
    it would stand over the rows and controls either column holds there, and
    a press on one would start a drag instead. The gutters are the panel's,
-   so this stays here beside them rather than in `@luke/ui`'s ResizeEdge. */
+   so this stays here beside them rather than in `@repo/ui`'s ResizeEdge. */
 @media (pointer: coarse) {
-  .luke-resize-edge::before {
+  .ui-resize-edge::before {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1344,19 +1343,18 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-control-gap);
+  gap: var(--ui-control-gap);
   min-height: var(--desktop-bar-height);
-  padding: var(--luke-row-inset) var(--panel-toggle-clearance) var(--luke-row-inset)
-    var(--column-inset);
+  padding: var(--ui-row-inset) var(--panel-toggle-clearance) var(--ui-row-inset) var(--column-inset);
 }
 
 /* On the frame its first tab starts on one line with its sheet's edge
    below, as the plan's does. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .side-panel-bar {
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .side-panel-bar {
   padding-left: 0;
 }
 
-[data-luke-profile="desktop"] .side-panel-bar {
+[data-ui-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
 }
 
@@ -1366,7 +1364,7 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-[data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover {
+[data-ui-profile="desktop"] .tab-add-anchor .ui-anchored-popover {
   -webkit-app-region: no-drag;
 }
 
@@ -1380,7 +1378,7 @@ body,
   /* What the panel leaves either side of a column at each measure, read
      where it is spent: a percentage there is of the box's frame, which is
      the panel's width. */
-  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
+  --reading-room: calc((100% - var(--ui-page-measure)) / 2);
   position: relative;
   /* The container every tab answers its width from (`@container
      side-panel`, tasks.css), so one width lays out every tab narrow; it
@@ -1411,7 +1409,7 @@ body,
 
 /* Tabs ------------------------------------------------------------------------ */
 
-/* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
+/* The window's one strip is `@repo/ui`'s Tabs (tab-strip.tsx), drawn alike
    in the plan's column and the side panel, folding as the room says. */
 
 /* A narrow room's bars have no room beside their buttons for their tabs,
@@ -1426,21 +1424,17 @@ body,
    in the title bar's buttons' place, the column's bar starts and ends at the
    column's own inset, and the side panel draws no bar at all, the row
    standing for it. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main {
-  --luke-toolbar-wrap-start: var(--sidebar-toggle-clearance);
-  --luke-toolbar-wrap-end: var(--panel-toggle-clearance);
+:where(:root)[data-ui-room="narrow"] .desktop-shell .desktop-task-main {
+  --ui-toolbar-wrap-start: var(--sidebar-toggle-clearance);
+  --ui-toolbar-wrap-end: var(--panel-toggle-clearance);
 }
 
-:where(:root)[data-luke-room="narrow"]
-  .desktop-shell
-  .task-head
-  ~ .desktop-task
-  .desktop-task-main {
-  --luke-toolbar-wrap-start: var(--column-inset);
-  --luke-toolbar-wrap-end: var(--column-inset);
+:where(:root)[data-ui-room="narrow"] .desktop-shell .task-head ~ .desktop-task .desktop-task-main {
+  --ui-toolbar-wrap-start: var(--column-inset);
+  --ui-toolbar-wrap-end: var(--column-inset);
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar:has(> .side-panel-tabs) {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar:has(> .side-panel-tabs) {
   --bar-start: var(--sidebar-toggle-clearance);
   --bar-end: var(--panel-toggle-clearance);
   flex-wrap: wrap;
@@ -1448,15 +1442,15 @@ body,
   padding-left: var(--bar-start);
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs {
   order: 1;
   flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
   margin-right: calc(var(--column-inset) - var(--bar-end));
   margin-left: calc(var(--column-inset) - var(--bar-start));
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs + * {
-  min-height: var(--luke-control-height);
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs + * {
+  min-height: var(--ui-control-height);
   margin-left: auto;
 }
 
@@ -1473,7 +1467,7 @@ body,
    name and who they are here, and each block a section's gap under the
    head. */
 .person-top ~ * {
-  margin-top: var(--luke-page-section-gap);
+  margin-top: var(--ui-page-section-gap);
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)
@@ -1491,7 +1485,7 @@ body,
 /* The words field stands at least five lines tall, so a task's prompt has
    room before it is written; it still grows to the agent box's eight. */
 .new-task-composer .agent-composer-input {
-  min-height: calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  min-height: calc(5 * var(--ui-type-body-leading) + var(--agent-composer-field-block));
 }
 
 /* In the dialog, which does not scroll, a window too short for five lines,
@@ -1500,17 +1494,17 @@ body,
    its composer keeps the five lines. */
 .new-task .new-task-composer .agent-composer-input {
   min-height: min(
-    calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
-    calc(var(--luke-stage-height) * 0.25)
+    calc(5 * var(--ui-type-body-leading) + var(--agent-composer-field-block)),
+    calc(var(--ui-stage-height) * 0.25)
   );
 }
 
 /* Where the card is too narrow for one row, as in a narrow window zoomed
    in, the foot wraps: its chips and its presses each stand on a line of
    their own, the presses kept at the right. */
-.new-task-composer :is(.luke-composer-foot-bar, .luke-composer-foot-tools) {
+.new-task-composer :is(.ui-composer-foot-bar, .ui-composer-foot-tools) {
   flex-wrap: wrap;
-  row-gap: var(--luke-control-gap);
+  row-gap: var(--ui-control-gap);
 }
 
 .new-task-composer .agent-composer-actions {
@@ -1587,31 +1581,31 @@ body,
 /* The status's mark before the name, on the name's first line, standing
    over the card's press as its pills do; the name wraps beside it. The
    press holds the name alone, its reach still covering the whole card. */
-.tasks-board-card-title > .luke-chip {
+.tasks-board-card-title > .ui-chip {
   position: relative;
   z-index: 1;
   /* off-scale: centres the compact chip on the name's first line */
-  margin-block: calc((var(--luke-type-label-leading) - var(--luke-space-20)) / 2);
+  margin-block: calc((var(--ui-type-label-leading) - var(--ui-space-20)) / 2);
 }
 
 /* The mark that leads the name and the one that leads the pills, the
    status's and the priority's (or the assignee's face where no priority is
    drawn), stand on one column: each chip is drawn out past the card's
    inset as far, so the two marks stand one above the other. */
-.tasks-board-card-title > .luke-chip,
-.tasks-board-card-pills > .luke-chip[data-icon-only="true"]:first-child {
-  margin-left: calc(-1 * var(--luke-space-4));
+.tasks-board-card-title > .ui-chip,
+.tasks-board-card-pills > .ui-chip[data-icon-only="true"]:first-child {
+  margin-left: calc(-1 * var(--ui-space-4));
 }
 
 /* A column's quick add (`quick-add.tsx`): its draft is the card it is
    about to be, its title bare in the name's place; an add still out stands
    muted until its card draws, and a refusal stands under the draft. */
 .tasks-board-draft[data-pending="true"] .tasks-board-name {
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
 }
 
 .tasks-board-draft-note {
-  padding: 0 var(--luke-list-inset);
+  padding: 0 var(--ui-list-inset);
 }
 
 /* The draft's title fills the name's room, so the caret's line reaches the
@@ -1619,7 +1613,7 @@ body,
 .tasks-board-draft .tasks-board-name {
   display: flex;
   overflow: visible;
-  gap: var(--luke-item-gap);
+  gap: var(--ui-item-gap);
 }
 
 .tasks-board-draft .tasks-board-name > [data-slot="input"] {
@@ -1627,17 +1621,17 @@ body,
   flex: 1 1 auto;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .tasks-board-column {
   width: auto;
   flex: 1 1 auto;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column-scroll {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .tasks-board-column-scroll {
   flex: 1 1 auto;
 }
 
-.tasks-list-group[data-drop-target="true"] .luke-group-header-head {
-  box-shadow: inset 0 -1px var(--luke-color-focus-ring);
+.tasks-list-group[data-drop-target="true"] .ui-group-header-head {
+  box-shadow: inset 0 -1px var(--ui-color-focus-ring);
 }
 
 /* A row being dragged stays in its group as its own placeholder, faded,
@@ -1647,30 +1641,30 @@ body,
   opacity: 0.4;
 }
 
-.luke-task-row[data-lifted="true"] {
+.ui-task-row[data-lifted="true"] {
   display: flex;
-  gap: var(--luke-block-gap);
-  background: var(--luke-color-surface);
-  box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  gap: var(--ui-block-gap);
+  background: var(--ui-color-surface);
+  box-shadow: 0 4px 12px var(--ui-color-shadow-soft);
 }
 
-.luke-task-row[data-lifted="true"] > [data-cell="name"] {
+.ui-task-row[data-lifted="true"] > [data-cell="name"] {
   flex: 1;
 }
 
 /* The line a row would land at in Pinned or a section. */
 .tasks-list-rows > li[data-drop-before="true"] {
-  box-shadow: inset 0 2px 0 var(--luke-color-focus-ring);
+  box-shadow: inset 0 2px 0 var(--ui-color-focus-ring);
 }
 
 .tasks-list-rows > li[data-drop-after="true"] {
-  box-shadow: inset 0 -2px 0 var(--luke-color-focus-ring);
+  box-shadow: inset 0 -2px 0 var(--ui-color-focus-ring);
 }
 
 /* A row's creator's face (`task-row-parts.tsx`) is a press of its own,
    hanging its card, standing over the row's press in a cell that lets the
    pointer through, so a press beside it still opens the task. */
-.luke-task-row-cell [data-task-creator] {
+.ui-task-row-cell [data-task-creator] {
   position: relative;
   z-index: 1;
   pointer-events: auto;

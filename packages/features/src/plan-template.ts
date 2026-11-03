@@ -1,5 +1,5 @@
-import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@repo/wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
 import { taskPicturesIn } from "./plan-attachment-link.js";

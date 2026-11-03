@@ -1,5 +1,5 @@
-import { readingWords } from "@luke/features/words";
-import { SkeletonRegion } from "@luke/ui";
+import { readingWords } from "@repo/features/words";
+import { SkeletonRegion } from "@repo/ui";
 import { PageSections } from "./controls.js";
 import { AdminPage, type AdminWayBack } from "./page-header.js";
 

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   type DevicePlatform,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";

@@ -2,9 +2,9 @@ import {
   type AgentPullRequest,
   type AgentPullRequestAnswer,
   CHECK_SUMMARY,
-} from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
+} from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { MENTION_KIND } from "@repo/features/mention-link";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
@@ -20,9 +20,9 @@ import {
   RowHintOptions,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { GitBranchIcon, GLYPH } from "@luke/ui/icons";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { GitBranchIcon, GLYPH } from "@repo/ui/icons";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";

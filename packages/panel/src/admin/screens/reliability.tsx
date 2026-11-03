@@ -3,23 +3,23 @@ import type {
   AdminAttentionProblem,
   AdminIntegration,
   AdminReliability,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ADMIN_ATTENTION_AGENT_DAYS,
   ADMIN_ATTENTION_KIND,
   ADMIN_READ,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
-} from "@luke/features/admin-wire";
-import { AGENT_FAILURE, type AgentFailure } from "@luke/features/agent-wire";
-import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { formatDate } from "@luke/features/time-format";
-import { readFailedWords } from "@luke/features/words";
+} from "@repo/features/admin-wire";
+import { AGENT_FAILURE, type AgentFailure } from "@repo/features/agent-wire";
+import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@repo/features/automation-wire";
+import { INTEGRATION_NAME } from "@repo/features/integration-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { formatDate } from "@repo/features/time-format";
+import { readFailedWords } from "@repo/features/words";
 import {
   Badge,
   Card,
@@ -36,8 +36,8 @@ import {
   TEXT_TONE,
   Text,
   TextLink,
-} from "@luke/ui";
-import { RATE_PLACES } from "@luke/ui/admin-format";
+} from "@repo/ui";
+import { RATE_PLACES } from "@repo/ui/admin-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
@@ -127,12 +127,12 @@ const AUTOMATION_REASON_LABEL = {
 const NO_REASON_LABEL = "No reason recorded";
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
-  { key: "count", label: "Failed runs", color: "var(--luke-color-danger)" },
+  { key: "count", label: "Failed runs", color: "var(--ui-color-danger)" },
 ];
 
 const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
-  { key: "skipped", label: "Skipped", color: "var(--luke-color-chart-1)" },
-  { key: "failed", label: "Failed", color: "var(--luke-color-danger)" },
+  { key: "skipped", label: "Skipped", color: "var(--ui-color-chart-1)" },
+  { key: "failed", label: "Failed", color: "var(--ui-color-danger)" },
 ];
 
 /** The model providers an account's own key is for, as a problem names them. */
@@ -230,8 +230,8 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "luke-turns",
     label: () => `${PRODUCT_NAME} turns failed`,
-    value: ({ headline }) => formatPercent(share(headline.lukeTurns), RATE_PLACES),
-    hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
+    value: ({ headline }) => formatPercent(share(headline.appTurns), RATE_PLACES),
+    hint: ({ headline, windowDays }) => ofHint(headline.appTurns, "turns", windowDays),
   },
   {
     key: "agent-runs",

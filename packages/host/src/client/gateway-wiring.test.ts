@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import {
   carried,
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   gatewayHost,
   NodeRegistry,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import { Context, Effect } from "effect";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";

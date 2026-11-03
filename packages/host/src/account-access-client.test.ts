@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fixedBearer } from "@luke/features";
-import { fakeHttpClientLayer, jsonResponse } from "@luke/wire/testing";
+import { fixedBearer } from "@repo/features";
+import { fakeHttpClientLayer, jsonResponse } from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";

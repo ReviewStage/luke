@@ -8,7 +8,7 @@ import type { PictureNode, PictureTaken, PlanEditorPictures } from "./contract.j
  * picture-node.ts -- a picture in the plan's text: TipTap's image held inline in its own paragraph, written back escaped, drawn by the panel, and laid in from a paste, a drop, or a file chosen.
  *
  * A picture stands in the plan's Markdown as `![alt](address "caption")`
- * (`@luke/features/plan-attachment-link`). The editor keeps it as TipTap's
+ * (`@repo/features/plan-attachment-link`). The editor keeps it as TipTap's
  * image node, inline, in a paragraph of its own, and writes it back with
  * its alt text's brackets, its address's parentheses, and its caption's
  * quotes escaped, which TipTap's own writer does not. A picture laid in from

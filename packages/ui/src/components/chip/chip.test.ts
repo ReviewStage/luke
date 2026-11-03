@@ -177,16 +177,16 @@ test("a long name cut in its middle keeps its words whole and its end, after a j
       createElement(ChipName, {
         mono: true,
         cut: CHIP_CUT.MIDDLE,
-        children: "luke/pull-request-header-menu-and-pill",
+        children: "agent/pull-request-header-menu-and-pill",
       }),
       createElement(ChipName, { mono: true, cut: CHIP_CUT.MIDDLE, children: "main" }),
     ),
   );
-  const [long, short] = [...document.querySelectorAll(".luke-chip-name")];
-  assert.equal(long?.textContent, "luke/pull-request-header-menu-and-pill");
-  assert.equal(long?.querySelector(".luke-chip-name-end")?.textContent, "and-pill");
+  const [long, short] = [...document.querySelectorAll(".ui-chip-name")];
+  assert.equal(long?.textContent, "agent/pull-request-header-menu-and-pill");
+  assert.equal(long?.querySelector(".ui-chip-name-end")?.textContent, "and-pill");
   assert.equal(short?.textContent, "main");
-  assert.equal(short?.querySelector(".luke-chip-name-end"), null);
+  assert.equal(short?.querySelector(".ui-chip-name-end"), null);
 });
 
 test("a chip given an address is a link named by its words, going there, and its press is heard before the page is followed", () => {

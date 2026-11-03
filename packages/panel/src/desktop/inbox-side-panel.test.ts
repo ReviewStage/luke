@@ -5,28 +5,28 @@ import {
   AGENT_CALL_FAILURE,
   type AgentMessagesAnswerView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { ReadLink } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActResult } from "@luke/host/contract";
-import { NO_EXPERIMENTS } from "@luke/settings";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import type { ReadLink } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageLine } from "@repo/features/page-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActResult } from "@repo/host/contract";
+import { NO_EXPERIMENTS } from "@repo/settings";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -338,7 +338,7 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
     ...container.querySelectorAll<HTMLButtonElement>(
       "[data-inbox-message-text] [data-mention-ref]",
     ),
-  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
+  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
   assert.ok(chip, `no chip says ${name}`);
   act(() => chip.click());
   await settle();
@@ -346,7 +346,7 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
 
 /** How many tabs of the panel beside the Inbox stand as its preview. */
 function previewTabs(container: HTMLElement): number {
-  return container.querySelectorAll('aside[aria-label="Panel"] .luke-tab[data-preview="true"]')
+  return container.querySelectorAll('aside[aria-label="Panel"] .ui-tab[data-preview="true"]')
     .length;
 }
 
@@ -402,7 +402,7 @@ test("a link the item names pressed with ⌘ asks to go to its task, opening wha
         "[data-inbox-message-text] [data-mention-ref]",
       ),
     ].find((each) =>
-      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Invite funnel"),
+      each.querySelector(".ui-inline-ref-label")?.textContent?.includes("Invite funnel"),
     );
     assert.ok(chip);
     act(() => {
@@ -451,7 +451,7 @@ test("a pull request and a file the item names pressed with ⌘ ask to go to the
         ...container.querySelectorAll<HTMLButtonElement>(
           "[data-inbox-message-text] [data-mention-ref]",
         ),
-      ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
+      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
       assert.ok(chip, `no chip says ${name}`);
       act(() => {
         chip.dispatchEvent(
@@ -492,7 +492,7 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
         "[data-inbox-message-text] [data-mention-ref]",
       ),
     ].find((each) =>
-      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Batch the invitations"),
+      each.querySelector(".ui-inline-ref-label")?.textContent?.includes("Batch the invitations"),
     );
     assert.ok(chip);
     act(() => {
@@ -513,9 +513,9 @@ test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the 
   const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
   assert.ok(tab, "the agent's tab stands beside the Inbox");
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Batch the invitations");
 });
 
 test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its right-click, whose Open in task, as ⌘O while the panel holds the keys, opens it in its task", async () => {

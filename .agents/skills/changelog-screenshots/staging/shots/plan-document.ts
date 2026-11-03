@@ -12,8 +12,8 @@ import {
   type TaskAgentsSummary,
   type PlanSectionEdit,
   type TaskSummary,
-} from "@luke/features/plan-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/planning-view";
+} from "@repo/features/plan-wire";
+import { TASKS_READ, type TasksView } from "@repo/features/planning-view";
 import { ago, daysAgo, hoursAgo } from "./clock";
 
 /** The ids the shots share, so a shot's plan, agent, and revisions agree with one another. */

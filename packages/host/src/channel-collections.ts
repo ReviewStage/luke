@@ -2,7 +2,7 @@
  * channel-collections.ts -- a workspace's channels held in a TanStack DB collection: fed by the list's follow, drawn as the window lists them, and changed by a write the moment it is asked.
  *
  * The list's parts are joined into one row per channel
- * (`@luke/features/channel-live`), and the rows kept in a collection of
+ * (`@repo/features/channel-live`), and the rows kept in a collection of
  * their own (`live-collection.ts`), so an answer that moved one channel
  * writes that one row and leaves every other as it stood. The list is drawn
  * from the rows whole, its open channels by name and its archived ones the
@@ -26,8 +26,8 @@ import {
   channelsOfRows,
   type WorkspaceChannels,
   type WorkspaceChannelsLiveRows,
-} from "@luke/features/channel-live";
-import type { Channel } from "@luke/features/channel-wire";
+} from "@repo/features/channel-live";
+import type { Channel } from "@repo/features/channel-wire";
 import { Data, Effect, type Scope } from "effect";
 import {
   answeredCollection,

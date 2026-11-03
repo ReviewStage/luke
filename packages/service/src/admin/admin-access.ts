@@ -1,7 +1,7 @@
 /**
  * Who may open the admin dashboard is the account's `role`, a plain-text column
  * on the `user` table that Better Auth manages — declared as an additional user
- * field (`auth-policy.ts`'s `USER_FIELDS`), generated into `@luke/database/schemas/auth`, and returned on the
+ * field (`auth-policy.ts`'s `USER_FIELDS`), generated into `@repo/database/schemas/auth`, and returned on the
  * session — not a constant in this file. The gate is a Better Auth session
  * whose account carries the admin role: the maintainer's own sign-in on this
  * site, or the same account's session as a signed bearer, and never the

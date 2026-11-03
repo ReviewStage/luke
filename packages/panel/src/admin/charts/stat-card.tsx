@@ -27,7 +27,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { Fragment } from "react";
 
 /**
@@ -39,7 +39,7 @@ import { Fragment } from "react";
  * hairlines fall in the one-pixel gap, or past the group's clipped edge.
  */
 const METRIC_CARD_GROUPED =
-  "shadow-[1px_0_0_var(--luke-color-border),0_1px_0_var(--luke-color-border)] px-(--luke-card-inset) py-(--luke-card-inset-compact) @min-[720px]/admin-section:flex-1 @min-[720px]/admin-section:basis-36";
+  "shadow-[1px_0_0_var(--ui-color-border),0_1px_0_var(--ui-color-border)] px-(--ui-card-inset) py-(--ui-card-inset-compact) @min-[720px]/admin-section:flex-1 @min-[720px]/admin-section:basis-36";
 
 /**
  * A figure stands on one line, never broken inside a number: a line that
@@ -195,7 +195,7 @@ export function MetricCardSkeleton({
  * (`settings-section.css`), so a section's cards read as one group and the
  * section's gap parts it from the next.
  */
-export const CARD_GAP = "gap-(--luke-space-8)";
+export const CARD_GAP = "gap-(--ui-space-8)";
 
 /**
  * A row of stat cards that wraps rather than holding fixed columns. Note that

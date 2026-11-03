@@ -4,7 +4,7 @@
  * GitHub's rendering signs a private repository's uploads for about five
  * minutes, and names a public one at an address only a browser signed in
  * to GitHub may read, so neither is read as GitHub spelled it. An upload is
- * read by its asset's id alone (`@luke/features/github-image`): GitHub
+ * read by its asset's id alone (`@repo/features/github-image`): GitHub
  * renders a one-line image of that asset in the agent's repository on the
  * App's token for it, which answers a freshly signed address, and the image
  * is read from there only where that address names the very asset asked
@@ -29,7 +29,7 @@ import {
   type GitHubImage,
   type GitHubImageType,
   isUploadOf,
-} from "@luke/features/github-image";
+} from "@repo/features/github-image";
 import { Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

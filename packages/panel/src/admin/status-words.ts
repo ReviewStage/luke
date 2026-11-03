@@ -9,18 +9,18 @@
  * uninstalled App is a danger.
  */
 
-import type { AdminPullRequest } from "@luke/features/admin-account-wire";
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/agent-wire";
+import type { AdminPullRequest } from "@repo/features/admin-account-wire";
+import { PULL_REQUEST_STATE, type PullRequestState } from "@repo/features/agent-wire";
 import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@luke/features/github-installation-wire";
+} from "@repo/features/github-installation-wire";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
-} from "@luke/features/integration-row-wire";
-import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
-import { STATUS_TONE, type StatusTone } from "@luke/ui";
+} from "@repo/features/integration-row-wire";
+import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
+import { STATUS_TONE, type StatusTone } from "@repo/ui";
 import { PULL_REQUEST_STATE_LABEL } from "../tasks/agent-model.js";
 import { PULL_REQUEST_TONE } from "../tasks/pull-request-mark.js";
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@repo/features/live-wire";
 import { Clock, Data, Effect } from "effect";
 import type { SqlClient } from "effect/sql";
 

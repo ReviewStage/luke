@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -63,7 +63,7 @@ async function mountChip(): Promise<HTMLAnchorElement> {
 
 /** What each toast standing says, oldest first. */
 function toasts(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }

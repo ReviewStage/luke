@@ -1,12 +1,12 @@
-import type { ActPortHandler, ActSender } from "@luke/host/act-port";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { ActPortHandler, ActSender } from "@repo/host/act-port";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import {
   ACT_PORT,
   BRIDGE,
   type BridgeArgumentsFor,
   type BridgeMethod,
   type BridgeResultFor,
-} from "@luke/host/bridge";
+} from "@repo/host/bridge";
 import type { Context } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 

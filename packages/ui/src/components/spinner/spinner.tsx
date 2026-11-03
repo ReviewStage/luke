@@ -9,13 +9,13 @@ import { useSettled } from "./settle-wait.js";
  * Every wait is drawn with this one ring, so a region still reading, a menu
  * still listing, and a button whose press is out read as one object. The
  * ring is an arc in the ink around it over a faint track, and holds still on
- * `--luke-loop-motion` under reduced motion and a capture run, still reading as a
+ * `--ui-loop-motion` under reduced motion and a capture run, still reading as a
  * wait. Its words are said to a reader alone, in a fixed phrase ("Reading the
  * transcript"), from a status line that stands from the start, empty until
  * the ring shows, because a reader announces a line filling more surely than
  * one arriving.
  *
- * A wait shows its ring only once it has stood a moment (`--luke-settle-delay`,
+ * A wait shows its ring only once it has stood a moment (`--ui-settle-delay`,
  * 180ms, `settle-wait.ts`), because a ring that flashes for a read that
  * landed at once is noise; each mount waits afresh, and its status line stands
  * from the start. A wait whose ring must stand at once says `delay={false}`.
@@ -38,10 +38,10 @@ export type SpinnerSize = (typeof SPINNER_SIZE)[keyof typeof SPINNER_SIZE];
 
 /** The ring's box: 12px on a caption's line, 16px beside words or inside a control, 22px alone in a region, in the muted ink a wait is said in. */
 const SPINNER_BOX =
-  "luke-spinner inline-flex flex-none size-spinner text-muted-foreground data-[size=small]:size-spinner-small data-[size=region]:size-spinner-region";
+  "ui-spinner inline-flex flex-none size-spinner text-muted-foreground data-[size=small]:size-spinner-small data-[size=region]:size-spinner-region";
 
 /** The ring's box inside a busy control, in the control's own ink, standing in the one cell it shares with the control's words. */
-const BUSY_SPINNER_BOX = "luke-spinner inline-flex flex-none size-spinner col-start-1 row-start-1";
+const BUSY_SPINNER_BOX = "ui-spinner inline-flex flex-none size-spinner col-start-1 row-start-1";
 
 /**
  * The ring alone, decorative: a mark that is itself the wait, such as a
@@ -72,7 +72,7 @@ export function Spinner({
   return (
     <span className={SPINNER_BOX} data-size={size} role="status">
       {delay && !settled ? null : <SpinnerRing />}
-      <span className="luke-visually-hidden">{label}</span>
+      <span className="ui-visually-hidden">{label}</span>
     </span>
   );
 }
@@ -86,7 +86,7 @@ export function SpinnerRegion({
   delay?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="luke-spinner-region flex min-h-0 flex-1 items-center justify-center self-stretch p-spinner-region-inset">
+    <div className="ui-spinner-region flex min-h-0 flex-1 items-center justify-center self-stretch p-spinner-region-inset">
       <Spinner label={label} size={SPINNER_SIZE.REGION} delay={delay} />
     </div>
   );
@@ -114,10 +114,10 @@ export function BusyLabel({
   if (!busy) return <>{children}</>;
   const ringShown = !delay || settled;
   return (
-    <span className="luke-busy-label inline-grid items-center justify-items-center gap-[inherit]">
+    <span className="ui-busy-label inline-grid items-center justify-items-center gap-[inherit]">
       <span
         className={cn(
-          "luke-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]",
+          "ui-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]",
           ringShown && "invisible",
         )}
       >
@@ -128,7 +128,7 @@ export function BusyLabel({
           <SpinnerRing />
         </span>
       ) : null}
-      <span className="luke-visually-hidden">{label}</span>
+      <span className="ui-visually-hidden">{label}</span>
     </span>
   );
 }

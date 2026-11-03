@@ -1,5 +1,5 @@
 {
-  "name": "@luke/demo-postgres",
+  "name": "@repo/demo-postgres",
   "version": "0.24.0",
   "private": true,
   "type": "module",

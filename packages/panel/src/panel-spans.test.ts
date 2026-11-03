@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";

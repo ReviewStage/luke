@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";

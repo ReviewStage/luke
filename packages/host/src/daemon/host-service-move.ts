@@ -1,5 +1,5 @@
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Duration, Effect, Option, Path, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess } from "effect/process";

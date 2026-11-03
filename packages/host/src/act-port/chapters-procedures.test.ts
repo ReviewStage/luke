@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { CHAPTER_KIND, CHAPTER_RISK } from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
-} from "@luke/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-view";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import { Effect } from "effect";
 import { type ActPortClient, CHAPTERS_ACT_KIND } from "../contract/index.js";
 import type { ActSender } from "./base.js";

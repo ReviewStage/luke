@@ -13,21 +13,21 @@
  * session, and sets none. The version is read again for the
  * account the link was minted for, under the reach its mint was held to, and
  * answered under the policy every server of a page answers with
- * (`@luke/features/page-policy`), framed by the app's own origins alone, with
- * our scripts ahead of it, the find's (`@luke/features/page-find`), the
- * link's (`@luke/features/page-link`), and the pick's
- * (`@luke/features/page-pick`).
+ * (`@repo/features/page-policy`), framed by the app's own origins alone, with
+ * our scripts ahead of it, the find's (`@repo/features/page-find`), the
+ * link's (`@repo/features/page-link`), and the pick's
+ * (`@repo/features/page-pick`).
  *
  * A link refused for any reason, its signature, its sandbox, its lapse, or the
  * account's reach, is answered not found alike, so a refusal says nothing of
  * which.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readPageVersion } from "@luke/database/models/plan-pages";
-import { withPageScripts } from "@luke/features/page-find";
-import { sandboxPageResponseHeaders } from "@luke/features/page-policy";
-import { HTTP_METHOD } from "@luke/wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readPageVersion } from "@repo/database/models/plan-pages";
+import { withPageScripts } from "@repo/features/page-find";
+import { sandboxPageResponseHeaders } from "@repo/features/page-policy";
+import { HTTP_METHOD } from "@repo/wire";
 import { Clock, Effect, Layer, Option, type Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";

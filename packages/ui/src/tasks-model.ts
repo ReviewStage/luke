@@ -1,10 +1,10 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   TASK_STATUS,
   type Task,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   type RepositoryCallFailure,
   type StartCallFailure,
@@ -12,8 +12,8 @@ import {
   TASK_PARENT_FAILURE,
   TASKS_READ,
   type TasksView,
-} from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+} from "@repo/features/tasks-view";
+import type { Workspace } from "@repo/features/workspace-wire";
 
 /**
  * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document alone.
@@ -371,7 +371,7 @@ export const AGENT_PIN_FAILED_NOTES = {
 /** What the toast says when the service refused a pin's new place, which is put back. */
 export const PIN_MOVE_FAILED_NOTE = "The pin could not be moved. Try again.";
 
-/** One pin dragged to a new place in the sidebar's Pinned section: a plan's or an agent's with no plan, and the position it takes (`@luke/features/pin-order`). */
+/** One pin dragged to a new place in the sidebar's Pinned section: a plan's or an agent's with no plan, and the position it takes (`@repo/features/pin-order`). */
 export interface PinMove {
   readonly agent: boolean;
   readonly id: string;
@@ -389,7 +389,7 @@ export interface SidebarTasks {
 /**
  * The account's tasks sorted into the sidebar's places, the pinned ones
  * newest pinned first until the Pinned section orders them with the rest of
- * its pins (`@luke/features/pin-order`).
+ * its pins (`@repo/features/pin-order`).
  */
 export function sidebarTasks(tasks: readonly TaskSummary[]): SidebarTasks {
   const pinned = tasks

@@ -4,7 +4,7 @@
  * A sandbox's stop snapshots its disk, the browser's profile among it, and
  * not the pages the browser held, so a browser that starts in a resumed
  * sandbox holds none of the tabs the service still lists for its agent
- * (`@luke/database/models/agent-browser-tabs`). Whoever reaches the
+ * (`@repo/database/models/agent-browser-tabs`). Whoever reaches the
  * browser, the agent's `browser` tool or a member's live view, connects
  * through `connectRestoring`, which reopens every kept tab the browser does
  * not hold at its address and moves its row onto the new target, keeping
@@ -26,9 +26,9 @@
  * logged, a failure only by its kind.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { listAgentBrowserTabs, retargetBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import type { CdpSession } from "@luke/features/browser-cdp";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { listAgentBrowserTabs, retargetBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import type { CdpSession } from "@repo/features/browser-cdp";
 import { Effect, type Scope } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";

@@ -8,7 +8,7 @@ import { Schema as EffectSchema } from "effect";
  * in the transcript, so it may still be edited, deleted, put in another
  * place, or steered into the turn after all; and once the agent's turn is
  * over, the first one goes as the developer's own message, under its own
- * send key, and opens the next turn (`@luke/service`'s `agent-queue.ts`).
+ * send key, and opens the next turn (`@repo/service`'s `agent-queue.ts`).
  * A Stop pauses the queue, and so does a turn that failed or a hand-off the
  * service refused, which the pause names; nothing goes until Resume. What a
  * member asks of the queue is `agent-wire.ts`'s, beside a message.

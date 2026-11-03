@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { TOPIC } from "@luke/database/sync/notification";
-import { defineSyncTable, type SyncTable } from "@luke/database/sync/sync-table";
-import { SYNC_TABLES } from "@luke/database/sync/tables";
-import { getTestDB, installSyncTables } from "@luke/database/testing";
-import { liveDigestOf } from "@luke/features/live-wire";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { TOPIC } from "@repo/database/sync/notification";
+import { defineSyncTable, type SyncTable } from "@repo/database/sync/sync-table";
+import { SYNC_TABLES } from "@repo/database/sync/tables";
+import { getTestDB, installSyncTables } from "@repo/database/testing";
+import { liveDigestOf } from "@repo/features/live-wire";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Queue } from "effect";
 import { SqlClient } from "effect/sql";
@@ -159,7 +159,7 @@ const PLANNED = "live_query_planned";
 /**
  * The statement's generic plan, as JSON: prepared under a name and
  * explained executing it, each value a null a generic plan never reads, as
- * `planOf` (`@luke/database/testing`) explains one. Note that an explain's
+ * `planOf` (`@repo/database/testing`) explains one. Note that an explain's
  * own `generic_plan` would do, but the driver binds every placeholder it is
  * handed, and an explain prepared with placeholders reads them as its own.
  */

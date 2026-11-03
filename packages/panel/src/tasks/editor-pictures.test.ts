@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import type { Task } from "@luke/features/task-wire";
-import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import type { Task } from "@repo/features/task-wire";
+import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";

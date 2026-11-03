@@ -1,4 +1,4 @@
-import { ErrorBoundary } from "@luke/ui/error-boundary";
+import { ErrorBoundary } from "@repo/ui/error-boundary";
 import { type ComponentType, createElement, type ReactPromise } from "react";
 
 /**
@@ -11,7 +11,7 @@ import { type ComponentType, createElement, type ReactPromise } from "react";
  * frame. `prefetch` starts the same import from a hover or a hint of intent,
  * so the press that follows finds the chunk landed; the import is shared, so
  * the chunk is read once whichever asks first. An import that failed is
- * thrown to the error boundary `Route` stands in (`@luke/ui`'s
+ * thrown to the error boundary `Route` stands in (`@repo/ui`'s
  * `ErrorBoundary`), which says so with Reload in the surface's place, and
  * the rest of the window stands.
  *

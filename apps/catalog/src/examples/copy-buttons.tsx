@@ -1,5 +1,5 @@
-import { BUTTON_SIZE, COPY_LOOK, CopyButton, GAP, Inline } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { BUTTON_SIZE, COPY_LOOK, CopyButton, GAP, Inline } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -50,8 +50,8 @@ function CopyButtons(): React.JSX.Element {
           <CopyButton
             look={COPY_LOOK.CHIP}
             lead={GLYPH.BRANCH}
-            text="luke/copy-button-chip-look-for-the-branch-chips"
-            what="branch luke/copy-button-chip-look-for-the-branch-chips"
+            text="agent/copy-button-chip-look-for-the-branch-chips"
+            what="branch agent/copy-button-chip-look-for-the-branch-chips"
             copy={refuse}
           />
         </Inline>

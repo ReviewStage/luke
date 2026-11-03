@@ -1,12 +1,12 @@
-import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@luke/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
+import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import {
   ADMIN_UNANSWERED,
   type AdminFavoriteParams,
   type AdminReadAnswer,
   type AdminReadParams,
   adminReadAnswerSchema,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -33,7 +33,6 @@ import {
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
-  type AgentLukeToolsAnswerView,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -66,6 +65,7 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
+  type AgentWorkspaceToolsAnswerView,
   agentAccountInboxAnswerViewSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
@@ -78,7 +78,6 @@ import {
   agentInboxReadAllViewSchema,
   agentInboxReadStateViewSchema,
   agentListAnswerViewSchema,
-  agentLukeToolsAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
   agentOverviewChecksAnswerViewSchema,
@@ -93,6 +92,7 @@ import {
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
+  agentWorkspaceToolsAnswerViewSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
   type DevicePresenceAnswerView,
@@ -116,8 +116,8 @@ import {
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
   providerKeysAnswerViewSchema,
-} from "@luke/features/agent-view";
-import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
+} from "@repo/features/agent-view";
+import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationChangeParams,
@@ -138,13 +138,13 @@ import {
   automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
   browserLiveClosedEventSchema,
   browserLiveMessageEventSchema,
-} from "@luke/features/browser-live-acts";
+} from "@repo/features/browser-live-acts";
 import {
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
@@ -161,7 +161,7 @@ import {
   channelMoveViewSchema,
   channelsViewSchema,
   channelThreadsViewSchema,
-} from "@luke/features/channel-view";
+} from "@repo/features/channel-view";
 import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingApproveView,
@@ -170,7 +170,7 @@ import {
   hostPairingApproveViewSchema,
   hostPairingDenyViewSchema,
   hostPairingViewSchema,
-} from "@luke/features/host-pairing-view";
+} from "@repo/features/host-pairing-view";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -199,7 +199,7 @@ import {
   installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
   installedSkillViewSchema,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -214,8 +214,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@luke/features/integration-view";
-import type { ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/integration-view";
+import type { ModelChoice } from "@repo/features/models-wire";
 import {
   type ChaptersModelAnswerView,
   type ChaptersModelWriteParams,
@@ -224,7 +224,7 @@ import {
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
   pullRequestChaptersAnswerViewSchema,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
@@ -355,7 +355,7 @@ import {
   type WorkspacePeopleFollowed,
   workspaceInvitationsFollowedSchema,
   workspacePeopleFollowedSchema,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -366,8 +366,8 @@ import {
   terminalResumedActAnswerSchema,
   terminalStateEventSchema,
   terminalsActAnswerSchema,
-} from "@luke/features/terminal-view";
-import { isSignInFailure } from "@luke/features/words";
+} from "@repo/features/terminal-view";
+import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
   GATEWAY_EVENT,
@@ -376,14 +376,14 @@ import {
   type GatewayClient,
   type GatewayMethod,
   gatewayEventReader,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import type {
   AppSettingField,
   AppSettingValue,
   Experiment,
   SettingsResetScope,
-} from "@luke/settings";
-import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
+} from "@repo/settings";
+import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -391,8 +391,8 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type {
@@ -813,7 +813,7 @@ export interface HostOperator {
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
-  agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
+  agentWorkspaceTools(params: AgentPullRequestParams): Effect.Effect<AgentWorkspaceToolsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -2068,10 +2068,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
         answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentLukeTools: (params) =>
+    agentWorkspaceTools: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_LUKE_TOOLS, { agentId: params.agentId }),
-        answerOf(agentLukeToolsAnswerViewSchema, AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS, { agentId: params.agentId }),
+        answerOf(agentWorkspaceToolsAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentOverviewChecks: (params) =>
       Effect.map(

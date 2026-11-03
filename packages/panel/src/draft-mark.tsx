@@ -13,7 +13,7 @@
  * of the words waiting rides it.
  */
 
-import { ROW_MARK, RowMark } from "@luke/ui";
+import { ROW_MARK, RowMark } from "@repo/ui";
 import { PencilLineIcon } from "lucide-react";
 
 /** What the mark is called. */

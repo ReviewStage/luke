@@ -1,7 +1,7 @@
 import { useAtom } from "@effect/atom-react";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { AgentPullRequest, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
-import type { Channel } from "@luke/features/channel-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { AgentPullRequest, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import type { Channel } from "@repo/features/channel-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -9,11 +9,11 @@ import {
   dateOfWords,
   readerZone,
   suggestedDates,
-} from "@luke/features/date-mention";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
-import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
-import { LIVE_READ } from "@luke/features/live-wire";
+} from "@repo/features/date-mention";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
+import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -21,25 +21,25 @@ import {
   type Mention,
   type MentionPlace,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import { agentName } from "@luke/features/model-label";
-import type { PageLine } from "@luke/features/page-wire";
-import { planSections } from "@luke/features/plan-document";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+} from "@repo/features/mention-link";
+import { agentName } from "@repo/features/model-label";
+import type { PageLine } from "@repo/features/page-wire";
+import { planSections } from "@repo/features/plan-document";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import {
   countWords,
   INTEGRATION_LABEL,
   noMatchWords,
   readFailedWords,
   TERM,
-} from "@luke/features/words";
-import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxItems } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+} from "@repo/features/words";
+import { namesTaskKey, taskKey } from "@repo/features/workspace-key";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppInboxItems } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   BackButton,
   type ComboboxGroup,
@@ -67,14 +67,14 @@ import {
   UserIcon,
   useComboboxField,
   useMinute,
-} from "@luke/ui";
-import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
-import type { NamedServer } from "@luke/ui/agent-servers-model";
-import { GLYPH } from "@luke/ui/icons";
-import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui/search-score";
-import { searchTokens } from "@luke/ui/search-tokens";
-import type { SkillOption } from "@luke/ui/skill-mention";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { type Actor, APP_ACTOR } from "@repo/ui/actor-model";
+import type { NamedServer } from "@repo/ui/agent-servers-model";
+import { GLYPH } from "@repo/ui/icons";
+import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@repo/ui/search-score";
+import { searchTokens } from "@repo/ui/search-tokens";
+import type { SkillOption } from "@repo/ui/skill-mention";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -131,12 +131,12 @@ import { useTaskStatus } from "./use-known-names.js";
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
  * editor throughout, its keys steered as any combobox's are
- * (`@luke/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, a bare Home
+ * (`@repo/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, a bare Home
  * and End take it to the first row and the last, Enter or Tab write the
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
- * as ⌘K scores them (`@luke/ui/search-score`), each row marking what found
+ * as ⌘K scores them (`@repo/ui/search-score`), each row marking what found
  * it, letters typed in order finding only a path, each group in a fixed place
  * so a later read never moves the rows above it: agents first, then tasks,
  * people, the plan, pages, and files and folders, since agents and tasks are
@@ -173,13 +173,13 @@ import { useTaskStatus } from "./use-known-names.js";
  * their title or their task's name, however many the workspace holds. An
  * archived agent takes no message, so it is offered only once a word is
  * typed, and marked archived. A mention of a page or an
- * agent names it by its id (`@luke/features/mention-link`), which the
+ * agent names it by its id (`@repo/features/mention-link`), which the
  * agent it is sent to is handed what it needs to read by
  * (`packages/service/src/agents/mentioned-context.ts`).
  *
  * Wherever the words stand in a workspace, the list offers its other
  * tasks too, as the window lists them, once a word is typed: each by its
- * name, its key beside it (`ACME-42`, `@luke/features/workspace-key`),
+ * name, its key beside it (`ACME-42`, `@repo/features/workspace-key`),
  * found by either, a pick written as the task's mention; the plan's own is
  * found by its key in the plan's group. Words that are a task's key whole
  * lead the list with that task, as words that read as a date lead it with
@@ -198,12 +198,12 @@ import { useTaskStatus } from "./use-known-names.js";
  * (`../use-host-read.ts`), the plan's own first, each by its title and
  * what it asks, said by its task or its agent on no task, hanging its
  * Inbox row's card: no mention names a thread, so a pick writes the
- * thread's link (`@luke/features/link-grammar`), which every place draws
+ * thread's link (`@repo/features/link-grammar`), which every place draws
  * as its chip. With Channels on it offers the workspace's open channels
  * the same way, each by its name and purpose, a pick written as the
  * channel's mention; their list is held only while the list stands open.
  *
- * Where the words typed read as a date (`@luke/features/date-mention`),
+ * Where the words typed read as a date (`@repo/features/date-mention`),
  * `tomorrow 3pm`, `next fri`, `oct 20 to 24`, the list offers that date
  * first, said from today as its chip says it and in full beside it, a pick
  * written with the date in full; narrowed to dates with nothing typed, it
@@ -221,7 +221,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * pick writes the same mention it would have written from the wide list.
  *
  * A pick hands the editor the mention's name and its target
- * (`@luke/features/mention-link`), which the editor writes in place of
+ * (`@repo/features/mention-link`), which the editor writes in place of
  * the word; the name is the file's or folder's own name, the heading, the
  * plan's name, the page's title, the agent's tab's name, the server's
  * name, or the server's name and the tool's.
@@ -1181,8 +1181,8 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       );
     case MENTION_KIND.CHANNEL:
       return <GLYPH.CHANNEL />;
-    case MENTION_KIND.LUKE:
-      return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
+    case MENTION_KIND.APP:
+      return <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />;
     case MENTION_KIND.DATE:
       return <CalendarIcon aria-hidden="true" />;
   }
@@ -1250,7 +1250,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
-    <KeepFocus className={`${SERVER_PAGE_HEAD_CLASS} mention-menu-crumb [--luke-fold:folded]`}>
+    <KeepFocus className={`${SERVER_PAGE_HEAD_CLASS} mention-menu-crumb [--ui-fold:folded]`}>
       {back === undefined ? null : (
         <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
@@ -1632,7 +1632,7 @@ function useRested(wordAt: number | undefined, words: string | undefined): boole
 /**
  * The `@` list for an editor on a task's page: its rows read from the
  * plan's words as they stand and the repository's paths, hung by the word
- * (`@luke/ui`'s `RectFloat`) and closed by a press outside it and `room`,
+ * (`@repo/ui`'s `RectFloat`) and closed by a press outside it and `room`,
  * and a pick handed to `onChoose` as the mention's node; a list that never
  * opens where there is no task to offer.
  */

@@ -7,10 +7,10 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -171,7 +171,7 @@ function readAndClose(): string[] {
   assert.ok(menu, "a menu stands open");
   const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
     (item) =>
-      `${item.querySelector(".luke-menu-item-label")?.textContent}${item.disabled ? " (off)" : ""}`,
+      `${item.querySelector(".ui-menu-item-label")?.textContent}${item.disabled ? " (off)" : ""}`,
   );
   act(() => {
     menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -200,7 +200,7 @@ interface Bars {
 
 /** The two columns' bars, as the task's page draws them. */
 function bars(container: HTMLElement): Bars {
-  const main = container.querySelector<HTMLElement>(".desktop-task-main .luke-toolbar");
+  const main = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(main && side, "both columns draw their bars");
   return { main, side };
@@ -292,7 +292,7 @@ test("the Plan tab's ⋯ and its right-click offer the task's own document menu,
     "Rename",
     "Version history",
     "Mark as unread",
-    "Relations",
+    "Task relation",
     "Pin",
     "Move to section",
     "Permanently delete",
@@ -326,7 +326,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
       assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
-    assert.equal(container.querySelector(".luke-tab [aria-haspopup]"), null, "no tab wears a ⋯");
+    assert.equal(container.querySelector(".ui-tab [aria-haspopup]"), null, "no tab wears a ⋯");
     act(() => roots.pop()?.unmount());
     container.remove();
   }
@@ -373,7 +373,7 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub li
   act(() => more?.click());
   const github = [
     ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
-  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open on GitHub");
+  ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === "Open on GitHub");
   assert.ok(github, "the ⋯ offers Open on GitHub");
   await act(async () => github.click());
   assert.deepEqual(opened, [PULL_REQUEST.url]);

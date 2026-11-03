@@ -22,7 +22,7 @@
  * Disconnect.
  */
 
-import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { CONNECTION_TOOL } from "@repo/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -30,9 +30,9 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
   integrationRemoteCallSchema,
-} from "@luke/features/integration-wire";
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+} from "@repo/features/integration-wire";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";
@@ -134,7 +134,7 @@ export function storedRemoteCall(
 
 /**
  * A native agent's call of a tool on an integration's own MCP server
- * (`../agents/luke-mcp/app.ts`), as the record keeps it: as eve's nested
+ * (`../agents/workspace-mcp/app.ts`), as the record keeps it: as eve's nested
  * call of the same tool is kept, under the integration's fixed name and its
  * envelope, the call standing as its own parent, since no
  * `connection_execute` wraps it; nothing for a server that is no

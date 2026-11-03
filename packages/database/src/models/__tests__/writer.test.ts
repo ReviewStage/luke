@@ -10,12 +10,12 @@ import {
   TURN_TRIGGER,
   toolCallSettlementOf,
   UI_PART_TYPE,
-} from "@luke/features/turn-run";
-import { wireValidatedTool } from "@luke/features/turn-run/tool-set";
-import { sessionKey } from "@luke/runtime/vocabulary";
-import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
-import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
+} from "@repo/features/turn-run";
+import { wireValidatedTool } from "@repo/features/turn-run/tool-set";
+import { sessionKey } from "@repo/runtime/vocabulary";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
+import { TOOL_PART_STATE } from "@repo/wire/ui-messages";
 import { Effect, Metric, Option, Ref, Result, Schema } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -408,7 +408,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         const line = {
           text: "Fix the tile.",
           clientKey: "fix",
-          sender: { kind: MESSAGE_SENDER.LUKE },
+          sender: { kind: MESSAGE_SENDER.APP },
         };
         const rowOf = Effect.map(
           readMessageByClientId(target.userId, target.conversationId, {}, sentLineId("fix")),
@@ -446,8 +446,8 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
           {
             text,
             clientKey: "wake",
-            sender: { kind: MESSAGE_SENDER.LUKE },
-            metadata: { channel: MESSAGE_CHANNEL.LUKE },
+            sender: { kind: MESSAGE_SENDER.APP },
+            metadata: { channel: MESSAGE_CHANNEL.APP },
           },
           Effect.succeed(false),
         );
@@ -475,11 +475,11 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         assert.equal(read.value[0]?.turnId, turnId);
         const message = read.value[0]?.message;
         assert.ok(message !== undefined && message.role === MESSAGE_ROLE.USER);
-        assert.deepEqual(message.metadata, { channel: MESSAGE_CHANNEL.LUKE });
+        assert.deepEqual(message.metadata, { channel: MESSAGE_CHANNEL.APP });
         assert.deepEqual(
           (yield* lineSendersOf(target, taken.success)).get(taken.success[0] ?? ""),
           {
-            kind: MESSAGE_SENDER.LUKE,
+            kind: MESSAGE_SENDER.APP,
           },
         );
       }),

@@ -10,12 +10,12 @@ import { withoutLocalAddress } from "./session-replay";
  */
 const LOCAL = "file:///Users/someone/Applications/Vespin.app/renderer/index.html";
 /** What the scrub puts in the address's place, as the library will report it. */
-const PANEL = "app://luke/panel";
+const PANEL = "app://desktop/panel";
 
 test("the address goes from an event's own properties", () => {
   const scrubbed = withoutLocalAddress({ $current_url: LOCAL, $browser: "Chrome" });
   // What is not the address is left exactly as the library reported it.
-  assert.deepEqual(scrubbed, { $current_url: "app://luke/panel", $browser: "Chrome" });
+  assert.deepEqual(scrubbed, { $current_url: "app://desktop/panel", $browser: "Chrome" });
 });
 
 test("the address goes from the frames the recorder opens with", () => {

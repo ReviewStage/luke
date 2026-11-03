@@ -1,5 +1,5 @@
-import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import { namedServers } from "@luke/ui/agent-servers-model";
+import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { namedServers } from "@repo/ui/agent-servers-model";
 import type { ReactNode, RefObject } from "react";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import type {

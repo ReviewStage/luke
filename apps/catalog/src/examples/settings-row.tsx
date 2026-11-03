@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -35,8 +35,8 @@ import {
   TEXT_VARIANT,
   Text,
   TextField,
-} from "@luke/ui";
-import { ExternalLinkIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ExternalLinkIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

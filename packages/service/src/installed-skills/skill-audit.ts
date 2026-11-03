@@ -17,7 +17,7 @@
 import {
   type SkillPartnerAudit,
   skillPartnerAuditSchema,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

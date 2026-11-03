@@ -25,8 +25,8 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { NodeRuntime } from "@effect/platform-node";
-import { PREPARE_SCRIPT } from "@luke/service/agents/agent-runtime/sandbox-image";
-import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
+import { PREPARE_SCRIPT } from "@repo/service/agents/agent-runtime/sandbox-image";
+import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@repo/wire";
 import { type Command, Sandbox } from "@vercel/sandbox";
 import {
   Cause,

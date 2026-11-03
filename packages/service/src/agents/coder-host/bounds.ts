@@ -1,7 +1,7 @@
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
-import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
-import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@repo/features/agent-status";
+import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { GITHUB_TOKEN_REFRESH } from "@repo/features/host-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -25,7 +25,7 @@ export const CODER = {
    * idle rather than by this: a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
    * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
-   * or two minutes into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * or two minutes into a wait on wakeups alone (`@repo/agent-runner`'s `RUNNER_RELEASE`,
    * whose process table tells the harness's own processes from the
    * agent's). A shorter timeout would stop none of those sooner, so this is
    * only the backstop for one nothing stopped, which bills its memory until
@@ -101,7 +101,7 @@ export const CODER = {
    * the same (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(3), deleteEvicted: true },
-  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@luke/features/host-wire`). */
+  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@repo/features/host-wire`). */
   GITHUB_TOKEN_REFRESH,
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
@@ -113,8 +113,14 @@ export const CODER = {
   COMPACTION_THRESHOLD_SHARE: 0.9,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
-  /** The branches an agent works on; an instruction to the model, enforced by nothing. */
-  BRANCH_PREFIX: "luke/",
+  /** The branches an agent works on; an instruction to the model, enforced by nothing, and how a pull request is told as an agent's (`isAgentBranch`). */
+  BRANCH_PREFIX: "agent/",
+  /**
+   * The prefix agents worked on before `BRANCH_PREFIX`, still read as an
+   * agent's, because pull requests opened on it stand open and their
+   * reviews, comments, and checks must still wake their agents.
+   */
+  LEGACY_BRANCH_PREFIX: "luke/",
   /** The most times an agent fixes a failing check on its pull request and pushes again before it stops and says so; an instruction to the model, enforced by nothing. */
   CI_FIX_ROUNDS: 3,
   /** How long a transcript read is held open for a new message while the agent runs, inside the function's own duration. */
@@ -200,7 +206,7 @@ export const CODER = {
    * The device's is thirty minutes, because nothing is billed on a host, and
    * every message within it goes into the running session rather than
    * through a relaunched CLI, a new GitHub token, and the last runner's
-   * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
+   * grace. Thirty, half the runner's own cap (`@repo/agent-runner`'s
    * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
    * by our retire under the lease and never by the runner ending itself,
    * whose stdin a message its host writes in that instant is lost on: the
@@ -285,4 +291,9 @@ export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];
 export function sandboxVcpus(repository: string | null): number {
   if (repository === null) return CODER.SANDBOX_VCPUS;
   return CODER.SANDBOX_VCPUS_BY_REPOSITORY.get(repository.toLowerCase()) ?? CODER.SANDBOX_VCPUS;
+}
+
+/** Whether a branch is one an agent works on, under today's prefix or the one before it. */
+export function isAgentBranch(branch: string): boolean {
+  return branch.startsWith(CODER.BRANCH_PREFIX) || branch.startsWith(CODER.LEGACY_BRANCH_PREFIX);
 }

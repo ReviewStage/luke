@@ -1,6 +1,6 @@
 import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";

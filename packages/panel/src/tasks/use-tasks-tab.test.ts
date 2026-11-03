@@ -2,46 +2,46 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+} from "@repo/features/link-grammar";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
   PLAN_ACTOR,
   TASK_CREATE_RELATION_KIND,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksView,
-} from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { timeRuntime } from "@luke/ui";
-import { memoryHistory } from "@luke/ui/history-adapter";
-import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { timeRuntime } from "@repo/ui";
+import { memoryHistory } from "@repo/ui/history-adapter";
+import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -694,7 +694,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     recent: readonly string[] | undefined,
   ) => {
     window.localStorage.setItem(
-      "luke.mainTabs",
+      "app.mainTabs",
       JSON.stringify({
         closedAgents: [],
         tasks:
@@ -736,7 +736,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
 
 test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
-    "luke.mainTabs",
+    "app.mainTabs",
     JSON.stringify({
       closedAgents: [],
       tasks: {
@@ -1582,7 +1582,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   act(() => tab.control().onSelect("alerts"));
   await settle();
   const refused = tab.control().workspace?.id;
-  const keptAfterRefusal = window.localStorage.getItem("luke.chosenWorkspace");
+  const keptAfterRefusal = window.localStorage.getItem("app.chosenWorkspace");
   opens = true;
   act(() => tab.control().onSelect("billing"));
   await settle();
@@ -2137,7 +2137,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".ui-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
@@ -2145,7 +2145,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
+        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),
@@ -2682,7 +2682,7 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   const pin = (task: string, at: number) => ({ task, tab: "plan", label: "Plan", at });
   const kept = () =>
     window.localStorage.setItem(
-      "luke.sidePanel",
+      "app.sidePanel",
       JSON.stringify({
         open: true,
         tabs: ["plan"],
@@ -2735,7 +2735,7 @@ const readAgentPin = Schema.decodeUnknownOption(
 test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed or the account already pinned it", async () => {
   const kept = () =>
     window.localStorage.setItem(
-      "luke.sidePanel",
+      "app.sidePanel",
       JSON.stringify({
         open: true,
         tabs: ["plan"],
@@ -2744,7 +2744,7 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
       }),
     );
   const storedPins = () =>
-    JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").pins as unknown[];
+    JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}").pins as unknown[];
   const asked = (tab: ReturnType<typeof mount>) =>
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
@@ -3654,7 +3654,7 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.setTime(Duration.toMillis(Duration.days(30)));
       window.localStorage.setItem(
-        "luke.mainTabs",
+        "app.mainTabs",
         JSON.stringify({
           closedAgents: [],
           tasks: { [TASK.id]: { recent: [{ agent: FINISHED_ID }, { agent: AGENT_ID }] } },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { authApp } from "@luke/service/auth/auth-app";
-import { HostedEnvironment } from "@luke/service/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { authApp } from "@repo/service/auth/auth-app";
+import { HostedEnvironment } from "@repo/service/environment";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
@@ -9,9 +9,9 @@ import {
   hostedRefusing,
   resolvedAccount,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import { ANY_METHOD } from "@luke/service/route";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/service/http/http-effect";
+import { ANY_METHOD } from "@repo/service/route";
+import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -33,7 +33,7 @@ import { disposeWebRuntime } from "../server/runtime.js";
  * one is never dialled — the placeholder `tests/auth-app.test.ts` and
  * `auth:generate` use for the same reason.
  */
-const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/app";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);

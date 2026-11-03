@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { TERMINAL_RELAY, TERMINAL_RELAY_CLOSE } from "@luke/features/terminal-wire";
+import { TERMINAL_RELAY, TERMINAL_RELAY_CLOSE } from "@repo/features/terminal-wire";
 import { Effect, Option } from "effect";
 import { WebSocket } from "ws";
 import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";

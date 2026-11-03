@@ -3,7 +3,7 @@ import {
   WRITING_MARK,
   type WritingBlock,
   type WritingMark,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
@@ -13,7 +13,7 @@ import {
   Stack,
   TurnIntoMenu,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

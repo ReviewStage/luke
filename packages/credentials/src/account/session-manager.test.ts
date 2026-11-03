@@ -6,7 +6,7 @@ import {
   fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { loopbackConsent } from "../loopback-consent.js";
 import { AccountClient, type StoredAccount } from "./client.js";

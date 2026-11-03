@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
-import { decodeMention } from "@luke/features/mention-link";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ANNOUNCE } from "@luke/ui";
+import { decodeMention } from "@repo/features/mention-link";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { ANNOUNCE } from "@repo/ui";
 import { AsyncResult } from "effect/reactivity";
 import {
   type ReactNode,

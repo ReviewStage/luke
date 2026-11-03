@@ -1,5 +1,5 @@
 {
-  "name": "@luke/agent-runner",
+  "name": "@repo/agent-runner",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@luke/wire": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "0.28.2",
     "typescript": "catalog:",

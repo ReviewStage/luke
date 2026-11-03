@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
+import type { AgentTranscriptMessage } from "@repo/features/agent-wire";
 import {
   CONVERSATION_MEDIA_TYPE,
   PICTURE_OMISSION,
-} from "@luke/features/conversation-picture-wire";
-import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
-import type { PictureAnswer } from "@luke/ui/picture-cache";
-import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
+} from "@repo/features/conversation-picture-wire";
+import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
+import type { PictureAnswer } from "@repo/ui/picture-cache";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -149,7 +149,7 @@ test("a set the agent showed stays out of the finished turn's fold, each picture
   const tiles = [...container.querySelectorAll<HTMLElement>(SHOWN_TILES)];
   assert.equal(tiles.length, 2, "the set is drawn though the work before it folded");
   assert.deepEqual(
-    tiles.map((tile) => tile.style.getPropertyValue("--luke-picture-ratio")),
+    tiles.map((tile) => tile.style.getPropertyValue("--ui-picture-ratio")),
     [String(1200 / 720), String(390 / 700)],
   );
   assert.deepEqual(
@@ -602,7 +602,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     assert.ok(inline, "the video plays where it stands");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
     assert.deepEqual(
-      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
@@ -627,7 +627,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the video");
     assert.deepEqual(
-      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
@@ -781,7 +781,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
     assert.ok(inline, "the recording plays though the work before it folded");
     assert.equal(inline.getAttribute("src"), "blob:recording-1");
     assert.deepEqual(
-      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
@@ -804,7 +804,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the recording");
     assert.deepEqual(
-      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
@@ -829,7 +829,7 @@ test("an image a line's row names by the picture it was kept as is read through 
         mediaType: INBOX_IMAGE_TYPE.PNG,
         filename: "flow.png",
         url: "",
-        providerMetadata: { luke: { attachmentId: kept.id } },
+        providerMetadata: { app: { attachmentId: kept.id } },
       },
       {
         type: "file",

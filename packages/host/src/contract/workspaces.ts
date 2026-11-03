@@ -1,6 +1,6 @@
-import { workspaceTokenRepositorySchema } from "@luke/features/github-repositories-wire";
-import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
-import { workspaceSlackBotAnswerSchema } from "@luke/features/slack-bot-wire";
+import { workspaceTokenRepositorySchema } from "@repo/features/github-repositories-wire";
+import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
+import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
@@ -21,13 +21,13 @@ import {
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
   workspacePeopleFollowSchema,
-} from "@luke/features/tasks-view";
-import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import {
   formerMemberSchema,
   workspaceMemberSchema,
   workspaceSchema,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

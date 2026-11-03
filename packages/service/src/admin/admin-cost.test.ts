@@ -3,8 +3,8 @@ import {
   ADMIN_COST_TOP_ACCOUNTS_LIMIT,
   type AdminCostAccountInfo,
   COST_SOURCE,
-} from "@luke/features/admin-cost-wire";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+} from "@repo/features/admin-cost-wire";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import { test } from "vitest";
 import type { OfferedModel } from "../providers/model-catalog.js";
 import {
@@ -74,7 +74,7 @@ function tokens(
     Partial<Omit<AdminCostTokenRow, "day" | "userId" | "model">>,
 ): AdminCostTokenRow {
   return {
-    source: COST_SOURCE.LUKE,
+    source: COST_SOURCE.APP,
     fastRefused: false,
     inputTokens: 0,
     outputTokens: 0,
@@ -185,11 +185,11 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
   assert.deepEqual(cost.daily.at(-1), {
     day: TODAY,
     [COST_SOURCE.AGENTS]: 1,
-    [COST_SOURCE.LUKE]: 0,
+    [COST_SOURCE.APP]: 0,
     [COST_SOURCE.DICTATION]: 0.045,
   });
-  assert.equal(cost.daily.at(-2)?.[COST_SOURCE.LUKE], 2);
-  assert.ok(cost.daily.slice(0, -2).every((day) => day[COST_SOURCE.LUKE] === 0));
+  assert.equal(cost.daily.at(-2)?.[COST_SOURCE.APP], 2);
+  assert.ok(cost.daily.slice(0, -2).every((day) => day[COST_SOURCE.APP] === 0));
   assert.equal(cost.totals.spendUsd.toFixed(3), "3.045");
   // The prior window holds last week's day and not the one before it.
   assert.deepEqual(cost.totals.trend, { days: WEEK, recent: cost.totals.spendUsd, prior: 4 });

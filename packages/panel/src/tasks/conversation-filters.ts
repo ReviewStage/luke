@@ -24,7 +24,7 @@
  * fold for every task in it.
  */
 
-import type { ConversationEntry, ReviewThread } from "@luke/features/agent-wire";
+import type { ConversationEntry, ReviewThread } from "@repo/features/agent-wire";
 import { Effect, Option, Schema } from "effect";
 import { useCallback } from "react";
 import { keptKey, useKept } from "../use-kept.js";
@@ -63,7 +63,7 @@ export type ConversationFilters = Pick<ConversationChoices, "hideBots" | "hideRe
 
 /** The choice, kept on this Mac under one key for every pull request. */
 const KEPT = {
-  CHOICES: keptKey("luke.conversation-filters", Schema.fromJsonString(conversationChoicesSchema)),
+  CHOICES: keptKey("app.conversation-filters", Schema.fromJsonString(conversationChoicesSchema)),
 } as const;
 
 /** How many entries each filter would leave out of a conversation, each counted on its own. */

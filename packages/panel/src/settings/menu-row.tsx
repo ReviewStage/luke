@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   dropBelowStart,
   IconButton,
@@ -9,8 +9,8 @@ import {
   type SettingsRowControl,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import type { ShownError } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import type { ShownError } from "@repo/ui/reported-failure";
 import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 
@@ -30,8 +30,8 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
- * Its acts may come in groups, a rule between each. The ⋯ is `@luke/ui`'s
- * quiet `IconButton`. A row given its words (`row`) stands in `@luke/ui`'s
+ * Its acts may come in groups, a rule between each. The ⋯ is `@repo/ui`'s
+ * quiet `IconButton`. A row given its words (`row`) stands in `@repo/ui`'s
  * `SettingsRow`, its control and the ⋯ at the row's end; one given
  * `children` still draws them in the window's own row, until its page moves.
  */
@@ -130,7 +130,7 @@ export function MenuRow({
       <div
         className={
           row === undefined
-            ? "settings-row menu-row flex min-h-settings-row-pair items-center justify-between gap-luke-12"
+            ? "settings-row menu-row flex min-h-settings-row-pair items-center justify-between gap-ui-12"
             : "menu-row"
         }
         {...(anchor ? searchAnchorProps(anchor) : undefined)}

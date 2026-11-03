@@ -205,8 +205,8 @@ test("a document's trail stands alone while its name is not yet read", () => {
 test("a bar that would cut the page's name under the readable floor stands it on a row of its own, and keeps one row above it", () => {
   const wrappedAt = (roomWidth: number, whole: number): string | undefined => {
     const laid = layTitle({
-      room: ".luke-toolbar-heading",
-      words: ".luke-toolbar-title",
+      room: ".ui-toolbar-heading",
+      words: ".ui-toolbar-title",
       roomWidth,
       whole,
       floor: 120,
@@ -232,8 +232,8 @@ test("a bar reads its title again once the page's fonts finish loading, which wi
   Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
   const lay = (whole: number) =>
     layTitle({
-      room: ".luke-toolbar-heading",
-      words: ".luke-toolbar-title",
+      room: ".ui-toolbar-heading",
+      words: ".ui-toolbar-title",
       roomWidth: 96,
       whole,
       floor: 120,

@@ -1,5 +1,5 @@
-import { GAP, SecretField, Stack } from "@luke/ui";
-import type { ShownError } from "@luke/ui/reported-failure";
+import { GAP, SecretField, Stack } from "@repo/ui";
+import type { ShownError } from "@repo/ui/reported-failure";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

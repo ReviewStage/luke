@@ -3,7 +3,7 @@ import {
   liveDigestOf,
   liveDigestOn,
   type SealedLiveQueryWire,
-} from "@luke/features/live-wire";
+} from "@repo/features/live-wire";
 import {
   Cause,
   Clock,

@@ -6,7 +6,7 @@ import {
   TEXT_VARIANT,
   Text,
   useDisclosurePreviewShown,
-} from "@luke/ui";
+} from "@repo/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Fold, FoldBody, type FoldProps } from "./fold.js";

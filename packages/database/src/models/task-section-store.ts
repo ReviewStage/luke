@@ -8,7 +8,7 @@ import {
   type TaskSectionsWritten,
   type TaskSectionWrite,
   taskSectionIconSchema,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

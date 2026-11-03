@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AttachmentChip,
   BUTTON_VARIANT,
@@ -19,9 +19,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { AtSign, GLYPH, Mic } from "@luke/ui/icons";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { AtSign, GLYPH, Mic } from "@repo/ui/icons";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import type { ComponentProps, ReactNode } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import { test } from "vitest";
 import { panelTabPlace } from "./links-at-hand.js";
 

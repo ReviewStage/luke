@@ -29,11 +29,17 @@ function changelogAt(path: string): FunctionComponent {
 
 const ChangelogIndex = changelogAt("/changelog");
 
-const PAGES: readonly { path: string; page: FunctionComponent; marked: readonly string[] }[] = [
-  { path: "/", page: App, marked: ["Vespin"] },
-  { path: "/about", page: AboutPage, marked: ["About", "About"] },
-  { path: "/changelog", page: ChangelogIndex, marked: ["Changelog", "Changelog"] },
-  { path: "/privacy", page: PrivacyPage, marked: ["Privacy"] },
+const PAGES: readonly {
+  path: string;
+  page: FunctionComponent;
+  marked: readonly string[];
+  /** What the banner offers after the site's links: the landing's way to sign in. */
+  calls: readonly string[];
+}[] = [
+  { path: "/", page: App, marked: ["Vespin"], calls: [`Sign in -> ${PANEL_PATH}`] },
+  { path: "/about", page: AboutPage, marked: ["About", "About"], calls: [] },
+  { path: "/changelog", page: ChangelogIndex, marked: ["Changelog", "Changelog"], calls: [] },
+  { path: "/privacy", page: PrivacyPage, marked: ["Privacy"], calls: [] },
 ];
 
 /** The page as the prerender writes it. */
@@ -52,7 +58,7 @@ function links(region: Element | null): string[] {
   );
 }
 
-for (const { path, page, marked } of PAGES) {
+for (const { path, page, marked, calls } of PAGES) {
   test(`${path} names the site's links in its banner and footer`, () => {
     const root = drawn(page);
     assert.deepEqual(links(root.querySelector('header nav[aria-label="Site"]')), [
@@ -60,6 +66,7 @@ for (const { path, page, marked } of PAGES) {
       "About -> /about",
       "Changelog -> /changelog",
       "Vespin on GitHub -> https://github.com/ReviewStage/vespin",
+      ...calls,
     ]);
     assert.deepEqual(links(root.querySelector("footer")), [
       "About -> /about",
@@ -84,7 +91,8 @@ test("the landing offers the web app beside the download", () => {
   const body = drawn(App).querySelector("main");
   assert.deepEqual(links(body), [
     "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
-    `Open Vespin on the web -> ${PANEL_PATH}`,
+    `or sign in on the web -> ${PANEL_PATH}`,
+    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
     "View on GitHub -> https://github.com/ReviewStage/vespin",
   ]);
 });

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import type { ActSender } from "@luke/host/act-port";
-import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import { ACT_KIND } from "@luke/host/acts";
+import type { ActSender } from "@repo/host/act-port";
+import { type TestActPort, testActPort } from "@repo/host/act-port/testing";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { macTerminalProcedures } from "./mac-terminal-acts";

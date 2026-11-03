@@ -8,7 +8,7 @@
  * with a tool-use id and a JSON-RPC id of its own, so neither keys it to the
  * call it repeats; what is the same is the agent's conversation, the tool,
  * and the input. So the key is the one the store holds for that digest
- * within the window (`@luke/database/models/native-call-keys`): the same
+ * within the window (`@repo/database/models/native-call-keys`): the same
  * input called again within it runs under the first call's key, and the
  * tools' own dedupe does the rest; past the window the input is a call of
  * its own again, as an agent sending one line twice an hour apart means it
@@ -16,9 +16,9 @@
  */
 
 import { createHash } from "node:crypto";
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import { nativeCallKeyOf } from "@luke/database/models/native-call-keys";
-import { isRecord, type UnparsedWireValue } from "@luke/wire";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { nativeCallKeyOf } from "@repo/database/models/native-call-keys";
+import { isRecord, type UnparsedWireValue } from "@repo/wire";
 import type { Effect } from "effect";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 
@@ -44,7 +44,7 @@ function nativeCallDigest(tool: string, input: UnparsedWireValue): string {
 }
 
 /** The key the admitted agent's call of the tool on this input runs under: one call's within the window. */
-export function lukeMcpCallKey(
+export function workspaceMcpCallKey(
   admitted: AdmittedConversation,
   tool: string,
   input: UnparsedWireValue,

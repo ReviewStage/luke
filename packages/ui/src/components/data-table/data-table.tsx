@@ -82,7 +82,7 @@ const TABLE_MIN_WIDTH =
   "data-[min-width=narrow]:min-w-data-table-narrow data-[min-width=medium]:min-w-data-table-medium data-[min-width=wide]:min-w-data-table-wide";
 
 /** A row's fill eases in and out under the pointer. */
-const ROW = "transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+const ROW = "transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /** A row that opens something: lit under the pointer, and pressed with the web's pointing hand but a Mac list's arrow on the desktop. */
 const PRESSABLE_ROW = "cursor-press [&:hover]:bg-muted";
@@ -116,7 +116,7 @@ function DataTableHeading<Row, Key extends string>({
   if (kind === DATA_TABLE_COLUMN_KIND.MARK) {
     return (
       <TableHead className={CELL_KIND} data-kind={kind}>
-        <span className="luke-visually-hidden">{column.label}</span>
+        <span className="ui-visually-hidden">{column.label}</span>
       </TableHead>
     );
   }

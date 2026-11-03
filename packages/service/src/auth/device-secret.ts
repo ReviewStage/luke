@@ -1,12 +1,12 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { hostBySecret, recordHostVersion } from "@luke/database/models/host-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { hostBySecret, recordHostVersion } from "@repo/database/models/host-store";
 import {
   HOST_USER_CODE,
   HOST_WIRE,
   hostVersionMeets,
   readHostVersion,
-} from "@luke/features/host-wire";
+} from "@repo/features/host-wire";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -19,11 +19,11 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
 /**
  * device-secret.ts -- a host's own credentials: minting a device secret, a pairing's poll secret, or its user code, and reading the host a request's bearer names.
  *
- * A host calls the service on a device secret (`@luke/features/host-wire`),
+ * A host calls the service on a device secret (`@repo/features/host-wire`),
  * as `Authorization: Bearer lkd_…`, never the desktop's sign-in, and with
  * its daemon's version in `HOST_WIRE.VERSION_HEADER` on every call. That
  * secret is minted here, answered once, and kept by the store only as its
- * SHA-256 (`@luke/database/models/host-store`), so a secret is looked up by
+ * SHA-256 (`@repo/database/models/host-store`), so a secret is looked up by
  * its hash and a database read never yields one. A pairing box's poll
  * secret is minted, answered, and kept the same way; its user code is the one
  * thing a member types or follows a link to, eight letters drawn evenly

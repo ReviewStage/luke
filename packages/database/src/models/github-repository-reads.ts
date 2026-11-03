@@ -1,4 +1,4 @@
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { and, eq, gte, isNotNull, ne, notExists, type SQLWrapper, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

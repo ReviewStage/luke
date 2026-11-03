@@ -1,4 +1,4 @@
-import { Text, TIME_LOOK, Time } from "@luke/ui";
+import { Text, TIME_LOOK, Time } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

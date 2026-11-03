@@ -1,11 +1,11 @@
-import { DEVICE_STANDING } from "@luke/features/agent-wire";
-import { DEVICE_PLATFORM, HOST_UPDATE } from "@luke/features/device-agent-wire";
-import { type Host, hostInstallCommand, hostUninstallCommand } from "@luke/features/host-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import { DEVICE_STANDING } from "@repo/features/agent-wire";
+import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
+import { type Host, hostInstallCommand, hostUninstallCommand } from "@repo/features/host-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   ANNOUNCE,
   BUTTON_VARIANT,
@@ -38,8 +38,8 @@ import {
   useConfirmDialog,
   useMinute,
   useSecond,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
@@ -61,7 +61,7 @@ import { MenuRow } from "./menu-row.js";
  * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command and waits for the hosts it adds.
  *
  * A machine is any device of the member's enrolled with a secret of its own
- * (`@luke/features/host-wire`): a Linux server or a Mac that ran the install
+ * (`@repo/features/host-wire`): a Linux server or a Mac that ran the install
  * command, or a Mac its desktop enrolled. The list names each as every list
  * of machines does (`machine-name.ts`), This Mac among them, and says what
  * it is by its platform (`DEVICE_PLATFORM_NAME`) after Online, Offline, or

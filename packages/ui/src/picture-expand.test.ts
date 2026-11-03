@@ -39,18 +39,18 @@ beforeAll(() => {
 
 beforeEach(() => {
   played = [];
-  document.documentElement.style.setProperty("--luke-duration-fast", "280ms");
-  document.documentElement.style.setProperty("--luke-spring-fast", "ease-out");
+  document.documentElement.style.setProperty("--ui-duration-fast", "280ms");
+  document.documentElement.style.setProperty("--ui-spring-fast", "ease-out");
   // Note that jsdom lays nothing out and plays no animation, so the browser's
   // layout and its animation are what stand in here, at that boundary.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const rect = this.classList.contains("luke-picture-tile-face")
+    const rect = this.classList.contains("ui-picture-tile-face")
       ? RECT.TILE
-      : this.classList.contains("luke-dialog")
+      : this.classList.contains("ui-dialog")
         ? RECT.CARD
-        : this.classList.contains("luke-zoom-image")
+        : this.classList.contains("ui-zoom-image")
           ? RECT.PICTURE
           : { left: 0, top: 0, width: innerWidth, height: innerHeight };
     return DOMRect.fromRect({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
@@ -86,7 +86,7 @@ function Viewer({ onClosed }: { onClosed: () => void }): React.JSX.Element {
       createElement("h2", { key: "title", id: titleId }, "The settings page"),
       createElement("img", {
         key: "picture",
-        className: "luke-zoom-image",
+        className: "ui-zoom-image",
         alt: "The settings page",
       }),
     ],
@@ -126,11 +126,11 @@ function mountPage(closed: string[]) {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(createElement(Page, { closed })));
-  const tile = container.querySelector<HTMLButtonElement>(".luke-picture-tile");
+  const tile = container.querySelector<HTMLButtonElement>(".ui-picture-tile");
   if (tile === null) throw new Error("the tile is drawn");
   return {
     tile,
-    card: () => document.querySelector<HTMLElement>(".luke-dialog"),
+    card: () => document.querySelector<HTMLElement>(".ui-dialog"),
     withdraw: () => {
       const button = [...container.querySelectorAll("button")].find(
         (each) => each.textContent === "Withdraw",
@@ -138,7 +138,7 @@ function mountPage(closed: string[]) {
       act(() => button?.click());
     },
     escape: () => {
-      const card = document.querySelector(".luke-dialog");
+      const card = document.querySelector(".ui-dialog");
       act(() =>
         card?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
       );
@@ -148,7 +148,7 @@ function mountPage(closed: string[]) {
 
 /** The flights the card played. */
 function cardFlights(): Played[] {
-  return played.filter((each) => each.element.classList.contains("luke-dialog"));
+  return played.filter((each) => each.element.classList.contains("ui-dialog"));
 }
 
 test("a picture opened from its tile is put away only once its flight back into the tile ends", () => {
@@ -179,7 +179,7 @@ test("a viewer whose tile is gone by the close is put away at once", () => {
 });
 
 test("under reduced motion a picture closes at once, as every dialog does", () => {
-  document.documentElement.style.setProperty("--luke-duration-fast", "0ms");
+  document.documentElement.style.setProperty("--ui-duration-fast", "0ms");
   const closed: string[] = [];
   const page = mountPage(closed);
 
@@ -197,7 +197,7 @@ test("a viewer opened from no tile keeps the dialog's own entrance and closes at
   roots.push(root);
   act(() => root.render(createElement(Viewer, { onClosed: () => closed.push("closed") })));
 
-  const card = document.querySelector(".luke-dialog");
+  const card = document.querySelector(".ui-dialog");
   act(() => card?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
 
   expect(closed).toEqual(["closed"]);

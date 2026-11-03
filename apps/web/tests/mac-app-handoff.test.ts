@@ -5,7 +5,7 @@ import {
   LINK_PLATFORM,
   type LinkOpen,
   type LinkPlatform,
-} from "@luke/features/link-open";
+} from "@repo/features/link-open";
 import { Effect } from "effect";
 import { handOffToMacApp } from "../src/app/mac-app-handoff";
 import { type FakeService, fakeService } from "./support/fake-service";

@@ -15,9 +15,9 @@ import { baselineProblems } from "../shared/baseline.ts";
 import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 
 /**
- * A list or menu is stepped by `useRovingKeys` and `List` (`@luke/ui`), never
+ * A list or menu is stepped by `useRovingKeys` and `List` (`@repo/ui`), never
  * a handler that matches `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`,
- * `Home` or `End` itself. Outside `@luke/ui` a key read off an event
+ * `Home` or `End` itself. Outside `@repo/ui` a key read off an event
  * (`event.key`, `event.code`, or a `key` bound from one) that is compared to
  * one of them, switched on, or listed as a key-to-step row is refused. The
  * files that need the raw keys for a purpose of their own are exempt by name
@@ -69,11 +69,11 @@ export const noHandWrittenArrowKeysRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow stepping a list with hand-matched arrow keys outside @luke/ui; use useRovingKeys and List.",
+        "Disallow stepping a list with hand-matched arrow keys outside @repo/ui; use useRovingKeys and List.",
     },
     messages: {
       arrowKey:
-        "`{{key}}` is matched by hand. Step a list or menu with `useRovingKeys` or `List` from `@luke/ui` (`rovingStep` where the focus stays in a field). A file that needs the raw key for a caret, a date or a pty is named in `tools/anti-slop/arrow-keys.json` with its reason; otherwise this file's arrow keys are more than its baseline holds.",
+        "`{{key}}` is matched by hand. Step a list or menu with `useRovingKeys` or `List` from `@repo/ui` (`rovingStep` where the focus stays in a field). A file that needs the raw key for a caret, a date or a pty is named in `tools/anti-slop/arrow-keys.json` with its reason; otherwise this file's arrow keys are more than its baseline holds.",
       staleBaseline:
         "This file matches {{found}} arrow key(s) by hand, fewer than `tools/anti-slop/arrow-keys.json` allows ({{expected}}). Lower its count to {{found}}, or delete the row at 0.",
     },

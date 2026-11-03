@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import type { TaskSummary } from "@luke/features/task-wire";
-import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@luke/features/tasks-view";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
+import type { TaskSummary } from "@repo/features/task-wire";
+import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/tasks-view";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { test } from "vitest";
 import { fixtureActAnswer, fixtureTasksView } from "./tasks-fixture.js";
 

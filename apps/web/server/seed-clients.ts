@@ -1,12 +1,12 @@
 import { pathToFileURL } from "node:url";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
-import { jwks as jwksTable, oauthClient as oauthClientTable } from "@luke/database/schemas/auth";
-import { authSecrets } from "@luke/service/auth/auth-deployment";
+import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import { jwks as jwksTable, oauthClient as oauthClientTable } from "@repo/database/schemas/auth";
+import { authSecrets } from "@repo/service/auth/auth-deployment";
 import {
   DESKTOP_OAUTH_CLIENT,
   type OAuthClient,
   oauthClientRecord,
-} from "@luke/service/auth/oauth-clients";
+} from "@repo/service/auth/oauth-clients";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";

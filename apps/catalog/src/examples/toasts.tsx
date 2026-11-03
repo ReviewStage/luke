@@ -8,7 +8,7 @@
  * that offer their details to copy, alone and beside a Retry.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -19,7 +19,7 @@ import {
   ToastActions,
   ToastStack,
   type ToastTone,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

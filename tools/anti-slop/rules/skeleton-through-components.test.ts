@@ -46,9 +46,9 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
     panel(
       "function TableSkeleton() { const bone = (w) => <Skeleton width={w} />; return <Table>{bone(1)}</Table>; }",
     ),
-    // `@luke/ui`'s own block is a skeleton's, and a classed box outside any skeleton is no business of the rule's.
+    // `@repo/ui`'s own block is a skeleton's, and a classed box outside any skeleton is no business of the rule's.
     {
-      code: 'function Skeleton() { return <span className="luke-skeleton" />; }',
+      code: 'function Skeleton() { return <span className="ui-skeleton" />; }',
       filename: UI_FILE,
     },
     panel('function Composer() { return <div className="agent-composer" />; }'),
@@ -72,7 +72,7 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       errors: [{ messageId: "blockOutsideSkeleton" }],
     },
     { ...panel("const block = <Skeleton />;"), errors: [{ messageId: "blockOutsideSkeleton" }] },
-    // A skeleton copying a box of the surface it stands for, in `@luke/ui` as anywhere.
+    // A skeleton copying a box of the surface it stands for, in `@repo/ui` as anywhere.
     {
       ...panel(
         'function ComposerSkeleton() { return <div className="agent-composer"><Skeleton /></div>; }',
@@ -85,7 +85,7 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       ],
     },
     {
-      code: 'const RowSkeleton = () => <div className="luke-settings-row" data-density="card" />;',
+      code: 'const RowSkeleton = () => <div className="ui-settings-row" data-density="card" />;',
       filename: UI_FILE,
       errors: [{ messageId: "copiedBox" }],
     },

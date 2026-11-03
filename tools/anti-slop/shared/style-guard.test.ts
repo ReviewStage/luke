@@ -9,12 +9,12 @@ import {
 } from "./style-guard.ts";
 
 const THEME = `@theme inline {
-  --color-primary: var(--luke-color-text);
-  --text-body: var(--luke-type-body-size);
-  --text-body--line-height: var(--luke-type-body-leading);
-  --radius-menu: var(--luke-menu-radius);
-  --ease-pane: var(--luke-motion-pane);
-  --animate-menu-in: luke-menu-in var(--luke-duration-quick) var(--luke-spring-fast);
+  --color-primary: var(--ui-color-text);
+  --text-body: var(--ui-type-body-size);
+  --text-body--line-height: var(--ui-type-body-leading);
+  --radius-menu: var(--ui-menu-radius);
+  --ease-pane: var(--ui-motion-pane);
+  --animate-menu-in: ui-menu-in var(--ui-duration-quick) var(--ui-spring-fast);
 }`;
 const NAMES = themeNames(THEME);
 const SHEET = "packages/ui/src/components/thing/thing.css";
@@ -37,7 +37,7 @@ describe("a stylesheet", () => {
       STYLE_RULE.COLOUR,
       STYLE_RULE.COLOUR,
     ]);
-    expect(sheetRules(".a { color: var(--luke-color-text); border-color: currentColor; }")).toEqual(
+    expect(sheetRules(".a { color: var(--ui-color-text); border-color: currentColor; }")).toEqual(
       [],
     );
   });
@@ -45,8 +45,8 @@ describe("a stylesheet", () => {
   it("passes a colour where a token is defined, a brand's ink, and a mask's alpha", () => {
     const css = `
       :root { --file-icon-red: light-dark(#d52c36, #ff6762); }
-      :root[data-luke-theme="dark"] { --ink: #fff; }
-      [data-luke-theme="dark"] .integration-mark-neon { color: #34d59a; }
+      :root[data-ui-theme="dark"] { --ink: #fff; }
+      [data-ui-theme="dark"] .integration-mark-neon { color: #34d59a; }
       .a { mask-image: linear-gradient(#000, transparent); --terminal-red: #f00; }`;
     expect(sheetRules(css)).toEqual([]);
   });
@@ -63,10 +63,10 @@ describe("a stylesheet", () => {
       font-size: 0.9em;
     }
     .b {
-      font-size: var(--luke-type-body-size);
-      font-weight: var(--luke-weight-medium);
+      font-size: var(--ui-type-body-size);
+      font-weight: var(--ui-weight-medium);
       font: inherit;
-      font-size: calc(var(--luke-avatar-size) * 0.5);
+      font-size: calc(var(--ui-avatar-size) * 0.5);
     }`;
     expect(sheetRules(css)).toEqual([
       STYLE_RULE.TYPE,
@@ -78,8 +78,8 @@ describe("a stylesheet", () => {
 
   it("refuses a literal radius, 50% among them, and passes a role or a factor of one", () => {
     const css = `.a { border-radius: 50%; border-top-left-radius: 4px; }
-      .b { border-radius: var(--luke-radius-full); border-radius: 0;
-           border-radius: calc(var(--luke-control-height) / 2); }`;
+      .b { border-radius: var(--ui-radius-full); border-radius: 0;
+           border-radius: calc(var(--ui-control-height) / 2); }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.RADIUS, STYLE_RULE.RADIUS]);
   });
 
@@ -92,14 +92,14 @@ describe("a stylesheet", () => {
 
   it("refuses a literal duration or delay, and passes a token or none", () => {
     const css = `.a { transition: opacity 200ms; animation-delay: 1s; }
-      .b { transition: opacity var(--luke-duration-quick); transition-delay: 0s; }`;
+      .b { transition: opacity var(--ui-duration-quick); transition-delay: 0s; }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.DURATION, STYLE_RULE.DURATION]);
   });
 
   it("passes a literal duration on an endless loop that answers a play-state token", () => {
     const loop = `.spin {
       animation: turn 900ms linear infinite;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
     }`;
     expect(sheetRules(loop)).toEqual([]);
     const unanswered = ".spin { animation: turn 900ms infinite; }";
@@ -109,33 +109,33 @@ describe("a stylesheet", () => {
   it("still refuses a transition beside a loop, and a finite animation that answers the loop token", () => {
     const beside = `.spin {
       animation: turn 900ms linear infinite;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
       transition: opacity 200ms ease;
     }`;
     expect(sheetRules(beside)).toEqual([STYLE_RULE.DURATION]);
     const finite = `.pop {
       animation: pop 300ms both;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
     }`;
     expect(sheetRules(finite)).toEqual([STYLE_RULE.DURATION]);
   });
 
   it("refuses a literal easing in a transition or animation, and passes a token", () => {
-    const css = `.a { transition: opacity var(--luke-duration-hover) ease; }
+    const css = `.a { transition: opacity var(--ui-duration-hover) ease; }
       .b { transition-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
       .c { --wobble: steps(4); }
-      .d { transition: transform var(--luke-duration-fast) var(--luke-spring-fast); }
-      .e { transition: opacity var(--luke-duration-hover); }`;
+      .d { transition: transform var(--ui-duration-fast) var(--ui-spring-fast); }
+      .e { transition: opacity var(--ui-duration-hover); }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
   });
 
-  it("refuses a literal width on a picker's, popover's or menu's box, outside @luke/ui, and passes a token, a share, and a glyph in one", () => {
+  it("refuses a literal width on a picker's, popover's or menu's box, outside @repo/ui, and passes a token, a share, and a glyph in one", () => {
     const panel = "packages/panel/src/styles/tasks.css";
     const css = `.mention-menu { width: 360px; max-width: 100%; }
       .composer .skill-menu { min-width: 20rem; }
       .settings-picker, .thing { max-width: 420px; }
-      .a-popover { width: calc(100% - 2 * var(--luke-space-8)); max-width: 100%; }
-      .b-menu { width: var(--luke-popover-width-regular); }
+      .a-popover { width: calc(100% - 2 * var(--ui-space-8)); max-width: 100%; }
+      .b-menu { width: var(--ui-popover-width-regular); }
       .issue-picker-detail > svg { width: 12px; }
       .menubar { width: 200px; }
       .automation-field { width: 200px; }`;
@@ -151,9 +151,9 @@ describe("a stylesheet", () => {
     const panel = "packages/panel/src/styles/tasks.css";
     const css = `.a { padding: 8px 12px; margin-left: -5px; gap: 0.5rem; row-gap: 6px; }
       .b { padding-block: max(0px, calc((14px - 1lh) / 2)); margin-inline-start: 4PX; }
-      .c { padding: var(--luke-row-inset) var(--luke-list-inset); gap: var(--luke-space-6); }
+      .c { padding: var(--ui-row-inset) var(--ui-list-inset); gap: var(--ui-space-6); }
       .d { margin: 0 auto; padding: 0px; gap: 0; margin-top: 1px; margin-bottom: -1px; }
-      .e { padding: var(--luke-card-inset, 12px); margin-left: 0.3em; width: 12px; top: 8px; }
+      .e { padding: var(--ui-card-inset, 12px); margin-left: 0.3em; width: 12px; top: 8px; }
       .f { --people-gap: 8px; scroll-margin-top: 8px; }
       :root { --column-inset: 12px; }`;
     expect(sheetRules(css, panel)).toEqual([
@@ -187,40 +187,40 @@ describe("a stylesheet", () => {
   });
 
   it("refuses a crumb drawn wider than its words, and passes a floor that is its basis under a cap", () => {
-    const floored = `.luke-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
-      .luke-breadcrumbs li:has(> .luke-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
-      .luke-breadcrumbs li:last-child { flex-grow: 9; }
-      .luke-breadcrumbs li > button { min-width: 11em; }
-      .luke-breadcrumbs, .list li { min-width: 11em; }`;
+    const floored = `.ui-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
+      .ui-breadcrumbs li:has(> .ui-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
+      .ui-breadcrumbs li:last-child { flex-grow: 9; }
+      .ui-breadcrumbs li > button { min-width: 11em; }
+      .ui-breadcrumbs, .list li { min-width: 11em; }`;
     expect(sheetRules(floored)).toEqual([
       STYLE_RULE.CRUMB_WIDTH,
       STYLE_RULE.CRUMB_WIDTH,
       STYLE_RULE.CRUMB_WIDTH,
     ]);
-    const capped = `.luke-breadcrumbs[data-variant="caption"] li {
+    const capped = `.ui-breadcrumbs[data-variant="caption"] li {
         flex: 1 0 var(--floor); min-width: 0; max-width: max-content; }
-      .luke-breadcrumbs li:last-child { flex-grow: 9; }
-      .luke-breadcrumbs li[data-fixed="true"] { flex: none; }`;
+      .ui-breadcrumbs li:last-child { flex-grow: 9; }
+      .ui-breadcrumbs li[data-fixed="true"] { flex: none; }`;
     expect(sheetRules(capped)).toEqual([]);
   });
 
   it("refuses a page rounding its own bar, and passes the sheet's one rule and a bar's parts", () => {
-    const pages = `.agent-page > .luke-pane-bar { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; }
-      .side-panel-keeps > * > :is(.luke-pane-bar, .luke-toolbar):first-child { border-top-left-radius: var(--sheet-radius); }
-      .inbox-view .luke-toolbar:not(.x) { border-top-right-radius: 0; }`;
+    const pages = `.agent-page > .ui-pane-bar { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; }
+      .side-panel-keeps > * > :is(.ui-pane-bar, .ui-toolbar):first-child { border-top-left-radius: var(--sheet-radius); }
+      .inbox-view .ui-toolbar:not(.x) { border-top-right-radius: 0; }`;
     expect(sheetRules(pages, SHELL_SHEET)).toEqual([
       STYLE_RULE.BAR_CORNER,
       STYLE_RULE.BAR_CORNER,
       STYLE_RULE.BAR_CORNER,
     ]);
-    const sheet = `.desktop-shell :is(.luke-pane-bar, .luke-toolbar):not(.x :not(.y) *) {
+    const sheet = `.desktop-shell :is(.ui-pane-bar, .ui-toolbar):not(.x :not(.y) *) {
         border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }
-      .luke-toolbar-heading, .a:not(.luke-pane-bar), .b:has(> .luke-toolbar) { border-radius: var(--luke-radius-6); }
-      .luke-pane-bar .luke-chip { border-radius: var(--luke-radius-6); }`;
+      .ui-toolbar-heading, .a:not(.ui-pane-bar), .b:has(> .ui-toolbar) { border-radius: var(--ui-radius-6); }
+      .ui-pane-bar .ui-chip { border-radius: var(--ui-radius-6); }`;
     expect(sheetRules(sheet, SHELL_SHEET)).toEqual([]);
     expect(
       sheetRules(
-        ".a .luke-toolbar { border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }",
+        ".a .ui-toolbar { border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }",
       ),
     ).toEqual([STYLE_RULE.BAR_CORNER]);
   });
@@ -243,12 +243,12 @@ describe("a stylesheet", () => {
 
   it("refuses the hand spelled out or a cursor chosen per profile, and passes the press and link roles and the other cursors", () => {
     const css = `.a { cursor: pointer; }
-      [data-luke-profile="desktop"] .b { cursor: default; }
-      .c { cursor: var(--luke-cursor-press); }
-      .d { cursor: var(--luke-cursor-link); }
+      [data-ui-profile="desktop"] .b { cursor: default; }
+      .c { cursor: var(--ui-cursor-press); }
+      .d { cursor: var(--ui-cursor-link); }
       .e { cursor: col-resize; }
       .f:disabled { cursor: default; }
-      .g { --luke-cursor-press: pointer; }`;
+      .g { --ui-cursor-press: pointer; }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
@@ -297,8 +297,8 @@ describe("a module's class strings", () => {
     ]);
   });
 
-  it("passes the utilities @luke/ui's theme maps onto tokens", () => {
-    const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--luke-duration-quick) \${x}\`);`;
+  it("passes the utilities @repo/ui's theme maps onto tokens", () => {
+    const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--ui-duration-quick) \${x}\`);`;
     expect(classRules(source)).toEqual([]);
   });
 
@@ -315,7 +315,7 @@ describe("a module's class strings", () => {
   });
 
   it("refuses cursor-pointer and a cursor chosen per profile, and passes cursor-press, cursor-link and the other cursors", () => {
-    const source = `const a = cn("cursor-pointer in-data-[luke-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
+    const source = `const a = cn("cursor-pointer in-data-[ui-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
     expect(classRules(source)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
@@ -338,7 +338,7 @@ describe("a module's class strings", () => {
   });
 
   it("refuses a radius beside a bar's own class", () => {
-    const source = `const BAR = "luke-pane-bar flex rounded-t-menu bg-muted"; const CHIP = "luke-chip rounded-menu";`;
+    const source = `const BAR = "ui-pane-bar flex rounded-t-menu bg-muted"; const CHIP = "ui-chip rounded-menu";`;
     expect(classRules(source)).toEqual([STYLE_RULE.BAR_CORNER]);
   });
 

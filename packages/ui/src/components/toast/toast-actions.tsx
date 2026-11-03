@@ -84,7 +84,7 @@ export function ToastActions({
       {copy === undefined ? null : (
         <CopyButton text={copy.text} what={copy.what} copy={copy.copy} />
       )}
-      <span className="luke-toast-dismiss absolute -top-toast-gap -left-toast-gap flex rounded-full border border-border-strong bg-background shadow-toast-dismiss">
+      <span className="ui-toast-dismiss absolute -top-toast-gap -left-toast-gap flex rounded-full border border-border-strong bg-background shadow-toast-dismiss">
         <Tooltip label={dismissLabel}>
           <IconButton
             icon={<CloseIcon />}

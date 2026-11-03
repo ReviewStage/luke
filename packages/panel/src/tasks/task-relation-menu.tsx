@@ -7,18 +7,20 @@ import {
   type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
+} from "@repo/features/task-wire";
+import { taskKey } from "@repo/features/workspace-key";
 import {
   type FootRow,
+  type MenuPanel,
   type MenuRow,
   POPOVER_ALIGN,
   type PopoverAlign,
+  SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   TaskStatusMark,
-} from "@luke/ui";
-import { CornerLeftUpIcon, GLYPH, HandIcon, OctagonMinusIcon } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 
 /**
@@ -26,7 +28,8 @@ import { useEffect, useId, useRef, useState } from "react";
  *
  * A relation is one of four kinds (`TASK_RELATION_KIND`): the task is
  * blocked by the one picked, blocks it, takes it as a sub-task, or takes it
- * as its parent. The menu opens on a kind its owner names, lists every other
+ * as its parent. The menu is named Task relation wherever it opens, as New
+ * task's + names its own (`new-task-relation.tsx`). It opens on a kind its owner names, lists every other
  * task of the workspace by its status mark, name, and key, and pins
  * "Relation: Sub-task" under them, a submenu of the four kinds, each by its
  * icon, so a reader who opened it on the wrong one switches without losing
@@ -37,10 +40,15 @@ import { useEffect, useId, useRef, useState } from "react";
  * a relation to this task, read from the new task's side: on Sub-task as a
  * sub-task of this task, on Blocked by as one that blocks it. A pick is sent through the door: a block as the
  * blocks' change, a sub-task or a parent as a parent set, the service's
- * answer being what the head goes on drawing. The task's ⋯ menu, its
- * right-click, and ⌘K open it from the head (`TaskRelationAsked`), and a
+ * answer being what the head goes on drawing. A task's menu, wherever a
+ * row or the Plan tab draws it, hangs it beside itself as its Task relation
+ * panel (`taskRelationMenuPanel`), so a task is related from a list without
+ * being opened; ⌘K opens it from the head (`TaskRelationAsked`), and a
  * group's + may draw it on a kind of its own.
  */
+
+/** What the menu is called wherever it opens, New task's + among them. */
+export const TASK_RELATION_MENU = "Task relation";
 
 /** Each kind as the menu's kind row, its submenu, the task's menus, and a related row's pill name it. */
 export const TASK_RELATION_WORDS = {
@@ -95,6 +103,13 @@ const NEW_TASK_KIND = {
   [TASK_RELATION_KIND.BLOCKED_BY]: TASK_CREATE_RELATION_KIND.BLOCKS,
   [TASK_RELATION_KIND.BLOCKS]: TASK_CREATE_RELATION_KIND.BLOCKED_BY,
 } as const satisfies Record<TaskRelationKind, TaskCreateRelationKind>;
+
+/**
+ * The task the menu relates: a list's row of it, or the open task, whose
+ * blocks the list does not carry, so a row's menu judges only the tree's
+ * kinds and leaves a block already standing to the service's refusal.
+ */
+export type TaskRelationSubject = TaskSummary & Pick<Task, "blockedBy" | "blocks">;
 
 /** What the menu reads and sends through: the workspace's name, which a key is drawn from, its tasks, and where a block, a parent, and a new related task go; a kind whose door is missing is offered nowhere. */
 export interface TaskRelationDoor {
@@ -153,7 +168,7 @@ function sameRepository(one: string | null, other: string | null): boolean {
 
 /** Why `other` cannot take `kind` against `task`; none where it can. */
 function whyNot(
-  task: Task,
+  task: TaskRelationSubject,
   other: TaskSummary,
   kind: TaskRelationKind,
   byId: ReadonlyMap<string, TaskSummary>,
@@ -184,7 +199,7 @@ function whyNot(
  * that cannot take the kind dimmed with why.
  */
 function relationRows(
-  task: Task,
+  task: TaskRelationSubject,
   door: TaskRelationDoor,
   kind: TaskRelationKind,
 ): readonly MenuRow[] {
@@ -205,7 +220,12 @@ function relationRows(
 }
 
 /** Sends `otherId` related to `task` as `kind` through the door. */
-function relate(task: Task, door: TaskRelationDoor, kind: TaskRelationKind, otherId: string): void {
+function relate(
+  task: TaskRelationSubject,
+  door: TaskRelationDoor,
+  kind: TaskRelationKind,
+  otherId: string,
+): void {
   switch (kind) {
     case TASK_RELATION_KIND.BLOCKED_BY:
     case TASK_RELATION_KIND.BLOCKS:
@@ -228,8 +248,9 @@ function kindOf(id: string): TaskRelationKind | undefined {
 /**
  * The add menu, opened on `kind`: the tasks for the kind chosen now, and
  * pinned under them New task for that kind and the kind's submenu. A
- * pick of a task is sent and closes the menu; a kind switched keeps the
- * search. Its owner holds it open and hangs it from a box of its own.
+ * pick of a task is sent and closes the menu (`onPicked`, else `onClose`);
+ * a kind switched keeps the search. Its owner holds it open and hangs it
+ * from a box of its own, or stands it in a menu's panel (`embedded`).
  */
 export function TaskRelationMenu({
   id,
@@ -237,20 +258,27 @@ export function TaskRelationMenu({
   door,
   kind: opened,
   align = POPOVER_ALIGN.START,
+  embedded = false,
   leaving,
   menuRef,
   onClose,
+  onPicked = onClose,
   onLeave,
 }: {
   id: string;
-  task: Task;
+  task: TaskRelationSubject;
   door: TaskRelationDoor;
   /** The kind the menu opens on. */
   kind: TaskRelationKind;
   align?: PopoverAlign | undefined;
+  /** Whether it stands in a menu's panel, which places it, rather than hung from its owner's box. */
+  embedded?: boolean | undefined;
   leaving?: boolean | undefined;
   menuRef?: ((element: HTMLElement | null) => void) | undefined;
+  /** Escape's way out: the menu's close, or a panel's way back to its item. */
   onClose: () => void;
+  /** A pick's way out, once a task or New task is picked; Escape's where none is said. */
+  onPicked?: (() => void) | undefined;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const [kind, setKind] = useState(opened);
@@ -265,7 +293,7 @@ export function TaskRelationMenu({
             label: "New task",
             icon: <GLYPH.ADD />,
             onPress: () => {
-              onClose();
+              onPicked();
               onNewTask(NEW_TASK_KIND[kind]);
             },
           },
@@ -290,24 +318,54 @@ export function TaskRelationMenu({
   ];
   return (
     <SearchableMenu
+      {...(embedded ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED } : { align })}
       id={id}
-      label={TASK_RELATION_WORDS[kind]}
+      label={TASK_RELATION_MENU}
       placeholder="Find a task"
       rows={relationRows(task, door, kind)}
       value={undefined}
       noMatch="No tasks match"
       foot={foot}
-      align={align}
       leaving={leaving}
       ref={menuRef}
       onPick={(otherId) => {
-        onClose();
+        onPicked();
         relate(task, door, kind, otherId);
       }}
       onClose={onClose}
       onLeave={onLeave}
     />
   );
+}
+
+/**
+ * A task's menu's Task relation: the add menu hung beside the menu as its
+ * panel, as New task's + hangs its own, opened on Sub-task with the kind
+ * switched at its foot. A pick relates the task and closes the menu, and
+ * Escape goes back to the menu. The door is read only while the panel is
+ * drawn, so a list drawing a menu for every row works out none of it.
+ */
+export function taskRelationMenuPanel(
+  id: string,
+  task: TaskRelationSubject,
+  door: () => TaskRelationDoor,
+): MenuPanel {
+  return {
+    label: TASK_RELATION_MENU,
+    icon: <NetworkIcon />,
+    panel: ({ back, close }) => (
+      <TaskRelationMenu
+        id={id}
+        task={task}
+        door={door()}
+        kind={TASK_RELATION_KIND.SUB_TASK}
+        embedded
+        onClose={back}
+        onPicked={close}
+        onLeave={() => undefined}
+      />
+    ),
+  };
 }
 
 /**
@@ -323,7 +381,7 @@ export function TaskRelationAsked({
   ask,
   onAsked,
 }: {
-  task: Task;
+  task: TaskRelationSubject;
   door: TaskRelationDoor;
   ask: TaskRelationAsk | undefined;
   onAsked?: ((request: number) => void) | undefined;

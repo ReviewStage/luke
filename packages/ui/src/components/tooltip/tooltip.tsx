@@ -41,8 +41,7 @@ const CARD_CHOICE = "button, a[href]";
 const HINT_COLLISION = { side: "flip", align: "shift", fallbackAxisSide: "none" } as const;
 
 /** The pill's chord, muted against the pill's own dark fill rather than the window's (`hint.tsx`). */
-export const TOOLTIP_CHORD =
-  "luke-tooltip-chord [--luke-shortcut-ink:var(--luke-color-tooltip-chord)]";
+export const TOOLTIP_CHORD = "ui-tooltip-chord [--ui-shortcut-ink:var(--ui-color-tooltip-chord)]";
 
 /** What every hint is handed: the control it stands for, and how it shows and goes. */
 interface TooltipBase {

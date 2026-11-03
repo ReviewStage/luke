@@ -1,13 +1,13 @@
-import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
-} from "@luke/settings/settings-views";
-import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@luke/ui";
-import { FlaskConicalIcon, GLYPH, InfoIcon } from "@luke/ui/icons";
+} from "@repo/settings/settings-views";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@repo/ui";
+import { FlaskConicalIcon, GLYPH, InfoIcon } from "@repo/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */

@@ -6,7 +6,7 @@
  * step whose own address is not this site's, the loaded link reads it as
  * no place, session replay and Sentry name every address of the tab by it, and a
  * connect's landing page goes back to it. The panel's own copy of the path
- * stays in `@luke/panel/navigation-history`, since the panel reaches no
+ * stays in `@repo/panel/navigation-history`, since the panel reaches no
  * shell.
  */
 

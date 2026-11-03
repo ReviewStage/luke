@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
-import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { CALL_KIND } from "@luke/features/turn-rows";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { AGENT_TOOL, RETIRED_TOOL } from "@repo/features/agent-tools";
+import type { AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { CALL_KIND } from "@repo/features/turn-rows";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

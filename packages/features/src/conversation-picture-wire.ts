@@ -1,3 +1,4 @@
+import { LEGACY_APP_WORD } from "@repo/wire";
 import { Schema as EffectSchema, Option } from "effect";
 import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
 import { WEBM_TYPE } from "./video-signature.js";
@@ -91,22 +92,37 @@ export type KeptPicture = typeof keptPictureSchema.Type;
  * was kept of its picture under, which no provider reads
  * (`packages/database/src/models/attached-file-parts.ts`).
  */
-export const KEPT_IMAGE_PROVIDER_KEY = "luke";
+export const KEPT_IMAGE_PROVIDER_KEY = "app";
 
 /** What an image file part names of its picture under that key: the attachment it was kept as, or why it was not kept. */
-export const keptImageMetadataSchema = EffectSchema.Struct({
-  [KEPT_IMAGE_PROVIDER_KEY]: EffectSchema.Union([
-    EffectSchema.Struct({ attachmentId: EffectSchema.String }),
-    EffectSchema.Struct({ omitted: EffectSchema.Literals(Object.values(PICTURE_OMISSION)) }),
-  ]),
-});
+const keptImageSchema = EffectSchema.Union([
+  EffectSchema.Struct({ attachmentId: EffectSchema.String }),
+  EffectSchema.Struct({ omitted: EffectSchema.Literals(Object.values(PICTURE_OMISSION)) }),
+]);
+
+/**
+ * An image file part's provider metadata, naming what was kept of its
+ * picture. Note that a part kept before the app was named `app` names it
+ * under `luke`, which is still read (a legacy read) and never written.
+ */
+const keptImageMetadataSchema = EffectSchema.Union([
+  EffectSchema.Struct({ [KEPT_IMAGE_PROVIDER_KEY]: keptImageSchema }),
+  EffectSchema.Struct({ [LEGACY_APP_WORD]: keptImageSchema }),
+]);
 
 const readKeptImageMetadata = EffectSchema.decodeUnknownOption(keptImageMetadataSchema);
 
+/** What an image file part's provider metadata names of its picture, under today's key or the legacy one; none where it names none. */
+export function keptImageMetadataOf(
+  providerMetadata: unknown,
+): typeof keptImageSchema.Type | undefined {
+  const read = Option.getOrUndefined(readKeptImageMetadata(providerMetadata));
+  if (read === undefined) return undefined;
+  return KEPT_IMAGE_PROVIDER_KEY in read ? read[KEPT_IMAGE_PROVIDER_KEY] : read[LEGACY_APP_WORD];
+}
+
 /** The id of the picture an image file part's provider metadata names it kept as; none where it names none. */
 export function keptPictureIdOf(providerMetadata: unknown): string | undefined {
-  const kept = Option.getOrUndefined(readKeptImageMetadata(providerMetadata))?.[
-    KEPT_IMAGE_PROVIDER_KEY
-  ];
+  const kept = keptImageMetadataOf(providerMetadata);
   return kept !== undefined && "attachmentId" in kept ? kept.attachmentId : undefined;
 }

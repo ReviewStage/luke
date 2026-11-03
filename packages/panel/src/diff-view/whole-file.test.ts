@@ -7,7 +7,7 @@ import {
   DIFF_LAYOUT,
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import type { DiffLook, FileViewHandle, FileViewProps } from "./contract.js";
 import { diffView } from "./index.js";
@@ -35,7 +35,7 @@ const LOOK: DiffLook = {
 };
 
 /** The motion token saying how a scroller a component moves itself gets there, `auto` where motion is held still. */
-const SCROLL_GLIDE = "--luke-scroll-glide";
+const SCROLL_GLIDE = "--ui-scroll-glide";
 
 const TEXT = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
 
@@ -242,7 +242,7 @@ test("a whole file and a patch drawn alone mark each indented line with its inde
   await nextFrame();
   const indents = (host: HTMLElement) =>
     [...drawnRoot(host).querySelectorAll<HTMLElement>("[data-line]")].map((row) =>
-      row.style.getPropertyValue("--luke-line-indent"),
+      row.style.getPropertyValue("--ui-line-indent"),
     );
   assert.deepEqual(indents(fileHost), ["", "4ch", ""]);
   assert.deepEqual(indents(patchHost), ["", "2ch", "2ch"]);

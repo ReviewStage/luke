@@ -1,5 +1,5 @@
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { readFailedWords, readingWords } from "@luke/features/words";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { readFailedWords, readingWords } from "@repo/features/words";
 import {
   Badge,
   BUTTON_VARIANT,
@@ -20,8 +20,8 @@ import {
   SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   Spinner,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import codexOneX from "../../../../packages/panel/marks/codex-16.png";
 import codexTwoX from "../../../../packages/panel/marks/codex-32.png";
@@ -264,7 +264,7 @@ const EFFORTS = [
 ] as const;
 
 /** The attribute the panel's shell marks the document's root with in a phone's layout (`stage-room.ts`). */
-const ROOM_ATTRIBUTE = "data-luke-room";
+const ROOM_ATTRIBUTE = "data-ui-room";
 
 /** The model menu from a button that opens it as a phone's layout does, as a sheet. */
 function PhoneSheet(): React.JSX.Element {

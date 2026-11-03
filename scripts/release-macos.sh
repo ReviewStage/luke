@@ -5,7 +5,7 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_macos
+app_require_macos
 if [[ -z "${APP_CODESIGN_IDENTITY:-}" ]]; then
     printf 'error: APP_CODESIGN_IDENTITY must name a Developer ID Application identity\n' >&2
     exit 1
@@ -32,4 +32,4 @@ fi
 "$SCRIPT_DIRECTORY/check.sh"
 
 cd "$APP_REPO_ROOT"
-pnpm --filter @luke/desktop release "$@"
+pnpm --filter @repo/desktop release "$@"

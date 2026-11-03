@@ -155,7 +155,7 @@ const GIVES_WAY =
   "group-hover/head:opacity-0 group-focus-visible/lead:opacity-0 [@media(hover:none)]:opacity-0";
 
 /** A part's fade as it is brought or put away, on the hover's settle. */
-const FADE = "transition-[opacity] duration-(--luke-duration-hover) ease-plain";
+const FADE = "transition-[opacity] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The head's parts. Note that the glyph and the chevron share one cell, only
@@ -164,24 +164,24 @@ const FADE = "transition-[opacity] duration-(--luke-duration-hover) ease-plain";
  * stays disclosure.css's one turn.
  */
 const PART = {
-  HEADING: "luke-group-header-heading m-0 flex min-w-0 flex-auto [font:inherit]",
-  LEAD: "luke-group-header-lead group/lead m-0 flex h-control min-w-0 flex-auto items-center gap-icon-gap rounded-control border-0 bg-transparent px-row-inset py-0 text-left font-ui text-muted-foreground",
+  HEADING: "ui-group-header-heading m-0 flex min-w-0 flex-auto [font:inherit]",
+  LEAD: "ui-group-header-lead group/lead m-0 flex h-control min-w-0 flex-auto items-center gap-icon-gap rounded-control border-0 bg-transparent px-row-inset py-0 text-left font-ui text-muted-foreground",
   GLYPH:
-    "luke-group-header-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:[grid-area:1/1]",
-  ICON: `luke-group-header-icon grid place-items-center [&>svg]:size-control-icon ${FADE}`,
-  CHEVRON: `luke-group-header-chevron grid place-items-center ${FADE}`,
-  MARK: "luke-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
-  COUNT: `luke-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
+    "ui-group-header-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:[grid-area:1/1]",
+  ICON: `ui-group-header-icon grid place-items-center [&>svg]:size-control-icon ${FADE}`,
+  CHEVRON: `ui-group-header-chevron grid place-items-center ${FADE}`,
+  MARK: "ui-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
+  COUNT: `ui-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
   /* Each action waits for the pointer or the keyboard on its own (`group-header.css`), a row's acts' gap apart, so a head's acts stand over the rows' acts beneath it. */
-  ACTIONS: "luke-group-header-actions flex flex-none items-center gap-luke-4",
+  ACTIONS: "ui-group-header-actions flex flex-none items-center gap-ui-4",
 } as const;
 
 /** An editing head's lead, laid out as a head's lead with nothing to press, and its field, bare in the group role's type in the label's place. */
 const EDITOR = {
-  LEAD: "luke-group-header-editor-lead flex h-control min-w-0 flex-auto items-center gap-icon-gap px-row-inset text-group font-group text-foreground",
+  LEAD: "ui-group-header-editor-lead flex h-control min-w-0 flex-auto items-center gap-icon-gap px-row-inset text-group font-group text-foreground",
   /* The glyph's control is a compact button, a step wider than the glyph, so it overhangs the cell by that step and the field stands where the label stood. */
   GLYPH:
-    "luke-group-header-editor-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:-m-luke-4",
+    "ui-group-header-editor-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:-m-ui-4",
   FIELD: `${INLINE_EDIT_FIELD} data-[look=well]:min-w-0 data-[look=well]:flex-auto`,
 } as const;
 
@@ -197,9 +197,9 @@ const PRESSED_AS_ROW = {
  * the head's.
  */
 const HEAD_BOX =
-  "group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+  "group/head flex min-w-0 items-center gap-ui-2 rounded-control pr-ui-4 transition-[background-color] duration-(--ui-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]";
 
-const HEAD = `luke-group-header-head ${HEAD_BOX}`;
+const HEAD = `ui-group-header-head ${HEAD_BOX}`;
 
 /** A head that sticks stands at the top of its scroller while its rows scroll beneath it, on the page's ground so they do not show through. */
 const STICKS = "sticky top-0 z-3 bg-ground";
@@ -211,9 +211,9 @@ const STICKS = "sticky top-0 z-3 bg-ground";
  * which the fold draws, must be a subgrid too.
  */
 const SUBGRID = {
-  ROOT: "grid col-span-full grid-cols-subgrid gap-y-luke-2",
+  ROOT: "grid col-span-full grid-cols-subgrid gap-y-ui-2",
   HEAD: "col-span-full",
-  BODY: "grid col-span-full grid-cols-subgrid gap-y-luke-2 *:col-span-full",
+  BODY: "grid col-span-full grid-cols-subgrid gap-y-ui-2 *:col-span-full",
 } as const;
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -234,9 +234,7 @@ function Count({ count }: { count: NavCount }): React.JSX.Element {
       data-tone={tone}
     >
       {count.value}
-      {count.noun === undefined ? null : (
-        <span className="luke-visually-hidden"> {count.noun}</span>
-      )}
+      {count.noun === undefined ? null : <span className="ui-visually-hidden"> {count.noun}</span>}
     </span>
   );
 }
@@ -305,7 +303,7 @@ export interface GroupHeaderEditorHandle {
  * as Base UI's popover does on the press's click, says no blur again, so
  * its owner calls `leave` (`ref`) when the layer says a press away put it
  * away. It is laid out as the head is but not named as one, so a list
- * that drags its groups by their heads (`.luke-group-header-head`) never
+ * that drags its groups by their heads (`.ui-group-header-head`) never
  * takes a press in the field for a drag.
  */
 export function GroupHeaderEditor({
@@ -354,7 +352,7 @@ export function GroupHeaderEditor({
     // biome-ignore lint/a11y/noStaticElementInteractions: the head takes nothing itself; it hears the focus leave its field, its glyph's control, and the layer that control hangs in a portal, which only React carries back up to it.
     <div
       ref={root}
-      className={`luke-group-header-editor ${HEAD_BOX}`}
+      className={`ui-group-header-editor ${HEAD_BOX}`}
       onBlur={(event) => {
         const next = event.relatedTarget;
         if (held.current || inHead(next)) return;
@@ -405,7 +403,7 @@ export function GroupAction({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="luke-group-header-action relative inline-flex" data-state={state}>
+    <span className="ui-group-header-action relative inline-flex" data-state={state}>
       {children}
     </span>
   );
@@ -520,7 +518,7 @@ export function GroupHeader({
   return (
     <DisclosureScope state={state}>
       <div
-        className={`luke-group-header min-w-0 ${subgrid ? SUBGRID.ROOT : ""}`}
+        className={`ui-group-header min-w-0 ${subgrid ? SUBGRID.ROOT : ""}`}
         data-folds={folds ? "true" : undefined}
         data-head={head === GROUP_HEAD.STICKS ? head : undefined}
         data-rows={subgrid ? rowsStand : undefined}
@@ -552,7 +550,7 @@ export function GroupHeader({
           <div
             ref={folds ? state.body : undefined}
             id={rowsId}
-            className={`luke-disclosure-body ${subgrid ? SUBGRID.BODY : ""}`}
+            className={`ui-disclosure-body ${subgrid ? SUBGRID.BODY : ""}`}
             data-inset="none"
             inert={folds && state.leaving}
           >

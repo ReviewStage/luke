@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   claimMacCommand,
   claimMacCommands,
@@ -10,10 +10,10 @@ import {
   markMacListening,
   queueMacCommand,
   withdrawMacCommand,
-} from "@luke/database/models/mac-command-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+} from "@repo/database/models/mac-command-store";
+import type { TaskStoreEffect } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
@@ -22,10 +22,10 @@ import {
   type MacCommandResult,
   type MacShellResult,
   macCommandSchema,
-} from "@luke/features/mac-command-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { UnparsedWireValue } from "@luke/wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/mac-command-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { UnparsedWireValue } from "@repo/wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import { heldUntil } from "../http/held-read.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";

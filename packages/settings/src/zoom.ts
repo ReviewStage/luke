@@ -7,7 +7,7 @@
  * press and a pick are the same stored value.
  */
 
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 
 /** Every size, smallest first: the pop-up's options and the shortcuts' steps. */

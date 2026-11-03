@@ -2,7 +2,7 @@
  * tables.ts -- every table Sync captures, as one list the drift check and the migration writer read.
  *
  * A table is synced by declaring it here (`defineSyncTable`) and writing
- * its capture into a migration (`pnpm --filter @luke/database sync:render`);
+ * its capture into a migration (`pnpm --filter @repo/database sync:render`);
  * the drift check (`__tests__/capture.test.ts`) then fails until the migrated
  * database carries exactly what these declarations render. Each table is
  * declared once, for every view that reads it: a view's live read names
@@ -255,7 +255,7 @@ export const macCommandSync = defineSyncTable(macCommand, {
 
 /**
  * A line queued for a cloud agent's runner, on the agent's topic, which the
- * runner's held read waits on (`@luke/service`'s `runner-lines-app.ts`).
+ * runner's held read waits on (`@repo/service`'s `runner-lines-app.ts`).
  * Note that its acceptance is ignored, because the runner's read waits on
  * new lines alone, and every message the runner takes stamps one.
  */

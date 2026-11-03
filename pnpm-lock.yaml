@@ -135,13 +135,13 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../../packages/features
-      '@luke/settings':
+      '@repo/settings':
         specifier: workspace:*
         version: link:../../packages/settings
-      '@luke/ui':
+      '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       react:
@@ -200,31 +200,31 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@luke/brand':
+      '@repo/brand':
         specifier: workspace:*
         version: link:../../packages/brand
-      '@luke/credentials':
+      '@repo/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../../packages/features
-      '@luke/gateway':
+      '@repo/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
-      '@luke/host':
+      '@repo/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@luke/panel':
+      '@repo/panel':
         specifier: workspace:*
         version: link:../../packages/panel
-      '@luke/settings':
+      '@repo/settings':
         specifier: workspace:*
         version: link:../../packages/settings
-      '@luke/ui':
+      '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       '@sentry/esbuild-plugin':
@@ -288,17 +288,17 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../../packages/features
-      '@luke/host':
+      '@repo/host':
         specifier: workspace:*
         version: link:../../packages/host
       effect:
         specifier: 'catalog:'
         version: 4.0.4
     devDependencies:
-      '@luke/agent-runner':
+      '@repo/agent-runner':
         specifier: workspace:*
         version: link:../../packages/agent-runner
       '@types/node':
@@ -337,37 +337,37 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@luke/brand':
+      '@repo/brand':
         specifier: workspace:*
         version: link:../../packages/brand
-      '@luke/credentials':
+      '@repo/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
-      '@luke/database':
+      '@repo/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../../packages/features
-      '@luke/host':
+      '@repo/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@luke/panel':
+      '@repo/panel':
         specifier: workspace:*
         version: link:../../packages/panel
-      '@luke/runtime':
+      '@repo/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@luke/service':
+      '@repo/service':
         specifier: workspace:*
         version: link:../../packages/service
-      '@luke/settings':
+      '@repo/settings':
         specifier: workspace:*
         version: link:../../packages/settings
-      '@luke/ui':
+      '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       '@sentry/browser':
@@ -483,7 +483,7 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       '@types/node':
@@ -513,16 +513,16 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/brand':
+      '@repo/brand':
         specifier: workspace:*
         version: link:../brand
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/runtime':
+      '@repo/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -547,16 +547,16 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/runtime':
+      '@repo/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@luke/settings':
+      '@repo/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       ai:
@@ -602,12 +602,6 @@ importers:
 
   packages/features:
     dependencies:
-      '@luke/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
       '@orpc/client':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -620,6 +614,12 @@ importers:
       '@orpc/openapi':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)
+      '@repo/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@repo/wire':
+        specifier: workspace:*
+        version: link:../wire
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
@@ -654,7 +654,7 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -679,27 +679,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/agent-runner':
-        specifier: workspace:*
-        version: link:../agent-runner
-      '@luke/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@luke/features':
-        specifier: workspace:*
-        version: link:../features
-      '@luke/gateway':
-        specifier: workspace:*
-        version: link:../gateway
-      '@luke/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@luke/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -712,6 +691,27 @@ importers:
       '@orpc/server':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)
+      '@repo/agent-runner':
+        specifier: workspace:*
+        version: link:../agent-runner
+      '@repo/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@repo/features':
+        specifier: workspace:*
+        version: link:../features
+      '@repo/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@repo/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@repo/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@repo/wire':
+        specifier: workspace:*
+        version: link:../wire
       '@shikijs/langs':
         specifier: 4.5.0
         version: 4.5.0
@@ -755,27 +755,6 @@ importers:
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
-      '@luke/brand':
-        specifier: workspace:*
-        version: link:../brand
-      '@luke/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@luke/features':
-        specifier: workspace:*
-        version: link:../features
-      '@luke/host':
-        specifier: workspace:*
-        version: link:../host
-      '@luke/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@luke/ui':
-        specifier: workspace:*
-        version: link:../ui
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
       '@orpc/client':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -785,6 +764,27 @@ importers:
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+      '@repo/brand':
+        specifier: workspace:*
+        version: link:../brand
+      '@repo/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@repo/features':
+        specifier: workspace:*
+        version: link:../features
+      '@repo/host':
+        specifier: workspace:*
+        version: link:../host
+      '@repo/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@repo/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@repo/wire':
+        specifier: workspace:*
+        version: link:../wire
       '@tiptap/core':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/pm@3.31.4)
@@ -873,7 +873,7 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@luke/gateway':
+      '@repo/gateway':
         specifier: workspace:*
         version: link:../gateway
       '@tailwindcss/vite':
@@ -909,7 +909,7 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -949,27 +949,6 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@luke/agent-runner':
-        specifier: workspace:*
-        version: link:../agent-runner
-      '@luke/brand':
-        specifier: workspace:*
-        version: link:../brand
-      '@luke/database':
-        specifier: workspace:*
-        version: link:../database
-      '@luke/features':
-        specifier: workspace:*
-        version: link:../features
-      '@luke/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@luke/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -982,6 +961,27 @@ importers:
       '@orpc/server':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)
+      '@repo/agent-runner':
+        specifier: workspace:*
+        version: link:../agent-runner
+      '@repo/brand':
+        specifier: workspace:*
+        version: link:../brand
+      '@repo/database':
+        specifier: workspace:*
+        version: link:../database
+      '@repo/features':
+        specifier: workspace:*
+        version: link:../features
+      '@repo/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@repo/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@repo/wire':
+        specifier: workspace:*
+        version: link:../wire
       '@sentry/effect':
         specifier: 11.7.0
         version: 11.7.0(@babel/core@7.29.7)(effect@4.0.4)(rollup@4.62.4)
@@ -1019,12 +1019,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@luke/credentials':
-        specifier: workspace:*
-        version: link:../credentials
       '@modelcontextprotocol/sdk':
         specifier: 1.32.1
         version: 1.32.1(zod@4.5.4)
+      '@repo/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -1049,10 +1049,10 @@ importers:
 
   packages/settings:
     dependencies:
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       effect:
@@ -1077,16 +1077,16 @@ importers:
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
-      '@luke/brand':
+      '@repo/brand':
         specifier: workspace:*
         version: link:../brand
-      '@luke/features':
+      '@repo/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/settings':
+      '@repo/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../wire
       '@tanstack/react-virtual':
@@ -1218,10 +1218,10 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/service':
+      '@repo/service':
         specifier: workspace:*
         version: link:../../packages/service
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       '@vercel/sandbox':
@@ -1246,13 +1246,13 @@ importers:
 
   tools/codex-probe:
     dependencies:
-      '@luke/credentials':
+      '@repo/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
-      '@luke/service':
+      '@repo/service':
         specifier: workspace:*
         version: link:../../packages/service
-      '@luke/wire':
+      '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire
       '@vercel/sandbox':

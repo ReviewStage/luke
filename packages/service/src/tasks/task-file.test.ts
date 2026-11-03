@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import {
   GITHUB_APP_WITH_TOKENS,

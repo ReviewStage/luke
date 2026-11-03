@@ -2,7 +2,7 @@
  * use-workspace-read.ts -- a workspace's own integration as the service holds it now, for the rows that offer it: our Sentry integration, and our Slack bot.
  */
 
-import type { ACT_KIND } from "@luke/host/acts";
+import type { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActResult, useAct } from "../act.js";
 

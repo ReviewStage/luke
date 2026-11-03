@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { inPinOrder } from "@luke/features/pin-order";
-import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
-import { applySectionWrite } from "@luke/features/task-section-writes";
+import { inPinOrder } from "@repo/features/pin-order";
+import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
+import { applySectionWrite } from "@repo/features/task-section-writes";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -11,13 +11,13 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
-import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+} from "@repo/features/task-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
+import { type PinMove, TASK_MARK, type TaskMark } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -349,10 +349,8 @@ function openOptions(page: HTMLElement, label: string): void {
 function choose(...names: string[]): void {
   for (const name of names) {
     const item = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[role="menu"]:not([data-leaving]) .luke-menu-item',
-      ),
-    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+      ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
     assert.ok(item, `${name} is in the menu`);
     act(() => item.click());
   }
@@ -420,12 +418,12 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
 /** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */
 function recordMotions() {
   const tokens = {
-    "--luke-duration-exit": "90ms",
-    "--luke-motion-exit": "ease",
-    "--luke-duration-quick": "140ms",
-    "--luke-duration-shape": "460ms",
-    "--luke-spring": "ease-out",
-    "--luke-row-stagger": "32ms",
+    "--ui-duration-exit": "90ms",
+    "--ui-motion-exit": "ease",
+    "--ui-duration-quick": "140ms",
+    "--ui-duration-shape": "460ms",
+    "--ui-spring": "ease-out",
+    "--ui-row-stagger": "32ms",
   };
   for (const [name, value] of Object.entries(tokens)) {
     document.documentElement.style.setProperty(name, value);
@@ -489,12 +487,12 @@ test("a field's chip scales in as it is filtered, and lifted, the list widens at
 test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
   const page = await mountPage();
   const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
-  window.localStorage.setItem("luke.tasksFilter", JSON.stringify(elsewhere));
+  window.localStorage.setItem("app.tasksFilter", JSON.stringify(elsewhere));
   openOptions(page, "Filter");
   choose("Priority", "High");
   closeMenus();
 
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.tasksFilter") ?? "{}"), {
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.tasksFilter") ?? "{}"), {
     ...elsewhere,
     [ACME.id]: { priority: [TASK_PRIORITY.HIGH] },
   });
@@ -562,7 +560,7 @@ test("the switch beside the title shows Columns, kept on this Mac", async () => 
 });
 
 test("a board choice kept before the rename still opens Columns, named so in the switch", async () => {
-  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  window.localStorage.setItem("app.tasksPageView", JSON.stringify("board"));
   const page = await mountPage();
 
   assert.ok(page.querySelector("[data-task-column]"), "the saved choice opens the columns");
@@ -580,7 +578,7 @@ test("in Columns the view options group the columns under Group by", async () =>
 
   const labels = [
     ...document.querySelectorAll(
-      '[role="menu"]:not([data-leaving]) .luke-menu-item .luke-menu-item-label',
+      '[role="menu"]:not([data-leaving]) .ui-menu-item .ui-menu-item-label',
     ),
   ].map((each) => each.textContent);
   assert.ok(labels.includes("Group by"), "the grouping submenu is Group by");
@@ -656,7 +654,7 @@ test("find opened in the List is let go as the Board is chosen", async () => {
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {
   const page = await mountPage();
   const press = rowOf(page, "ACME-44").querySelector("button");
-  const spoken = press?.querySelector(".luke-visually-hidden");
+  const spoken = press?.querySelector(".ui-visually-hidden");
   assert.ok(spoken, "the key and status are said");
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });
@@ -688,7 +686,7 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
 /** The words of the menu items standing open now. */
 function menuLabels(): (string | null)[] {
   return [
-    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label'),
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .ui-menu-item-label'),
   ].map((label) => label.textContent);
 }
 
@@ -786,13 +784,13 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+    const button = head?.querySelector<HTMLButtonElement>(".ui-group-header-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
 
   // Note that a wide page counts a group open and folded alike, never only under the pointer.
-  const count = () => fold().querySelector(".luke-group-header-count");
+  const count = () => fold().querySelector(".ui-group-header-count");
   assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => fold().click());
@@ -865,7 +863,7 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
   const todo = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
     (group) => group.getAttribute("aria-label") === "Todo",
   );
-  const fold = todo?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+  const fold = todo?.querySelector<HTMLButtonElement>(".ui-group-header-head button");
   assert.ok(fold, "Todo's head folds it");
   act(() => fold.click());
 
@@ -878,7 +876,7 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
 
 /** The page's one scroller, which holds the List's rows or the Board's columns. */
 function scroller(page: HTMLElement): HTMLElement {
-  const found = page.querySelector<HTMLElement>(".luke-collection-page-scroll");
+  const found = page.querySelector<HTMLElement>(".ui-collection-page-scroll");
   assert.ok(found, "the page scrolls");
   return found;
 }
@@ -1049,7 +1047,7 @@ test("a row draws its assignee and not its creator at first, and a List display 
     { properties: BEFORE_ASSIGNEE, offered: BEFORE_ASSIGNEE },
     { properties: BEFORE_ASSIGNEE },
   ]) {
-    window.localStorage.setItem("luke.tasksListDisplay", JSON.stringify(kept));
+    window.localStorage.setItem("app.tasksListDisplay", JSON.stringify(kept));
     const page = await mountPage();
     assert.ok(cells(page).includes("assignee"), "the assignee is drawn without turning it on");
     assert.ok(cells(page).includes("creator"), "the creator stays on, as kept");
@@ -1076,7 +1074,7 @@ test("a row's Assignee chip sends the member picked, and No assignee assigns it 
 
 test("grouped by assignee, the reader's group leads and No assignee's ends, a row there leaves its assignee's cell empty, and a row dragged onto a group is assigned to its person, onto No assignee's to no one", async () => {
   window.localStorage.setItem(
-    "luke.tasksListDisplay",
+    "app.tasksListDisplay",
     JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
   );
   const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
@@ -1104,7 +1102,7 @@ test("grouped by assignee, the reader's group leads and No assignee's ends, a ro
 
 test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves it without a drag", async () => {
   window.localStorage.setItem(
-    "luke.tasksListDisplay",
+    "app.tasksListDisplay",
     JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
   );
   const page = await mountPage(
@@ -1123,9 +1121,9 @@ test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves
 });
 
 test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
-  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  window.localStorage.setItem("app.tasksPageView", JSON.stringify("board"));
   window.localStorage.setItem(
-    "luke.tasksBoardDisplay",
+    "app.tasksBoardDisplay",
     JSON.stringify({ properties: ["priority", "status"] }),
   );
   const page = await mountPage();
@@ -1268,7 +1266,7 @@ test("a view that leaves no task standing says so, though an empty section still
     agentEntries: [],
   };
   window.localStorage.setItem(
-    "luke.tasksFilter",
+    "app.tasksFilter",
     JSON.stringify({ [ACME.id]: { status: [TASK_STATUS.CANCELED] } }),
   );
   const page = await mountPage();
@@ -1280,10 +1278,10 @@ test("a view that leaves no task standing says so, though an empty section still
 test("a row leads its repository with its owner's picture, one address for every row of that owner, so the window asks GitHub for it once", async () => {
   const page = await mountPage();
   const pictures = [
-    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.luke-avatar-picture"),
+    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.ui-avatar-picture"),
   ].map((picture) => picture.getAttribute("src"));
 
-  assert.equal(pictures.length, page.querySelectorAll(".luke-task-row").length);
+  assert.equal(pictures.length, page.querySelectorAll(".ui-task-row").length);
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
 
@@ -1296,10 +1294,10 @@ test("the Filter's Repository names each repository as the repository chip does,
   openOptions(page, "Filter");
   choose("Repository");
   const offered = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
   ]
-    .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
-    .map((item) => item.querySelector(".luke-menu-item-detail")?.textContent);
+    .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
+    .map((item) => item.querySelector(".ui-menu-item-detail")?.textContent);
 
   assert.deepEqual(offered, ["acme", "beta"]);
 });
@@ -1313,15 +1311,15 @@ test("the Filter's Repository rows each hang the repository's card, its name wit
   openOptions(page, "Filter");
   choose("Repository");
   const row = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
-  ].find((item) => item.querySelector(".luke-menu-item-detail")?.textContent === "beta");
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+  ].find((item) => item.querySelector(".ui-menu-item-detail")?.textContent === "beta");
   restOn(row ?? assert.fail("the Filter offers beta/web"));
-  const card = document.querySelector(".luke-tooltip-card [data-repository-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-repository-card]");
 
   assert.deepEqual(
     [
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      card?.querySelector(".luke-hover-card-sub")?.textContent,
+      card?.querySelector(".ui-hover-card-name")?.textContent,
+      card?.querySelector(".ui-hover-card-sub")?.textContent,
     ],
     ["web", "beta"],
   );
@@ -1347,20 +1345,20 @@ test("the Filter's Assignee and Creator list the members as every people menu do
     const items = [
       ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
         .at(-1)
-        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
     ];
     offered.push(
       items.map((item) => [
-        item.querySelector(".luke-menu-item-label")?.textContent,
-        item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+        item.querySelector(".ui-menu-item-label")?.textContent,
+        item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
       ]),
     );
     restOn(
       items.find(
-        (item) => item.querySelector(".luke-menu-item-label")?.textContent === "Charles Pan",
+        (item) => item.querySelector(".ui-menu-item-label")?.textContent === "Charles Pan",
       ) ?? assert.fail(`${field} offers Charles Pan`),
     );
-    cards.push(document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent);
+    cards.push(document.querySelector(".ui-tooltip-card .ui-hover-card-name")?.textContent);
     closeMenus();
   }
 
@@ -1393,10 +1391,10 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
     [
       ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
         .at(-1)
-        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
     ].map((item) => [
-      item.querySelector(".luke-menu-item-label")?.textContent,
-      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.querySelector(".ui-menu-item-label")?.textContent,
+      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
     ]);
 
   openOptions(page, "Filter");
@@ -1419,9 +1417,9 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item')]
-      .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
-      .map((item) => item.querySelector("img.luke-avatar-picture")?.getAttribute("src"));
+    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item')]
+      .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
+      .map((item) => item.querySelector("img.ui-avatar-picture")?.getAttribute("src"));
 
   openOptions(page, "Filter");
   choose("Repository");

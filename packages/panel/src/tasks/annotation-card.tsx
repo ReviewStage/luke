@@ -19,8 +19,8 @@ import {
   useDisclosureState,
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
-} from "@luke/ui";
-import { landedMark } from "@luke/ui/landed";
+} from "@repo/ui";
+import { landedMark } from "@repo/ui/landed";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
@@ -108,7 +108,7 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
   if (open) return null;
   return (
     <span className="annotation-card-count inline-flex flex-none items-center gap-tight-gap text-muted-foreground">
-      <MessageSquareIcon className="size-luke-12" aria-hidden="true" />
+      <MessageSquareIcon className="size-ui-12" aria-hidden="true" />
       {count}
       <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
         {" "}
@@ -201,7 +201,7 @@ export function AnnotationCard({
             <span className="annotation-card-face flex size-annotation-face flex-none items-center justify-center">
               {face}
             </span>
-            <span className="flex min-w-0 flex-initial overflow-hidden font-luke-semibold">
+            <span className="flex min-w-0 flex-initial overflow-hidden font-ui-semibold">
               {name}
             </span>
             {time === undefined ? null : (
@@ -216,7 +216,7 @@ export function AnnotationCard({
           </DisclosureSummary>
           <FoldBody className="annotation-card-body">
             {lead}
-            <div className="annotation-card-content pt-luke-2 pr-list-inset pb-list-inset pl-annotation-face-x">
+            <div className="annotation-card-content pt-ui-2 pr-list-inset pb-list-inset pl-annotation-face-x">
               {children}
             </div>
             {footer}

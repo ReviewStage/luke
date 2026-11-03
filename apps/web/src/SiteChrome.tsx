@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   IconButtonLink,
   MARK_PROVIDER,
@@ -13,7 +13,8 @@ import {
   Text,
   TextLink,
   type TextLinkCurrent,
-} from "@luke/ui";
+} from "@repo/ui";
+import type { ReactNode } from "react";
 import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
@@ -25,10 +26,10 @@ export const WEB_APP_URL = PANEL_PATH;
 
 /**
  * The product's name beside the mark, in the web profile's wordmark display style
- * (`@luke/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
+ * (`@repo/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
  */
 export const WORDMARK =
-  "font-brand text-(length:--luke-display-wordmark-size) font-(--luke-display-wordmark-weight) tracking-(--luke-display-wordmark-tracking)";
+  "font-brand text-(length:--ui-display-wordmark-size) font-(--ui-display-wordmark-weight) tracking-(--ui-display-wordmark-tracking)";
 
 /** The pages the site's chrome links to, by the path each is served at. */
 export const SITE_PAGE = {
@@ -62,11 +63,18 @@ function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurren
 /**
  * Shared between every page so navigation and branding never drift apart:
  * the wordmark and the links the banner holds, handed to PublicPage's
- * `banner`; `current` marks where the reader is. Every link stands the
+ * `banner`, or the landing's bar; `current` marks where the reader is, and
+ * `calls` stand after the links. Every link stands the
  * web's 44px tall inside the 64px banner, so its hit target is the contract's
  * without moving a word.
  */
-export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
+export function SiteNavigation({
+  current,
+  calls,
+}: ChromeProps & {
+  /** What stands after the links: the landing's way to sign in and its download. */
+  readonly calls?: ReactNode;
+}): React.JSX.Element {
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
       <TextLink
@@ -74,7 +82,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
         height={TEXT_LINK_HEIGHT.CONTROL}
         current={currentOf(SITE_PAGE.HOME, current)}
       >
-        <span className={`inline-flex items-center gap-2 text-(--luke-color-text) ${WORDMARK}`}>
+        <span className={`inline-flex items-center gap-2 text-(--ui-color-text) ${WORDMARK}`}>
           <span className="inline-flex h-4.5 w-5 shrink-0">
             <ProductMark fill inherit />
           </span>
@@ -108,6 +116,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
             label={`${PRODUCT_NAME} on GitHub`}
           />
         </span>
+        {calls}
       </div>
     </nav>
   );
@@ -147,7 +156,7 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
       {/* The notice sits under its own rule at the foot of the column, the
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
-      <p className="mt-8 border-t border-(--luke-color-border) pt-6">© 2026 Stage Inc.</p>
+      <p className="mt-8 border-t border-(--ui-color-border) pt-6">© 2026 Stage Inc.</p>
     </Text>
   );
 }

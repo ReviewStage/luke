@@ -1,11 +1,11 @@
-import type { AppAudioSlice } from "@luke/host/app-state";
-import type { AppStateStore } from "@luke/host/client";
-import type { DesktopService } from "@luke/host/desktop-service";
+import type { AppAudioSlice } from "@repo/host/app-state";
+import type { AppStateStore } from "@repo/host/client";
+import type { DesktopService } from "@repo/host/desktop-service";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
-} from "@luke/settings/microphone";
+} from "@repo/settings/microphone";
 import { Schema } from "effect";
 import { systemPreferences } from "electron";
 import {

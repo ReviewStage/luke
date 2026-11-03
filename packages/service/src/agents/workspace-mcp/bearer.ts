@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import {
   type AgentStoreEffect,
   readRunnerTokenConversation,
-} from "@luke/database/models/agent-store";
+} from "@repo/database/models/agent-store";
 import { Effect, Option } from "effect";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 

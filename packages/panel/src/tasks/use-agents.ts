@@ -11,7 +11,7 @@ import {
   type AgentReviewOptionsAnswerView,
   ARCHIVE_DRAWN,
   type ArchiveDrawn,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -20,25 +20,25 @@ import {
   type AgentSummary,
   CONTEXT_WINDOW,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type {
   CatalogModel,
   MacOffer,
   ModelChoice,
   ModelProvider,
-} from "@luke/features/models-wire";
+} from "@repo/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
-} from "@luke/features/pull-request-chapters-view";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { ListedPullRequest, TaskMode } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActPayload } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { STATUS_TONE } from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/features/pull-request-chapters-view";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { ListedPullRequest, TaskMode } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActPayload } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { STATUS_TONE } from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import {
@@ -116,7 +116,7 @@ const MODELS_READ_BOUND_MS = 15_000;
  * The agents are the task list's, followed live in the host, which carries
  * every agent of the task, archived ones among them, and draws a rename, an
  * archive, a change of model, or a switch of MCP servers the moment it is
- * asked, kept until the list carries it (`@luke/host`'s
+ * asked, kept until the list carries it (`@repo/host`'s
  * `task-list-collections.ts`), and a Start's agent before the Start answers.
  * Where no task is open, the agent named is read as its own page, for its
  * workspace, its repository, and the run that started it, and the list's

@@ -14,7 +14,7 @@
  * with why, so that procedure answers its status beside its body.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { pageFrameAnswerSchema } from "../page-frame.js";

@@ -12,7 +12,7 @@ import {
   Skeleton,
   SkeletonRegion,
   type StatusTone,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useRef } from "react";
 
 /**
@@ -36,7 +36,7 @@ const SKELETON_SECTION_NAME = "120px";
 /** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
 const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
 
-/** The placeholder head's face, at the page's size (`.luke-avatar[data-size="page"]`). */
+/** The placeholder head's face, at the page's size (`.ui-avatar[data-size="page"]`). */
 const SKELETON_FACE = "48px";
 
 /** A placeholder row's tile, an automation's or a repository's at its inline size (`.home-row-picture`). */
@@ -137,7 +137,7 @@ export function PersonSectionFrame({
 }): React.JSX.Element {
   return (
     <section
-      className="home-section flex flex-col gap-tight-gap [.home-section+&]:mt-page-section-gap pointer-coarse:[&_.luke-list-row-main]:min-h-touch"
+      className="home-section flex flex-col gap-tight-gap [.home-section+&]:mt-page-section-gap pointer-coarse:[&_.ui-list-row-main]:min-h-touch"
       aria-label={label}
     >
       <GroupHeader

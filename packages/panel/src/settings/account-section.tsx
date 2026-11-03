@@ -1,12 +1,12 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS, VERB } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { GitHubTokenSummary } from "@repo/features/github-token-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -22,9 +22,9 @@ import {
   STATUS_TONE,
   useConfirmDialog,
   wholeWordsHint,
-} from "@luke/ui";
-import { accountActor } from "@luke/ui/actor-model";
-import type { ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { accountActor } from "@repo/ui/actor-model";
+import type { ActionResult } from "@repo/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -191,7 +191,7 @@ export function AccountSection({
           leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
           label={<OneLine hint={wholeWordsHint(account.email)}>{account.email}</OneLine>}
           description={
-            <span className="inline-flex flex-wrap items-center gap-luke-4 whitespace-nowrap">
+            <span className="inline-flex flex-wrap items-center gap-ui-4 whitespace-nowrap">
               Signed in with
               <ProviderMark provider={account.provider} size={PROVIDER_MARK_SIZE.CAPTION} />
               {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}

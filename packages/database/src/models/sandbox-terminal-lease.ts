@@ -25,7 +25,7 @@
  * conversation and its instants.
  */
 
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS } from "@repo/wire";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

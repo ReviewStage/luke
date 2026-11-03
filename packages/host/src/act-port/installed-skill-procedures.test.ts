@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import type { InstalledSkillListView } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE } from "@luke/features/installed-skill-wire";
+import type { InstalledSkillListView } from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_SCOPE } from "@repo/features/installed-skill-wire";
 import { Effect } from "effect";
 import { type ActPortClient, INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
 import type { ActSender } from "./base.js";

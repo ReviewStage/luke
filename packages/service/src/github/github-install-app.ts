@@ -52,14 +52,14 @@
  * whole web flow with `redirect_uri` to choose the callback instead.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { workspaceOf } from "@luke/database/models/workspace-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { workspaceOf } from "@repo/database/models/workspace-store";
 import {
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
   githubInstallLandingPath,
   HOSTED_SERVICE_PATH,
-} from "@luke/features";
+} from "@repo/features";
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";

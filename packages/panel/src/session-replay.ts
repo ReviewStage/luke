@@ -47,10 +47,10 @@
  * alone, as the service's counts are (`WORKSPACE_GROUP_TYPE`).
  */
 
-import type { ProductPlatform } from "@luke/features/analytics";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import { opensWithheldSheet } from "@luke/ui/session-replay-marks";
-import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
+import type { ProductPlatform } from "@repo/features/analytics";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import { opensWithheldSheet } from "@repo/ui/session-replay-marks";
+import { isRecord, text, type UnparsedWireValue, type WireValue } from "@repo/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import type { BundleImporter } from "./bundle-loader.js";
 import { sessionRecorderLoaded } from "./session-recorder/contract.js";
@@ -80,8 +80,7 @@ const LAYOUT_DATA = `
   inbox-comment inbox-shown indent indeterminate indicators inherit ink
   inset issue-state item-section item-selected keyboard kind labels-control
   landed late layer layout lead leaving legible level lifted lights line
-  lines lit loaded look luke-boot-sidebar luke-density luke-profile
-  luke-room luke-theme marked measure menu-open meta min-width mobile-bar
+  lines lit loaded look marked measure menu-open meta min-width mobile-bar
   mode motion move moves muted name narrow narrowest nudge numbered open
   opened orientation overflow page pane-beside pane-over panel-open
   panel-toggle pending picked place placed placement playing pointer-opens
@@ -90,7 +89,8 @@ const LAYOUT_DATA = `
   sections selected separator shown side sidebar-collapsed sidebar-overlay
   single size slot stand start state status style submit surface swiped
   thumb tone truncate-container truncate-group-container turn turned type
-  under under-more unread variant whole wide width worded wrap-heading
+  ui-boot-sidebar ui-density ui-profile ui-room ui-theme under under-more
+  unread variant whole wide width worded wrap-heading
   wrapped zoom
 `
   .trim()
@@ -110,7 +110,7 @@ const LAYOUT_DATA = `
  * where a box left out of the recording stands. Each is a keyword, a number,
  * a colour, or a path, and never a person's words. Note that an element's own
  * style leaves whole, so nothing may write a person's words into one: the one
- * style built from a config, a chart's series colours (`@luke/ui/chart`), is
+ * style built from a config, a chart's series colours (`@repo/ui/chart`), is
  * drawn from a module's constants, and only on the admin page, which the
  * recording leaves out. Names are lowercase, since the recorder hands an SVG
  * attribute over in the case it was written.
@@ -271,7 +271,7 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
  * because the project's setting would otherwise decide; and that the
  * recorder masks no radio's, checkbox's, or file input's value at all,
  * whatever this says, so those are kept out where they are drawn
- * (`@luke/ui/session-replay-marks`, and the file picker's `ph-no-capture`).
+ * (`@repo/ui/session-replay-marks`, and the file picker's `ph-no-capture`).
  * The canvas option is set here rather than left to the library's default
  * on the same terms, because the library reads it before the remote
  * configuration and a project that switched canvas recording on would
@@ -337,7 +337,7 @@ export interface SessionReplayShell {
    * connect policy must allow, and the processor's own app, its `ui_host`:
    * the processor's address on the desktop, whose `file://` page no blocker
    * sees, and a path of the tab's own origin on the web, which the web
-   * service passes on (`@luke/features/posthog-proxy`).
+   * service passes on (`@repo/features/posthog-proxy`).
    */
   readonly host: { readonly api: string; readonly ui: string };
   /** The address the window says it has, in place of the one it has, which may name a person or carry their words. */
@@ -419,7 +419,7 @@ function addressless(
 }
 
 /**
- * Empties every withheld sheet (`@luke/ui/session-replay-marks`) in what a
+ * Empties every withheld sheet (`@repo/ui/session-replay-marks`) in what a
  * recording sends: the panel built it from a person's words, which its
  * selectors name in clear, since no masking reaches CSS.
  *

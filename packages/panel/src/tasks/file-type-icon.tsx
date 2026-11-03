@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { cn } from "@luke/ui";
+import { cn } from "@repo/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileIcon } from "lucide-react";
 import { useSideBundles } from "../bundle-loader.js";

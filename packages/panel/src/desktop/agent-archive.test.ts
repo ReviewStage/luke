@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { ARCHIVE_DRAWN } from "@luke/features/agent-view";
-import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@luke/features/agent-wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { ARCHIVE_DRAWN } from "@repo/features/agent-view";
+import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@repo/features/agent-wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -97,9 +97,9 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   );
   assert.ok(row, "the archived agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Retry audit");
-  assert.match(card?.querySelector(".luke-hover-card-corner")?.textContent ?? "", /^Archived · /u);
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Retry audit");
+  assert.match(card?.querySelector(".ui-hover-card-corner")?.textContent ?? "", /^Archived · /u);
 });
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
@@ -140,7 +140,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   );
   restOn(row ?? assert.fail("the row is drawn"));
   return [
-    ...document.querySelectorAll(".luke-tooltip-card [data-agent-card] .luke-hover-card-note"),
+    ...document.querySelectorAll(".ui-tooltip-card [data-agent-card] .ui-hover-card-note"),
   ].map((note) => note.textContent ?? "");
 }
 
@@ -156,7 +156,7 @@ test("an archived agent's card says who archived it, an agent or Vespin for a me
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
-  const byLuke = archivedCardNotes("user-dean", { by: AGENT_ARCHIVER.LUKE, member: dean });
+  const byApp = archivedCardNotes("user-dean", { by: AGENT_ARCHIVER.APP, member: dean });
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
@@ -171,7 +171,7 @@ test("an archived agent's card says who archived it, an agent or Vespin for a me
     "Archived by Bill by seat for Dean Stratakos",
     "Its pull request merged.",
   ]);
-  assert.deepEqual(byLuke, ["Archived by Vespin for you"]);
+  assert.deepEqual(byApp, ["Archived by Vespin for you"]);
   assert.deepEqual(withTask, ["Archived with its task by Dean Stratakos"]);
 });
 
@@ -216,7 +216,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     const unarchive =
       container.querySelector<HTMLButtonElement>(".task-summary-marks button") ??
       assert.fail("the Unarchive");
-    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+    const ring = () => unarchive.querySelector(".ui-spinner-ring") !== null;
 
     act(() => unarchive.click());
     assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");

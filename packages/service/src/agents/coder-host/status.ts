@@ -1,4 +1,4 @@
-import type { AgentOwnerFacts } from "@luke/database/models/agent-owners";
+import type { AgentOwnerFacts } from "@repo/database/models/agent-owners";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -6,16 +6,16 @@ import {
   type AgentStartedFromIt,
   agentBriefOf,
   agentLineOf,
-} from "@luke/database/models/agent-store";
-import type { Device } from "@luke/database/models/device-store";
-import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/agent";
+} from "@repo/database/models/agent-store";
+import type { Device } from "@repo/database/models/device-store";
+import type { StoredArchive, StoredAutomationOrigin } from "@repo/database/schemas/agent";
 import {
   agentStatusAt,
   type StatusTurn,
   lineAwaitsTurn as sharedLineAwaitsTurn,
   statusClockEdge as sharedStatusClockEdge,
   turnStoppable,
-} from "@luke/features/agent-status";
+} from "@repo/features/agent-status";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
@@ -31,8 +31,8 @@ import {
   agentOwnerOf,
   CONTEXT_WINDOW,
   type NativeAgentRuntime,
-} from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+} from "@repo/features/agent-wire";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -52,7 +52,7 @@ import { CODER_REFUSAL } from "./bounds.js";
  * and its first turn lands in seconds or not at all. A line that awaits its
  * turn reads as running whatever the newest turn says, because the session
  * took the message and the turn it opens is on its way
- * (`@luke/database/models/message-reads`'s `awaitingLinesOf` is where a
+ * (`@repo/database/models/message-reads`'s `awaitingLinesOf` is where a
  * line is counted as waiting), but only for so long: a line that has
  * waited past `LINE_GRACE_MILLIS` with no turn running reads as failed, as
  * one whose turn is not coming, so the developer is offered Continue on it
@@ -87,7 +87,7 @@ export function startedBlank(agent: Agent | Pick<AgentLine, "brief">): boolean {
   return brief === AGENT_BRIEF.BLANK;
 }
 
-/** What of the newest turn the shared rule reads (`@luke/features/agent-status`), each instant in epoch milliseconds. */
+/** What of the newest turn the shared rule reads (`@repo/features/agent-status`), each instant in epoch milliseconds. */
 function statusTurnOf(turn: AgentLatestTurn | undefined): StatusTurn | undefined {
   return turn === undefined
     ? undefined

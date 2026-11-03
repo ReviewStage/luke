@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@luke/database/github-installation-vocabulary";
-import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
+} from "@repo/database/github-installation-vocabulary";
+import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
@@ -15,19 +15,19 @@ import {
   readWorkspacePhoto,
   workspaceGitHubAccountId,
   workspacesLiveStatements,
-} from "@luke/database/models/workspace-store";
-import { member, organization, user } from "@luke/database/schemas/auth";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+} from "@repo/database/models/workspace-store";
+import { member, organization, user } from "@repo/database/schemas/auth";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   WORKSPACE_ROLE,
-} from "@luke/database/testing";
-import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@luke/features/workspace-live";
-import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
-import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
+} from "@repo/database/testing";
+import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@repo/features/workspace-live";
+import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
+import { openWorkspacePlugin } from "@repo/service/testing/workspace-plugin";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -42,7 +42,7 @@ import { SqlClient } from "effect/sql";
  * and the account's own first workspace with none lists the account's sign-in
  * picture where the renderer may draw it.
  *
- * The plugin's write is a fake over the same tables (`@luke/database/testing`'s `workspaces.ts`),
+ * The plugin's write is a fake over the same tables (`@repo/database/testing`'s `workspaces.ts`),
  * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
  * over PGlite in the last case. Synthetic accounts throughout.
  */

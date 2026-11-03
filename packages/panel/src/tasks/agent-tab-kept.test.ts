@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
+import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -158,12 +158,12 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   document.documentElement.dataset.keyboard = "true";
   act(() => row.blur());
   focusRestOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the row hangs its agent's card");
   return [
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    card.querySelector(".luke-hover-card-corner")?.textContent,
-    card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
+    card.querySelector(".ui-hover-card-name")?.textContent,
+    card.querySelector(".ui-hover-card-corner")?.textContent,
+    card.querySelector('.ui-hover-card-lead .state-glyph[data-state="working"]') !== null,
   ];
 }
 
@@ -294,7 +294,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
     document.documentElement.dataset.keyboard = "true";
     act(() => ref.blur());
     focusRestOn(ref);
-    return document.querySelector(".luke-tooltip-card [data-task-card-probe]")?.textContent;
+    return document.querySelector(".ui-tooltip-card [data-task-card-probe]")?.textContent;
   };
   assert.match(sender().textContent ?? "", /First draft/u);
   assert.equal(cardOf(sender()), "First draft, its card");

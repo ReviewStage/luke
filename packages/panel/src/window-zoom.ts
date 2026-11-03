@@ -13,7 +13,7 @@
  * that asked has no control left to show it on.
  */
 
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   HOST_CAPABILITY,
   ZOOM_ACTUAL_SIZE,
@@ -21,10 +21,10 @@ import {
   type ZoomPercent,
   zoomFactor,
   zoomStepped,
-} from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { STATUS_TONE } from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { STATUS_TONE } from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { showToast, TOAST_HOLD } from "./toast.js";

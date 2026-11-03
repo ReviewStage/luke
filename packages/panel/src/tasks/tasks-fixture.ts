@@ -7,7 +7,7 @@ import {
   type PlanCommentEntry,
   type PlanCommentThread,
   type PlanCommentWriter,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import {
   PLAN_ACTOR,
   type PlanDocument,
@@ -16,20 +16,20 @@ import {
   TASK_STATUS,
   type Task,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksRepositoriesAnswer,
   type TasksRevisionsAnswer,
   type TasksView,
-} from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@luke/host/fixture-stage";
-import type { SettingsLink } from "@luke/settings/settings-views";
+} from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@repo/host/fixture-stage";
+import type { SettingsLink } from "@repo/settings/settings-views";
 import {
   agentActAnswer,
   agentSidePanel,
@@ -149,7 +149,7 @@ const CALL_AT = Date.parse("2026-10-07T16:40:00Z");
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 
-/** The reference journey's task, by the id the host's staged call (`@luke/host/fixture-stage`) names it by too. */
+/** The reference journey's task, by the id the host's staged call (`@repo/host/fixture-stage`) names it by too. */
 export const FIXTURE_TASK_ID = FIXTURE_IDS.TASK;
 
 const FIXTURE_TASK: Task = {
@@ -464,7 +464,7 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
       ),
       comment(
         "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e64",
-        { actor: PLAN_COMMENT_ACTOR.LUKE },
+        { actor: PLAN_COMMENT_ACTOR.APP },
         CALL_AT - 4 * HOUR + 2 * 60_000,
         'Added under Hard parts: a withdrawn link reads "This invite is no longer valid" and grants nothing.',
       ),

@@ -91,7 +91,7 @@ const GITHUB_EVENT_WORDS = {
 /** Whose events a GitHub trigger hears, as its sentence names them after "by". */
 const GITHUB_SENDER_WORDS = {
   [GITHUB_SENDER.PEOPLE]: "people",
-  [GITHUB_SENDER.LUKE_AGENTS]: `${PRODUCT_NAME}'s agents`,
+  [GITHUB_SENDER.APP_AGENTS]: `${PRODUCT_NAME}'s agents`,
   [GITHUB_SENDER.OTHER_BOTS]: "other bots",
 } as const satisfies Record<GitHubSender, string>;
 

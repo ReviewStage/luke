@@ -11,8 +11,8 @@
  * frame's layout never changes under it. A change from a press or a key
  * glides, while one following the fingers or the pointer lands at once,
  * because a glide behind a gesture would trail it. Once the picture has
- * loaded it says its own pixels as `--luke-zoom-natural-width` and
- * `--luke-zoom-natural-height`, plain numbers a frame may fit it by, as
+ * loaded it says its own pixels as `--ui-zoom-natural-width` and
+ * `--ui-zoom-natural-height`, plain numbers a frame may fit it by, as
  * large as the frame and no larger than a set multiple of them, and the last
  * picture's stand while the next one loads; one opened at its own pixels says
  * none, and stands no larger than they are.
@@ -199,7 +199,7 @@ export function useImageZoom(
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
   // The picture's own pixels once it has loaded, which a frame may fit it by
-  // (`--luke-zoom-natural-*`). Note that the last picture's stand until the
+  // (`--ui-zoom-natural-*`). Note that the last picture's stand until the
   // next one's are read, because the browser draws the last picture until the
   // next has loaded, and a frame left to guess between them draws it too large.
   const [loaded, setLoaded] = useState<ImageSize>();
@@ -323,8 +323,8 @@ export function useImageZoom(
         // Note that a picture opened at its own pixels says none, because a fit grown past them would undo the scale its opening set.
         ...(loaded !== undefined && opening === IMAGE_OPENING.FITTED
           ? cssCustomProperties({
-              "--luke-zoom-natural-width": loaded.width,
-              "--luke-zoom-natural-height": loaded.height,
+              "--ui-zoom-natural-width": loaded.width,
+              "--ui-zoom-natural-height": loaded.height,
             })
           : {}),
       },
@@ -412,5 +412,5 @@ export function ZoomImage({
   src: string;
   alt: string;
 }): React.JSX.Element {
-  return <img className="luke-zoom-image" src={src} alt={alt} {...zoom.imageProps} />;
+  return <img className="ui-zoom-image" src={src} alt={alt} {...zoom.imageProps} />;
 }

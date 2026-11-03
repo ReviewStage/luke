@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { unmigratedPgliteSqlClient } from "@luke/database/testing";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { unmigratedPgliteSqlClient } from "@repo/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -23,7 +23,7 @@ const BACKFILL = "20261015131300_personal_workspace_owner_name";
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-backfill-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-backfill-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(BACKFILL) < 0,
   );

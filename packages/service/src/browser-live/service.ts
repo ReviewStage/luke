@@ -18,10 +18,10 @@
  */
 
 import type { IncomingHttpHeaders } from "node:http";
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
-import { readEither } from "@luke/wire/effect";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import type { BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { readEither } from "@repo/wire/effect";
 import { type Cause, Effect, Option, Result, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {

@@ -2,7 +2,7 @@
  * session-replay-marks.ts -- what a component or a surface wears so the screen recording keeps no value or sheet of a person's past the masking: the class on an input whose value the recorder must not read, and the mark a stylesheet built from a person's words is written under.
  *
  * The recording masks every word the panel draws and every attribute but
- * the ones it lays out by (`@luke/panel`'s `session-replay.ts`). Two things
+ * the ones it lays out by (`@repo/panel`'s `session-replay.ts`). Two things
  * reach it past that masking, and each is answered here, once, for every
  * surface that has one.
  *

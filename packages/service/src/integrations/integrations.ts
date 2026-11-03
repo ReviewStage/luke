@@ -5,7 +5,7 @@
  * Vercel Connect holds for the account under one connector of this
  * deployment's, or, for GitHub, with the account's own GitHub sign-in
  * (`INTEGRATION_GRANT_OF`, `github-integration.ts`). The table, beside the
- * names the wire gives it (`@luke/features/integration-wire`, the name a
+ * names the wire gives it (`@repo/features/integration-wire`, the name a
  * nested call of one of its tools is stored under among them), is the whole
  * of what makes a provider one: the variable its connector's UID is read
  * from and the one naming the accounts it is offered to
@@ -25,10 +25,10 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { orList } from "@luke/features/words";
-import type { WireRecord, WireValue } from "@luke/wire";
+} from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { orList } from "@repo/features/words";
+import type { WireRecord, WireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { toolResultJson, toolResultTexts } from "./mcp-tools.js";
 

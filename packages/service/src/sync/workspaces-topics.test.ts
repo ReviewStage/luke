@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire } from "@repo/database/testing";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/features/github-installation-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/github-installation-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { linkInstallation, setInstallationStatus } from "../github/github-installations.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";

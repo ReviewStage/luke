@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";

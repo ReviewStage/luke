@@ -6,7 +6,7 @@ import type {
   DIFF_THEMES,
   DiffLayout,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 
 /**
  * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch, one for a list of files, and one for a whole file with no diff, and the handles the view redraws them through.
@@ -18,7 +18,7 @@ import type {
  * tab loads its tree. That bundle exports one module, `diffView`, and
  * this file is the whole of what the two share: no Pierre type crosses, only
  * the patch as git writes it and how to draw it, in the settings' own words
- * for a diff (`@luke/settings/diff-view`, which imports nothing), so the
+ * for a diff (`@repo/settings/diff-view`, which imports nothing), so the
  * bundle carries none of the panel's libraries.
  */
 
@@ -337,7 +337,7 @@ export interface DiffListHandle {
   readonly revealLine: (path: string, side: DiffSelection["side"], line: number) => void;
   /**
    * Scrolls to a run of a file's lines, a few lines under the file's header,
-   * and lights them once, as every place landed on is (`@luke/ui/landed`),
+   * and lights them once, as every place landed on is (`@repo/ui/landed`),
    * as a chapter's key change points at them; the lines lit before stand
    * again once they fade. Every line of the run is one the file draws.
    */

@@ -1,7 +1,7 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   ANNOUNCE,
   AuthPage,
@@ -12,7 +12,7 @@ import {
   ProviderButton,
   TEXT_LINK_LOOK,
   TextLink,
-} from "@luke/ui";
+} from "@repo/ui";
 import { failureShown } from "./failure-report.js";
 import { useAnnounceShown } from "./use-announce-shown.js";
 

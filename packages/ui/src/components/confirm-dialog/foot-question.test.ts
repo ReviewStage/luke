@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";

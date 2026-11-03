@@ -4,7 +4,7 @@ import {
   CHANGED_FILE_STATUS,
   DIFF_SIDE,
   PATCH_OMITTED,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import { createPatch } from "diff";
 import { test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "../diff-view/contract.js";

@@ -127,7 +127,7 @@ A successful assessment identifies the source as `Notarized Developer ID`.
 
 ## Host releases
 
-The host daemon (`apps/host`, `@luke/host-daemon`) is released apart from the desktop app by
+The host daemon (`apps/host`, `@repo/host-daemon`) is released apart from the desktop app by
 the **Release host** workflow (`.github/workflows/release-host.yml`). It runs when a
 `host-vX.Y.Z` tag is pushed, and the version must match `apps/host/package.json`; the
 workflow refuses a tag that does not.

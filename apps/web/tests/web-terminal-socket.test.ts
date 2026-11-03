@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { TerminalSocketArrival } from "@luke/host/effect";
+import type { TerminalSocketArrival } from "@repo/host/effect";
 import { Effect, Exit, Fiber, Scope, Stream } from "effect";
 import { afterEach, vi } from "vitest";
 import { openTerminalSocketFromPage } from "../src/app/web-terminal-socket";

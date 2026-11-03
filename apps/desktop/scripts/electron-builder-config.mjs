@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DMG_WINDOW } from "@luke/brand/dmg-window";
+import { DMG_WINDOW } from "@repo/brand/dmg-window";
 import {
   finalizeElectronBuilderArtifacts,
   notarizeElectronBuilderApp,
 } from "./electron-builder-hooks.mjs";
 import { packageAssetPaths } from "./package-assets.mjs";
 import {
+  APP_ID,
   APP_UPDATE_CACHE_DIR_NAME,
   APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
@@ -25,7 +26,7 @@ const repoRoot = path.resolve(appRoot, "../..");
 const desktopPackage = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
 const packageAssets = packageAssetPaths({ appRoot });
 const productName = desktopPackage.productName;
-const electronBuilderMetadataName = "luke";
+const electronBuilderMetadataName = "desktop";
 export const ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG = {
   provider: "generic",
   url: APP_UPDATE_FEED_URL,
@@ -34,7 +35,7 @@ export const ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG = {
 export const ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG = {
   provider: "github",
   owner: "ReviewStage",
-  repo: "luke",
+  repo: "vespin",
 };
 
 function macBinaryPath(helper) {
@@ -46,7 +47,7 @@ export function createElectronBuilderConfig(env = process.env) {
   const developerIdSigned = signing.mode === SIGNING_MODE.DEVELOPER_ID;
 
   return {
-    appId: "dev.vespin.app",
+    appId: APP_ID,
     productName,
     copyright: `Copyright (c) ${new Date().getFullYear()} Stage Inc.`,
     electronVersion: desktopPackage.devDependencies.electron,

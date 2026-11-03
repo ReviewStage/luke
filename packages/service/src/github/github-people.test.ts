@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { account, user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { CHANGES_BOUNDS, REVIEW_STATE } from "@luke/features/agent-wire";
+import { Database } from "@repo/database/core/query";
+import { account, user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { CHANGES_BOUNDS, REVIEW_STATE } from "@repo/features/agent-wire";
 import { Effect, Redacted } from "effect";
 import {
   GITHUB_FIXTURE,

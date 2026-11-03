@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
   startPlanCommentThread,
-} from "@luke/database/models/plan-comments";
-import { createTask, savePlanText } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/plan-comments";
+import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
   planCommentsAnswerSchema,
-} from "@luke/features/plan-comment-wire";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/plan-comment-wire";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -117,7 +117,6 @@ const onHub = Effect.gen(function* () {
         Effect.succeed(
           Option.fromNullishOr(asked.headers.get("authorization")?.replace("Bearer ", "")),
         ),
-      eveOrigin: () => undefined,
     }),
   });
   /** The plan's comments read as the account, past the cursor where one is named. */

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { experimentsOn, settingsView } from "@repo/settings/testing";
 import { test } from "vitest";
 import {
   type SettingsSearchEntry,

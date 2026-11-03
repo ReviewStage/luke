@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { createAgent } from "@luke/database/models/agent-store";
-import { createChannel } from "@luke/database/models/channel-store";
-import { queueMacCommand } from "@luke/database/models/mac-command-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import { Database } from "@repo/database/core/query";
+import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { createAgent } from "@repo/database/models/agent-store";
+import { createChannel } from "@repo/database/models/channel-store";
+import { queueMacCommand } from "@repo/database/models/mac-command-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import {
   workspaceChannelsLiveAnswerSchema,
   workspaceChannelsLiveRowsSchema,
-} from "@luke/features/channel-live";
-import { INBOX_ASK } from "@luke/features/inbox-wire";
+} from "@repo/features/channel-live";
+import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
@@ -39,18 +39,18 @@ import {
   taskPagesLiveAnswerSchema,
   taskPagesLiveRowsSchema,
   taskRecordLiveAnswerSchema,
-} from "@luke/features/live-wire";
-import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { sidebarLiveAnswerSchema } from "@luke/features/sidebar-live";
-import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@luke/features/task-list-live";
+} from "@repo/features/live-wire";
+import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
+import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   workspaceInvitationsLiveAnswerSchema,
   workspaceMembersLiveAnswerSchema,
   workspacesLiveAnswerSchema,
   workspacesLiveRowsSchema,
-} from "@luke/features/workspace-live";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/workspace-live";
+import type { WireBoundaryInput } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -315,7 +315,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             dana,
             taskPageOwner(started.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         const path = "/api/live/task-pages";
@@ -481,7 +481,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         userId,
         taskPageOwner(taskId),
         { title: "Invite funnel", html: "<p>One</p>" },
-        { kind: PAGE_SHOWER.LUKE },
+        { kind: PAGE_SHOWER.APP },
       ),
       Option.getOrThrow,
     );
@@ -898,7 +898,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             dana,
             taskPageOwner(started.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         yield* TestClock.adjust(Duration.seconds(3));

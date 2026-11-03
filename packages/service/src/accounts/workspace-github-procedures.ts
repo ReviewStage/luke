@@ -19,7 +19,7 @@
  * sent.
  */
 
-import { workspaceOf } from "@luke/database/models/workspace-store";
+import { workspaceOf } from "@repo/database/models/workspace-store";
 import { Effect, Option } from "effect";
 import { GitHubApp } from "../github/github-app.js";
 import { createConnectIntent, GITHUB_CONNECT_ROLES } from "../github/github-installations.js";

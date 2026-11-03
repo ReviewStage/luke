@@ -3,21 +3,21 @@ import {
   type InstalledSkillCandidate,
   type InstalledSkillPreview,
   type InstalledSkillSummary,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillPreviewView,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import {
   INSTALLED_SKILL_SCOPE,
   type InstalledSkillScope,
-} from "@luke/features/installed-skill-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
-import { countWords, TERM } from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/installed-skill-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
+import { countWords, TERM } from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   ALIGN,
   ANNOUNCE,
@@ -58,8 +58,8 @@ import {
   TextArea,
   TextButton,
   TextField,
-} from "@luke/ui";
-import { inputProblem } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { inputProblem } from "@repo/ui/reported-failure";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";

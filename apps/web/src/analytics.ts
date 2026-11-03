@@ -1,4 +1,4 @@
-import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
 import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
 /**
@@ -8,7 +8,7 @@ import type { CapturedNetworkRequest, PostHog } from "posthog-js";
  * account.
  *
  * The browser posts to a path of this site's own origin, which the web
- * service passes on to the analytics processor (`@luke/features/posthog-proxy`),
+ * service passes on to the analytics processor (`@repo/features/posthog-proxy`),
  * because ad blockers refuse the processor's own host. What the processor is
  * handed is the browser's request, the visitor's address and user agent
  * among it, but for the site's cookies, which the rewrite takes off — where
@@ -93,7 +93,7 @@ const LOGS_SCRIPT = "/logs.js";
  * sign-in for, so a sign-in that passes more than one page that would count
  * it (consent, where it is shown, then the desktop's hand-off) is counted once.
  */
-const COUNTED_SESSION_KEY = "luke_site_sign_in_session";
+const COUNTED_SESSION_KEY = "app_site_sign_in_session";
 
 /** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {

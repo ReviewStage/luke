@@ -1,13 +1,13 @@
 import os from "node:os";
-import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { DARWIN_HOST } from "@luke/host/daemon";
-import { ThisMacHost, type ThisMacHostSeam } from "@luke/host/effect";
+import { DEVICE_ARCH } from "@repo/features/device-agent-wire";
+import { DARWIN_HOST } from "@repo/host/daemon";
+import { ThisMacHost, type ThisMacHostSeam } from "@repo/host/effect";
 import { Duration, Effect, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { app } from "electron";
 
 /**
- * host-login-item.ts -- This Mac's host as the host asks it (`@luke/host/effect`'s `ThisMacHost`): the account install the install command puts on a Mac, its LaunchAgent started or stopped through launchd, and the install script run.
+ * host-login-item.ts -- This Mac's host as the host asks it (`@repo/host/effect`'s `ThisMacHost`): the account install the install command puts on a Mac, its LaunchAgent started or stopped through launchd, and the install script run.
  *
  * The install lives under the member's own home, by the names the install
  * script gives it (`apps/web/install/install.sh`): its state, holding the

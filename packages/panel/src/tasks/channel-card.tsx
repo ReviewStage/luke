@@ -1,6 +1,6 @@
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { dateOfText } from "@luke/features/time-format";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { dateOfText } from "@repo/features/time-format";
 import {
   HoverCard,
   HoverCardHead,
@@ -9,8 +9,8 @@ import {
   HoverCardSkeleton,
   Time,
   useMinute,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { ReactNode } from "react";
 import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";

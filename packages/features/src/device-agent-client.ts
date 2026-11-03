@@ -1,4 +1,4 @@
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";

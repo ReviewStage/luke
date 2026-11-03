@@ -1,4 +1,4 @@
-import { NOTE_KIND, type PlanNote } from "@luke/features/plan-template";
+import { NOTE_KIND, type PlanNote } from "@repo/features/plan-template";
 
 /**
  * task-contents.ts -- the notes a notetaker would take, as a test writes them.

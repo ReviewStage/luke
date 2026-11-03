@@ -153,7 +153,7 @@ test("a field that answers no Escape lets it reach what stands behind", () => {
 test("the chord stands while the field is empty, and the tally while a query does", () => {
   const page = render(createElement(Held, { tally: { count: 12, at: 2 } }));
   const field = fieldOf(page);
-  const tally = () => page.querySelector(".luke-search-field-tally")?.textContent;
+  const tally = () => page.querySelector(".ui-search-field-tally")?.textContent;
 
   assert.equal(page.querySelector("kbd")?.textContent, "⌘F");
   assert.equal(tally(), undefined);
@@ -183,7 +183,7 @@ test("a tally says none found, how many, or which of how many", () => {
     const page = render(
       createElement(SearchField, { label: "Find", value: "x", onChange: () => undefined, tally }),
     );
-    return page.querySelector(".luke-search-field-tally")?.textContent;
+    return page.querySelector(".ui-search-field-tally")?.textContent;
   };
 
   assert.deepEqual(

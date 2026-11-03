@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
   writeAccountPreferences,
-} from "@luke/database/models/account-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/database/models/account-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -49,7 +49,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 interface Answer {
@@ -77,7 +76,6 @@ const openAccounts = () =>
           Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
         ),
       // This suite deletes nothing, so it retires no session and reaches no eve.
-      eveOrigin: () => undefined,
       standingSessions: () => Effect.die(new Error("this suite deletes no account")),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,

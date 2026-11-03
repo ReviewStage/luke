@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
-import type { AdminReliability } from "@luke/features/admin-answer-wire";
-import { ADMIN_ATTENTION_KIND } from "@luke/features/admin-wire";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { adminIntegrations } from "@luke/service/admin/admin-health";
+import type { AdminReliability } from "@repo/features/admin-answer-wire";
+import { ADMIN_ATTENTION_KIND } from "@repo/features/admin-wire";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
+import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { adminIntegrations } from "@repo/service/admin/admin-health";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -39,14 +39,14 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
     generatedAt: Date.UTC(2026, 9, 17, 12),
     windowDays: 7,
     headline: {
-      lukeTurns: { failed: 412, total: 29_880 },
+      appTurns: { failed: 412, total: 29_880 },
       agentRuns: { failed: 68, total: 1000 },
       abandonedTurns: 37,
       automationRuns: { failed: 43, skipped: 90, total: 1000 },
     },
     daily: [
-      { day: "2026-10-16", lukeTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
-      { day: "2026-10-17", lukeTurns: 0.02, agentRuns: null, automationRuns: null },
+      { day: "2026-10-16", appTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
+      { day: "2026-10-17", appTurns: 0.02, agentRuns: null, automationRuns: null },
     ],
     agentFailures: [{ failure: AGENT_FAILURE.MODEL, count: 40 }],
     automationReasons: [{ reason: AUTOMATION_RUN_REASON.CONCURRENCY, skipped: 90, failed: 0 }],
@@ -89,7 +89,6 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
         analyticsRecording: true,
         analyticsErasure: true,
         sweep: true,
-        eveDeployment: true,
         ownKeys: true,
         connectors: new Map([[INTEGRATION_PROVIDER.LINEAR, true]]),
       }),
@@ -136,7 +135,7 @@ async function openReliability(body: AdminReliability | undefined): Promise<Open
           }),
         ),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const heard: string[] = [];
   const page = document.createElement("div");
   document.body.replaceChildren(page);

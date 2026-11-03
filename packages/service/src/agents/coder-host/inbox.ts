@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   archiveChannel,
   CHANNEL_NAME_REFUSAL,
@@ -12,9 +12,9 @@ import {
   openChannels,
   resolveChannel,
   unarchiveChannel,
-} from "@luke/database/models/channel-store";
-import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { isWireUuid } from "@luke/features";
+} from "@repo/database/models/channel-store";
+import { GENERAL_CHANNEL } from "@repo/database/schemas/channel";
+import { isWireUuid } from "@repo/features";
 import {
   CHANNEL_BOUNDS,
   CHANNEL_TOOL,
@@ -22,8 +22,8 @@ import {
   channelCreateInputSchema,
   channelUpdateInputSchema,
   threadMoveInputSchema,
-} from "@luke/features/channel-wire";
-import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
+} from "@repo/features/channel-wire";
+import { inboxSandboxPicturePaths } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -45,12 +45,12 @@ import {
   inboxWithdrawInputSchema,
   keptInboxAsk,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@luke/features/link-grammar";
-import { decodeMention, MENTION_KIND, mentionLinksIn } from "@luke/features/mention-link";
-import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@repo/features/link-grammar";
+import { decodeMention, MENTION_KIND, mentionLinksIn } from "@repo/features/mention-link";
+import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { readEither } from "@repo/wire/effect";
 import { Data, DateTime, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
@@ -93,7 +93,7 @@ import {
  * goes to #general. The agent names each thread by a key of its own. A post is one
  * message on it, one Markdown body with its chips, its cards, and its
  * pictures where they belong, which may end with an ask, `decide`, `do`, or
- * `answer` (`@luke/features/inbox-wire`); the first post under a key opens
+ * `answer` (`@repo/features/inbox-wire`); the first post under a key opens
  * the thread and names its title, and a later one adds a message, its ask
  * replacing the one open. A picture is drawn in the body by the path of
  * its file in the agent's sandbox, a screenshot of what it rendered, which
@@ -219,7 +219,7 @@ function postThreadDescription(channels: readonly ListedChannel[]): string {
 }
 
 /**
- * The tools as the model is shown them (`../luke-mcp/tools.ts`): each one's name,
+ * The tools as the model is shown them (`../workspace-mcp/tools.ts`): each one's name,
  * words, and input. `post_thread`'s words here list no channel; an agent is
  * shown them with its workspace's (`postThreadDescription`).
  */

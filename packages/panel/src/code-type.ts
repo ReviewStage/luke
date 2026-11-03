@@ -6,16 +6,16 @@
  * snippet alike, so a setting reads the same in every place code is drawn.
  */
 
-import { DIFF_FONT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
+import { DIFF_FONT, DIFF_LINE_HEIGHT } from "@repo/settings/diff-view";
 import type { DiffLook } from "./diff-view/contract.js";
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
 export const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
+  [DIFF_FONT.SF_MONO]: "var(--ui-font-mono)",
+  [DIFF_FONT.MENLO]: "Menlo, var(--ui-font-mono)",
+  [DIFF_FONT.MONACO]: "Monaco, var(--ui-font-mono)",
+  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--ui-font-mono)',
+  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--ui-font-mono)',
 } as const satisfies Record<DiffLook["font"], string>;
 
 /** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */

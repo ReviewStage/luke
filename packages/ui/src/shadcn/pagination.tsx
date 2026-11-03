@@ -9,7 +9,7 @@ import { cn } from "../cn.js";
  * nav, its list, and its ellipsis are vendored; shadcn's `PaginationLink`,
  * `PaginationPrevious`, and `PaginationNext` are dropped, because they draw
  * through shadcn's `button.tsx`, and a step here is a plain link to its
- * page's address, drawn by `@luke/ui`'s `Pagination`
+ * page's address, drawn by `@repo/ui`'s `Pagination`
  * (`components/pagination/pagination.tsx`) in `PAGINATION_ITEM`'s classes.
  * Its local changes:
  *
@@ -24,7 +24,7 @@ import { cn } from "../cn.js";
  *   than shadcn's centred row.
  * - `PaginationEllipsis` draws the "…" the caller hands it, read as it is,
  *   dimmed (`data-idle`), rather than lucide's glyph hidden beside a
- *   "More pages" for readers, because no icon library rides in `@luke/ui`
+ *   "More pages" for readers, because no icon library rides in `@repo/ui`
  *   and the elision says itself.
  * - `PAGINATION_ITEM` is every item's box: as tall as the caption's line and
  *   its inset either side, and at least as wide, with an edge whether or not
@@ -39,14 +39,14 @@ import { cn } from "../cn.js";
 
 /** Every item's box: a step, a page's number, the current page, or an elision. */
 export const PAGINATION_ITEM =
-  "luke-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [a&:hover]:bg-muted [a&:hover]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-disabled";
+  "ui-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [a&:hover]:bg-muted [a&:hover]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-disabled";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
       data-slot="pagination"
       className={cn(
-        "luke-pagination flex items-center gap-pagination-gap not-data-[numbered=true]:justify-between not-data-[numbered=true]:gap-pagination-steps-gap",
+        "ui-pagination flex items-center gap-pagination-gap not-data-[numbered=true]:justify-between not-data-[numbered=true]:gap-pagination-steps-gap",
         className,
       )}
       {...props}

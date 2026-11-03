@@ -4,7 +4,7 @@
  * `GET /api/github/token` answers the member's token as its login, hint,
  * status, and expiry; `PUT` saves one, first asking GitHub whose it is with
  * one `GET /user` on it, and keeps it sealed
- * (`@luke/database/models/provider-key-seal`) only where GitHub accepts it,
+ * (`@repo/database/models/provider-key-seal`) only where GitHub accepts it,
  * it carries the `repo` scope, and it is the member's own linked GitHub
  * account's; `DELETE` removes it. A fine-grained token is refused before it
  * is sent anywhere. Every answer is the token as it then stands and none
@@ -29,19 +29,19 @@ import {
   readGitHubTokenRow,
   removeGitHubToken,
   saveGitHubToken,
-} from "@luke/database/models/github-token-store";
+} from "@repo/database/models/github-token-store";
 import {
   type KeyRing,
   openGitHubToken,
   sealGitHubToken,
-} from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/provider-key-seal";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
   type GitHubTokenAnswer,
   type GitHubTokenRejection,
   type GitHubTokenSummary,
-} from "@luke/features/github-token-wire";
+} from "@repo/features/github-token-wire";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";

@@ -4,7 +4,7 @@ import { type RepositoryGuard, readJson, record, texts } from "./guard.ts";
 import { type ModuleRecord, namesUsed, readModule, resolveRelative } from "./module-graph.ts";
 
 /**
- * catalog-examples.ts -- a component cannot join `@luke/ui` without the catalog drawing it.
+ * catalog-examples.ts -- a component cannot join `@repo/ui` without the catalog drawing it.
  *
  * `packages/ui/AGENTS.md`: a component lands "with a catalog example and a
  * test". The names are read off the barrel's own exports and the coverage off
@@ -14,7 +14,7 @@ import { type ModuleRecord, namesUsed, readModule, resolveRelative } from "./mod
  */
 
 const UI_BARREL = "packages/ui/src/index.ts";
-const UI_PACKAGE = "@luke/ui";
+const UI_PACKAGE = "@repo/ui";
 const REGISTRY = "apps/catalog/src/examples.ts";
 const EXAMPLES = "apps/catalog/src/examples";
 const EXEMPT = "tools/anti-slop/catalog-exempt.json";
@@ -57,7 +57,7 @@ export function componentsOf(names: ReadonlySet<string>): readonly string[] {
   return [...names].filter((name) => PASCAL_CASE.test(name) && !name.endsWith(GLYPH_SUFFIX)).sort();
 }
 
-/** The `@luke/ui` names a module imports as values and then uses, by the name the barrel exports them under. */
+/** The `@repo/ui` names a module imports as values and then uses, by the name the barrel exports them under. */
 export function drawnFrom(module: ModuleRecord): ReadonlySet<string> {
   const used = namesUsed(module.program);
   const drawn = new Set<string>();
@@ -128,6 +128,6 @@ async function catalogExampleProblems(root: string): Promise<readonly string[]> 
 
 export const catalogExamplesGuard: RepositoryGuard = {
   holds:
-    "every component @luke/ui exports is drawn by a catalog example, or exempt with its reason",
+    "every component @repo/ui exports is drawn by a catalog example, or exempt with its reason",
   problems: catalogExampleProblems,
 };

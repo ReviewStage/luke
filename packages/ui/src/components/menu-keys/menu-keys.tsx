@@ -1,4 +1,4 @@
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import { Shortcut } from "../shortcut/shortcut.js";
 
 /**
@@ -30,10 +30,10 @@ export function menuKey(does: string, ...keys: ShortcutChord["key"][]): MenuKey 
 /** The foot naming `keys`, in the order given. */
 export function MenuKeys({ keys }: { keys: readonly MenuKey[] }): React.JSX.Element {
   return (
-    <div className="luke-menu-keys" aria-hidden="true">
+    <div className="ui-menu-keys" aria-hidden="true">
       {keys.map((entry) => (
-        <span key={entry.does} className="luke-menu-keys-item">
-          <span className="luke-menu-keys-key">
+        <span key={entry.does} className="ui-menu-keys-item">
+          <span className="ui-menu-keys-key">
             {entry.keys.map((key) => (
               <Shortcut key={key.accelerator} chord={{ key, plain: true }} />
             ))}

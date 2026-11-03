@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -186,7 +186,7 @@ async function drawn(
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -304,7 +304,7 @@ test("an archived agent's chip, which no list the window holds names, wears the 
   const marks = [
     ...container.querySelectorAll<HTMLElement>('[data-mention-ref][data-kind="agent"]'),
   ].map((chip) =>
-    chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark")?.getAttribute("data-provider"),
+    chip.querySelector(".ui-inline-ref-glyph .ui-harness-mark")?.getAttribute("data-provider"),
   );
   assert.deepEqual(marks, [MODEL_PROVIDER.OPENAI, MODEL_PROVIDER.ANTHROPIC]);
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { HostedDeviceAgentClient } from "@luke/features";
+import { HostedDeviceAgentClient } from "@repo/features";
 import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { composeLocalAgents } from "../compose-local-agents.js";

@@ -1,4 +1,4 @@
-import { SavedTick, SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
+import { SavedTick, SettingsAttentionMark, SettingsChangedMark } from "@repo/ui";
 
 /**
  * The word beside a row's name while its value differs from the default,
@@ -36,7 +36,7 @@ export function SettingMarks({
  * hand — the same mark wherever it stands, so one urgency reads the same on
  * the row that supplies the missing thing and on a shortcut whose key
  * answers nothing until it is supplied. It is
- * `@luke/ui`'s alert glyph in the attention ink. A statement, not a control:
+ * `@repo/ui`'s alert glyph in the attention ink. A statement, not a control:
  * the words are the hover's and the screen reader's, and the page around it
  * is where the missing thing is explained.
  */

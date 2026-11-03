@@ -8,10 +8,10 @@ import type { Baseline } from "./baseline.ts";
 
 /**
  * arrow-key-guard.ts -- what the `no-hand-written-arrow-keys` rule reads: the
- * keys that step a list, the files outside `@luke/ui` that may still match
+ * keys that step a list, the files outside `@repo/ui` that may still match
  * them (each with its reason), and the baseline of files that still step a
  * list by hand. A list or menu is stepped by `useRovingKeys` and `List`
- * (`@luke/ui`), never a handler that matches `ArrowDown` itself.
+ * (`@repo/ui`), never a handler that matches `ArrowDown` itself.
  */
 export const ARROW_KEY_GUARD_RULE = "anti-slop/no-hand-written-arrow-keys";
 

@@ -3,13 +3,13 @@
  *
  * A message queued while the agent works waits here, unsent and with no row
  * in the transcript, until the agent's turn is over, when the service sends
- * the first one as a turn of its own (`@luke/features/agent-queue-wire`).
+ * the first one as a turn of its own (`@repo/features/agent-queue-wire`).
  * Every row goes with its agent, and a member's rows with their account.
  */
 
-import type { HostedApiError } from "@luke/features";
-import type { QueuePause } from "@luke/features/agent-queue-wire";
-import type { AgentAttachment } from "@luke/features/agent-wire";
+import type { HostedApiError } from "@repo/features";
+import type { QueuePause } from "@repo/features/agent-queue-wire";
+import type { AgentAttachment } from "@repo/features/agent-wire";
 import { boolean, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable } from "./agent.js";

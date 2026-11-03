@@ -7,9 +7,9 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { selectableListBehaviour } from "@luke/ui/testing/selectable-list";
+} from "@repo/features/inbox-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,7 +22,7 @@ import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
 /**
  * inbox-list-selectable.test.ts -- the Inbox's list chooses its items as
- * every selectable list does (`@luke/ui/testing/selectable-list`). The list
+ * every selectable list does (`@repo/ui/testing/selectable-list`). The list
  * alone over five open items of one task; the key of each is its item's id.
  */
 

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { SANDBOX_STATE } from "@repo/features/terminal-wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";

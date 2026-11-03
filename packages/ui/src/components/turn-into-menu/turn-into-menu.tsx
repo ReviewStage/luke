@@ -3,7 +3,7 @@ import {
   WRITING_SHORTCUTS,
   type WritingBlock,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { type DrawnMenu, Menu, type MenuAction } from "../menu/menu.js";
 import { Shortcut } from "../shortcut/shortcut.js";
 import { WritingGlyph } from "../writing-glyph/writing-glyph.js";

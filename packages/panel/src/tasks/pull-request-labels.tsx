@@ -1,10 +1,10 @@
-import type { PullRequestLabel } from "@luke/features/agent-wire";
-import { Badge, GAP, Inline, LAYOUT_ELEMENT } from "@luke/ui";
+import type { PullRequestLabel } from "@repo/features/agent-wire";
+import { Badge, GAP, Inline, LAYOUT_ELEMENT } from "@repo/ui";
 
 /**
  * pull-request-labels.tsx -- a pull request's labels at the end of its header's line of people, each a badge filled with its GitHub colour, readable in either appearance.
  *
- * A label is told from another by its colour, so each is `@luke/ui`'s
+ * A label is told from another by its colour, so each is `@repo/ui`'s
  * filled `Badge`, which draws it as GitHub does in either appearance and
  * fades its name at its end where the header is too narrow to hold it; a
  * colour GitHub spells any other way draws it neutral.

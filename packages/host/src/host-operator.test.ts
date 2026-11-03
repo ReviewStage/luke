@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { INBOX_REPLY, type InboxAnswers } from "@repo/features/inbox-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
 import {
   carried,
   GATEWAY_ERROR,
@@ -11,11 +11,11 @@ import {
   type GatewayCallResult,
   type GatewayClient,
   type GatewayMethod,
-} from "@luke/gateway";
-import { APP_SETTING_SCHEMA, THEME } from "@luke/settings";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettings } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
+} from "@repo/gateway";
+import { APP_SETTING_SCHEMA, THEME } from "@repo/settings";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import type { AppSettings } from "@repo/settings/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import { createHostOperator } from "./host-operator.js";
 import { recordingReporter } from "./testing/recording-reporter.js";

@@ -95,7 +95,7 @@
     "worker_threads",
     "zlib"
   ],
-  "luke-mcp.js": [
+  "workspace-mcp.js": [
     "assert",
     "buffer",
     "bufferutil",

@@ -24,18 +24,18 @@ import {
   type DesktopSessionPageQuery,
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
-} from "@luke/features/desktop-session-wire";
-import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialSignInChoices } from "@luke/ui";
+} from "@repo/features/desktop-session-wire";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialSignInChoices } from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient();
@@ -131,7 +131,7 @@ function DesktopSession(): React.JSX.Element {
           ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER }
           : undefined
       }
-      action={view.kind === VIEW.SAID ? openLukeFromMac() : undefined}
+      action={view.kind === VIEW.SAID ? openAppFromMac() : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (
         <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />

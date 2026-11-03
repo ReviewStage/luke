@@ -1,4 +1,4 @@
-import { GAP, LinkField, Stack } from "@luke/ui";
+import { GAP, LinkField, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -16,7 +16,7 @@ function LinkFieldExample(): React.JSX.Element {
       <Stack gap={GAP.FIELD}>
         <LinkField onApply={ignore} onCancel={ignore} />
         <LinkField
-          href="https://github.com/ReviewStage/luke/pull/4819"
+          href="https://github.com/acme/web/pull/4819"
           onApply={ignore}
           onCancel={ignore}
           onOpen={ignore}

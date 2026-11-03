@@ -1,12 +1,12 @@
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   KEPT_IMAGE_PROVIDER_KEY,
-  keptImageMetadataSchema,
+  keptImageMetadataOf,
   PICTURE_OMISSION,
   type PictureOmission,
-} from "@luke/features/conversation-picture-wire";
-import { UI_PART_STATE, UI_PART_TYPE } from "@luke/features/turn-run";
+} from "@repo/features/conversation-picture-wire";
+import { UI_PART_STATE, UI_PART_TYPE } from "@repo/features/turn-run";
 import {
   type DataUIPart,
   type FileUIPart,
@@ -61,7 +61,7 @@ export const MENTIONED_HEADING =
   "Mentioned in this message, as it stood when the message was sent:";
 
 /** The data part the journal keeps a line's mentioned part as. */
-const MENTIONED_PART_TYPE = "data-luke-mentioned";
+const MENTIONED_PART_TYPE = "data-ui-mentioned";
 
 /** Whether a text part eve was handed is a line's mentioned part rather than its words. */
 export function isMentionedText(text: string): boolean {
@@ -92,9 +92,6 @@ export type KeptImage = { readonly id: string } | { readonly omitted: PictureOmi
 /** A file as eve is handed it and the journal keeps it: an image with what was kept of it, where it was kept or refused. */
 export type HandedFile = AgentAttachment & { readonly kept?: KeptImage | undefined };
 
-/** What was kept of an image as its file part keeps it. */
-const readKeptMetadata = EffectSchema.decodeUnknownOption(keptImageMetadataSchema);
-
 /** An attachment's id as the store mints it. */
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -114,9 +111,8 @@ export function keptImageMetadata(kept: KeptImage): ProviderMetadata {
 
 /** What was kept of the image a file part carries, or nothing where it names none. */
 export function keptImageOf(part: FileUIPart): KeptImage | undefined {
-  const read = Option.getOrUndefined(readKeptMetadata(part.providerMetadata));
-  if (read === undefined) return undefined;
-  const kept = read[KEPT_IMAGE_PROVIDER_KEY];
+  const kept = keptImageMetadataOf(part.providerMetadata);
+  if (kept === undefined) return undefined;
   return "attachmentId" in kept ? { id: kept.attachmentId } : { omitted: kept.omitted };
 }
 

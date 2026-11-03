@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 /**
  * use-held-through-exit.ts -- what a dialog's owner keeps drawn for the fade that takes it away.
  *
- * A dialog fades out as its owner's `open` falls (`@luke/ui`'s `Dialog`), so
+ * A dialog fades out as its owner's `open` falls (`@repo/ui`'s `Dialog`), so
  * an owner whose card holds state, or reads data while it is drawn, must not
  * unmount it in the render that closes it. This holds what it was opened
  * with from the opening until the dialog says it is gone (`onExited`), and

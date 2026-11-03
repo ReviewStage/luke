@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { AdminCost } from "@luke/features/admin-cost-wire";
-import { SECONDS_LIST_PRICE } from "@luke/features/admin-cost-wire";
-import { CostScreen } from "@luke/panel/admin/screens/cost";
+import type { AdminCost } from "@repo/features/admin-cost-wire";
+import { SECONDS_LIST_PRICE } from "@repo/features/admin-cost-wire";
+import { CostScreen } from "@repo/panel/admin/screens/cost";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -21,7 +21,7 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const DAY = {
   day: "2026-10-17",
   agents: 12.5,
-  luke: 3,
+  app: 3,
   dictation: 0.01,
 };
 
@@ -96,7 +96,7 @@ async function openCost(
       }),
     );
   });
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);

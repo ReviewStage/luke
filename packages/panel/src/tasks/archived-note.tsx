@@ -6,7 +6,7 @@ import {
   Button,
   TEXT_TONE,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import type { ArchivedByReading } from "./agent-model.js";

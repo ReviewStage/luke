@@ -1,4 +1,4 @@
-import type { CodeRef } from "@luke/features/task-wire";
+import type { CodeRef } from "@repo/features/task-wire";
 import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract.js";
 
 /**

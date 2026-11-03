@@ -1,21 +1,21 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   type HostCapability,
   SETTINGS_VIEW_COUNTED_AS,
   settingKeepWords,
   settingsPageKeep,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
-} from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BACK_BUTTON_LOOK,
   BackButton,
@@ -36,8 +36,8 @@ import {
   TOOLBAR_LOOK,
   useMenu,
   useRovingKeys,
-} from "@luke/ui";
-import { integrationNamed } from "@luke/ui/integration-search";
+} from "@repo/ui";
+import { integrationNamed } from "@repo/ui/integration-search";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";

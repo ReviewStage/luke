@@ -22,7 +22,7 @@
  * row marks exactly what found it, a loose hit's scattered letters included.
  */
 
-import { namesTaskKey } from "@luke/features/workspace-key";
+import { namesTaskKey } from "@repo/features/workspace-key";
 import { type MatchRange, searchTokens } from "./search-tokens.js";
 
 /** Each way a row can answer a query, in the order they rank. */

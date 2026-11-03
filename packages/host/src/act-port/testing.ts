@@ -6,7 +6,7 @@
  * what a window would: an answer, or a refusal in its sentence.
  */
 
-import type { WireBoundaryInput } from "@luke/wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import type { Router } from "@orpc/server";

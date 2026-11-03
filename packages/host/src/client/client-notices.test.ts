@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { Deferred, Effect, Exit, Layer, Scope } from "effect";
 import { type AgentNotice, AgentNoticeDoors, NOTICE_KIND } from "../agent-notices.js";
 import { runModeFor } from "../run-mode.js";

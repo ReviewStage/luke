@@ -1,8 +1,8 @@
 {
-  "instead": "Draw the product's mark with ProductMark from @luke/ui, and a provider's mark, X's and LinkedIn's included, with ProviderMark.",
+  "instead": "Draw the product's mark with ProductMark from @repo/ui, and a provider's mark, X's and LinkedIn's included, with ProviderMark.",
   "patterns": [
     {
-      "import": "@luke/brand",
+      "import": "@repo/brand",
       "names": ["MARK_ART"],
       "allow": ["packages/brand/", "packages/credentials/", "packages/ui/src/marks/"]
     }

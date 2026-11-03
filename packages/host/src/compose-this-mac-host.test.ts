@@ -11,14 +11,14 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@luke/features";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { HOST_RELEASE } from "@luke/features/host-release";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { EXPERIMENT, type Experiment } from "@luke/settings";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { HOST_RELEASE } from "@repo/features/host-release";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { EXPERIMENT, type Experiment } from "@repo/settings";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Layer, Option, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -167,7 +167,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
 /** The state folder with the record given written, as the install's host would have left it. */
 const recorded = (record: HostDevice) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+    const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
     yield* writeHostDevice(stateRoot, record);
     return stateRoot;
   });
@@ -177,7 +177,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot);
         yield* until(() => mac.asked.length >= 2);
 
@@ -242,7 +242,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot, { failedInstalls: 1 });
         yield* until(() => mac.asked.length >= 2);
         yield* nudged(Duration.seconds(5));

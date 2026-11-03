@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
 import { checkApiCallers, PATHS_MODULE, RESOLUTION } from "../server/api-callers";
 
@@ -25,7 +25,7 @@ async function repositoryWith(root: string, client: string): Promise<void> {
 const HOLE = ["$", "{id}"].join("");
 
 test("a client path resolves to an exception's rewrite first, then a hosted procedure, and one that matches neither is refused even though the fallback would take it", async (t) => {
-  const root = await temporaryDirectory(t, "luke-api-callers-");
+  const root = await temporaryDirectory(t, "api-callers-");
   await repositoryWith(
     root,
     [

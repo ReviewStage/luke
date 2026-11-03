@@ -1,5 +1,5 @@
-import { browserClient } from "@luke/features/contract/browser-client";
-import { LANDING_TONE, type LandingTone } from "@luke/features/landing-outcome";
+import { browserClient } from "@repo/features/contract/browser-client";
+import { LANDING_TONE, type LandingTone } from "@repo/features/landing-outcome";
 import {
   INVITATION_OFFER_QUERY,
   INVITATION_OFFER_REFUSAL,
@@ -7,7 +7,7 @@ import {
   type InvitationAcceptQuery,
   invitationAcceptQuery,
   type WorkspaceInvitation,
-} from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/workspace-invitation-wire";
 import {
   type AuthAction,
   AuthMark,
@@ -18,16 +18,16 @@ import {
   BUTTON_VARIANT,
   Button,
   SocialSignInCard,
-} from "@luke/ui";
+} from "@repo/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 /**
@@ -107,7 +107,7 @@ const ROLE_WORDS = {
 
 /** The way into the workspace once in it: the Mac app on a Mac, else the web app. */
 function openTheWorkspace(): AuthAction {
-  return openLukeFromMac() ?? OPEN_ON_THE_WEB;
+  return openAppFromMac() ?? OPEN_ON_THE_WEB;
 }
 
 const SPENT: View = said(

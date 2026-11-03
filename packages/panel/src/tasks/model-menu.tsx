@@ -1,8 +1,8 @@
-import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { remedyLabel } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords } from "@luke/features/words";
+import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { remedyLabel } from "@repo/features/failure-remedy";
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords } from "@repo/features/words";
 import {
   ErrorState,
   type FootRow,
@@ -12,7 +12,7 @@ import {
   type PopoverWidth,
   SearchableMenu,
   Spinner,
-} from "@luke/ui";
+} from "@repo/ui";
 import { unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";

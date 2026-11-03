@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { UPDATE_STATUS } from "@luke/settings/update";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { UPDATE_STATUS } from "@repo/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -81,7 +81,7 @@ async function mountRefusingInstall(sentence: string): Promise<() => SettingsPan
 
 /** What each toast standing says, oldest first. */
 function toasts(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }

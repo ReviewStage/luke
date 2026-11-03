@@ -13,7 +13,7 @@
  * survived, so a new field the passes do not know cannot leak by accident.
  */
 
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@repo/wire";
 
 /** What a known secret is, which names its placeholder. */
 export const SECRET_KIND = {

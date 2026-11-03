@@ -25,8 +25,8 @@
  * own and travels in base64, which no name, title, or path can break.
  */
 
-import type { TerminalSummary } from "@luke/features/terminal-wire";
-import { readEither } from "@luke/wire/effect";
+import type { TerminalSummary } from "@repo/features/terminal-wire";
+import { readEither } from "@repo/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
@@ -34,7 +34,7 @@ import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
-  /** What a Terminal tab's session names start with; the rest is the shell's id. */
+  /** What a Terminal tab's session names start with; the rest is the shell's id. Note that it and `SOCKET` keep their old names, because a running sandbox's shells are found again by them. */
   SESSION_PREFIX: "luke-",
   /** The session option a developer-given name rides in. */
   TITLE_OPTION: "@luke_title",

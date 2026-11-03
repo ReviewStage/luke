@@ -1,35 +1,35 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
-import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollOwnDevice } from "@luke/database/models/host-store";
-import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
+import { Database } from "@repo/database/core/query";
+import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
+import { queueDeviceAgentLine } from "@repo/database/models/device-agent-store";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { enrollOwnDevice } from "@repo/database/models/host-store";
+import { type KeyRing, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   saveProviderKey,
   setProviderKeyStatus,
-} from "@luke/database/models/provider-key-store";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
+} from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   type DeviceIsolation,
-} from "@luke/features/device-agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
+} from "@repo/features/device-agent-wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, DateTime, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -46,7 +46,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-token-app.js";
 
 /**
@@ -79,7 +79,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };

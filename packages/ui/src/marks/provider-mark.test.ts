@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { LINK_SITE_LIST } from "@luke/features/link-site";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
+import { LINK_SITE_LIST } from "@repo/features/link-site";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

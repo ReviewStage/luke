@@ -3,8 +3,8 @@
  */
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { agentFoldersMade } from "./local-agent-box.js";
@@ -18,7 +18,7 @@ describe("an agent's folders made on the box", () => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-agent-box-");
+        const root = yield* temporaryDirectoryScoped("agent-box-");
         const home = `${root}/agent/home`;
         yield* fileSystem.makeDirectory(`${home}/.local/share/pnpm/store/v10`, { recursive: true });
         yield* fileSystem.writeFileString(`${home}/.npmrc`, OWN_NPMRC);

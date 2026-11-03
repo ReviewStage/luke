@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 import { Database } from "../core/query.js";

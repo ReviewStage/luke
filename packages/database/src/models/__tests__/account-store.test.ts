@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { LINK_OPEN } from "@luke/features/link-open";
-import { AGENT_ENTER, EXPERIMENT } from "@luke/settings";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { LINK_OPEN } from "@repo/features/link-open";
+import { AGENT_ENTER, EXPERIMENT } from "@repo/settings";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";

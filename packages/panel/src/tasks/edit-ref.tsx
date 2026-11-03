@@ -1,23 +1,23 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
-import { agoText } from "@luke/features/time-format";
-import { useMinute } from "@luke/ui";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@repo/features/task-wire";
+import { agoText } from "@repo/features/time-format";
+import { useMinute } from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  APP_ACTOR,
   activityWords,
   actorName,
   distinctActors,
   type EditAgent,
   type EditReader,
   editActor,
-  LUKE_ACTOR,
   latestActivity,
-} from "@luke/ui/actor-model";
+} from "@repo/ui/actor-model";
 import { useMemo } from "react";
-import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
+import { ActorRef, AppCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
 import { agentGlyphState, agentName, providerOf } from "./agent-model.js";
@@ -27,7 +27,7 @@ import type { AgentsControl } from "./use-agents.js";
 /**
  * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
  *
- * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
+ * The writer is read through `@repo/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
  * they last did in the plan, and the app's when and what it wrote, both read
@@ -174,9 +174,9 @@ function WriterRef({
   const agent = agentOf(edit, place.agents);
   const actor = writerOf(edit, place);
   if (actor === undefined) return null;
-  if (actor.kind === ACTOR_KIND.LUKE) {
+  if (actor.kind === ACTOR_KIND.APP) {
     const card = (
-      <LukeCard sub={agoText(edit.at, now)} latest={latestLine(LUKE_ACTOR, place, now, false)} />
+      <AppCard sub={agoText(edit.at, now)} latest={latestLine(APP_ACTOR, place, now, false)} />
     );
     return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }

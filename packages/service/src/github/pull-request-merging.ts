@@ -20,8 +20,8 @@ import {
   type PullRequestMerging,
   REVIEW_DECISION,
   type ReviewDecision,
-} from "@luke/features/agent-wire";
-import { MERGE_METHOD, type MergeMethod } from "@luke/features/pull-request-write-wire";
+} from "@repo/features/agent-wire";
+import { MERGE_METHOD, type MergeMethod } from "@repo/features/pull-request-write-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type GitHubUnavailable, githubPost, readBody, send } from "./github-app.js";

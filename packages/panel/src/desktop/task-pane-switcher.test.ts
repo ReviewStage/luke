@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,7 +26,7 @@ import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
 function page(container: HTMLElement): HTMLButtonElement[] {
   return [
     ...container.querySelectorAll<HTMLButtonElement>(
-      '.side-panel-activity ul[aria-label="Activity"] button:not(.luke-list-row-main)',
+      '.side-panel-activity ul[aria-label="Activity"] button:not(.ui-list-row-main)',
     ),
   ];
 }
@@ -116,7 +116,7 @@ test("the view standing follows the panel: Agents while it is shut, Plan on the 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the comments, a page of the plan's where `paged`, and its column on the agent's tab where `agent`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
 /** What a menu item says, its words and what it acts on, without the chord the open task's items print at their end. */
 function itemWords(item: HTMLElement): string {
-  const chord = item.querySelector(".luke-shortcut")?.textContent ?? "";
+  const chord = item.querySelector(".ui-shortcut")?.textContent ?? "";
   const words = item.textContent ?? "";
   return chord !== "" && words.endsWith(chord) ? words.slice(0, -chord.length) : words;
 }
@@ -232,22 +232,20 @@ function mount(
     title: container.querySelector(".task-head h1")?.textContent,
   });
   const back = () => {
-    const found = container.querySelector<HTMLButtonElement>(
-      ".task-head .luke-toolbar-lead button",
-    );
+    const found = container.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button");
     assert.ok(found, "the row leads with its way back");
     act(() => found.click());
   };
   const rows = () =>
     [
       ...container.querySelectorAll(
-        '.side-panel-activity ul[aria-label="Activity"] .luke-list-row-title',
+        '.side-panel-activity ul[aria-label="Activity"] .ui-list-row-title',
       ),
     ].map((each) => each.textContent);
   const row = (name: string) => {
     const found = [
       ...container.querySelectorAll<HTMLButtonElement>(
-        '.side-panel-activity ul[aria-label="Activity"] .luke-list-row-main',
+        '.side-panel-activity ul[aria-label="Activity"] .ui-list-row-main',
       ),
     ].find((each) => each.textContent?.includes(name));
     assert.ok(found, `Activity lists ${name}`);

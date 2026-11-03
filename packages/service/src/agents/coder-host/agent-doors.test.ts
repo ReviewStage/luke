@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { type Agent, type AgentBriefText, createAgent } from "@luke/database/models/agent-store";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
+import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
 import {
   readPlanCommentThreads,
   startPlanCommentThread,
-} from "@luke/database/models/plan-comments";
-import { createTask, readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
-import { PICTURE_TYPE } from "@luke/features/picture-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+} from "@repo/database/models/plan-comments";
+import { createTask, readTask, savePlanText, updateTask } from "@repo/database/models/task-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
-} from "@luke/features/plan-comment-wire";
-import { planSections } from "@luke/features/plan-document";
+} from "@repo/features/plan-comment-wire";
+import { planSections } from "@repo/features/plan-document";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
 import { COMMENT_TOOL_REFUSAL } from "../../tasks/comment-tools.js";

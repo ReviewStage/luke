@@ -10,17 +10,17 @@
      the card, because they fall on what the card holds, rows, lines, and
      other components' boxes, whose own sheets a parent's child selector in
      the utilities layer would beat. */
-  .luke-settings-section-card > * + * {
-    border-top: 1px solid var(--luke-color-border);
+  .ui-settings-section-card > * + * {
+    border-top: 1px solid var(--ui-color-border);
   }
 
   /* The rows a setting reveals (reveal.css) are ruled as the card's own,
      and a reveal with none to draw stands nowhere, so it draws no rule. */
-  .luke-settings-section-card .luke-reveal > * + * {
-    border-top: 1px solid var(--luke-color-border);
+  .ui-settings-section-card .ui-reveal > * + * {
+    border-top: 1px solid var(--ui-color-border);
   }
 
-  .luke-settings-section-card .luke-reveal:empty {
+  .ui-settings-section-card .ui-reveal:empty {
     display: none;
   }
 
@@ -28,9 +28,9 @@
      popover's) is set apart from the section before it by a rule, as the
      card's edge sets a card's apart. Note that this stays here rather than
      in a utility, because it falls on the section's sibling. */
-  .luke-settings-section[data-frame="rows"] + .luke-settings-section[data-frame="rows"] {
-    padding-top: var(--luke-list-inset);
-    border-top: 1px solid var(--luke-color-border);
+  .ui-settings-section[data-frame="rows"] + .ui-settings-section[data-frame="rows"] {
+    padding-top: var(--ui-list-inset);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   /* Note that the placeholders' boxes are drawn here rather than in
@@ -38,20 +38,20 @@
      naming itself a skeleton's (`anti-slop/skeleton-through-components`).
      Their rows are ruled one from the next as a card's rows are, and their
      sections stand a page's section gap apart. */
-  .luke-settings-skeleton-rows {
+  .ui-settings-skeleton-rows {
     display: flex;
     flex-direction: column;
     min-width: 0;
   }
 
-  .luke-settings-skeleton-rows > * + * {
-    border-top: 1px solid var(--luke-color-border);
+  .ui-settings-skeleton-rows > * + * {
+    border-top: 1px solid var(--ui-color-border);
   }
 
-  .luke-settings-skeleton {
+  .ui-settings-skeleton {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-page-section-gap);
+    gap: var(--ui-page-section-gap);
     min-width: 0;
   }
 }

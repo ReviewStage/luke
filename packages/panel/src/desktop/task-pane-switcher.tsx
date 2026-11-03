@@ -1,4 +1,4 @@
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS } from "@repo/features/task-wire";
 import {
   BackButton,
   DocumentIcon,
@@ -8,7 +8,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { BotIcon, ListIcon } from "lucide-react";
 import type { AwayStep } from "../navigation-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
@@ -143,7 +143,7 @@ export function TaskHead({
         <Text
           as={TEXT_ELEMENT.H1}
           variant={TEXT_VARIANT.TOOLBAR_TITLE}
-          className="luke-toolbar-title"
+          className="ui-toolbar-title"
         >
           <InlineEdit
             value={title}

@@ -4,10 +4,10 @@ import {
   type AgentPullRequest,
   type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   BUTTON_SIZE,
   HOVER_CARD_ROW_LOOK,
@@ -29,8 +29,8 @@ import {
   RowHintOptions,
   Tooltip,
   VisuallyHidden,
-} from "@luke/ui";
-import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -261,7 +261,7 @@ const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
 /**
  * The pull request an agent opened, as a pin's card reads it: read once as
  * the first card of the agent shows, never for a row only crossed, since a
- * card is mounted only once the pointer has rested (`@luke/ui`'s `Tooltip`), and
+ * card is mounted only once the pointer has rested (`@repo/ui`'s `Tooltip`), and
  * shared by every card of it while one stands and for
  * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
  * the open task's pull requests (`useListedPullRequests`), so a pin's card
@@ -444,7 +444,7 @@ function PinnedTabRow({
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
-          <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-16)] [&_svg]:size-luke-16">
+          <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-ui-16)] [&_svg]:size-ui-16">
             {glyph}
           </span>
         }

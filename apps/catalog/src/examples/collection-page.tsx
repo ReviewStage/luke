@@ -19,7 +19,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextField,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

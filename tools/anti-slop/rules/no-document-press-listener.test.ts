@@ -37,7 +37,7 @@ const tester = new RuleTester();
 
 tester.run("no-document-press-listener", noDocumentPressListenerRule, {
   valid: [
-    // @luke/ui is where a press anywhere is heard.
+    // @repo/ui is where a press anywhere is heard.
     { code: PRESS, filename: UI_FILE },
     // A test dispatches presses and may stand a listener to see them.
     { code: PRESS, filename: TEST_FILE },

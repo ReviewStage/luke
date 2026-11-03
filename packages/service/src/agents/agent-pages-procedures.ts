@@ -4,7 +4,7 @@
  * `GET /api/agents/{id}/pages` is the agent's own pages, each by its newest
  * version, `/api/agents/{id}/pages/{page}/versions/{version}` one
  * version's HTML, answered inside JSON so no page is ever a document of this
- * origin (`@luke/database/models/plan-pages`), and `…/versions/{version}/frame`
+ * origin (`@repo/database/models/plan-pages`), and `…/versions/{version}/frame`
  * a browser's frame of it, sent on to the sandbox's own site
  * (`../pages/page-frame.ts`). Each reads as the task's own
  * pages read under the task (`../tasks/task-files-procedures.ts`), gated on
@@ -13,10 +13,10 @@
  * exactly as one that names nothing, and an id that is no UUID names none.
  */
 
-import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
-import { PAGE_OWNER, pageVersionNumberSchema } from "@luke/features/page-wire";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { listPages, readPageVersion } from "@repo/database/models/plan-pages";
+import { PAGE_OWNER, pageVersionNumberSchema } from "@repo/features/page-wire";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Option, Result } from "effect";
 import {
   HOSTED_REFUSAL,

@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { archiveAgent, readAgent } from "@luke/database/models/agent-store";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, readAgent } from "@repo/database/models/agent-store";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
 import {
   openInboxItem,
   openTaskAgent,
   openWorkspace,
   unmigratedPgliteSqlClient,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -41,7 +41,7 @@ const MIGRATION = "20261102192712_eve_agents_archive";
 const foldersBut = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-but-eve-archive-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "but-eve-archive-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name !== MIGRATION,
   );
@@ -93,8 +93,9 @@ it.effect(
 
         const archivedBy = (agentId: string) =>
           Effect.map(readAgent("dean", agentId), (agent) => Option.getOrThrow(agent).archivedBy);
+        // Note that the migration stores the app as `luke`, its word then, which reads as the app's.
         const retired = {
-          by: "luke",
+          by: "app",
           userId: "dean",
           reason: "Its runtime was retired. Continue it in a new agent to go on from its work.",
         };

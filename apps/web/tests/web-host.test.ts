@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_PORT_CHANNEL,
   TERMINAL_PORT_MESSAGE,
-} from "@luke/features/terminal-acts";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { askAct } from "@luke/panel/act";
-import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
-import { HOST_CAPABILITY, THEME } from "@luke/settings";
-import { ACTION_RESULT_STATUS, isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/terminal-acts";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { askAct } from "@repo/panel/act";
+import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
+import { HOST_CAPABILITY, THEME } from "@repo/settings";
+import { ACTION_RESULT_STATUS, isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Context, Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
@@ -155,7 +155,7 @@ it.effect(
         yield* Effect.promise(() =>
           vi.waitFor(async () => {
             window.dispatchEvent(
-              new StorageEvent("storage", { key: "luke.host.files", storageArea: localStorage }),
+              new StorageEvent("storage", { key: "app.host.files", storageArea: localStorage }),
             );
             const state = await reader.bridge.requestAppState();
             assert.equal(state.settings?.stored.theme, THEME.DARK);

@@ -28,11 +28,11 @@
  * the app's own files, so only the web's root listens.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { holdsUnkept } from "@luke/panel/composer-drafts";
-import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { showToast } from "@luke/panel/toast";
-import { STATUS_TONE } from "@luke/ui";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { holdsUnkept } from "@repo/panel/composer-drafts";
+import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { showToast } from "@repo/panel/toast";
+import { STATUS_TONE } from "@repo/ui";
 import { Effect, Option } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -44,7 +44,7 @@ import { PANEL_PATH } from "./web-address";
 export const PRELOAD_ERROR = "vite:preloadError";
 
 /** Where the tab's session keeps the build it last reloaded away from. */
-const RELOADED_FROM_KEY = "luke.staleBuild.reloadedFrom";
+const RELOADED_FROM_KEY = "app.staleBuild.reloadedFrom";
 
 /** What the toast says where the tab holds work a reload would lose. */
 const NEW_VERSION_READY = `A new version of ${PRODUCT_NAME} is ready`;

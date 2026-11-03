@@ -14,7 +14,7 @@
  * closed as too. Who opened it is read off the same answer, by login.
  */
 
-import { ISSUE_STATE, type IssueState } from "@luke/features/github-repositories-wire";
+import { ISSUE_STATE, type IssueState } from "@repo/features/github-repositories-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

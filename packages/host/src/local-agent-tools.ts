@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentToolPin } from "@luke/agent-runner/pins";
+import type { AgentToolPin } from "@repo/agent-runner/pins";
 import { Duration, Effect, Option, Path, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -7,7 +7,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { stagedFolder, streamedArchive, unpackedArchive } from "./staged-fetch.js";
 
 /**
- * local-agent-tools.ts -- a binary a device's local agents run on, as its pin names it (`@luke/agent-runner/pins`' `AgentToolPin`): the pinned release fetched once, checked, and kept in the device's own folder.
+ * local-agent-tools.ts -- a binary a device's local agents run on, as its pin names it (`@repo/agent-runner/pins`' `AgentToolPin`): the pinned release fetched once, checked, and kept in the device's own folder.
  *
  * One resolver answers every such binary, every host's Claude Code, Codex,
  * and GitHub CLI among them: the build kept under the

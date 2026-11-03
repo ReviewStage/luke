@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { SHORTCUT_KEY, WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
+import { SHORTCUT_KEY, WRITING_BLOCK, WRITING_INSERT } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
@@ -127,7 +127,7 @@ test("a menu with nothing left in it says so", () => {
 
 test("its foot names the keys it hears, and is read by nobody", () => {
   const { menu } = mount(GROUPS);
-  const foot = menu.querySelector('.luke-menu-keys[aria-hidden="true"]');
+  const foot = menu.querySelector('.ui-menu-keys[aria-hidden="true"]');
   expect([...(foot?.children ?? [])].map((key) => key.textContent)).toEqual([
     "↑↓Move",
     "⏎⇥Insert",

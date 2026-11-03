@@ -13,13 +13,13 @@ export const COST_SOURCE = {
   /** A coding agent's turns and its workers'. */
   AGENTS: "agents",
   /** Our own turns: every other conversation kind, the brain and its workers. */
-  LUKE: "luke",
+  APP: "app",
   DICTATION: "dictation",
 } as const;
 
 export type CostSource = (typeof COST_SOURCE)[keyof typeof COST_SOURCE];
 
-export type TokenCostSource = typeof COST_SOURCE.AGENTS | typeof COST_SOURCE.LUKE;
+export type TokenCostSource = typeof COST_SOURCE.AGENTS | typeof COST_SOURCE.APP;
 
 export type SecondsCostSource = typeof COST_SOURCE.DICTATION;
 
@@ -61,7 +61,7 @@ export interface AdminCostAccount extends AdminCostAccountInfo {
 export interface AdminCostDay {
   day: string;
   [COST_SOURCE.AGENTS]: number;
-  [COST_SOURCE.LUKE]: number;
+  [COST_SOURCE.APP]: number;
   [COST_SOURCE.DICTATION]: number;
 }
 

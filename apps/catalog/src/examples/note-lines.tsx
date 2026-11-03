@@ -5,7 +5,7 @@ import {
   NOTE_LINE_LOOK,
   NoteLine,
   UserIcon,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

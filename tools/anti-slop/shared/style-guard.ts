@@ -2,7 +2,7 @@ import { parseSync } from "oxc-parser";
 
 /**
  * The design system's style guard: what a stylesheet or a Tailwind class
- * string may spell outside `@luke/ui`'s tokens. docs/DESIGN.md and
+ * string may spell outside `@repo/ui`'s tokens. docs/DESIGN.md and
  * `packages/ui/README.md` state each rule in prose; this holds them as data,
  * read by `style-guard.ts`, which `pnpm lint` runs after oxlint, since
  * oxlint reads no CSS. A rule with places left to fix starts from a baseline
@@ -69,7 +69,7 @@ export const STYLE_RULES: Readonly<
   },
   [STYLE_RULE.CURSOR]: {
     refuses:
-      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--ui-cursor-press`), a real link `cursor-link` (`--ui-cursor-link`)",
     backlog: false,
   },
   [STYLE_RULE.HAS_OVER_ANY]: {
@@ -79,7 +79,7 @@ export const STYLE_RULES: Readonly<
   },
   [STYLE_RULE.BAR_CORNER]: {
     refuses:
-      "a corner radius on a bar's own box (`.luke-pane-bar`, `.luke-toolbar`), in a stylesheet or as a `rounded-*` beside its class: the sheet rounds the bar standing at its top, once, in `packages/panel/src/styles/shell.css` (\"The sheet's top\"), so no page rounds its own",
+      "a corner radius on a bar's own box (`.ui-pane-bar`, `.ui-toolbar`), in a stylesheet or as a `rounded-*` beside its class: the sheet rounds the bar standing at its top, once, in `packages/panel/src/styles/shell.css` (\"The sheet's top\"), so no page rounds its own",
     backlog: false,
   },
   [STYLE_RULE.CRUMB_WIDTH]: {
@@ -103,7 +103,7 @@ const TOKEN_SHEETS = ["packages/ui/src/tokens/", "packages/ui/src/tailwind/theme
 const TOOLING = [".agents/", ".claude/"];
 
 /**
- * Folders one rule passes whole: `@luke/ui` is where a popover's width is
+ * Folders one rule passes whole: `@repo/ui` is where a popover's width is
  * drawn from its token, and the catalog's stage and rooms are its own
  * demonstration layout, not a picker.
  */
@@ -113,8 +113,8 @@ const RULE_EXEMPT_FOLDERS: Readonly<Partial<Record<StyleRule, readonly string[]>
 
 /**
  * Where one rule reads at all: spacing is held in the panel's own sheets,
- * where `@luke/ui`'s spacing roles are read, and a component sheet in
- * `@luke/ui` is where a role is drawn from its scale.
+ * where `@repo/ui`'s spacing roles are read, and a component sheet in
+ * `@repo/ui` is where a role is drawn from its scale.
  */
 const RULE_SCOPES: Readonly<Partial<Record<StyleRule, RegExp>>> = {
   [STYLE_RULE.SPACING]: /^packages\/panel\/src\/styles\/[^/]+\.css$/u,
@@ -311,7 +311,7 @@ const WIDE_KEYWORDS = /\b(?:inherit|initial|unset|revert|revert-layer)\b/gu;
 /**
  * A number left once tokens and keywords are out: a literal size, weight,
  * or radius. A zero is none, and a number with no unit is a factor of a
- * token (`calc(var(--luke-control-height) / 2)`) unless `unitless` says it
+ * token (`calc(var(--ui-control-height) / 2)`) unless `unitless` says it
  * is a value of its own, as a weight is.
  */
 function holdsLiteralNumber(value: string, unitless = false): boolean {
@@ -412,7 +412,7 @@ const EASING_KEYWORD =
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-[a-z-]+)?$/u;
 
 /** The play-state tokens an endless loop answers (docs/DESIGN.md's vocabulary). */
-const PLAY_STATE_TOKEN = /var\(\s*--(?:luke-)?loop-motion\b/u;
+const PLAY_STATE_TOKEN = /var\(\s*--(?:ui-)?loop-motion\b/u;
 
 /**
  * Whether a declaration is an animation the play-state exception covers:
@@ -465,12 +465,12 @@ function holdsForeignInk(block: CssBlock, property: string): boolean {
 const POINTER_CURSOR = /(?<![\w-])pointer(?![\w-])/u;
 
 /** A selector or a Tailwind variant that picks a profile, as a cursor of its own per app would. */
-const PROFILE_PICK = /luke-profile/u;
+const PROFILE_PICK = /ui-profile/u;
 
 /**
  * Whether a declaration chooses its own cursor where the one rule goes: the
  * hand spelled out, or any cursor set under a profile's selector, which is
- * the rule copied rather than read (profiles.css's `--luke-cursor-press`).
+ * the rule copied rather than read (profiles.css's `--ui-cursor-press`).
  */
 function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
   if (declaration.property !== "cursor") return false;
@@ -478,8 +478,8 @@ function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
   return block.preludes.some((prelude) => PROFILE_PICK.test(prelude));
 }
 
-/** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
-const PATH_CLASS = /\.luke-breadcrumbs\b/u;
+/** A path's landmark, whose list items are its crumbs (`@repo/ui`'s `Breadcrumbs`). */
+const PATH_CLASS = /\.ui-breadcrumbs\b/u;
 
 /** A selector with what its brackets and parentheses hold taken out, so `:has(> .x)` splits as one compound. */
 function withoutArguments(selector: string): string {
@@ -571,7 +571,7 @@ function widensCrumb(declaration: CssDeclaration, block: CssBlock, capped: boole
 }
 
 /** The classes a bar's own box wears: `PaneBar`'s and `Toolbar`'s. */
-const BAR_CLASS = /\.luke-(?:pane-bar|toolbar)(?![\w-])/u;
+const BAR_CLASS = /\.ui-(?:pane-bar|toolbar)(?![\w-])/u;
 
 /** The sheet that rounds a bar at a sheet's top, and the radius its one rule publishes there. */
 const SHEET_CORNER_FILE = "packages/panel/src/styles/shell.css";
@@ -692,14 +692,14 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
 
 // ------------------------------------------------------- Tailwind classes
 
-/** The names `@luke/ui`'s Tailwind theme maps onto tokens, by namespace. */
+/** The names `@repo/ui`'s Tailwind theme maps onto tokens, by namespace. */
 export interface ThemeNames {
   readonly [namespace: string]: ReadonlySet<string>;
 }
 
 const THEME_NAMESPACES = ["color", "text", "radius", "ease", "animate", "font-weight"];
 
-/** The names each theme namespace maps, read from `@luke/ui`'s theme sheet. */
+/** The names each theme namespace maps, read from `@repo/ui`'s theme sheet. */
 export function themeNames(themeSheet: string): ThemeNames {
   const names: Record<string, Set<string>> = {};
   for (const namespace of THEME_NAMESPACES) names[namespace] = new Set();
@@ -724,7 +724,7 @@ const COLOUR_UTILITY =
 const TYPE_SCALE = /^(?:xs|sm|base|lg|xl|\dxl)$/u;
 const WEIGHTS = /^(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/u;
 const RADIUS_UTILITY = /^rounded(?:-(?:t|r|b|l|tl|tr|br|bl|s|e|ss|se|es|ee|x|y))?(?:-(.+))?$/u;
-const TOKEN_ARBITRARY = /^(?:\[var\(--luke-[\w-]+\)\]|\(--luke-[\w-]+\))$/u;
+const TOKEN_ARBITRARY = /^(?:\[var\(--ui-[\w-]+\)\]|\(--ui-[\w-]+\))$/u;
 const LENGTH_ARBITRARY = /^\[(?:length:)?-?(?:\d*\.)?\d+[a-z%]*\]$/u;
 
 /** A class with its variants, important mark, negation, and modifier taken off. */

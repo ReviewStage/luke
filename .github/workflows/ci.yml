@@ -43,7 +43,7 @@ jobs:
 
   # One job per slice of the tests, so a run takes about as long as its slowest
   # slice rather than two large suites back to back. Each of the four largest
-  # suites, and @luke/database's, runs in jobs of its own, the longest of them
+  # suites, and @repo/database's, runs in jobs of its own, the longest of them
   # cut into vitest shards with `-- --shard=<i>/<n>`, which turbo hashes, so
   # each shard is cached on its own; a shard count is set here alone and is
   # sized to keep a slice near two minutes when it misses the cache. The last
@@ -61,35 +61,35 @@ jobs:
       matrix:
         include:
           - slice: panel 1/6
-            task: test:vitest --filter=@luke/panel -- --shard=1/6
+            task: test:vitest --filter=@repo/panel -- --shard=1/6
           - slice: panel 2/6
-            task: test:vitest --filter=@luke/panel -- --shard=2/6
+            task: test:vitest --filter=@repo/panel -- --shard=2/6
           - slice: panel 3/6
-            task: test:vitest --filter=@luke/panel -- --shard=3/6
+            task: test:vitest --filter=@repo/panel -- --shard=3/6
           - slice: panel 4/6
-            task: test:vitest --filter=@luke/panel -- --shard=4/6
+            task: test:vitest --filter=@repo/panel -- --shard=4/6
           - slice: panel 5/6
-            task: test:vitest --filter=@luke/panel -- --shard=5/6
+            task: test:vitest --filter=@repo/panel -- --shard=5/6
           - slice: panel 6/6
-            task: test:vitest --filter=@luke/panel -- --shard=6/6
+            task: test:vitest --filter=@repo/panel -- --shard=6/6
           - slice: service 1/4
-            task: test:vitest --filter=@luke/service -- --shard=1/4
+            task: test:vitest --filter=@repo/service -- --shard=1/4
           - slice: service 2/4
-            task: test:vitest --filter=@luke/service -- --shard=2/4
+            task: test:vitest --filter=@repo/service -- --shard=2/4
           - slice: service 3/4
-            task: test:vitest --filter=@luke/service -- --shard=3/4
+            task: test:vitest --filter=@repo/service -- --shard=3/4
           - slice: service 4/4
-            task: test:vitest --filter=@luke/service -- --shard=4/4
+            task: test:vitest --filter=@repo/service -- --shard=4/4
           - slice: web 1/2
-            task: test:vitest --filter=@luke/web -- --shard=1/2
+            task: test:vitest --filter=@repo/web -- --shard=1/2
           - slice: web 2/2
-            task: test:vitest --filter=@luke/web -- --shard=2/2
+            task: test:vitest --filter=@repo/web -- --shard=2/2
           - slice: ui
-            task: test:vitest --filter=@luke/ui
+            task: test:vitest --filter=@repo/ui
           - slice: database
-            task: test:vitest --filter=@luke/database
+            task: test:vitest --filter=@repo/database
           - slice: the rest
-            task: test:vitest --filter=!@luke/panel --filter=!@luke/service --filter=!@luke/web --filter=!@luke/ui --filter=!@luke/database
+            task: test:vitest --filter=!@repo/panel --filter=!@repo/service --filter=!@repo/web --filter=!@repo/ui --filter=!@repo/database
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
@@ -106,7 +106,7 @@ jobs:
   # `db:migrate` finds it, and they end at the declared schema, its tables
   # (`apps/web/tests/storage-schema.test.ts`) and its columns
   # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
-  # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
+  # what `db:migrate` built (`@repo/database/testing` clones it as a template). The store tests
   # themselves run on PGlite, the same Postgres 18, in the test jobs above, but
   # for the database package's `*.postgres.test.ts`, two connections contending
   # for one lock, which PGlite's one connection cannot hold apart: its
@@ -161,7 +161,7 @@ jobs:
           docker logs postgres
           echo "::error::Postgres did not become healthy"
           exit 1
-      - run: pnpm --filter @luke/web db:migrate
+      - run: pnpm --filter @repo/web db:migrate
       - name: The migrations end at the declared schema
         run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts
       - name: The store's lock and claim tests on a real Postgres

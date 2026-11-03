@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { afterEach, vi } from "vitest";
@@ -65,7 +65,7 @@ async function view(name: string): Promise<HTMLElement> {
 
 /** The way back leading the phone's task's header. */
 function back(): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button");
+  const found = document.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button");
   assert.ok(found, "the task's header leads with its way back");
   return found;
 }

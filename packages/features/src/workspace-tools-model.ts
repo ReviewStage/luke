@@ -1,8 +1,8 @@
 /**
- * luke-tools-model.ts -- what an agent's MCP popover says of our own tools: each one's group and one line of what it does, and whether `run_on_mac` is on for the agent and why not.
+ * workspace-tools-model.ts -- what an agent's MCP popover says of our own tools: each one's group and one line of what it does, and whether `run_on_mac` is on for the agent and why not.
  *
  * Which of our tools an agent is offered is the service's answer
- * (`luke-tools-wire.ts`), read off the same rules its runtime narrows the
+ * (`workspace-tools-wire.ts`), read off the same rules its runtime narrows the
  * list by, so it never drifts from what the agent is handed. What each tool
  * is called beside its name, and the group it stands under, is said here,
  * once, for every tool in `AGENT_TOOL`: a tool added there does not build
@@ -22,12 +22,12 @@
 
 import { AGENT_TOOL, type AgentTool } from "./agent-tools.js";
 import { MESSAGE_SENDER, type MessageSender } from "./agent-wire.js";
-import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./luke-tools-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 import { dayAndTimeText } from "./time-format.js";
+import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./workspace-tools-wire.js";
 
 /** The groups our tools stand under on their page, in the order they are drawn. */
-export const LUKE_TOOL_GROUP = {
+export const WORKSPACE_TOOL_GROUP = {
   MAC: "Your Mac",
   THREADS: "Threads",
   AGENTS: "Agents and tasks",
@@ -40,244 +40,246 @@ export const LUKE_TOOL_GROUP = {
   OTHER: "Other",
 } as const;
 
-export type LukeToolGroup = (typeof LUKE_TOOL_GROUP)[keyof typeof LUKE_TOOL_GROUP];
+export type WorkspaceToolGroup = (typeof WORKSPACE_TOOL_GROUP)[keyof typeof WORKSPACE_TOOL_GROUP];
 
-const GROUP_ORDER: readonly LukeToolGroup[] = Object.values(LUKE_TOOL_GROUP);
+const GROUP_ORDER: readonly WorkspaceToolGroup[] = Object.values(WORKSPACE_TOOL_GROUP);
 
 /** One of our tools as its page says it: its group, and one line of what it does. */
-interface LukeToolWords {
-  readonly group: LukeToolGroup;
+interface WorkspaceToolWords {
+  readonly group: WorkspaceToolGroup;
   readonly summary: string;
 }
 
 /** Every tool of ours, by its name: its group and one line of what it does. */
-const LUKE_TOOL_WORDS = {
+const WORKSPACE_TOOL_WORDS = {
   [AGENT_TOOL.RUN_ON_MAC]: {
-    group: LUKE_TOOL_GROUP.MAC,
+    group: WORKSPACE_TOOL_GROUP.MAC,
     summary: "Runs a shell command on the developer's own Mac",
   },
   [AGENT_TOOL.POST_THREAD]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Posts a thread to one of the workspace's channels",
   },
   [AGENT_TOOL.READ_THREADS]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Reads the threads it posted and their answers",
   },
   [AGENT_TOOL.WITHDRAW_ASK]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Withdraws an ask it no longer needs answered",
   },
   [AGENT_TOOL.CREATE_CHANNEL]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Makes a channel in the workspace",
   },
   [AGENT_TOOL.UPDATE_CHANNEL]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Renames, describes, or archives a channel",
   },
   [AGENT_TOOL.MOVE_THREAD]: {
-    group: LUKE_TOOL_GROUP.THREADS,
+    group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Moves a thread to another channel",
   },
   [AGENT_TOOL.LIST_AGENTS]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Lists the workspace's agents",
   },
   [AGENT_TOOL.READ_AGENT]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Reads where another agent stands and what it published",
   },
   [AGENT_TOOL.MESSAGE_AGENT]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Sends another agent a message",
   },
   [AGENT_TOOL.START_AGENT]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Starts a new agent on a task",
   },
   [AGENT_TOOL.STOP_AGENT]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Stops another agent's turn",
   },
   [AGENT_TOOL.UPDATE_AGENT]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Renames, pins, moves, or archives an agent",
   },
   [AGENT_TOOL.LIST_MODELS]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Lists the models an agent may be started on",
   },
   [AGENT_TOOL.LIST_TASKS]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Lists the workspace's tasks",
   },
   [AGENT_TOOL.READ_TASK]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Reads a task and its plan",
   },
   [AGENT_TOOL.CREATE_TASK]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Makes a task",
   },
   [AGENT_TOOL.UPDATE_TASK]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Renames a task or changes where it stands",
   },
   [AGENT_TOOL.CREATE_SECTION]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Makes a section in the sidebar",
   },
   [AGENT_TOOL.DELETE_SECTION]: {
-    group: LUKE_TOOL_GROUP.AGENTS,
+    group: WORKSPACE_TOOL_GROUP.AGENTS,
     summary: "Deletes a section of the sidebar",
   },
   [AGENT_TOOL.LIST_AUTOMATIONS]: {
-    group: LUKE_TOOL_GROUP.AUTOMATIONS,
+    group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Lists the workspace's automations",
   },
   [AGENT_TOOL.CREATE_AUTOMATION]: {
-    group: LUKE_TOOL_GROUP.AUTOMATIONS,
+    group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Makes an automation",
   },
   [AGENT_TOOL.UPDATE_AUTOMATION]: {
-    group: LUKE_TOOL_GROUP.AUTOMATIONS,
+    group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Changes an automation",
   },
   [AGENT_TOOL.DELETE_AUTOMATION]: {
-    group: LUKE_TOOL_GROUP.AUTOMATIONS,
+    group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Deletes an automation",
   },
   [AGENT_TOOL.RUN_AUTOMATION]: {
-    group: LUKE_TOOL_GROUP.AUTOMATIONS,
+    group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Runs an automation now",
   },
   [AGENT_TOOL.EDIT_PLAN]: {
-    group: LUKE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.PLAN,
     summary: "Takes notes in its task's plan",
   },
   [AGENT_TOOL.READ_COMMENTS]: {
-    group: LUKE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.PLAN,
     summary: "Reads the comment threads on the plan",
   },
   [AGENT_TOOL.REPLY_TO_COMMENT]: {
-    group: LUKE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.PLAN,
     summary: "Answers a comment thread it was mentioned in",
   },
   [AGENT_TOOL.UPDATE_COMMENT]: {
-    group: LUKE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.PLAN,
     summary: "Resolves or reopens a comment thread",
   },
   [AGENT_TOOL.SHOW_PAGE]: {
-    group: LUKE_TOOL_GROUP.PAGES,
+    group: WORKSPACE_TOOL_GROUP.PAGES,
     summary: "Shows a page in the side panel",
   },
   [AGENT_TOOL.READ_PAGE]: {
-    group: LUKE_TOOL_GROUP.PAGES,
+    group: WORKSPACE_TOOL_GROUP.PAGES,
     summary: "Reads a page shown in the workspace",
   },
   [AGENT_TOOL.SHOW_IMAGE]: {
-    group: LUKE_TOOL_GROUP.PAGES,
+    group: WORKSPACE_TOOL_GROUP.PAGES,
     summary: "Shows pictures from its sandbox in the transcript",
   },
   [AGENT_TOOL.LOOK_AT_PICTURE]: {
-    group: LUKE_TOOL_GROUP.PAGES,
+    group: WORKSPACE_TOOL_GROUP.PAGES,
     summary: "Looks at a picture in the plan",
   },
   [AGENT_TOOL.BROWSER]: {
-    group: LUKE_TOOL_GROUP.WEB,
+    group: WORKSPACE_TOOL_GROUP.WEB,
     summary: "Drives a browser in its sandbox you can watch",
   },
   [AGENT_TOOL.WEB_SEARCH]: {
-    group: LUKE_TOOL_GROUP.WEB,
+    group: WORKSPACE_TOOL_GROUP.WEB,
     summary: "Searches the public web",
   },
   [AGENT_TOOL.READ_WEB_PAGE]: {
-    group: LUKE_TOOL_GROUP.WEB,
+    group: WORKSPACE_TOOL_GROUP.WEB,
     summary: "Reads a public web page",
   },
   [AGENT_TOOL.BASH]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Runs a shell command in its sandbox",
   },
   [AGENT_TOOL.READ_FILE]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Reads a file in its checkout",
   },
   [AGENT_TOOL.WRITE_FILE]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Writes a file in its checkout",
   },
   [AGENT_TOOL.GLOB]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Finds files by their paths",
   },
   [AGENT_TOOL.GREP]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Searches files for a pattern",
   },
   [AGENT_TOOL.APPLY_PATCH]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Edits files in its checkout with a patch",
   },
   [AGENT_TOOL.OPEN_PULL_REQUEST]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Opens the pull request for a branch it pushed",
   },
   [AGENT_TOOL.DELEGATE]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Hands a read-only job to a worker",
   },
   [AGENT_TOOL.WRITE_TODOS]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Keeps its to-do list",
   },
   [AGENT_TOOL.LOAD_SKILL]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Loads one of the repository's skills",
   },
   [AGENT_TOOL.SLEEP]: {
-    group: LUKE_TOOL_GROUP.CODE,
+    group: WORKSPACE_TOOL_GROUP.CODE,
     summary: "Waits before it checks on its checks or a deploy",
   },
   [AGENT_TOOL.SAVE_MEMORY]: {
-    group: LUKE_TOOL_GROUP.MEMORY,
+    group: WORKSPACE_TOOL_GROUP.MEMORY,
     summary: "Keeps a fact in the workspace's memory",
   },
   [AGENT_TOOL.SEARCH_MEMORY]: {
-    group: LUKE_TOOL_GROUP.MEMORY,
+    group: WORKSPACE_TOOL_GROUP.MEMORY,
     summary: "Searches the workspace's memory",
   },
-} as const satisfies { readonly [Tool in AgentTool]: LukeToolWords };
+} as const satisfies { readonly [Tool in AgentTool]: WorkspaceToolWords };
 
 /** One tool as our tools' page draws it: its name, and one line of what it does where this build knows it. */
-export interface LukeToolRow {
+export interface WorkspaceToolRow {
   readonly name: string;
   readonly summary?: string;
 }
 
 /** One group of our tools' page: its heading and its tools, in the order the service answered them. */
-export interface LukeToolSection {
-  readonly heading: LukeToolGroup;
-  readonly tools: readonly LukeToolRow[];
+export interface WorkspaceToolSection {
+  readonly heading: WorkspaceToolGroup;
+  readonly tools: readonly WorkspaceToolRow[];
 }
 
-function wordsOf(name: string): LukeToolWords | undefined {
-  return Object.hasOwn(LUKE_TOOL_WORDS, name) ? LUKE_TOOL_WORDS[name as AgentTool] : undefined;
+function wordsOf(name: string): WorkspaceToolWords | undefined {
+  return Object.hasOwn(WORKSPACE_TOOL_WORDS, name)
+    ? WORKSPACE_TOOL_WORDS[name as AgentTool]
+    : undefined;
 }
 
 /** One line of what a tool of ours does; nothing for a name this build does not know. */
-export function lukeToolSummary(name: string): string | undefined {
+export function workspaceToolSummary(name: string): string | undefined {
   return wordsOf(name)?.summary;
 }
 
 /** The tools the service named, under their groups in the page's order, each group's in the order named; no group stands empty. */
-export function lukeToolSections(names: readonly string[]): readonly LukeToolSection[] {
+export function workspaceToolSections(names: readonly string[]): readonly WorkspaceToolSection[] {
   return GROUP_ORDER.flatMap((heading) => {
     const tools = names
-      .filter((name) => (wordsOf(name)?.group ?? LUKE_TOOL_GROUP.OTHER) === heading)
-      .map((name): LukeToolRow => {
-        const summary = lukeToolSummary(name);
+      .filter((name) => (wordsOf(name)?.group ?? WORKSPACE_TOOL_GROUP.OTHER) === heading)
+      .map((name): WorkspaceToolRow => {
+        const summary = workspaceToolSummary(name);
         return summary === undefined ? { name } : { name, summary };
       });
     return tools.length === 0 ? [] : [{ heading, tools }];
@@ -322,7 +324,7 @@ const OUTSIDE_WORDS_FROM = {
   [MESSAGE_SENDER.AGENT]: "A teammate's agent's message",
   [MESSAGE_SENDER.AUTOMATION]: "An automation's webhook or event",
   [MESSAGE_SENDER.GITHUB]: "A review or comment on its pull request",
-  [MESSAGE_SENDER.LUKE]: "A message",
+  [MESSAGE_SENDER.APP]: "A message",
 } as const satisfies Record<MessageSender, string>;
 
 /**

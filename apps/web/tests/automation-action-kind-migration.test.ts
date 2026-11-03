@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -29,7 +29,7 @@ function foldersWhere(keep: (name: string) => boolean) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-action-kind-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "action-kind-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(keep);
     for (const name of names) {
       yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));

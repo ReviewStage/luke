@@ -19,16 +19,16 @@
  * Connect nothing.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_NAME,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { causeKind } from "@luke/runtime/effect";
+} from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { causeKind } from "@repo/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { ConversationAdmission } from "../agents/eve-host/conversation.js";

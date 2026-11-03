@@ -2,8 +2,8 @@
  * app-bridge.ts -- the bridge and act port a test's window reaches main through: fakes answering only the calls its test gives them.
  */
 
-import { AUTOMATION_FOLLOW, type AutomationFollow } from "@luke/features/automation-view";
-import type { AppBridge } from "@luke/host/bridge";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { AppBridge } from "@repo/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
@@ -15,8 +15,8 @@ import {
   type PortActPayload,
   type PortActResult,
   TASKS_ACT_KIND,
-} from "@luke/host/contract";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/host/contract";
+import type { WireBoundaryInput } from "@repo/wire";
 import { ORPCError } from "@orpc/client";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
 

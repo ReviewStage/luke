@@ -1,5 +1,5 @@
-import type { Workspace } from "@luke/features/workspace-wire";
-import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@luke/ui";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@repo/ui";
 import type { ReactNode } from "react";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
@@ -48,7 +48,7 @@ const NAME_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: "self-baseline py-workspace-ref-lift",
   [WORKSPACE_REF_SIZE.ROW]: undefined,
   [WORKSPACE_REF_SIZE.HEAD]:
-    "text-foreground text-section-size font-luke-semibold tracking-workspace-head",
+    "text-foreground text-section-size font-ui-semibold tracking-workspace-head",
 } as const;
 
 /** The tile each size of ref draws. */

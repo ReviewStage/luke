@@ -1,4 +1,4 @@
-import type { WireRecord } from "@luke/wire";
+import type { WireRecord } from "@repo/wire";
 
 /**
  * What one inference reports about itself, as the brain's run stream and

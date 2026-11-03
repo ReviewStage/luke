@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { archiveChannel, createChannel } from "@luke/database/models/channel-store";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { archiveChannel, createChannel } from "@repo/database/models/channel-store";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { GENERAL_CHANNEL } from "@repo/database/schemas/channel";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -24,10 +24,10 @@ import {
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { paddedTo, webmBytes } from "@luke/wire/testing";
+} from "@repo/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";

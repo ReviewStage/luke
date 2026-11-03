@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   queueAgentMessage,
   readAgentQueue,
   takeQueuedMessage,
-} from "@luke/database/models/agent-queue-store";
-import { createTask } from "@luke/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/agent-queue-store";
+import { createTask } from "@repo/database/models/task-store";
+import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@repo/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";

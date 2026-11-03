@@ -7,7 +7,7 @@ import {
   terminalResumedActAnswerSchema,
   terminalShellParamsSchema,
   terminalsActAnswerSchema,
-} from "@luke/features/terminal-acts";
+} from "@repo/features/terminal-acts";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { TERMINAL_ACT_KIND } from "./kinds.js";

@@ -1,4 +1,4 @@
-import { FILL_ELEMENT, Fill, ProductMark, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { FILL_ELEMENT, Fill, ProductMark, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { freshAccount } from "../tasks/resting-page.js";
@@ -57,7 +57,7 @@ export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.El
       aria-label="Welcome"
     >
       <span
-        className="home-welcome-mark mb-tight-gap flex size-welcome-tile items-center justify-center rounded-luke-14 bg-muted text-foreground [&_.luke-product-mark]:size-welcome-mark!"
+        className="home-welcome-mark mb-tight-gap flex size-welcome-tile items-center justify-center rounded-ui-14 bg-muted text-foreground [&_.ui-product-mark]:size-welcome-mark!"
         aria-hidden="true"
       >
         <ProductMark />

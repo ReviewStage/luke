@@ -2,12 +2,12 @@
  * desktop-platform.ts -- what the desktop's shell answers for the panel: each capability as the act or the preload event main already serves.
  */
 
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { ACT_KIND } from "@luke/host/acts";
-import { askAct, pressAct, tellAct } from "@luke/panel/act";
-import { appBridge } from "@luke/panel/app-bridge";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { openBrowserLiveOverPort } from "@luke/panel/browser-live-port";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { ACT_KIND } from "@repo/host/acts";
+import { askAct, pressAct, tellAct } from "@repo/panel/act";
+import { appBridge } from "@repo/panel/app-bridge";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { openBrowserLiveOverPort } from "@repo/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
 /** What of this window's work is unsaved: a page's, which stands an ask, and a plan's words. */
@@ -22,7 +22,7 @@ const tellUnsavedWork = (): void =>
  * and the browser are main's, reached over the act channel, and so is a
  * cloud Browser tab's live view, which arrives on a port of its own; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `luke-page:` scheme main serves; the
+ * entries; a page is drawn from the `app-page:` scheme main serves; the
  * static files are the build's copies beside the document; and the session
  * recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge

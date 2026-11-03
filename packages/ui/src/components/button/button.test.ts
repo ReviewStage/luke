@@ -56,7 +56,7 @@ function mount(element: React.ReactElement): HTMLElement {
 test("a ButtonLink is a link named by its words, going to its address", () => {
   const container = mount(
     createElement(ButtonLink, {
-      href: "https://example.com/luke.dmg",
+      href: "https://example.com/app.dmg",
       variant: BUTTON_VARIANT.PRIMARY,
       icon: createElement("svg", { "aria-hidden": true }),
       children: "Download for macOS",
@@ -65,7 +65,7 @@ test("a ButtonLink is a link named by its words, going to its address", () => {
 
   const links = Array.from(container.querySelectorAll("a"));
   expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-    ["Download for macOS", "https://example.com/luke.dmg"],
+    ["Download for macOS", "https://example.com/app.dmg"],
   ]);
   expect(container.querySelector("button")).toBeNull();
 });
@@ -223,7 +223,7 @@ test("a read-only labelled button records a press: it takes none and no Tab stop
   expect([given?.tabIndex, given?.getAttribute("aria-pressed")]).toEqual([-1, "true"]);
   expect(other?.getAttribute("aria-pressed")).toBe("false");
   const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
-  given?.querySelector(".luke-button-words")?.dispatchEvent(down);
+  given?.querySelector(".ui-button-words")?.dispatchEvent(down);
   expect(down.defaultPrevented).toBe(false);
 });
 
@@ -275,7 +275,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       "div",
       null,
       createElement(IconButtonLink, {
-        href: "https://github.com/example/luke",
+        href: "https://github.com/example/app",
         icon: createElement("svg", { "aria-hidden": true }),
         label: "Vespin on GitHub",
       }),
@@ -296,7 +296,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       link.getAttribute("target"),
     ]),
   ).toEqual([
-    ["Vespin on GitHub", "https://github.com/example/luke", null],
+    ["Vespin on GitHub", "https://github.com/example/app", null],
     ["Example on X", "https://x.com/example", "_blank"],
   ]);
   expect(container.querySelector("button")).toBeNull();
@@ -434,7 +434,7 @@ test("a done button wears its check in its words' place, refuses its press, and 
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {
-      return this.classList.contains("luke-button-done") ? [motion] : [];
+      return this.classList.contains("ui-button-done") ? [motion] : [];
     },
   });
   const heard: string[] = [];
@@ -459,7 +459,7 @@ test("a done button wears its check in its words' place, refuses its press, and 
   const afterFinish = [...heard];
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
 
-  expect(button.querySelector(".luke-button-done svg")).not.toBeNull();
+  expect(button.querySelector(".ui-button-done svg")).not.toBeNull();
   expect(button.textContent).toBe("Delete");
   expect(pressed).toBe(0);
   expect(beforeFinish).toEqual([]);
@@ -477,7 +477,7 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {
-      if (!this.classList.contains("luke-button-done")) return [];
+      if (!this.classList.contains("ui-button-done")) return [];
       return this.dataset.leaving === "true" ? [fade] : [hold];
     },
   });
@@ -511,14 +511,14 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   const [save, upload] = [...container.querySelectorAll("button")];
   act(() => root.render(draw(false, true)));
   const landed = [save, upload].map((button) => ({
-    check: button?.querySelector(".luke-button-done svg") !== null,
+    check: button?.querySelector(".ui-button-done svg") !== null,
     busy: button?.getAttribute("aria-busy") ?? null,
     disabled: button?.disabled,
   }));
   act(() => save?.click());
   act(() => hold.dispatchEvent(new Event("finish")));
   const fading = [save, upload].map(
-    (button) => button?.querySelector<HTMLElement>(".luke-button-done")?.dataset.leaving,
+    (button) => button?.querySelector<HTMLElement>(".ui-button-done")?.dataset.leaving,
   );
   act(() => fade.dispatchEvent(new Event("finish")));
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
@@ -529,8 +529,8 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   ]);
   expect(pressed).toBe(0);
   expect(fading).toEqual(["true", "true"]);
-  expect(save?.querySelector(".luke-button-done")).toBeNull();
-  expect(upload?.querySelector(".luke-button-done")).toBeNull();
+  expect(save?.querySelector(".ui-button-done")).toBeNull();
+  expect(upload?.querySelector(".ui-button-done")).toBeNull();
   expect(save?.disabled).toBe(true);
   expect(save?.getAttribute("aria-label")).toBeNull();
   expect(save?.textContent).toBe("Save");
@@ -538,7 +538,7 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   // A press that failed stops its ring with no check.
   act(() => root.render(draw(true, false)));
   act(() => root.render(draw(false, false)));
-  expect(container.querySelector(".luke-button-done")).toBeNull();
+  expect(container.querySelector(".ui-button-done")).toBeNull();
 });
 
 test("a ButtonLink given a label is named by it, and an IconButtonLink's press is heard before the link is followed", () => {
@@ -553,7 +553,7 @@ test("a ButtonLink given a label is named by it, and an IconButtonLink's press i
         children: "Preview",
       }),
       createElement(IconButtonLink, {
-        href: "https://github.com/example/luke",
+        href: "https://github.com/example/app",
         icon: createElement("svg", { "aria-hidden": true }),
         label: "Open on GitHub",
         onClick: (event) => {

@@ -1,6 +1,6 @@
-import { noMatchWords, TERM } from "@luke/features/words";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { noMatchWords, TERM } from "@repo/features/words";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   ALIGN,
   ComboboxList,
@@ -18,8 +18,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { holdsSlashWord, matchingSkills, type SkillOption } from "@luke/ui/skill-mention";
+} from "@repo/ui";
+import { holdsSlashWord, matchingSkills, type SkillOption } from "@repo/ui/skill-mention";
 import {
   type ReactNode,
   type RefObject,
@@ -57,7 +57,7 @@ import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-re
  *
  * The box is an editor (`../plan-editor/composer-editor.ts`), which finds
  * the `/` word the caret ends and says where its slash stands in the
- * window, so the list hangs over that line (`@luke/ui`'s `RectFloat`), as
+ * window, so the list hangs over that line (`@repo/ui`'s `RectFloat`), as
  * the box stands at the foot of its tab, and closes on a press outside it
  * and the box as on Escape. A chosen skill is a chip in the
  * words, an atom one Backspace takes out whole, which reads out as `/name`,

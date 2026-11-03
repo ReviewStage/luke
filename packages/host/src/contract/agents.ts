@@ -24,7 +24,6 @@ import {
   agentGitHubImageViewSchema,
   agentListAnswerViewSchema,
   agentListParamsSchema,
-  agentLukeToolsAnswerViewSchema,
   agentMessageParamsSchema,
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
@@ -55,18 +54,19 @@ import {
   agentTranscriptOlderAnswerSchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
+  agentWorkspaceToolsAnswerViewSchema,
   devicePresenceAnswerViewSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   hostsAnswerViewSchema,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   hostPairingApproveViewSchema,
   hostPairingDenyViewSchema,
   hostPairingParamsSchema,
   hostPairingViewSchema,
-} from "@luke/features/host-pairing-view";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/host-pairing-view";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -211,11 +211,11 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actProcedure(
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]: actProcedure(
     `Could not read the agent's ${PRODUCT_NAME} tools on this system.`,
   )
     .input(exactInput(agentPullRequestParamsSchema))
-    .output(EffectSchema.flip(agentLukeToolsAnswerViewSchema)),
+    .output(EffectSchema.flip(agentWorkspaceToolsAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actProcedure(
     "Could not read the pull request's checks on this system.",
   )

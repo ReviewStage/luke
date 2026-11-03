@@ -33,7 +33,7 @@
  * first and reads back only as far as it is scrolled.
  */
 
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   claimQueuedMessage,
   editQueuedMessage,
@@ -46,14 +46,14 @@ import {
   reorderAgentQueue,
   resumeAgentQueue,
   takeQueuedMessage,
-} from "@luke/database/models/agent-queue-store";
-import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
-import { childTitlesOf } from "@luke/database/models/child-titles";
-import { readRewoundRevision } from "@luke/database/models/conversation-rewind";
-import { childConversationId } from "@luke/database/models/ids";
-import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/agent-queue-store";
+import { type Agent, readAgent, readVisibleAgent } from "@repo/database/models/agent-store";
+import { childTitlesOf } from "@repo/database/models/child-titles";
+import { readRewoundRevision } from "@repo/database/models/conversation-rewind";
+import { childConversationId } from "@repo/database/models/ids";
+import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
+import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
@@ -69,11 +69,11 @@ import {
   agentCursorSchema,
   QUEUE_CHANGE,
   TRANSCRIPT_PARTS_QUERY,
-} from "@luke/features/agent-wire";
-import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
-import { PROVIDER_KEY_KIND } from "@luke/features/provider-key-wire";
-import { isRecord } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/agent-wire";
+import { TRANSCRIPT_NOW_QUERY } from "@repo/features/live-wire";
+import { PROVIDER_KEY_KIND } from "@repo/features/provider-key-wire";
+import { isRecord } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
@@ -90,15 +90,16 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import {
   claimNext,
-  queueEveFor,
+  type QueueEve,
   sendClaimed,
   sendQueued,
   wireQueue,
 } from "./coder-host/agent-queue.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
+import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { startedBlank } from "./coder-host/status.js";
 import { steerAgentWritten } from "./coder-host/steer.js";
-import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
+import { summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   cursorOfWire,
@@ -124,7 +125,7 @@ import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
 
-export interface MessagesProcedureSeams extends EveReach {
+export interface MessagesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
@@ -397,7 +398,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
+        const eve = yield* routedSessions<EveTypedTurn>(context.userId);
         const { txid, sent } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
@@ -429,7 +430,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { userId } = context;
       // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
       if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const eve = queueEveFor(seams, context.request, userId);
+      const eve: QueueEve = routedSessions;
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */
       const found = <A>(effect: Effect.Effect<Option.Option<A>, StoreFailure, DatabaseServices>) =>

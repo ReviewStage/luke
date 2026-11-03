@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,7 +84,7 @@ function drawn(node: ReactNode): HTMLElement {
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -118,7 +118,7 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
+    [...container.querySelectorAll(".ui-text-link")].map((link) => link.textContent),
     ["the docs"],
   );
   assert.deepEqual(
@@ -161,10 +161,7 @@ test("a link whose label a version changed in part is drawn as words with the ch
   );
 
   assert.equal(container.querySelector("[data-mention-ref]"), null);
-  assert.equal(
-    container.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
-    "new ",
-  );
+  assert.equal(container.querySelector(".ui-text-link ins.markdown-inserted")?.textContent, "new ");
 });
 
 test("the plan's version history, off the plan's page, reads a version's mentions against the plan it is of", () => {

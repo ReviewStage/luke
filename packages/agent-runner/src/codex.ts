@@ -121,12 +121,12 @@ const TOKEN_COMMAND = {
   REFRESH_INTERVAL_MS: 300_000,
 } as const;
 
-/** The name our MCP server is registered under in Codex's config. */
-const MCP_SERVER = "luke";
+/** The name our MCP server is registered under in Codex's config (`@repo/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
+const MCP_SERVER = "workspace";
 
 /**
  * How long Codex waits on one of our tool calls, in seconds: our MCP
- * function's own duration (`luke-mcp/app.ts`'s `LUKE_MCP_FUNCTION`, the
+ * function's own duration (`workspace-mcp/app.ts`'s `WORKSPACE_MCP_FUNCTION`, the
  * longest `run_on_mac` and two minutes around it), so Codex never gives up
  * on a call the service is still running. Note that Codex's default is 60 s, past
  * which it fails the call while the service carries it out, and the agent retries a

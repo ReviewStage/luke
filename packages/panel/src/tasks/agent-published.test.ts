@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -158,7 +158,7 @@ test("the pull request's row reads as every place names it, its number then its 
 
 test("the lines a change adds and removes are drawn as every count of them is, grouped and toned", () => {
   drawn(createElement(LinesChanged, { additions: 1234, deletions: 5 }));
-  const parts = [...document.querySelectorAll(".agent-published-lines .luke-count-part")];
+  const parts = [...document.querySelectorAll(".agent-published-lines .ui-count-part")];
   assert.deepEqual(
     parts.map((part) => [part.textContent, part.getAttribute("data-tone")]),
     [

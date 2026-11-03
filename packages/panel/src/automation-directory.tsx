@@ -1,5 +1,5 @@
-import type { AutomationSummary } from "@luke/features/automation-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { AutomationSummary } from "@repo/features/automation-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { useAutomations } from "./desktop/use-automations.js";
 

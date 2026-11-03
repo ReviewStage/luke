@@ -1,6 +1,6 @@
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
-import type { ViewerAccount } from "@luke/panel/admin/chrome/page-header";
-import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { ViewerAccount } from "@repo/panel/admin/chrome/page-header";
+import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
 import {
   ADMIN_PAGE,
   ADMIN_TAB,
@@ -12,14 +12,14 @@ import {
   viewFromLocation,
   windowFromLocation,
   windowHref,
-} from "@luke/panel/admin/routing";
-import { AccountScreen } from "@luke/panel/admin/screens/account";
-import { CostScreen } from "@luke/panel/admin/screens/cost";
-import { DashboardScreen, useMetricsRead } from "@luke/panel/admin/screens/dashboard";
-import { DayScreen } from "@luke/panel/admin/screens/day";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+} from "@repo/panel/admin/routing";
+import { AccountScreen } from "@repo/panel/admin/screens/account";
+import { CostScreen } from "@repo/panel/admin/screens/cost";
+import { DashboardScreen, useMetricsRead } from "@repo/panel/admin/screens/dashboard";
+import { DayScreen } from "@repo/panel/admin/screens/day";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./admin/auth-client";
 import { SignInCard } from "./admin/chrome/gate-cards";

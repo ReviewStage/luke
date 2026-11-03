@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE_SERVER } from "@luke/features/browser-live-wire";
+import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_LIVE_SERVER } from "@repo/features/browser-live-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -179,7 +179,7 @@ test("the agent's pointer hides while a member drives the tab, and fades once th
 test.each(["1ms", "0s"])(
   "where the motion tokens stand at %s the agent's pointer is held still: it neither rocks, glides, nor ripples",
   async (duration) => {
-    document.documentElement.style.setProperty("--luke-duration-fast", duration);
+    document.documentElement.style.setProperty("--ui-duration-fast", duration);
     try {
       await paneOf(CLICKED);
       const drawn = pointer();
@@ -188,7 +188,7 @@ test.each(["1ms", "0s"])(
       assert.ok(drawn.hasAttribute("data-still"), "held still");
       assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
     } finally {
-      document.documentElement.style.removeProperty("--luke-duration-fast");
+      document.documentElement.style.removeProperty("--ui-duration-fast");
     }
   },
 );

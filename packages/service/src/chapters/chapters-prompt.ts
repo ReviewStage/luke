@@ -1,5 +1,5 @@
-import { DIFF_ROW, type DiffHunk } from "@luke/features/diff-hunks";
-import type { Chapter, ChapterHunk, HunkRef } from "@luke/features/pull-request-chapters";
+import { DIFF_ROW, type DiffHunk } from "@repo/features/diff-hunks";
+import type { Chapter, ChapterHunk, HunkRef } from "@repo/features/pull-request-chapters";
 
 /**
  * chapters-prompt.ts -- what the model is told when it tells a pull request's diff as chapters: the rules, the diff as it reads it, and the ask to place the hunks it left out.

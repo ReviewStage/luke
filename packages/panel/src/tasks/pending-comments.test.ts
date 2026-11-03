@@ -11,7 +11,7 @@ import {
   DIFF_SIDE,
   type PendingReviewComment,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import { test } from "vitest";
 import { gapLines, threadsOn } from "./changes-model.js";
 import { pendingThreadsOf } from "./pending-comments.js";

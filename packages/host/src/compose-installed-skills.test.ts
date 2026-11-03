@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { InstalledSkillSummary } from "@luke/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_FILES_REFUSAL } from "@luke/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { SKILL_PASTE_KIND } from "@luke/features/skill-paste";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import type { WireRecord } from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
+import { INSTALLED_SKILL_FILES_REFUSAL } from "@repo/features/installed-skill-route-wire";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { SKILL_PASTE_KIND } from "@repo/features/skill-paste";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@repo/gateway";
+import type { WireRecord } from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { composeInstalledSkills, type InstalledSkillsClient } from "./compose-installed-skills.js";
 

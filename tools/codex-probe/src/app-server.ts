@@ -18,7 +18,7 @@ import {
   valueFromJsonText,
   type WireRecord,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 
 /** The pinned Codex and where the probe installs it, root-owned, outside the default user's reach. */
 export const CODEX = {

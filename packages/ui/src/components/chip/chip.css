@@ -9,16 +9,16 @@
      compact button does (`../button/button.css`). A removable chip is a box
      of two presses, its words and its ×, so it keeps each its own. */
   @media (pointer: coarse) {
-    :is(button, a).luke-chip[data-size="compact"] {
+    :is(button, a).ui-chip[data-size="compact"] {
       position: relative;
     }
 
-    :is(button, a).luke-chip[data-size="compact"]::after {
+    :is(button, a).ui-chip[data-size="compact"]::after {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: max(100%, var(--luke-touch-target));
-      height: max(100%, var(--luke-touch-target));
+      width: max(100%, var(--ui-touch-target));
+      height: max(100%, var(--ui-touch-target));
       transform: translate(-50%, -50%);
       content: "";
     }
@@ -31,12 +31,12 @@
      whole after it. Note that the fades stay here, because Tailwind's mask
      utilities compose the gradient through variables rather than drawing
      it, as the badge's label fade does (`badge.css`). */
-  .luke-chip-name[data-overflow="true"],
-  .luke-chip-name-start[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  .ui-chip-name[data-overflow="true"],
+  .ui-chip-name-start[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  .luke-chip-name[data-cut="middle"] {
+  .ui-chip-name[data-cut="middle"] {
     mask-image: none;
   }
 
@@ -47,7 +47,7 @@
      test lays this class in markup of its own
      (`pull-request-header-narrow.test.ts`), and each part keeps its spaces,
      because a flex item drops one at its edge. */
-  .luke-chip-name-end {
+  .ui-chip-name-end {
     display: inline-flex;
     flex: none;
     justify-content: flex-end;
@@ -63,19 +63,19 @@
      (`data-motion-key`) arrives and leaves by the motion instead, which
      scales it the same way, so the two never play at once. Note that the
      keyframes stay here, because `attachment-chip.css` springs in by them. */
-  .luke-chip[data-removable="true"]:not([data-motion-key]) {
+  .ui-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
-      luke-chip-fade-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      ui-chip-fade-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-chip-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
-  @keyframes luke-chip-fade-in {
+  @keyframes ui-chip-fade-in {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-chip-pop {
+  @keyframes ui-chip-pop {
     from {
       transform: scale(0.6);
     }
@@ -86,36 +86,36 @@
      stands before its words, as a task's status mark says where it stands.
      Note that these stay here, because whether the dot stands turns on what
      the chip holds (`:has()`), and the glyph and the dot read one ink. */
-  .luke-chip[data-tone] .luke-chip-face > :is(svg, img):first-child:not(.settings-chevron) {
-    color: var(--luke-chip-tone);
+  .ui-chip[data-tone] .ui-chip-face > :is(svg, img):first-child:not(.settings-chevron) {
+    color: var(--ui-chip-tone);
   }
 
   /* Note that the dot is drawn only where nothing but the chevron is a
      glyph, because a leading mark already says the state in its colour. */
-  .luke-chip[data-tone]
-  .luke-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
+  .ui-chip[data-tone]
+  .ui-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
     content: "";
     flex: none;
     width: 7px; /* off-scale: a status dot */
     height: 7px; /* off-scale: a status dot */
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-chip-tone);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-chip-tone);
   }
 
   /* Its leading mark and its dot are in its status tone's ink (`tokens/status-tone.css`). */
-  .luke-chip[data-tone] {
-    --luke-chip-tone: var(--luke-tone-ink);
+  .ui-chip[data-tone] {
+    --ui-chip-tone: var(--ui-tone-ink);
   }
 
   /* Busy, a change it made is out, and what it holds pulses until
      answered, its face standing whole beneath. Note that it stays here for
-     its keyframes, held still with every loop (`--luke-loop-motion`). */
-  .luke-chip[aria-busy="true"] > .luke-chip-face {
-    animation: luke-chip-wait 1.2s ease-in-out infinite;
-    animation-play-state: var(--luke-loop-motion);
+     its keyframes, held still with every loop (`--ui-loop-motion`). */
+  .ui-chip[aria-busy="true"] > .ui-chip-face {
+    animation: ui-chip-wait 1.2s ease-in-out infinite;
+    animation-play-state: var(--ui-loop-motion);
   }
 
-  @keyframes luke-chip-wait {
+  @keyframes ui-chip-wait {
     50% {
       opacity: 0.35;
     }

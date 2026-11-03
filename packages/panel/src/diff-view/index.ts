@@ -1,7 +1,7 @@
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { onDrawnThemeChange } from "@luke/ui/appearance";
-import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@luke/ui/landed";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { DIFF_LAYOUT } from "@repo/settings/diff-view";
+import { onDrawnThemeChange } from "@repo/ui/appearance";
+import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@repo/ui/landed";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -70,7 +70,7 @@ import { wholeOf } from "./whole-diff.js";
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
  * drawn. Shiki colours the code in the theme chosen for each appearance,
- * the File tab's two GitHub themes (`@luke/host`'s `task-code.ts`) until
+ * the File tab's two GitHub themes (`@repo/host`'s `task-code.ts`) until
  * another is, each taken as the system's appearance changes, and runs its
  * grammars on its JavaScript engine, since the panel's policy admits no
  * WebAssembly.
@@ -184,7 +184,7 @@ const LEAD_ATTRIBUTE = "data-lead";
  * How long a moment stands at most, in milliseconds, past its hold and its
  * fade: a light on a file taken down before it ends is dropped with no end
  * told, so the moment ends by this deadline of its own. Twice the hold
- * (`--luke-confirm-delay`) outlasts the fade and the scroll to the lines.
+ * (`--ui-confirm-delay`) outlasts the fade and the scroll to the lines.
  */
 const FLASH_DEADLINE_MS = MOTION_DELAY_MS.CONFIRM * 2;
 
@@ -241,7 +241,7 @@ const LOOK_CSS = `
      their ink to the code's, with no underline. */
   [data-separator="line-info-basic"] [data-separator-wrapper] {
     /* Pierre's own band ground, which a list sets (LIST_CSS). */
-    background-color: var(--diffs-bg-separator, var(--luke-color-fill-hover));
+    background-color: var(--diffs-bg-separator, var(--ui-color-fill-hover));
   }
   [data-separator="line-info-basic"] [data-expand-button],
   [data-separator="line-info-basic"] [data-separator-content] {
@@ -264,26 +264,26 @@ const LOOK_CSS = `
     grid-column: 2;
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
-    background-color: var(--luke-color-fill-pressed);
+    background-color: var(--ui-color-fill-pressed);
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"] {
-    cursor: var(--luke-cursor-press);
+    cursor: var(--ui-cursor-press);
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
     /* The code's own ink, as an arrow's lifts under the pointer. */
-    color: var(--diffs-fg, var(--luke-color-text));
+    color: var(--diffs-fg, var(--ui-color-text));
   }
   /* The window's one focus ring (\`styles/base.css\`), which reaches no
      shadow root, drawn inside the band, whose card clips what stands past
      it, and only once the keyboard has moved the focus. */
   [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+    outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
+    outline-offset: calc(-1 * var(--ui-focus-ring-width));
   }
   /* The words stand inside the band with room around them, so their ring stands clear of them, as the window's does. */
   [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:focus-visible {
-    border-radius: var(--luke-focus-ring-width);
-    outline-offset: var(--luke-focus-ring-offset);
+    border-radius: var(--ui-focus-ring-width);
+    outline-offset: var(--ui-focus-ring-offset);
   }
   :host-context(:root:not([data-keyboard="true"])) [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
     outline: none;
@@ -320,8 +320,8 @@ const LOOK_CSS = `
   [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}],
   [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}] {
     background-color: light-dark(
-      color-mix(in lab, var(--diffs-bg, var(--luke-color-ground)) var(--mix-light), var(--annotation-band)),
-      color-mix(in lab, var(--diffs-bg, var(--luke-color-ground)) var(--mix-dark), var(--annotation-band))
+      color-mix(in lab, var(--diffs-bg, var(--ui-color-ground)) var(--mix-light), var(--annotation-band)),
+      color-mix(in lab, var(--diffs-bg, var(--ui-color-ground)) var(--mix-dark), var(--annotation-band))
     );
   }
   [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.ADDITION}"] {
@@ -372,8 +372,8 @@ const LOOK_CSS = `
      stands whatever its indicators, and the line's ground, which a border
      lets show through, still runs to the column's start. */
   [data-overflow="wrap"] [data-line] {
-    border-inline-start: var(--luke-line-indent, 0ch) solid transparent;
-    text-indent: calc(-1 * var(--luke-line-indent, 0ch));
+    border-inline-start: var(--ui-line-indent, 0ch) solid transparent;
+    text-indent: calc(-1 * var(--ui-line-indent, 0ch));
   }
   /* A file drawn as its notes alone, laid out as blocks: its one empty line, the old side, the numbers, and the hatching beside a side's missing lines are hidden, so its notes run across its whole width, as tall as Pierre measured them. */
   :host([${LEAD_ATTRIBUTE}]) pre,
@@ -391,18 +391,18 @@ const LOOK_CSS = `
     display: none;
   }
   ::highlight(find-match) {
-    background-color: var(--luke-color-find-match);
+    background-color: var(--ui-color-find-match);
   }
   ::highlight(find-current) {
-    background-color: var(--luke-color-find-current);
-    color: var(--luke-color-on-find-current);
+    background-color: var(--ui-color-find-current);
+    color: var(--ui-color-on-find-current);
   }
 }
 `;
 
 /**
- * Lines lit a moment: the file's element is landed on (`@luke/ui/landed`),
- * whose light, `--luke-landed`, falls from 1 to 0 on the element and is
+ * Lines lit a moment: the file's element is landed on (`@repo/ui/landed`),
+ * whose light, `--ui-landed`, falls from 1 to 0 on the element and is
  * inherited inside, since no keyframes of the document's reach a shadow
  * root, and Pierre's lit rows stand that far between their lit ground and
  * the line's own. So they hold lit and fade as every place landed on does,
@@ -414,7 +414,7 @@ const FLASH_CSS = `
   :host([${LANDED_ATTRIBUTE}]) [data-selected-line] {
     background-color: color-mix(
       in lab,
-      var(--diffs-computed-selected-line-bg) calc(var(--luke-landed) * 100%),
+      var(--diffs-computed-selected-line-bg) calc(var(--ui-landed) * 100%),
       var(--diffs-computed-diff-line-bg, transparent)
     );
   }
@@ -457,15 +457,15 @@ const LIST_CSS = `
   :host {
     box-sizing: border-box;
     overflow: clip;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
-    --diffs-bg-separator-override: var(--luke-color-fill-hover);
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-control-radius);
+    --diffs-bg-separator-override: var(--ui-color-fill-hover);
   }
   [data-separator="line-info-basic"] {
     height: ${LIST_GAP_HEIGHT}px;
-    color: var(--luke-color-text-muted);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-family: var(--ui-font-sans);
+    font-size: var(--ui-type-caption-size);
   }
 }
 `;
@@ -516,7 +516,7 @@ function highlightWorkerText(): string | undefined {
 let kept: Highlighting | undefined;
 
 /**
- * How a list's files are highlighted (`@luke/panel/diff-view/highlight-pool`),
+ * How a list's files are highlighted (`@repo/panel/diff-view/highlight-pool`),
  * started the first time a list is drawn and kept for the window's life,
  * since a next list would only load the same grammars and themes again:
  * each worker started from the text the build carried, as a `blob:`.
@@ -640,7 +640,7 @@ function lineHeightOf(look: DiffLook): number {
 }
 
 /** The motion token saying how a scroller a component moves itself gets there, and its value where it gets there at once. */
-const SCROLL_GLIDE = { TOKEN: "--luke-scroll-glide", AT_ONCE: "auto" } as const;
+const SCROLL_GLIDE = { TOKEN: "--ui-scroll-glide", AT_ONCE: "auto" } as const;
 
 /**
  * How a list scrolled to a file or a line gets there, as the glide token

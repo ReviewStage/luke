@@ -1,5 +1,5 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { type CallCredential, NO_CREDENTIAL } from "@luke/features";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { type CallCredential, NO_CREDENTIAL } from "@repo/features";
 import { Effect, Layer, Stream } from "effect";
 import type { AccountSession } from "../account-source.js";
 import { AccountSource } from "../effect/seams.js";

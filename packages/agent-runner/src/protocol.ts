@@ -13,7 +13,7 @@
  * stdin: the runner's bearer and the harness's credential are in its
  * environment, and Codex asks the service for each ChatGPT access token over HTTPS
  * through the runner's token command (`codex-token.ts`), so no line carries
- * one, on a Mac's queue (`@luke/features/device-agent-wire`) or anywhere else.
+ * one, on a Mac's queue (`@repo/features/device-agent-wire`) or anywhere else.
  */
 
 import type {
@@ -83,7 +83,7 @@ export const INSTALLED_SKILLS = {
   /** The plugin's manifest, under the installed folder. */
   MANIFEST: ".claude-plugin/plugin.json",
   /** The plugin's name, which leads each of its skills' names in Claude Code. */
-  PLUGIN: "luke",
+  PLUGIN: "workspace",
 } as const;
 
 /**

@@ -28,12 +28,12 @@
  * candidates rated where nothing is asked.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type InstalledSkill,
   type InstalledSkillRevision,
   listInstalledSkills,
-} from "@luke/database/models/installed-skill-store";
+} from "@repo/database/models/installed-skill-store";
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   INSTALLED_SKILL_PREVIEW_MARKDOWN_BYTES,
@@ -44,20 +44,20 @@ import {
   type InstalledSkillPreview,
   type InstalledSkillProblem,
   type InstalledSkillStanding,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_MAIN_FILE,
   INSTALLED_SKILL_SOURCE,
-} from "@luke/features/installed-skill-wire";
-import { readSkillFile, SKILL_FILE_BOUNDS, SKILL_KEY } from "@luke/features/skill-file";
+} from "@repo/features/installed-skill-wire";
+import { readSkillFile, SKILL_FILE_BOUNDS, SKILL_KEY } from "@repo/features/skill-file";
 import {
   ALL_SKILLS,
   SKILL_PASTE_KIND,
   type SkillPaste,
   type SkillPasteSource,
   type SkillPasteText,
-} from "@luke/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+} from "@repo/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";

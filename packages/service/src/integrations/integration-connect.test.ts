@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   type ConnectAuthorizationResponse,
   type ConnectTokenResponse,

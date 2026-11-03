@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
-import { member as memberTable } from "@luke/database/schemas/auth";
-import { automation as automationTable } from "@luke/database/schemas/automation";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { messages, turns } from "@luke/database/schemas/storage";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
+import { member as memberTable } from "@repo/database/schemas/auth";
+import { automation as automationTable } from "@repo/database/schemas/automation";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { messages, turns } from "@repo/database/schemas/storage";
 import {
   getTestDB,
   joinWorkspace,
   leaveWorkspace,
   openWorkspace,
   startTask,
-} from "@luke/database/testing";
-import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
-import { AGENT_FAILURE, AGENT_STATUS } from "@luke/features/agent-wire";
+} from "@repo/database/testing";
+import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
+import { AGENT_FAILURE, AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
   automationsLiveRowsSchema,
   automationsOfLiveRows,
-} from "@luke/features/automation-live";
-import { SCHEDULE_PRESET } from "@luke/features/automation-schedule";
+} from "@repo/features/automation-live";
+import { SCHEDULE_PRESET } from "@repo/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
@@ -38,10 +38,10 @@ import {
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
   GITHUB_TRIGGER_EVENT,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import {
   MESSAGE_ROLE,
   TURN_ORIGIN,
@@ -49,10 +49,10 @@ import {
   type TurnStatus,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq, sql } from "drizzle-orm";
-import { Clock, type Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
@@ -147,11 +147,6 @@ function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
-function deploymentFor(account: string): string {
-  return `deployment for ${account}`;
-}
-
 /** The automation procedures over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
@@ -203,9 +198,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
             (input) =>
               Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
           ),
-        eveOrigin: () => ORIGIN,
-        eve: (authorization) => sessionsAs(Redacted.value(authorization)),
-        eveAs: (account) => sessionsAs(deploymentFor(account)),
       }),
     });
     const ask = (

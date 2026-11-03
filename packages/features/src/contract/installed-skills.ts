@@ -9,7 +9,7 @@
  * skills it made.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {

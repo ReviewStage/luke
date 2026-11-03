@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
-import type { SkillOption } from "@luke/ui/skill-mention";
-import { MESSAGE_ROLE } from "@luke/wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
+import type { SkillOption } from "@repo/ui/skill-mention";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -125,7 +125,7 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
   );
   const chip = container.querySelector(".agent-composer-input [data-skill-ref]");
   assert.equal(
-    chip?.querySelector(".luke-inline-ref-label")?.textContent,
+    chip?.querySelector(".ui-inline-ref-label")?.textContent,
     "/release",
     "the chosen skill is drawn as a chip",
   );
@@ -147,9 +147,9 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
 
   restOn(chip);
 
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
-  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".ui-hover-card-note")?.textContent, RELEASE.description);
 });
 
 test("a skill still being read hangs a card of its name, with a placeholder for what it is for", async () => {
@@ -161,8 +161,8 @@ test("a skill still being read hangs a card of its name, with a placeholder for 
 
   restOn(chip);
 
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "/release");
   assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading…");
 });
 
@@ -175,12 +175,12 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(chip);
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "/release");
-  assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "/release");
+  assert.equal(card.querySelector(".ui-hover-card-note")?.textContent, RELEASE.description);
   assert.equal(
-    card.querySelector('.luke-hover-card-row[data-look="detail"]')?.textContent,
+    card.querySelector('.ui-hover-card-row[data-look="detail"]')?.textContent,
     RELEASE.path,
   );
   assert.equal(
@@ -208,24 +208,22 @@ test("an installed skill's chip is no button, yet takes the focus for its card, 
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(triage);
   assert.equal(document.activeElement, triage, "the installed skill's chip takes the focus");
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "Workspace skill");
-  assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "Workspace skill");
+  assert.equal(card?.querySelector('.ui-hover-card-row[data-look="detail"]'), null);
   act(() => triage.click());
   assert.deepEqual(opened, [], "an installed skill has no file to open");
   act(() => triage.blur());
   focusRestOn(release);
-  const repository = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(
-    -1,
-  );
-  assert.equal(repository?.querySelector(".luke-hover-card-sub")?.textContent, "Repository skill");
+  const repository = [...document.querySelectorAll(".ui-tooltip-card > [data-skill-card]")].at(-1);
+  assert.equal(repository?.querySelector(".ui-hover-card-sub")?.textContent, "Repository skill");
 });
 
 /** A node's words as drawn, without those only a screen reader hears. */
 function drawnWords(node: Node): string {
   if (!(node instanceof Element)) return node.textContent ?? "";
   const drawn = node.cloneNode(true) as Element;
-  for (const heard of drawn.querySelectorAll(".luke-visually-hidden")) heard.remove();
+  for (const heard of drawn.querySelectorAll(".ui-visually-hidden")) heard.remove();
   return drawn.textContent ?? "";
 }
 
@@ -288,7 +286,7 @@ function agentTurn(message: AgentTranscriptMessage): ReactNode {
 function cardOf(control: HTMLElement): string | undefined {
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(control);
-  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > [data-skill-card]")].at(-1);
   act(() => control.blur());
   return card?.outerHTML;
 }

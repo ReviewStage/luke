@@ -8,12 +8,12 @@
   /* An item may give way below its content's width, so a long label
      shrinks or wraps before the row overflows, breaking inside an unbroken
      word where it has to rather than painting past its box. */
-  :is(.luke-stack, .luke-inline) > * {
+  :is(.ui-stack, .ui-inline) > * {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .luke-inline[data-grow-first] > :first-child {
-    flex: 1 1 var(--luke-select-field-width);
+  .ui-inline[data-grow-first] > :first-child {
+    flex: 1 1 var(--ui-select-field-width);
   }
 }

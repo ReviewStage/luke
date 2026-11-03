@@ -1,11 +1,11 @@
-import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@repo/features/agent-wire";
 import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DevicePlatform,
-} from "@luke/features/device-agent-wire";
-import type { MacOffer } from "@luke/features/models-wire";
-import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
+} from "@repo/features/device-agent-wire";
+import type { MacOffer } from "@repo/features/models-wire";
+import type { TaskRunsOn, TaskRunsOnRequest } from "@repo/features/task-wire";
 import {
   CHIP_WIDTH,
   GAP,
@@ -19,8 +19,8 @@ import {
   StatusGlyph,
   type StatusTone,
   useSecond,
-} from "@luke/ui";
-import { GLYPH, ICON_SIZE } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
@@ -78,7 +78,7 @@ const RUNS_ON_WORDS = {
 const CLOUD_ROW = "cloud";
 
 /** Where New task keeps the member's last pick: Cloud's id, or a device's. */
-const KEPT = { PICK: keptKey("luke.newTaskRunsOn", Schema.String) } as const;
+const KEPT = { PICK: keptKey("app.newTaskRunsOn", Schema.String) } as const;
 
 /** The cloud, as a request names it. */
 const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };

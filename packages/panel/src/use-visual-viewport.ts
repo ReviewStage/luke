@@ -5,8 +5,8 @@
  * browser toolbars and, while it is up, the on-screen keyboard; `dvh` follows
  * the toolbars but never the keyboard. The visual viewport is the part that
  * is actually seen, so the panel writes where it begins, its height, and the
- * keyboard's height below it over `@luke/ui`'s `--luke-viewport-top`,
- * `--luke-stage-height`, and `--luke-keyboard-inset`,
+ * keyboard's height below it over `@repo/ui`'s `--ui-viewport-top`,
+ * `--ui-stage-height`, and `--ui-keyboard-inset`,
  * and the stage, the palette, the dialogs, and the viewers are measured by
  * those. They are written on the document's root rather than the stage,
  * because a dialog is drawn over `document.body`, outside the stage, and must
@@ -43,15 +43,15 @@
  * keyboard's slide away, which WebKit measures only once it has ended.
  */
 
-import { visibleViewport } from "@luke/ui/visible-viewport";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { useLayoutEffect } from "react";
 
 /** How far down the layout viewport the visible part begins, as a phone pans it to a focused field. */
-const VIEWPORT_TOP = "--luke-viewport-top";
+const VIEWPORT_TOP = "--ui-viewport-top";
 /** The visible height, in CSS pixels. */
-const STAGE_HEIGHT = "--luke-stage-height";
+const STAGE_HEIGHT = "--ui-stage-height";
 /** How much of the layout viewport stands below the visible part: the keyboard's height while it is up. */
-const KEYBOARD_INSET = "--luke-keyboard-inset";
+const KEYBOARD_INSET = "--ui-keyboard-inset";
 
 /** How far from 1 a visual viewport's scale may stand and still be the page at its own scale, for a phone's rounding. */
 const UNZOOMED_TOLERANCE = 0.01;

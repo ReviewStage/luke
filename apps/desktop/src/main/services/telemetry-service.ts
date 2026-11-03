@@ -1,24 +1,24 @@
-import { signedInAccountId } from "@luke/credentials/snapshot";
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import {
   PRODUCT_EVENT,
   productSessionCountBucket,
   type RecordProductEvent,
-} from "@luke/features/analytics";
-import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
-import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
-import { sentryUser } from "@luke/features/sentry-account";
+} from "@repo/features/analytics";
+import type { FeedbackResult, FeedbackSubmission } from "@repo/features/feedback";
+import { feedbackDeliveryFromEnvironment } from "@repo/features/feedback";
+import { sentryUser } from "@repo/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
   spanWithoutAccessTokens,
   withoutAccessTokens,
-} from "@luke/features/sentry-breadcrumbs";
-import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
-import { type RunMode, sentryReportingEnabled } from "@luke/host";
-import type { AppStateStore } from "@luke/host/client";
-import type { EffectDesktopService } from "@luke/host/desktop-service";
-import type { SentryEnvironment } from "@luke/host/sentry-environment";
+} from "@repo/features/sentry-breadcrumbs";
+import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
+import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { type RunMode, sentryReportingEnabled } from "@repo/host";
+import type { AppStateStore } from "@repo/host/client";
+import type { EffectDesktopService } from "@repo/host/desktop-service";
+import type { SentryEnvironment } from "@repo/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
 import { Effect, Exit, type Layer, Scope, Stream } from "effect";
 import {
@@ -89,7 +89,7 @@ export const mainErrorReporting: Layer.Layer<never> = sentryReporterLayer(mainSe
  * cleared as they sign out, from main's own document. Every report main
  * sends takes it: its own, a window's or the preload's event as it passes
  * through, and a native crash's. A window's log line is not among them, and
- * names the account as it leaves the window (`@luke/features/sentry-account`).
+ * names the account as it leaves the window (`@repo/features/sentry-account`).
  */
 export function followAccountInReports(
   state: AppStateStore,
@@ -144,7 +144,7 @@ function noteWorkingSetCrossing(crossing: WorkingSetCrossing): void {
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
-   * `@luke/features/analytics` fixed. It travels to our own service through the
+   * `@repo/features/analytics` fixed. It travels to our own service through the
    * host, never to an analytics provider from here.
    */
   readonly recordProductEvent: RecordProductEvent;

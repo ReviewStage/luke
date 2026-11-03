@@ -5,24 +5,24 @@
    room is kept whether it shows or not, so its coming and going moves
    nothing. */
 @layer components {
-  .luke-row-more {
+  .ui-row-more {
     display: flex;
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  [data-row-menu]:is(:has(:focus-visible), [data-menu-open="true"]) .luke-row-more {
+  [data-row-menu]:is(:has(:focus-visible), [data-menu-open="true"]) .ui-row-more {
     opacity: 1;
   }
 
   @media (hover: hover) {
-    [data-row-menu]:hover .luke-row-more {
+    [data-row-menu]:hover .ui-row-more {
       opacity: 1;
     }
   }
 
   @media (hover: none) {
-    .luke-row-more {
+    .ui-row-more {
       opacity: 1;
     }
   }

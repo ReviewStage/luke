@@ -7,7 +7,7 @@ import {
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillRefusal,
-} from "@luke/features/installed-skill-wire";
+} from "@repo/features/installed-skill-wire";
 import { and, eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";

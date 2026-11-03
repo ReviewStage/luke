@@ -22,17 +22,17 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import type { LinkPlatform } from "@luke/features/link-open";
-import type { DuplicateGatewayMethod, HostTag } from "@luke/host/effect";
-import { App } from "@luke/panel/app";
-import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
-import { installAppPlatform } from "@luke/panel/app-platform";
-import { installShownFailureReporter } from "@luke/panel/failure-report";
-import { installWindowHistory } from "@luke/panel/navigation-history";
-import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
-import { ErrorBoundary, ReloadState } from "@luke/ui/error-boundary";
-import type { HistoryAdapter } from "@luke/ui/history-adapter";
+import type { LinkPlatform } from "@repo/features/link-open";
+import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
+import { App } from "@repo/panel/app";
+import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
+import { installAppPlatform } from "@repo/panel/app-platform";
+import { installShownFailureReporter } from "@repo/panel/failure-report";
+import { installWindowHistory } from "@repo/panel/navigation-history";
+import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
+import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
+import type { HistoryAdapter } from "@repo/ui/history-adapter";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

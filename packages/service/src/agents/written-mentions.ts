@@ -1,8 +1,8 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
-import { workspaceOf } from "@luke/database/models/workspace-store";
-import { MENTION_KIND, type Mention, mentionMarkdown } from "@luke/features/mention-link";
-import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
+import { workspaceOf } from "@repo/database/models/workspace-store";
+import { MENTION_KIND, type Mention, mentionMarkdown } from "@repo/features/mention-link";
+import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
 import { Effect, Option } from "effect";
 import { taskWorkspace } from "../github/workspace-repository.js";
 import type { StoreFailure } from "../http/store-failure.js";
@@ -11,7 +11,7 @@ import type { StoreFailure } from "../http/store-failure.js";
  * written-mentions.ts -- the mentions a tool hands an agent ready to write: a task's, a page's, on a task or on an agent with no task, or another agent's, each `[@name](target)` under its workspace.
  *
  * An agent names a thing of ours in its messages, its Inbox items, its
- * plan notes, and its pages as a mention (`@luke/features/mention-link`),
+ * plan notes, and its pages as a mention (`@repo/features/mention-link`),
  * which the desktop draws as the thing's chip and the plan keeps through
  * every correction. A tool that makes or lists such a thing answers its
  * mention whole, so the agent copies it rather than spelling an address.

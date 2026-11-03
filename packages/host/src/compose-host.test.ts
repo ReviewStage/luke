@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { loopbackConsent } from "@luke/credentials/node";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { noNetwork } from "@luke/wire/testing";
+import { loopbackConsent } from "@repo/credentials/node";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { GATEWAY_ERROR, GATEWAY_METHOD } from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { noNetwork } from "@repo/wire/testing";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
@@ -102,7 +102,7 @@ describe("the host's platform concerns", () => {
     "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
     () =>
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
+        const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
         // Note that nothing here provides a `ChildProcessSpawner`, a
         // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
         // asks for neither, and a build that reached for one anyway would die
@@ -130,7 +130,7 @@ describe("the host's platform concerns", () => {
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-desktop-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-desktop-");
       const desktop = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer(ALL_HOST_PLATFORM_CONCERNS)),
         Layer.provide(
@@ -192,7 +192,7 @@ describe("the host's platform concerns", () => {
 describe("the host's account source", () => {
   it.effect("another source than the desktop's stands with no sign-in consent or cipher", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-account-source-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-account-source-");
       const account = {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",

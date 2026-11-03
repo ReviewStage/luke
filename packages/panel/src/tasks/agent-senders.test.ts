@@ -8,17 +8,17 @@ import {
   type AgentSender,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND } from "@repo/ui/actor-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -118,7 +118,7 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
   { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
-  line("luke", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }),
+  line("app", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }),
   line("automation", "Triage the failures.", {
     name: "Nightly triage",
     kind: AGENT_SENDER.AUTOMATION,
@@ -224,7 +224,7 @@ async function drawnFor(
 }
 
 /** Where a line names its sender: over its bubble, or, for GitHub's card, on the line under it. */
-const SENDER = ":is(.luke-message-head-sender, .luke-message-line-sender)";
+const SENDER = ":is(.ui-message-head-sender, .ui-message-line-sender)";
 
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
@@ -237,7 +237,7 @@ async function sendersFor(
     const sender = message.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
     if (sender === null) return [];
     const id = messages[index]?.id ?? "";
-    const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
+    const name = sender.querySelector(".ui-inline-ref-label")?.textContent ?? "";
     const picture = sender.querySelector("img")?.getAttribute("src");
     const kind = sender.dataset.kind ?? "";
     return [picture == null ? [id, kind, name] : [id, kind, name, picture]];
@@ -252,7 +252,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
-    ["luke", ACTOR_KIND.LUKE, "Vespin"],
+    ["app", ACTOR_KIND.APP, "Vespin"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
     // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.
@@ -288,7 +288,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
     const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
       `${SENDER} .actor-mark`,
     );
-    const mark = sender?.querySelector(".luke-harness-mark");
+    const mark = sender?.querySelector(".ui-harness-mark");
     return mark?.getAttribute("data-provider") ?? undefined;
   };
 
@@ -328,7 +328,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const card = document.querySelector(".luke-tooltip-card")?.textContent ?? "";
+  const card = document.querySelector(".ui-tooltip-card")?.textContent ?? "";
   act(() => {
     sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -337,7 +337,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   assert.ok(card.includes("Split view, merged"), card);
   // The line still wears Claude's mark it was sent under, though the agent runs on Codex now.
   assert.equal(
-    sender.querySelector(".luke-harness-mark")?.getAttribute("data-provider"),
+    sender.querySelector(".ui-harness-mark")?.getAttribute("data-provider"),
     MODEL_PROVIDER.ANTHROPIC,
   );
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, agentId: SENDER_ID }]);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAttachment } from "@luke/features/agent-wire";
+import type { AgentAttachment } from "@repo/features/agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -24,13 +24,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /** The motion tokens the row reads, as the app's sheets set them. */
 const TOKENS = {
-  "--luke-duration-exit": "90ms",
-  "--luke-motion-exit": "ease",
-  "--luke-duration-quick": "140ms",
-  "--luke-duration-shape": "460ms",
-  "--luke-spring": "ease-out",
-  "--luke-row-stagger": "32ms",
-  "--luke-list-travel": "16px",
+  "--ui-duration-exit": "90ms",
+  "--ui-motion-exit": "ease",
+  "--ui-duration-quick": "140ms",
+  "--ui-duration-shape": "460ms",
+  "--ui-spring": "ease-out",
+  "--ui-row-stagger": "32ms",
+  "--ui-list-travel": "16px",
 } as const;
 
 /** A motion played: the element it played on, its keyframes, and a way to have it finish. */
@@ -123,7 +123,7 @@ function draw(start: readonly AgentAttachment[]) {
 
 /** The chips drawn, in order, by the name their way off is heard by. */
 function chips(): HTMLLIElement[] {
-  return [...document.querySelectorAll<HTMLLIElement>("li.luke-attachment-chip")];
+  return [...document.querySelectorAll<HTMLLIElement>("li.ui-attachment-chip")];
 }
 
 function remove(chip: HTMLLIElement | undefined): void {

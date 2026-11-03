@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
+import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TerminalHandle } from "./contract.js";
 import { terminal } from "./index.js";
@@ -163,7 +163,7 @@ function drawnFace(host: HTMLElement): string | undefined {
 /** A host whose window's monospace stack is a web font, as the web app's profile names it. */
 function webFontHost(): HTMLElement {
   const host = document.createElement("div");
-  host.style.setProperty("--luke-font-mono", '"JetBrains Mono Variable", monospace');
+  host.style.setProperty("--ui-font-mono", '"JetBrains Mono Variable", monospace');
   document.body.append(host);
   return host;
 }

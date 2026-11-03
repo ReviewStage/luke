@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
-import { APP_HOME_LINK } from "@luke/features/link-home";
+import { desktopSessionPageUrl } from "@repo/features/desktop-session-wire";
+import { APP_HOME_LINK } from "@repo/features/link-home";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 

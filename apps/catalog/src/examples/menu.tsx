@@ -1,4 +1,4 @@
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   ArchiveIcon,
   ArrowDownIcon,
@@ -44,8 +44,8 @@ import {
   TrashIcon,
   UserIcon,
   useMenu,
-} from "@luke/ui";
-import { PaperclipIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { PaperclipIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

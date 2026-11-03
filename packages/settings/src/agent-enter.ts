@@ -6,7 +6,7 @@
  * running, either key just sends, opening a turn.
  */
 
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 
 export const AGENT_ENTER = {

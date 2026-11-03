@@ -57,13 +57,13 @@ test("a box whose editor bundle could not be loaded says so beside Retry and sta
   });
   await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
 
-  const note = container.querySelector(".luke-composer-foot-note");
+  const note = container.querySelector(".ui-composer-foot-note");
   assert.equal(note?.textContent, "The message box could not be loaded.Retry");
   assert.equal(container.querySelector(".agent-composer-input")?.getAttribute("aria-busy"), "true");
 
   await act(async () => note?.querySelector("button")?.click());
 
-  assert.equal(container.querySelector(".luke-composer-foot-note"), null, "the note is gone");
+  assert.equal(container.querySelector(".ui-composer-foot-note"), null, "the note is gone");
   assert.notEqual(
     container.querySelector(".agent-composer-input")?.getAttribute("aria-busy"),
     "true",

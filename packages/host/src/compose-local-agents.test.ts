@@ -23,8 +23,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@luke/features";
-import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@repo/features";
+import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -38,10 +38,10 @@ import {
   type DeviceSignedIn,
   deviceAgentLayout,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { HOST_TARGET, hostTarballUrl } from "@luke/features/host-release";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { HOST_TARGET, hostTarballUrl } from "@repo/features/host-release";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
@@ -920,7 +920,7 @@ const NEWER = "0.4.0";
 /** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `luke-host/` folder. */
 const newerTarball = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
+  const scratch = yield* temporaryDirectoryScoped("host-tarball-");
   yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
   yield* fileSystem.writeFileString(
     `${scratch}/luke-host/bin/vespin-host`,
@@ -946,7 +946,7 @@ const newerTarball = Effect.gen(function* () {
 const updatingHost = (tarball: Uint8Array<ArrayBuffer>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const folder = yield* temporaryDirectoryScoped("luke-host-releases-");
+    const folder = yield* temporaryDirectoryScoped("host-releases-");
     for (const version of ["0.2.0", RUNNING]) {
       yield* fileSystem.makeDirectory(`${folder}/versions/${version}/bin`, { recursive: true });
     }

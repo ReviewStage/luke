@@ -2,8 +2,8 @@
  * connect-app-tab.ts -- the web app's tab as a landing page's test meets it: the real connect tabs, connects handed off to tabs of their own or none, listening on the channel a landing speaks on, and a landing come back in one of those tabs.
  */
 
-import { ACT_KIND } from "@luke/host/acts";
-import type { ActPortClient } from "@luke/host/contract";
+import { ACT_KIND } from "@repo/host/acts";
+import type { ActPortClient } from "@repo/host/contract";
 import { type ConnectBrowser, type ConnectTab, connectTabs } from "../../src/app/connect-tab";
 
 /** The app's tab, as a landing page's test reaches it. */

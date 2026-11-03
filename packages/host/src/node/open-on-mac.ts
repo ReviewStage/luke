@@ -108,7 +108,7 @@ const OWN_REPOSITORY = [
 
 /**
  * The script, its values quoted, that makes a local agent's own repository
- * (`@luke/host`'s `compose-local-agents.ts`), at the head of the branch the
+ * (`@repo/host`'s `compose-local-agents.ts`), at the head of the branch the
  * agent starts from, or of GitHub's default branch where it names none,
  * read in our own clone of the repository, under its lock. The agent's work stays in its own folder,
  * and a worktree's Git folder would stand in the shared clone, so the agent
@@ -153,8 +153,8 @@ export function agentWorktreeScript(input: {
     '    fetched="refs/remotes/origin/$branch"',
     "  else",
     // Note that the default branch is fetched by GitHub's own HEAD into a ref of its own, never FETCH_HEAD, which another open of the shared clone may write over.
-    '    git fetch origin "+HEAD:refs/luke/default-head" || return 1',
-    '    fetched="refs/luke/default-head"',
+    '    git fetch origin "+HEAD:refs/agent/default-head" || return 1',
+    '    fetched="refs/agent/default-head"',
     "  fi",
     '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
     '  mkdir -p "$(dirname "$worktree")" || return 1',
@@ -177,7 +177,7 @@ export function agentWorktreeScript(input: {
 
 /**
  * The script, its path quoted, that says what a discard would lose from a
- * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
+ * local agent's worktree (`@repo/host`'s `compose-local-agents.ts`): it
  * prints one line, and exits 0, when the worktree holds work that is nowhere
  * else, changes `git status --porcelain` shows, commits its upstream does
  * not hold, or, with no upstream, commits on no remote branch of our
@@ -217,15 +217,15 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     "    exit 0",
     "  fi",
     "else",
-    // Note that the heads we fetched into refs/luke are GitHub's too, which the agent's own commits are not.
-    `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/luke/*')" || exit 1`,
+    // Note that the heads we fetched into refs/agent are GitHub's too, which the agent's own commits are not.
+    `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/agent/*')" || exit 1`,
     '  if [ -n "$ahead" ]; then',
     '    echo "it has commits on no remote branch"',
     "    exit 0",
     "  fi",
     "fi",
     // Note that a branch the agent left for another holds its commits as surely as the one checked out.
-    `ahead="$(git rev-list --max-count=1 --branches --not --remotes --glob='refs/luke/*')" || exit 1`,
+    `ahead="$(git rev-list --max-count=1 --branches --not --remotes --glob='refs/agent/*')" || exit 1`,
     'if [ -n "$ahead" ]; then',
     '  echo "it has a branch with commits on no remote branch"',
     "  exit 0",

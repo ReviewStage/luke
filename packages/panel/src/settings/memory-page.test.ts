@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
-import type { MemorySummary } from "@luke/features/memory-wire";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
+import type { MemorySummary } from "@repo/features/memory-wire";
 import {
   FAILURE_KIND,
   FAILURE_SURFACE,
   type ShownFailureReport,
-} from "@luke/features/shown-failure";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
+} from "@repo/features/shown-failure";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -238,7 +238,7 @@ test("what Vespin kept in the workspace is read for it and listed in the service
   );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   const keeper = (memory: MemorySummary) =>
-    rowOf(page, memory).querySelector(".luke-comment-head")?.textContent ?? "";
+    rowOf(page, memory).querySelector(".ui-comment-head")?.textContent ?? "";
   assert.match(keeper(DEPLOYS), /^You/u);
   assert.match(keeper(TESTS), /^Dean/u);
   assert.ok(

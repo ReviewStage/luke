@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@repo/database/testing";
 import {
   PAGE_FRAME_STATUS,
   PAGE_IN_MAC_APP_PATH,
   PAGE_SANDBOX_ORIGIN,
-} from "@luke/features/page-frame";
-import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+} from "@repo/features/page-frame";
+import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Clock, type Context, Duration, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -77,7 +77,7 @@ const pageOnTask = Effect.gen(function* () {
   const task = yield* startTask(starter, { name: "Teammate invitations" });
   yield* joinWorkspace(task.workspaceId, teammate);
   const page = Option.getOrThrow(
-    yield* writePage(starter, taskPageOwner(task.id), CHART, { kind: PAGE_SHOWER.LUKE }),
+    yield* writePage(starter, taskPageOwner(task.id), CHART, { kind: PAGE_SHOWER.APP }),
   );
   return { starter, teammate, task, page };
 });

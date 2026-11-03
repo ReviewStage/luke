@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
 import {
   getTestDB,
   joinWorkspace,
   leaveWorkspace,
   openWorkspace,
   WORKSPACE_ROLE,
-} from "@luke/database/testing";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
+} from "@repo/database/testing";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_PROVIDER,
   type IntegrationLandingStatus,
   integrationLandingPath,
-} from "@luke/features/integration-wire";
-import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/integration-wire";
+import type { WireBoundaryInput } from "@repo/wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

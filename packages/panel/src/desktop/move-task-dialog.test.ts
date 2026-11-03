@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import type { Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -334,7 +334,7 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   const words = document.getElementById(banner.getAttribute("aria-labelledby") ?? "");
   assert.equal(words === null ? undefined : heard(words), "This task's repository belongs to Acme");
   assert.equal(
-    banner.querySelector(".workspace-ref .luke-avatar[data-shape='tile']")?.textContent,
+    banner.querySelector(".workspace-ref .ui-avatar[data-shape='tile']")?.textContent,
     "A",
   );
   for (const element of [banner, ...banner.querySelectorAll("*")]) {

@@ -1,7 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
-import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
+import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@repo/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
-import { EVE_HOST_ENVIRONMENT } from "./agents/eve-host/bounds.js";
 import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
@@ -28,10 +26,8 @@ export interface HostedEnvironmentValues {
   readonly posthogProjectApiKey: Redacted.Redacted | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   readonly posthogIngestHost: string | undefined;
-  /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too and eve's door never does; absent refuses every sweep. */
+  /** Vercel's own bearer on every scheduled call, which the maintenance routes asked by hand take too; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
-  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by the eve service; absent, blank, or the cron's own value refuses every delegation. */
-  readonly eveDeploymentSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs our GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
   /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of ours stands in. */
@@ -60,50 +56,6 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
   );
 }
 
-/** What the log says, once a build, where the eve secret is read as unset for holding the cron's value: the two names, never a value. */
-const EVE_SECRET_SHARED =
-  "EVE_DEPLOYMENT_SECRET holds the same value as CRON_SECRET, so it is read as unset: no deployment request reaches eve until it holds a value of its own.";
-
-/**
- * The deployment's own secret at eve's door, read beside the cron's: nothing
- * where the two hold one value, because the bearer Vercel's scheduler sends
- * would then open eve's door again, the master key the separate secret keeps
- * apart. Both arrive trimmed with a blank one dropped, so one value is one
- * run of bytes, compared in constant time as every secret here is.
- */
-function eveSecretApart(
-  eve: Redacted.Redacted | undefined,
-  cron: Redacted.Redacted | undefined,
-): Redacted.Redacted | undefined {
-  if (eve === undefined || cron === undefined) return eve;
-  const offered = Buffer.from(Redacted.value(eve));
-  const held = Buffer.from(Redacted.value(cron));
-  return offered.length === held.length && timingSafeEqual(offered, held) ? undefined : eve;
-}
-
-/** A secret an environment record names, under `presentRedacted`'s rule: trimmed, and nothing where it is blank. */
-export function namedIn(
-  environment: Readonly<Record<string, string | undefined>>,
-  name: string,
-): Redacted.Redacted | undefined {
-  const value = text(environment[name]);
-  return value === undefined ? undefined : Redacted.make(value);
-}
-
-/**
- * `EVE_DEPLOYMENT_SECRET` as an environment record holds it, under the rule
- * the layer below reads it by, for a reader that holds the record rather
- * than the service: the admin dashboard's health list. Nothing where it is unset, blank, or the cron's own value.
- */
-export function eveDeploymentSecretIn(
-  environment: Readonly<Record<string, string | undefined>>,
-): Redacted.Redacted | undefined {
-  return eveSecretApart(
-    namedIn(environment, EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET),
-    namedIn(environment, CRON_ENVIRONMENT.CRON_SECRET),
-  );
-}
-
 /**
  * The values as this deployment's own environment holds them. The provider is
  * named rather than inherited so the read is the process environment wherever
@@ -112,8 +64,7 @@ export function eveDeploymentSecretIn(
  * into a record of its own, so a provider constructed as this module loads
  * would be this process's first environment forever. A key travels as a
  * `Redacted` so a log line or an error that folded a service into it still
- * says nothing. An eve secret that is the cron's value is read as unset, and
- * the build says so once, by name.
+ * says nothing.
  */
 export const hostedEnvironment = Layer.effect(
   HostedEnvironment,
@@ -125,7 +76,6 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
       posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
       cronSecret: Config.option(Config.Redacted(CRON_ENVIRONMENT.CRON_SECRET)),
-      eveDeploymentSecret: Config.option(Config.Redacted(EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET)),
       githubWebhookSecret: Config.option(Config.Redacted(GITHUB_APP_ENVIRONMENT.WEBHOOK_SECRET)),
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
@@ -133,8 +83,6 @@ export const hostedEnvironment = Layer.effect(
     }),
     (read) => {
       const cronSecret = presentRedacted(read.cronSecret);
-      const namedEveSecret = presentRedacted(read.eveDeploymentSecret);
-      const eveDeploymentSecret = eveSecretApart(namedEveSecret, cronSecret);
       const values: HostedEnvironmentValues = {
         posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
         posthogProjectId: present(read.posthogProjectId),
@@ -142,14 +90,10 @@ export const hostedEnvironment = Layer.effect(
         posthogProjectApiKey: presentRedacted(read.posthogProjectApiKey),
         posthogIngestHost: present(read.posthogIngestHost),
         cronSecret,
-        eveDeploymentSecret,
         githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
       };
-      // Note that the warning names the two variables alone, because a value in a log line is a leaked secret.
-      return eveDeploymentSecret === namedEveSecret
-        ? Effect.succeed(values)
-        : Effect.as(Effect.logWarning(EVE_SECRET_SHARED), values);
+      return Effect.succeed(values);
     },
   ).pipe(
     Effect.provideServiceEffect(

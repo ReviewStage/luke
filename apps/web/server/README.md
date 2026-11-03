@@ -83,7 +83,7 @@ standing. To apply the seed by hand against production:
 
 ```sh
 vercel env run --environment production --scope stage-review -- \
-  pnpm --filter @luke/web auth:seed
+  pnpm --filter @repo/web auth:seed
 ```
 
 Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
@@ -152,7 +152,7 @@ every member of its workspace, whichever of them started it:
 membership of the task's workspace rather than on the task's starter.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
-`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
+`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@repo/features/picture-wire`)
 (`packages/database/src/models/plan-attachments.ts`), gated by the same
 `taskReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
 `data:` URL of a PNG, JPEG, or WebP whose bytes sniff as its label, on a plan
@@ -160,7 +160,7 @@ that is not archived and holds fewer than `MAX_PER_PLAN`, answering `{ id }`
 or `{ refused: "too-many" }`; `GET /api/plans/<id>/attachments/<picture>`
 serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
 to a member alone, anyone else reading `not-found`. The plan's text names a
-picture by its address (`@luke/features/plan-attachment-link`), which
+picture by its address (`@repo/features/plan-attachment-link`), which
 `savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
@@ -172,7 +172,7 @@ workspace of the agent naming the conversation, or naming its standing
 parent one hop up (a subagent's session), and the opener alone for a
 conversation no agent names, so a member who leaves the workspace leaves its
 conversations with it. The MCP door's admission
-(`packages/service/src/agents/luke-mcp/bearer.ts`, which answers the caller
+(`packages/service/src/agents/workspace-mcp/bearer.ts`, which answers the caller
 beside the conversation's owner) and the ask door read it, so a member speaks
 into the session a teammate opened. From there the caller and the owner are
 two ids: the task, every tool binding, and an integration's grant are read,
@@ -192,7 +192,7 @@ its type, to a member alone, `nosniff` and `private, no-store`; a non-member,
 and a workspace with no PNG, JPEG, or WebP photo, read `not-found`. The list
 carries only a digest of it as `photoVersion`, and the account's own first
 workspace with none carries the account's sign-in picture as `pictureUrl`
-where it is Google's or GitHub's (`@luke/features/account-picture`).
+where it is Google's or GitHub's (`@repo/features/account-picture`).
 `POST /api/workspaces/members/remove` lets the owner remove an admin or a
 member and an admin a member alone, `POST /api/workspaces/members/role
 { workspaceId, userId, role }` lets the owner alone make another member an
@@ -279,7 +279,7 @@ removing a route, and `repository-checks.sh` refuses drift on either half. The
 same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
-scripts' — and the exports of `@luke/features`'s paths module, evaluated, must
+scripts' — and the exports of `@repo/features`'s paths module, evaluated, must
 resolve to an extensionless alias the Build Output emits, a rewrite of the
 table ahead of its fallback, or a procedure of the hosted oRPC contract, and a
 builder the check cannot read is refused by name rather than
@@ -375,7 +375,7 @@ string`, #2838) although `vercel.json` takes the same rewrites.
 
 ## The local server
 
-`pnpm --filter @luke/web local-server --port <n>` (`scripts/local-server.ts`)
+`pnpm --filter @repo/web local-server --port <n>` (`scripts/local-server.ts`)
 serves the same routes from this machine, on 127.0.0.1 alone, over the
 database `DATABASE_URL` names. It builds each grouped function's dispatcher
 over the route modules where they stand, as the generated bundle entry does,
@@ -388,11 +388,11 @@ WebSocket functions and the feedback courier are not served, and the scheduled
 sweep is called in process on the cron's cadence under `CRON_SECRET`.
 
 It refuses to start beside any `VERCEL*` variable or over a database host off
-the loopback (`@luke/service/local/local-server-guard`), and imports no route
+the loopback (`@repo/service/local/local-server-guard`), and imports no route
 until it has, because the auth service reads the environment as it loads. It
 sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honours only
 where the same guard passes over its own environment
-(`@luke/service/local/local-demo`): there a Start on a task with no repository
+(`@repo/service/local/local-demo`): there a Start on a task with no repository
 runs where its agents run on a host. Where
 `BETTER_AUTH_URL` is unset it names the server's own address there first. A
 route that only the local server answers mounts in the entry's `localRoutes`
@@ -439,7 +439,7 @@ where a statement is one expression. It takes no `relations` config, because not
 Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
-(`import { task } from "@luke/database/schemas/task"`), never the barrel,
+(`import { task } from "@repo/database/schemas/task"`), never the barrel,
 which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
@@ -506,7 +506,7 @@ the document), so a rewrite reaches only the reads of what it rewrote.
 
 `server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
 module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
-The layer it builds, `webServices`, is `@luke/service/runtime`'s, which runs
+The layer it builds, `webServices`, is `@repo/service/runtime`'s, which runs
 nothing.
 Vercel keeps a warm instance's module registry between invocations, so the
 first invocation of a cold start builds the layer and every later one on that
@@ -563,7 +563,7 @@ what leaves them external to the bundles rather than inlined into each of them,
 so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
 `pg`, which is external on the same terms and already was.
 
-A test reads the same client through `@luke/database/testing`, which
+A test reads the same client through `@repo/database/testing`, which
 chooses its dialect the way its `hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
 `APP_STORE_TEST_DATABASE_URL`, which the CI job points at its service
@@ -623,17 +623,16 @@ rather than read past to the cookie, and the browser's session cookie only
 where no `Authorization` is carried. `/api/mac-commands` takes the bearer
 alone (`resolveHostedBearerUserId`), because its held read claims commands
 for the one Mac that asks. Everything else takes either, the work that
-reaches an agent's session included: a request that carries a bearer reaches
-it over that bearer, and one that carries only the cookie as the deployment
-acting for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
-`eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
+reaches an agent's session included, which reaches it for the account the
+request resolved to (`packages/service/src/agents/coder-host/runtime-sessions.ts`'s
+`routedSessions`), so an agent's Start, message, and Stop, an inbox answer, a manual
 automation run, a comment's ask of an agent, and a task's delete and the account's, which
 retire the sessions of the agents they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
-dispatcher's `route-path` query among them; whom a session is reached as is
-chosen per request in the endpoint instead, so where a request lands changes
-nothing about it. Every route
+dispatcher's `route-path` query among them; the account is resolved per
+request in the endpoint instead, so where a request lands changes nothing
+about it. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
@@ -648,7 +647,7 @@ with its bearer and hands its renderer the bytes.
 
 `server/orpc-route.ts` holds `orpcRoute`, the one route every path moved onto
 the hosted oRPC router answers through (`packages/service/src/orpc/`, its
-contract in `@luke/features/contract`); `/api/models` is the first. It meets
+contract in `@repo/features/contract`); `/api/models` is the first. It meets
 the cookie origin guard, reads the web runtime's services through `runWeb`
 once per instance as `routeFromHttpRouter` does, and hands each request to
 `OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
@@ -690,7 +689,7 @@ headers at every address it answers at.
 
 An agent's page runs the script the agent wrote, so the web app draws it from
 a registrable domain of its own, `vespin.page`
-(`@luke/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
+(`@repo/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
 project beside the app's. That host serves one route and nothing else. The
 first top-level rewrite sends every request made to it into the web service,
 and the web service's first two routes, which the
@@ -797,7 +796,7 @@ the account outlives the request.
 the same bearer resolution. The desktop never talks to the analytics processor:
 it posts an allowlisted batch here, and this is the one place a `distinct_id`
 is attached, from the resolved account and never from the body, which has no
-place to name one. `productEventBatchFromWire` in `@luke/features/analytics` is the whole
+place to name one. `productEventBatchFromWire` in `@repo/features/analytics` is the whole
 admission policy, and it builds each event from that event's property
 allowlist, so nothing outside the vocabulary survives the read.
 
@@ -835,7 +834,7 @@ nothing.
 
 The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
 is a build-time variable that lets the site's own pages talk to PostHog
-through a path of the deployment's own origin (`@luke/features/posthog-proxy`),
+through a path of the deployment's own origin (`@repo/features/posthog-proxy`),
 which `vercel.json` passes on to PostHog with the request's cookies taken off,
 so PostHog is still handed a visitor's address there. A build without it never
 loads the library at all.
@@ -863,7 +862,7 @@ invitation stands. Canceling an invitation emails nothing.
 
 The functions report to Sentry's `luke-web` project, set
 up as Sentry's own guides set it up. `server/runtime.ts` provides
-`@luke/service/observability/sentry`'s `sentryLayer()`, which is the Effect
+`@repo/service/observability/sentry`'s `sentryLayer()`, which is the Effect
 guide's: `Sentry.effectLayer` starts the SDK and registers its
 `ErrorReporter`, so a route that fails or dies is captured as the router
 answers 500, and the tracer and metrics layers send Effect's spans and
@@ -893,12 +892,10 @@ The terminal relay and the Browser tab's live view are WebSocket functions,
 each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
-keys. `EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`, and an eve
-origin, the deployment's own unless `APP_EVE_ORIGIN` names another, must
-still stand for the deployment to act for an account whose bearer it does not
-hold, although no eve service answers either now
-(`packages/service/README.md`'s "Reaching eve as the deployment"). No
-separate service is deployed.
+keys. A native agent's runner reports to the deployment's own origin, its
+production domain in production and its own host otherwise, unless
+`APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).
+No separate service is deployed.
 
 ## The agents
 

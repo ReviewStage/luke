@@ -1,4 +1,4 @@
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 import type { ReactNode } from "react";
 
 /**

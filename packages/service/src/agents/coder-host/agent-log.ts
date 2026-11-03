@@ -26,9 +26,9 @@
  * is a named outcome, logged and never reported.
  */
 
-import type { Agent } from "@luke/database/models/agent-store";
-import { redactCredentials } from "@luke/features/credential-redaction";
-import type { TurnFailure } from "@luke/features/turn-run";
+import type { Agent } from "@repo/database/models/agent-store";
+import { redactCredentials } from "@repo/features/credential-redaction";
+import type { TurnFailure } from "@repo/features/turn-run";
 import { Cause, Data, Effect, ErrorReporter, References } from "effect";
 
 /** How much of a failure's own words a line or a turn's record keeps, inside the writer's own bound. */

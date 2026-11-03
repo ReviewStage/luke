@@ -7,8 +7,8 @@ import {
   PictureStandIn,
   PictureTile,
   VideoPlayer,
-} from "@luke/ui";
-import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
+} from "@repo/ui";
+import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-cache";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.
@@ -16,7 +16,7 @@ import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
  * While its bytes are read it is a quiet box on the section's fill with the
  * window's spinner; a picture this reader cannot reach, or whose bytes are
  * gone, is its alt text and says it is not available, as a tile of a set
- * says it (`@luke/ui`'s `PictureStandIn`); one whose read did not land this
+ * says it (`@repo/ui`'s `PictureStandIn`); one whose read did not land this
  * time says it could not be read, with Retry, in the same box. A gone picture
  * is plain words, never a `role="img"` named by its alt, which would hide the
  * "not available" beside it and leave an empty alt with no name at all. The block is left out
@@ -24,7 +24,7 @@ import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
  * words and the recording carries none (`session-replay.ts`), and because a
  * `data:` address is megabytes of attribute a recording has no use for even
  * masked. A video an agent recorded plays in its place instead
- * (`@luke/ui`'s `VideoPlayer`), with the player's own controls, Full screen
+ * (`@repo/ui`'s `VideoPlayer`), with the player's own controls, Full screen
  * among them, since a press on a video plays it; what a press on a picture
  * opens is its Expand. Nothing here knows whose picture it is; the place
  * drawing one hands its state and what a press does.
@@ -38,7 +38,7 @@ import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 export const PICTURE_BLOCK_CLASS =
   "picture-block ph-no-capture my-block-gap block w-fit max-w-full";
 
-/** The frame, `@luke/ui`'s Card, hugging the picture. */
+/** The frame, `@repo/ui`'s Card, hugging the picture. */
 export const PICTURE_FRAME_CLASS = "picture-frame w-fit max-w-full";
 
 /** The picture, no taller than a screenful's worth, at its own shape. */

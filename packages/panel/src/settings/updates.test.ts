@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { ACT_KIND } from "@repo/host/acts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

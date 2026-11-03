@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +78,7 @@ function drawn(
 
 test("a task's card says where it stands by marks a reader hears, as the board's card draws them, and none is a picker", () => {
   const heard = (task: TaskSummary) =>
-    [...drawn(task).querySelectorAll(".luke-hover-card-head .task-card-mark")].map((each) =>
+    [...drawn(task).querySelectorAll(".ui-hover-card-head .task-card-mark")].map((each) =>
       each.getAttribute("aria-label"),
     );
 
@@ -159,7 +159,7 @@ test("a pull request's line on the card counts its size as every figure is count
     ),
   );
   assert.deepEqual(
-    [...container.querySelectorAll(".luke-count-part")].map((each) => [
+    [...container.querySelectorAll(".ui-count-part")].map((each) => [
       each.textContent,
       each.getAttribute("data-tone"),
     ]),

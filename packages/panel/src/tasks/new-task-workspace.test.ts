@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -110,7 +110,7 @@ test("New task offers no workspace picker, and its head row's repository chip li
   act(() => dialog.repositoryChip().click());
   await settle();
   const listed = [...document.querySelectorAll('[role="option"]')].map((row) =>
-    [".luke-combobox-option-detail", ".luke-combobox-option-label"]
+    [".ui-combobox-option-detail", ".ui-combobox-option-label"]
       .map((part) => row.querySelector(part)?.textContent)
       .join("/"),
   );
@@ -150,7 +150,7 @@ async function openNewTask(workspaceId: string, preset?: string) {
   draw(workspaceId);
   await settle();
   const repositoryChip = () =>
-    document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
+    document.querySelector<HTMLButtonElement>(".repository-chip .ui-chip") ??
     assert.fail("the repository chip stands");
   // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   const create = async () => {
@@ -183,7 +183,7 @@ test("the owner's workspace changing to one with no GitHub connected lets the ot
   act(() => dialog.repositoryChip().click());
   await settle();
   const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
-  const note = document.querySelector(".luke-combobox-note p")?.textContent;
+  const note = document.querySelector(".ui-combobox-note p")?.textContent;
   const after = dialog.repositoryChip().textContent;
   await dialog.create();
 

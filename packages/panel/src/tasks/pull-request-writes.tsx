@@ -3,14 +3,14 @@ import {
   type AgentCallFailure,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   type AgentPullRequest,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import { saidWords } from "@luke/features/integration-health";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/agent-wire";
+import { saidWords } from "@repo/features/integration-health";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -18,9 +18,9 @@ import {
   type PullRequestAction,
   type PullRequestActionRequest,
   type PullRequestRefusal,
-} from "@luke/features/pull-request-write-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+} from "@repo/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   Badge,
   BUTTON_SIZE,
@@ -46,15 +46,15 @@ import {
   Tooltip,
   useConfirmDialog,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
   GLYPH,
-} from "@luke/ui/icons";
-import { useClipped } from "@luke/ui/use-clipped";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/icons";
+import { useClipped } from "@repo/ui/use-clipped";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import {
   createContext,
   type ReactNode,
@@ -94,7 +94,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  * take the member's sign-in; and our own words where the change never
  * reached GitHub.
  *
- * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
+ * The pill is `@repo/ui`'s pill chip in the tone of where the pull request
  * stands, as stage-cli's status pill is, and opens a menu offering what may
  * be done from there: Ready for review for a draft and Convert to draft for
  * one open, each with Close pull request, drawn red as every item that
@@ -383,7 +383,7 @@ const CLOSED_TOAST = {
  * the attention tone with the merge's mark, its menu offering Close alone,
  * which asks first, since reopening does not queue it again; any other Close
  * acts at once and a toast offers Reopen.
- * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
+ * Note that the pill is a compact one, which `@repo/ui` draws in a badge's
  * box, so every state stands at the one size the app's status badges do,
  * the one with a menu adding its chevron.
  */

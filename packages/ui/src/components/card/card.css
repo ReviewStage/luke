@@ -7,11 +7,11 @@
   /* Note that a card that lifts is one that moves among others, as a board's
      cards slide aside under a drag and fade as one is carried, so its slide
      and its fade ride the motion tokens beside its lift. */
-  .luke-card[data-hover="lift"] {
+  .ui-card[data-hover="lift"] {
     transition:
-      transform var(--luke-duration-fast) var(--luke-spring-fast),
-      border-color var(--luke-duration-hover) var(--luke-motion-exit),
-      box-shadow var(--luke-duration-hover) var(--luke-motion-exit),
-      opacity var(--luke-duration-quick) var(--luke-motion-exit);
+      transform var(--ui-duration-fast) var(--ui-spring-fast),
+      border-color var(--ui-duration-hover) var(--ui-motion-exit),
+      box-shadow var(--ui-duration-hover) var(--ui-motion-exit),
+      opacity var(--ui-duration-quick) var(--ui-motion-exit);
   }
 }

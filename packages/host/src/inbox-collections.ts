@@ -45,8 +45,8 @@
  * while marks on other items go at once.
  */
 
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
-import { inboxInOrder } from "@luke/features/live-wire";
+import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import { inboxInOrder } from "@repo/features/live-wire";
 import { Deferred, Effect, Equal, Exit, FiberSet, type Scope } from "effect";
 import { type AnsweredCollection, answeredCollection, rowAt, rowsOf } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";

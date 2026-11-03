@@ -1,5 +1,5 @@
-import type { TaskSummary } from "@luke/features/task-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { keptKey, useKept } from "../use-kept.js";
@@ -33,7 +33,7 @@ const storedTasks = Schema.fromJsonString(Schema.Record(Schema.String, Schema.St
 type KeptTasks = typeof storedTasks.Type;
 
 /** Where the tasks are kept in the renderer's storage, and where they were kept before tasks had their name. */
-const KEPT = { TASKS: keptKey("luke.lastTask", storedTasks, "luke.lastPlan") } as const;
+const KEPT = { TASKS: keptKey("app.lastTask", storedTasks, "app.lastPlan") } as const;
 
 const NONE_KEPT: KeptTasks = {};
 

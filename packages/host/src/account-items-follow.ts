@@ -1,5 +1,5 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   type AccountInboxItemsLiveAnswer,
@@ -8,7 +8,7 @@ import {
   type InboxItemStamp,
   inboxInOrder,
   inboxOfLiveRows,
-} from "@luke/features/live-wire";
+} from "@repo/features/live-wire";
 import { Effect, Ref } from "effect";
 import type { AppHostRead, AppInboxItems } from "./app-state.js";
 import { type InboxReads, itemsRead } from "./inbox-collections.js";

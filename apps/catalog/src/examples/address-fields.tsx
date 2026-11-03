@@ -1,4 +1,4 @@
-import { AddressField, GAP, Stack } from "@luke/ui";
+import { AddressField, GAP, Stack } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

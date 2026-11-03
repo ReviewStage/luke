@@ -2,7 +2,7 @@
  * live-region-guard.ts -- what the `no-hand-written-live-region` rule reads:
  * which roles and attributes make an element a live region. Anything read
  * aloud goes through `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` and
- * the one `Announcer` (`@luke/ui`), so outside `@luke/ui` no intrinsic
+ * the one `Announcer` (`@repo/ui`), so outside `@repo/ui` no intrinsic
  * element is one. The rule started clean, so it takes no baseline.
  */
 export const LIVE_REGION_GUARD_RULE = "anti-slop/no-hand-written-live-region";

@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { TASK_PRIORITY_ORDER, TASK_STATUS_ORDER, type TaskSummary } from "@luke/features/task-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TASK_PRIORITY_ORDER, TASK_STATUS_ORDER, type TaskSummary } from "@repo/features/task-wire";
 import {
   CHIP_LOOK,
   Chip,
@@ -19,17 +19,17 @@ import {
   Tooltip,
   useLeaving,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
+  APP_ACTOR,
   actorName,
   creatorActor,
-  LUKE_ACTOR,
   memberActor,
   personActor,
-} from "@luke/ui/actor-model";
+} from "@repo/ui/actor-model";
 import {
   ArrowDownAZIcon,
   BotIcon,
@@ -47,7 +47,7 @@ import {
   UserCheckIcon,
   UserIcon,
   UserXIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
@@ -73,7 +73,7 @@ import {
   type TasksOrder,
   toggledFilter,
   valueCounts,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -169,7 +169,7 @@ const COMPLETED_WORDS = {
 const MAKER_WORDS = {
   [TASK_MAKER.PERSON]: "People",
   [TASK_MAKER.AGENT]: "Agents and automations",
-  [TASK_MAKER.LUKE]: PRODUCT_NAME,
+  [TASK_MAKER.APP]: PRODUCT_NAME,
 } as const satisfies Record<TaskMaker, string>;
 
 const MAKER_ACTOR = {
@@ -179,7 +179,7 @@ const MAKER_ACTOR = {
     provider: undefined,
     state: ACTOR_STATE.REST,
   },
-  [TASK_MAKER.LUKE]: LUKE_ACTOR,
+  [TASK_MAKER.APP]: APP_ACTOR,
 } as const satisfies Record<Exclude<TaskMaker, typeof TASK_MAKER.PERSON>, Actor>;
 
 /** What a grouping is called. */

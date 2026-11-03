@@ -1,15 +1,15 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
-import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialProviderButton } from "@luke/ui";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { type SocialProvider, socialProviderFromState } from "@repo/features/sign-in-provider";
+import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialProviderButton } from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -48,7 +48,7 @@ function SignIn(): React.JSX.Element {
       title={provider ? `Sign in to ${PRODUCT_NAME}` : `${PRODUCT_NAME} could not continue`}
       description={provider ? undefined : "Start sign-in again."}
       error={failed ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER } : undefined}
-      action={provider ? undefined : openLukeFromMac()}
+      action={provider ? undefined : openAppFromMac()}
       footnote={
         provider
           ? `You can close this window after ${PRODUCT_NAME} confirms the sign-in.`

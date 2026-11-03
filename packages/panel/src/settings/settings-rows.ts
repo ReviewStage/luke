@@ -1,6 +1,6 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   EXPERIMENT,
   type Experiment,
@@ -8,13 +8,13 @@ import {
   experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_VIEW,
   type SettingsView,
-} from "@luke/settings/settings-views";
-import type { AppSettingsView } from "@luke/settings/wire";
+} from "@repo/settings/settings-views";
+import type { AppSettingsView } from "@repo/settings/wire";
 import type { SettingsSearchInput } from "../settings-search.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
 

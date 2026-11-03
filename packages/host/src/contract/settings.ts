@@ -5,9 +5,9 @@ import {
   type AppSettingValue,
   EXPERIMENT,
   SETTINGS_RESET_SCOPE,
-} from "@luke/settings";
-import { settingsUpdateResultSchema } from "@luke/settings/wire";
-import { WireValueSchema } from "@luke/wire";
+} from "@repo/settings";
+import { settingsUpdateResultSchema } from "@repo/settings/wire";
+import { WireValueSchema } from "@repo/wire";
 import { Effect, Schema as EffectSchema, SchemaGetter, SchemaIssue } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { SETTINGS_ACT_KIND } from "./kinds.js";

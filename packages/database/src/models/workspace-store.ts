@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { pinnedPictureUrl } from "@luke/features/account-picture";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
+import { pinnedPictureUrl } from "@repo/features/account-picture";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
   roleOf,
@@ -10,7 +10,7 @@ import {
   WORKSPACE_ROLE,
   type WorkspacePhoto,
   workspacePhotoOfDataUrl,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

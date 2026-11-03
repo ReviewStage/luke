@@ -1,5 +1,5 @@
-import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
-import type { Failure } from "@luke/features/failure-remedy";
+import type { AgentAttachment, AgentSummary } from "@repo/features/agent-wire";
+import type { Failure } from "@repo/features/failure-remedy";
 import {
   ANNOUNCE,
   BANNER_LOOK,
@@ -14,8 +14,8 @@ import {
   Text,
   TextButton,
   useMenu,
-} from "@luke/ui";
-import { ACTOR_KIND } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND } from "@repo/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
 import { ActorMark } from "../actor-ref.js";

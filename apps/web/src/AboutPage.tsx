@@ -12,7 +12,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 type Founder = {

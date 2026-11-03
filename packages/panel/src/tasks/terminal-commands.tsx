@@ -1,16 +1,16 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { remedyLabel } from "@luke/features/failure-remedy";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { remedyLabel } from "@repo/features/failure-remedy";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TERMINAL_ASK,
   TERMINAL_TARGET,
   type TerminalAsk,
   terminalTarget,
-} from "@luke/features/terminal-entry";
-import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/terminal-entry";
+import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { STATUS_TONE } from "@repo/ui";
 import { useCallback, useContext, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";

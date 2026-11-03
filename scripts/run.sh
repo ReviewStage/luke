@@ -5,16 +5,16 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_macos
-luke_require_node
-luke_ensure_dependencies
+app_require_macos
+app_require_node
+app_ensure_dependencies
 
 # The instance `--demo` launches, the one folder of its profile a run keeps
-# (the CLIs the run's host fetched for its agents, `@luke/host`'s
+# (the CLIs the run's host fetched for its agents, `@repo/host`'s
 # local-agent-tools.ts), how long its local server may take to answer, and
 # the link the app opens once signed in: acme's Inbox, by the slug the
 # seed's workspace name takes in a fresh database
-# (`@luke/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
+# (`@repo/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
 DEMO_INSTANCE=demo
 DEMO_KEPT_FOLDER=agent-tools
 DEMO_SERVER_WAIT_SECONDS=120
@@ -60,7 +60,7 @@ demo_agents_removed() {
 # address after it (`--preview https://…`) skips the lookup. `--instance
 # <name>` launches a named development instance beside the plain one, with
 # its own profile, replacing only its own earlier run; a `--preview` run is
-# one without asking, named for its Preview (`luke_preview_instance`).
+# one without asking, named for its Preview (`app_preview_instance`).
 # `--demo` launches the `demo` instance signed in as Dean on the acme demo
 # world, against a hosted service run on this Mac for as long as the app is
 # open (see "The demo" below); it takes none of the three flags above. Dean's
@@ -97,7 +97,7 @@ while ((remaining_arguments-- > 0)); do
         continue
     fi
     if [[ $argument == --instance ]]; then
-        if ((remaining_arguments == 0)) || ! luke_is_instance_name "$1"; then
+        if ((remaining_arguments == 0)) || ! app_is_instance_name "$1"; then
             printf 'error: --instance takes a name of lower-case letters, digits, and single hyphens, at most %s long\n' \
                 "$APP_INSTANCE_NAME_MAX_LENGTH" >&2
             exit 2
@@ -127,9 +127,9 @@ fi
 # cron tick runs on a preview.
 if [[ $use_preview == true ]]; then
     if [[ -z $preview_address ]]; then
-        luke_require_command gh
-        luke_require_command curl
-        luke_require_command jq
+        app_require_command gh
+        app_require_command curl
+        app_require_command jq
         preview_address=$("$SCRIPT_DIRECTORY/preview-address.sh")
     fi
     export APP_ACCOUNT_BASE_URL="${preview_address%/}/api/auth"
@@ -138,7 +138,7 @@ if [[ $use_preview == true ]]; then
         if [[ $preview_address_given == false ]]; then
             preview_branch=$(git -C "$APP_REPO_ROOT" symbolic-ref --quiet --short HEAD || true)
         fi
-        instance=$(luke_preview_instance "$preview_address" "$preview_branch")
+        instance=$(app_preview_instance "$preview_address" "$preview_branch")
     fi
     printf 'preview: launching against %s\n' "$preview_address" >&2
 fi
@@ -148,13 +148,13 @@ fi
 # inherited from the shell, so it is always the plain instance.
 if [[ -n $instance ]]; then
     export APP_INSTANCE=$instance
-    printf 'instance: launching as "%s", beside the plain Vespin Dev\n' "$(luke_instance_app_name "$instance")" >&2
+    printf 'instance: launching as "%s", beside the plain Vespin Dev\n' "$(app_instance_app_name "$instance")" >&2
 else
     unset APP_INSTANCE
 fi
 
 if [[ $replace_running_app == true ]]; then
-    luke_stop_running_app "$instance"
+    app_stop_running_app "$instance"
 fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;
@@ -182,7 +182,7 @@ fi
 # seed and goes to its record alone. The app is not exec'd, so the trap
 # stops the host, the server and the database, and deletes the run's
 # folder, however the run ends.
-demo_profile="$HOME/Library/Application Support/$(luke_instance_app_name "$instance")"
+demo_profile="$HOME/Library/Application Support/$(app_instance_app_name "$instance")"
 if [[ -d $demo_profile ]]; then
     demo_agents_removed "$demo_profile"
     find "$demo_profile" -mindepth 1 -maxdepth 1 ! -name "$DEMO_KEPT_FOLDER" -exec rm -rf -- {} +
@@ -234,7 +234,7 @@ demo_stop() {
     fi
 }
 trap demo_stop EXIT
-demo_folder=$(mktemp -d "${TMPDIR:-/tmp}/luke-demo.XXXXXX")
+demo_folder=$(mktemp -d "${TMPDIR:-/tmp}/app-demo.XXXXXX")
 
 node tools/demo-postgres/demo-postgres.ts --url-file "$demo_folder/database-url" &
 postgres_pid=$!
@@ -261,17 +261,17 @@ demo_origin="http://127.0.0.1:$demo_port"
     if [[ -n $demo_anthropic_api_key ]]; then
         export APP_DEMO_ANTHROPIC_API_KEY="$demo_anthropic_api_key"
     fi
-    exec pnpm --filter @luke/web demo:seed
+    exec pnpm --filter @repo/web demo:seed
 )
 
-# Note that node runs the server itself rather than `pnpm --filter @luke/web
+# Note that node runs the server itself rather than `pnpm --filter @repo/web
 # local-server`, because a pnpm that hands the run to the version the
 # repository pins waits on it without passing a stop on, so the trap's stop
 # would never reach the server.
 (
     export DATABASE_URL="$demo_database_url" DATABASE_URL_UNPOOLED="$demo_database_url" \
         BETTER_AUTH_SECRET="$demo_auth_secret" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
-        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" APP_EVE_ORIGIN="$demo_origin"
+        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" APP_DEPLOYMENT_ORIGIN="$demo_origin"
     cd apps/web
     exec node --import tsx scripts/local-server.ts --port "$demo_port"
 ) >"$demo_folder/server.log" 2>&1 &
@@ -297,7 +297,7 @@ printf 'demo: serving %s, its log at %s\n' "$demo_origin" "$demo_folder/server.l
 # handed: its agents run on the one saved as Dean's. The first run fetches
 # its agents' CLIs into the kept folder, and the host reads as getting ready
 # in Settings › Hosts until it has them.
-pnpm --filter @luke/host-daemon --filter @luke/agent-runner build >"$demo_folder/host-build.log" 2>&1 || {
+pnpm --filter @repo/host-daemon --filter @repo/agent-runner build >"$demo_folder/host-build.log" 2>&1 || {
     printf 'error: the demo host did not build; it printed:\n' >&2
     cat "$demo_folder/host-build.log" >&2
     exit 1
@@ -311,7 +311,7 @@ printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/h
 
 # Note that the app is handed acme's link, because a cleared profile opens
 # the member's own workspace, which the seed leaves empty; the app holds the
-# link until it is signed in (`@luke/features/app-links`), and a link among
+# link until it is signed in (`@repo/features/app-links`), and a link among
 # the arguments forwarded, the last, opens in its place.
 export APP_ACCOUNT_BASE_URL="$demo_origin/api/auth"
 pnpm start -- "$DEMO_LINK" "$@"

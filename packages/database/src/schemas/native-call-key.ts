@@ -8,7 +8,7 @@ import { conversations } from "./storage.js";
  *
  * eve keys a tool call on its own id for the call, so a call run again
  * sends or starts once. A Claude Code or Codex agent reaches our tools
- * over MCP (`packages/service/src/agents/luke-mcp/`), whose server keeps no
+ * over MCP (`packages/service/src/agents/workspace-mcp/`), whose server keeps no
  * session and whose harness names a retry by nothing the first call had, so
  * the server keys a call on a row here: one per conversation, tool, and
  * input, holding the key the first call was given and when, which a call of

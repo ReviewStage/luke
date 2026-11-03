@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
+import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -10,14 +10,14 @@ import {
   BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
-} from "@luke/features/browser-live-wire";
+} from "@repo/features/browser-live-wire";
 import {
   BROWSER_TAB_OPEN_FAILURE,
   type TasksBrowserTabOpenParams,
-} from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { COMMAND_KEY } from "@luke/settings/shortcuts";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { COMMAND_KEY } from "@repo/settings/shortcuts";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -59,7 +59,7 @@ import {
  */
 
 /** The app, whose browser a tab is in, wearing a plain glyph. */
-const LUKE_OWNER = { name: "Vespin", icon: createElement("span") };
+const APP_OWNER = { name: "Vespin", icon: createElement("span") };
 
 /** An agent whose browser a draft opens in. */
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
@@ -306,7 +306,7 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -371,7 +371,7 @@ test("a pane's view closes while its window's page is hidden, and a new one open
     draw(
       createElement(CloudBrowserPane, {
         tab: LISTED,
-        owner: LUKE_OWNER,
+        owner: APP_OWNER,
         shown: true,
         memberName: () => undefined,
       }),
@@ -420,7 +420,7 @@ it.effect(
             registry,
             createElement(CloudBrowserPane, {
               tab: LISTED,
-              owner: LUKE_OWNER,
+              owner: APP_OWNER,
               shown: true,
               memberName: () => undefined,
             }),
@@ -455,7 +455,7 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -518,7 +518,7 @@ test("off a Mac, while the member drives, a Ctrl chord the window has a command 
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -669,7 +669,7 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(
     document
-      .querySelector(".cloud-browser-standing .luke-failure-note")
+      .querySelector(".cloud-browser-standing .ui-failure-note")
       ?.textContent?.includes("hasn't opened its sandbox"),
     "a refusal is said under the bar as a failure note",
   );
@@ -743,7 +743,7 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: (userId) => (userId === "user-ada" ? "Ada" : undefined),
     }),
@@ -790,7 +790,7 @@ test("a bar's steps say why they are off while the tab is not live, reachable by
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -863,7 +863,7 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
   draft.rerender(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),

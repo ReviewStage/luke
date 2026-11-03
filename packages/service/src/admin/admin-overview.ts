@@ -20,7 +20,7 @@ import type {
   AdminActivityDay,
   AdminOverview,
   AdminOverviewAccount,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   type ActivityFeature,
@@ -30,8 +30,8 @@ import {
   type FunnelStep,
   REACH_FEATURE,
   type ReachFeature,
-} from "@luke/features/admin-overview-vocabulary";
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+} from "@repo/features/admin-overview-vocabulary";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
 import {
   ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,

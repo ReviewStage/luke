@@ -46,7 +46,7 @@ import { MENTION_NODE } from "./mention-node.js";
 const SECTION_LEVELS = new Set([1, 2]);
 
 /** What a change that named mentions again is tagged with, so it names none of its own. */
-const RETARGETED_META = "luke-plan-retargeted";
+const RETARGETED_META = "plan-retargeted";
 
 /** The `@` word the caret ends: `@`, at the start of a word, then up to six words with no bracket, parenthesis, or `@` in them. */
 const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,5})?)$/u;

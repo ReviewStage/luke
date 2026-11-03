@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER, integrationConnectionOf } from "@luke/features/integration-wire";
-import { serverName } from "@luke/ui/agent-servers-model";
+import { INTEGRATION_PROVIDER, integrationConnectionOf } from "@repo/features/integration-wire";
+import { serverName } from "@repo/ui/agent-servers-model";
 import { createContext, type ReactNode, useCallback, useContext } from "react";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import type { ToolCallView } from "./tool-call-model.js";

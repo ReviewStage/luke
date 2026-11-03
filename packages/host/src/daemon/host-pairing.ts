@@ -3,14 +3,14 @@ import {
   type HostPairingOutcome,
   pollHostPairing,
   startHostPairing,
-} from "@luke/features";
-import type { DeviceArch, DeviceMachine, DevicePlatform } from "@luke/features/device-agent-wire";
+} from "@repo/features";
+import type { DeviceArch, DeviceMachine, DevicePlatform } from "@repo/features/device-agent-wire";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   type HostPairingPollAnswer,
   type HostPairingStartAnswer,
-} from "@luke/features/host-wire";
+} from "@repo/features/host-wire";
 import { Duration, Effect, Option, Ref, Schedule } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -21,7 +21,7 @@ import { readHostDevice, writeHostDevice } from "../host-device-record.js";
  *
  * The start carries no credential. The service answers a poll secret, which
  * names the pairing and nothing else, the code and its link, how long the
- * code lasts, and how often to poll (`@luke/features`' `startHostPairing`).
+ * code lasts, and how often to poll (`@repo/features`' `startHostPairing`).
  * The box waits that long before each poll, and five seconds longer from
  * each time the service says to slow down, as RFC 8628's `slow_down` asks.
  * A poll that goes unanswered is tried again at the next, so a network blip

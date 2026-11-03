@@ -10,7 +10,7 @@
  * writes the name but the task it is handed.
  */
 
-import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 import { UNIT_ATTRIBUTED_CLASS } from "./plan-unit-look.js";
 
 /** The title over a plan's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */

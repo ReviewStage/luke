@@ -12,7 +12,7 @@
 
 // @vitest-environment jsdom
 
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

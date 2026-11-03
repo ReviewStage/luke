@@ -1,7 +1,7 @@
-import { APP_COMMAND, APP_SHORTCUTS, SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, Button, Shortcut } from "@luke/ui";
-import { CommandDialog, type CommandGroup } from "@luke/ui/command";
-import { GLYPH } from "@luke/ui/icons";
+import { APP_COMMAND, APP_SHORTCUTS, SHORTCUT_KEY } from "@repo/settings/shortcuts";
+import { BUTTON_VARIANT, Button, Shortcut } from "@repo/ui";
+import { CommandDialog, type CommandGroup } from "@repo/ui/command";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -23,20 +23,20 @@ function paletteGroups(close: () => void): CommandGroup[] {
       items: [
         {
           id: "task-41",
-          lead: "LUKE-41",
+          lead: "APP-41",
           icon: <GLYPH.TASK />,
           label: "Add a shortcut for new tasks",
-          detail: "luke",
-          words: "LUKE-41 Add a shortcut for new tasks luke",
+          detail: "app",
+          words: "APP-41 Add a shortcut for new tasks app",
           onSelect: close,
         },
         {
           id: "task-42",
-          lead: "LUKE-42",
+          lead: "APP-42",
           icon: <GLYPH.TASK />,
           label: "Fix the login page on a phone's narrow screen",
           detail: "web",
-          words: "LUKE-42 Fix the login page on a phone's narrow screen web",
+          words: "APP-42 Fix the login page on a phone's narrow screen web",
           onSelect: close,
         },
       ],

@@ -9,7 +9,7 @@ import {
   type PageWrite,
   pageShowerSchema,
   pageWriteSchema,
-} from "@luke/features/page-wire";
+} from "@repo/features/page-wire";
 import { and, desc, eq, isNull, or, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

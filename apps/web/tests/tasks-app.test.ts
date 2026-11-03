@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { createTask, readTask } from "@luke/database/models/task-store";
-import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { user } from "@luke/database/schemas/auth";
-import { planRevision } from "@luke/database/schemas/plan-revision";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { PLAN_REVISION } from "@repo/database/models/plan-revisions";
+import { createTask, readTask } from "@repo/database/models/task-store";
+import { personalWorkspaceOf } from "@repo/database/models/workspace-store";
+import { user } from "@repo/database/schemas/auth";
+import { planRevision } from "@repo/database/schemas/plan-revision";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
+} from "@repo/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@repo/features/plan-edit";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
+} from "@repo/features/repository-reach-wire";
 import {
   PLAN_ACTOR,
   planRevisionAnswerSchema,
@@ -35,25 +35,24 @@ import {
   taskFileAnswerSchema,
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
-} from "@luke/features/task-wire";
-import { type AgentSessions, EVE_RESET_OUTCOME } from "@luke/service/agents/eve-host/eve-sessions";
-import { messagesProcedures } from "@luke/service/agents/messages-procedures";
-import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
+} from "@repo/features/task-wire";
+import { messagesProcedures } from "@repo/service/agents/messages-procedures";
+import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
 import {
   requestUserId,
   type SessionEndpoint,
   type UserInfoEndpoint,
-} from "@luke/service/auth/bearer";
-import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
-import { LINK_OUTCOME } from "@luke/service/github/github-installations";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import type { WebServices } from "@luke/service/runtime";
-import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
-import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
-import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
+} from "@repo/service/auth/bearer";
+import { recordingProductAnalytics, SERVER_EVENT } from "@repo/service/events/server-events";
+import { LINK_OUTCOME } from "@repo/service/github/github-installations";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { modelCatalogOf } from "@repo/service/providers/model-catalog";
+import type { WebServices } from "@repo/service/runtime";
+import { PLAN_SAVE_STATUS, saveNotes } from "@repo/service/tasks/plan-notes";
+import { taskFilesProcedures } from "@repo/service/tasks/task-files-procedures";
+import { tasksApp } from "@repo/service/tasks/tasks-app";
+import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -64,18 +63,18 @@ import {
   NO_GITHUB,
   openGithubUser,
   type SentToGitHub,
-} from "@luke/service/testing/github-app-fake";
-import { integrationConnectOver } from "@luke/service/testing/integration-connect";
+} from "@repo/service/testing/github-app-fake";
+import { integrationConnectOver } from "@repo/service/testing/integration-connect";
 import {
   INVITATIONS_TEXT,
   makeDocumentTask,
   makeSavedDocumentTask,
-} from "@luke/service/testing/plan-documents";
-import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
-import { added } from "@luke/service/testing/task-contents";
-import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/service/testing/plan-documents";
+import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
+import { added } from "@repo/service/testing/task-contents";
+import { EXPERIMENT } from "@repo/settings";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq, sql } from "drizzle-orm";
 import {
   Clock,
@@ -85,7 +84,6 @@ import {
   Effect,
   Layer,
   Option,
-  Redacted,
   Result,
   type Schema,
 } from "effect";
@@ -145,47 +143,12 @@ const LINEAR_CONNECTORS = { LINEAR_CONNECTOR_UID: "oauth/linear" } as const;
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
 
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
-function deploymentFor(account: string): string {
-  return `deployment for ${account}`;
-}
-
-/**
- * eve as a task's delete reaches it: each retire written down with who asked
- * it, over the request's bearer or as the deployment acting for an account;
- * a task here has no coding agent, so its delete asks eve nothing else, and
- * `agents-app.test.ts` deletes one that has.
- */
-function retiringEve() {
-  const retired: (readonly [string, string])[] = [];
-  const asked = (caller: string): AgentSessions => ({
-    open: () => Effect.die(new Error("a task's delete opens no session")),
-    send: () => Effect.die(new Error("a task's delete sends no message")),
-    cancel: () => Effect.die(new Error("a task with no agent has no turn to cancel")),
-    reset: (sessionId) =>
-      Effect.sync(() => {
-        retired.push([caller, sessionId]);
-        return { outcome: EVE_RESET_OUTCOME.RESET };
-      }),
-  });
-  return {
-    retired,
-    eve: (authorization: Redacted.Redacted) => asked(Redacted.value(authorization)),
-    eveAs: (account: string) => asked(deploymentFor(account)),
-  };
-}
-
 /**
  * Two accounts, each behind its own bearer. The owner signed in with GitHub
  * through the App; the other signed in with Google alone, and reaches
- * nothing on GitHub. eve is a fake that writes down each retire, unless the
- * test asks for none, when the deployment composes its own: on an
- * environment naming no secret, over a network nothing answers on.
+ * nothing on GitHub.
  */
-const openAccounts = (
-  github: FakeGitHub = UNREACHED_GITHUB,
-  options: { readonly reachesEve?: boolean } = {},
-) =>
+const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openGithubUser();
@@ -201,10 +164,9 @@ const openAccounts = (
         [sessionCookieOf(other), other],
       ]),
     };
-    const eve = options.reachesEve === false ? undefined : retiringEve();
     const ask = (request: Request, landedAs?: string) =>
-      answer(signedIn, github, eve, request, landedAs);
-    return { owner, other, ask, retired: eve?.retired ?? [] };
+      answer(signedIn, github, request, landedAs);
+    return { owner, other, ask };
   });
 
 /** How the suite's accounts sign in: each one's OAuth bearer, and the session cookie of a browser signed in to it. */
@@ -247,13 +209,7 @@ const countedFor = (userId: string, name: string) =>
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-const answer = (
-  signedIn: SignedIn,
-  github: FakeGitHub,
-  eve: ReturnType<typeof retiringEve> | undefined,
-  request: Request,
-  landedAs?: string,
-) =>
+const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landedAs?: string) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -271,10 +227,8 @@ const answer = (
       resolveUserId: (incoming: Request) =>
         requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
       workspaces: yield* fakeWorkspaceSeams,
-      eveOrigin: () => ORIGIN,
       sessionSandboxes: sessionSandboxesLayer,
       keepAwake: keepAwakeDetached,
-      ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
     };
     const { handler, dispose } = HttpRouter.toWebHandler(
       tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -839,43 +793,10 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a session cookie's delete is refused as unavailable, stopping and deleting nothing, on a deployment that cannot reach eve as itself, while the bearer's delete goes on with its retires a courtesy",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts(UNREACHED_GITHUB, { reachesEve: false });
-        const taskId = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-        assert.deepEqual(
-          yield* ask(
-            request(ONE_TASK(taskId), undefined, {
-              method: "DELETE",
-              cookie: sessionCookieOf(owner),
-            }),
-          ),
-          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
-        );
-        assert.equal(
-          (yield* ask(request(ONE_TASK(taskId), owner))).status,
-          HOSTED_HTTP_STATUS.OK,
-          "the task stands",
-        );
-        assert.equal(
-          readAnswer(
-            taskDeleteAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })),
-          ).deleted,
-          true,
-        );
-      }),
-  );
-
-  it.effect(
     "a session cookie starts, reads, and deletes its account's task however the delete lands, while another account's cookie deletes and retires nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, other, ask, retired } = yield* openAccounts();
+        const { owner, other, ask } = yield* openAccounts();
         const cookie = sessionCookieOf(owner);
         const started = (body: typeof RELAY | typeof LEDGER) =>
           Effect.map(ask(request(TASKS, undefined, { method: "POST", body, cookie })), startedId);
@@ -898,7 +819,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         assert.deepEqual(yield* deletedBy(relay, sessionCookieOf(other)), notFound);
         assert.deepEqual(yield* deletedBy(ledger, sessionCookieOf(other)), notFound);
-        assert.deepEqual(retired, [], "another account's cookie retires nothing");
 
         assert.equal(yield* deletedAs(relay, cookie), true);
         assert.equal(yield* deletedAs(ledger, cookie), true);
@@ -1337,7 +1257,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             owner,
             taskPageOwner(taskId),
             { title: "Invite funnel", html: "<p>v1</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         const version = (asker: string, pageId: string, number: string, method?: string) =>
@@ -1356,7 +1276,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
               title: "Invite funnel",
               version: 1,
               at: page.at,
-              shownBy: { kind: PAGE_SHOWER.LUKE },
+              shownBy: { kind: PAGE_SHOWER.APP },
               html: "<p>v1</p>",
             },
           },
@@ -1496,8 +1416,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const taskId = startedId(
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
-        const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
-        yield* makeDocumentTask(taskId, lukes);
+        const appText = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
+        yield* makeDocumentTask(taskId, appText);
         const edit = (id: string, value: string) =>
           ask(
             request(EDIT(id), owner, {
@@ -1523,7 +1443,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
 
         assert.ok("plan" in merged);
-        const mergedText = lukes.replace("Only an admin", "Only an owner");
+        const mergedText = appText.replace("Only an admin", "Only an owner");
         assert.equal(merged.plan.document.body, mergedText);
         assert.deepEqual(conflicted, {
           status: HOSTED_HTTP_STATUS.OK,

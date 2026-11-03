@@ -1,4 +1,4 @@
-# @luke/service
+# @repo/service
 
 The hosted service's logic: what the web deployment's functions compose and
 run. The deployment
@@ -7,8 +7,8 @@ keeps only its shell in `apps/web/server` — the Vercel function entries under
 bundling — and reaches everything else here.
 
 The package has no barrel. Each module is its own subpath, as
-`@luke/database`'s are (`@luke/service/http/http-effect`), and test builders
-stand at `@luke/service/testing/<name>`. A module lives in the folder of the
+`@repo/database`'s are (`@repo/service/http/http-effect`), and test builders
+stand at `@repo/service/testing/<name>`. A module lives in the folder of the
 domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, …),
 named by the group of this README that describes it.
 
@@ -177,7 +177,7 @@ The App's registered Setup URL, with "Redirect on update", is
 `https://vespin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@luke/features`). Without a `state`, the route confirms the installation
+(`@repo/features`). Without a `state`, the route confirms the installation
 through `installation(id)` as the App and links nothing: `installed`,
 `updated`, `requested` (a member asked an organization's owner, so there is
 no installation yet), `not-found`, or `unavailable`.
@@ -242,7 +242,7 @@ task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
 A redelivery reads the same again. Before any of that, the repository a
 delivery names is recorded by GitHub's id under the name it carries
-(`github_repository`, `@luke/database/models/github-repositories`); where
+(`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
 name of it (tasks, agents, automations, pins, token reads, chapters, and
 workspace token repositories) moves to the new one in the same transaction,
@@ -289,7 +289,7 @@ Automations fire on Sentry's events (an issue alert whose action is Vespin, a
 new issue) through Vespin's own Sentry public integration, which a Sentry
 organization's owner installs on one Vespin workspace; a delivery fires only
 the automations of the workspace its installation stands for
-(`integration_installation`, `@luke/database/models/integration-installation-store`).
+(`integration_installation`, `@repo/database/models/integration-installation-store`).
 `src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
 as the web runtime builds it from `SENTRY_APP_SLUG` (the integration's slug,
 which its install address names), `SENTRY_APP_CLIENT_ID`, and
@@ -326,7 +326,7 @@ on a Preview. An owner or admin connects the bot under Settings › Workspace
 team in `slack_installation`, one per workspace; Disconnect deletes it.
 `SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
 time and keeps the answer, a miss included, in `slack_member`
-(`@luke/database/models/slack-installation-store`). `dm` and `update` log and
+(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
 swallow every failure; never yield either inside a transaction.
 
 ## The admin resource
@@ -334,8 +334,8 @@ swallow every failure; never yield either inside a transaction.
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
 oRPC router (`admin` in `src/orpc/router.ts`): its reads and the Users tab's
 one star write, PUT to set it and DELETE to take it back, each a procedure
-of `@luke/features/contract`'s `admin` contract, whose addresses are
-`ADMIN_ROUTE_PATH` in `@luke/features/admin-wire` — the same constants the
+of `@repo/features/contract`'s `admin` contract, whose addresses are
+`ADMIN_ROUTE_PATH` in `@repo/features/admin-wire` — the same constants the
 page's browser client asks through, so an address cannot drift between the
 two ends. A method an address does not answer is the handler's 405 before
 anything else runs.
@@ -400,20 +400,11 @@ never falls to the cookie beside it, because Better Auth's bearer plugin
 leaves the cookie standing under any header it did not sign. So a page on the
 deployment's own origin reaches the account routes the desktop does, its
 state-changing requests held to that origin by `src/http/origin-guard.ts`
-first. The work that reaches an agent's session picks its caller per request
-in one place (`src/agents/coder-host/stop.ts`'s `eveFor`): a request that
-carries an `Authorization` header reaches it over that bearer as it came, as
-every desktop request does, and one that carries none, whose account the
-cookie named, as the deployment acting for that account. The account is
-always the one the route resolved from that request, never one the request or
-a row names, and a deployment with no `EVE_DEPLOYMENT_SECRET` or no eve
-origin answers such a request unavailable, a delete included: a cookie's
-delete composes the sessions before it stops or erases anything and is
-refused where it cannot (`src/agents/retire-sessions.ts`'s `retiringReach`),
-while a bearer's goes on with its retires a courtesy, as it always has.
-Either way a coding agent's session is answered by the harness its
-conversation runs on (`src/agents/coder-host/runtime-sessions.ts`), and one
-that ran on eve is refused as ended; nothing is sent to eve. What acts for
+first. The work that reaches an agent's session reaches it for the account
+the route resolved from that request, never one the request or a row names,
+whether a bearer or a cookie named it (`src/agents/coder-host/runtime-sessions.ts`'s
+`routedSessions`): a coding agent's session is answered by the harness its
+conversation runs on, and one that ran on eve is refused as ended. What acts for
 one device rather than the account takes the bearer alone: the Mac's
 commands (`resolveHostedBearerUserId`), as the terminal relay
 resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -426,7 +417,7 @@ policy keeps an SVG's script from running as this origin.
 `src/dictation/dictation-procedures.ts` answers `POST /api/dictation` on the
 hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
-(`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
+(`@repo/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
@@ -493,7 +484,7 @@ account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, `DELETE
 ?provider=<provider>` removes one, and `PATCH` turns a connected plan's
 default for the account's agents on or off, each answered with the keys as they then
-stand (`@luke/features/provider-key-wire`). No answer carries a key: what
+stand (`@repo/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
 `verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
@@ -606,7 +597,7 @@ server takes a GitHub App user token, and an account that signed in with
 GitHub already holds one: the Vespin GitHub App's, which `GitHubApp.userToken`
 reads off the `account` row and refreshes ("The Vespin GitHub App" above). So
 GitHub has no connector, no `integration_connection` row, and no Connect or
-Disconnect (`INTEGRATION_GRANT_OF` in `@luke/features/integration-wire`): the
+Disconnect (`INTEGRATION_GRANT_OF` in `@repo/features/integration-wire`): the
 statuses route answers it `connected` while that token reads, `disconnected`
 for an account with no usable GitHub sign-in, and `unavailable` on a
 deployment without the App, and a turn is handed GitHub's server wherever the
@@ -638,7 +629,7 @@ was possible, and a minted `luke_acct_…` id for another. Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
-`@luke/features/integration-wire`) and read back from the row after. That
+`@repo/features/integration-wire`) and read back from the row after. That
 name is the MCP server an agent reaches the account through, an agent's switch and mention, and the routes' `connection` query, so every
 name stored before a second account was possible keeps naming the first.
 A row also keeps a `label`, the account's name at the provider where
@@ -758,7 +749,7 @@ reads a task's id.
 **The agents** (`src/integrations/connection-door.ts`,
 `src/agents/agent-runtime/servers.ts`). Each connection an agent is handed
 is an MCP server of its own at Vespin
-(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`)
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/workspace-mcp/app.ts`)
 on the runner's bearer, and the launch names them (`nativeAgentConnections`):
 every integration offered to the caller that the developer has not switched
 off for that agent, the switches naming connections, and a server mentioned
@@ -785,7 +776,7 @@ Codex agent's call of a connection (`mcp__linear__list_issues`, or Codex's
 input }` and, for an account past the provider's first, its `connection`, the
 call its own parent, and settled with what the provider answered. Both the
 names and that envelope are the wire's
-(`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
+(`@repo/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
 `integrationRemoteCallSchema`), because the desktop draws the call as the
 provider's tool, under the provider's mark. An eve agent reached a connection
 through `connection_search` and `connection_execute`, and its transcript
@@ -1145,14 +1136,14 @@ as the deployment acting for the cookie's account ("Reaching eve as the
 deployment").
 
 The agent is offered Vespin's own tools on Vespin's MCP server
-(`src/agents/luke-mcp/app.ts`, at `/api/agents/mcp`), which admits the
+(`src/agents/workspace-mcp/app.ts`, at `/api/agents/mcp`), which admits the
 runner's bearer, minted at each launch and kept on the agent's row only as
-its hash (`luke-mcp/bearer.ts`), and runs each call as the agent's starter
+its hash (`workspace-mcp/bearer.ts`), and runs each call as the agent's starter
 through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
-Code sees them as `mcp__luke__<tool>`, Codex as the `luke` server. Its shell,
+Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
-(`@luke/features/plan-template`'s `planNotesSchema`)
+(`@repo/features/plan-template`'s `planNotesSchema`)
 into the plan of the task the call names, the agent's own or any other of
 its workspace, through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
@@ -1234,7 +1225,7 @@ mentions, since an agent's servers are its developer's to switch.
 `gh` and `git` run through the shell, authenticated at the firewall.
 
 A Claude Code agent's worker is the runner's one declared subagent
-(`CLAUDE_CODE_WORKER`, in `@luke/agent-runner`): it runs on the agent's own
+(`CLAUDE_CODE_WORKER`, in `@repo/agent-runner`): it runs on the agent's own
 model, read-only, denied every edit, the Agent tool, and Vespin's MCP server,
 and the agent hands it work through Claude Code's Agent tool. A Codex agent
 uses Codex's own subagents. Neither opens a conversation of its own in the
@@ -1295,7 +1286,7 @@ session's instructions say whether the CI read was granted
 checks with `gh pr checks` and fixes what fails for at most
 `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was not watched.
 
-The runner (`@luke/agent-runner`) runs in the sandbox as an unprivileged
+The runner (`@repo/agent-runner`) runs in the sandbox as an unprivileged
 user and drives Claude Code through its Agent SDK or Codex through its app
 server. It posts numbered batches of the harness's events to
 `/api/agents/runner-events` (`src/agents/native-events/runner-events-app.ts`),
@@ -1309,7 +1300,7 @@ credential off the firewall and stops the sandbox, unless a Terminal holds
 it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
 harness and handed to it at every launch) tell the agent to read `AGENTS.md`
 and `CLAUDE.md` first, reread the code the plan names and say where it no
-longer fits, run the repository's checks, work on a `luke/<slug>` branch and
+longer fits, run the repository's checks, work on an `agent/<slug>` branch and
 never push the default branch, and decide on a pull request and its draft
 state itself; the plan is the session's first message, or for an agent started
 on a developer's prompt, the prompt is, the agent is never handed the plan,
@@ -1322,7 +1313,7 @@ credentials.
 
 `src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
 router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
-template procedures, on the paths `@luke/features/contract`'s `account.ts`
+template procedures, on the paths `@repo/features/contract`'s `account.ts`
 declares, each answering from this deployment's own database.
 Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
@@ -1364,7 +1355,7 @@ must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
 `experiments` is the third part: each experiment the account turned on or
-back off in Settings › Experimental, keyed by `@luke/settings`'s
+back off in Settings › Experimental, keyed by `@repo/settings`'s
 `EXPERIMENT`, as `{ "memory": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
 whose keys are merged over what stood (`jsonb ||` on the `experiments`
@@ -1422,7 +1413,7 @@ the member's whose words the memory holds, or an owner's or admin's
 ## The chapters group
 
 `src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
-(`@luke/features/pull-request-chapters`): `generateChapters(model, input)`
+(`@repo/features/pull-request-chapters`): `generateChapters(model, input)`
 groups, orders, and narrates the hunks in one structured call
 (`Output.object`, its JSON Schema emitted from the Effect Schema that decodes
 the answer), holds the answer to the diff, asks once more for any hunk it left
@@ -1459,7 +1450,7 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`); then
+(`@repo/features/plan-markdown`); then
 makes the agent and its conversation
 (`createAgent`), and opens the agent's session on its harness under the
 developer's own bearer with the snapshot as the first message of a typed
@@ -1618,7 +1609,7 @@ An automation is an account's saved agent Start on one of its tasks,
 fired by a trigger. The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
-and the guards as `@luke/features/automation-wire`'s own JSON; every
+and the guards as `@repo/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
 run. The store is `packages/database/src/models/automation-store.ts`: an
@@ -1626,7 +1617,7 @@ automation is made only on a task the account reaches, and every other
 statement an account makes names it.
 
 A schedule is five-field cron read in an IANA zone
-(`@luke/features/automation-schedule`), so nine o'clock stays nine o'clock
+(`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
 often than every fifteen minutes is refused. Its next due instant is the
 row's `next_run_at`, which the minute sweep claims by
@@ -1736,8 +1727,8 @@ brackets spelled as entities, cut with a note where it would push the prompt
 past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
-`@luke/features/automation-wire` declares every body and `service-paths.ts`
-the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
+`@repo/features/automation-wire` declares every body and `service-paths.ts`
+the addresses, `@repo/features/contract`'s `automations.ts` the procedures;
 `src/automations/automations-procedures.test.ts` holds the routes over a fake
 of the agents' sessions, a scripted GitHub, a fixed catalog, and PGlite.
 
@@ -1766,10 +1757,10 @@ or a person; and, for a pull request, its moment (opened or reopened, marked
 ready, pushed to), whether it is a draft, and whether it comes from a fork
 (its head in another repository, or in none). The trigger's settings choose
 among them (`senders`, `moments`, `drafts`, `forks` in
-`@luke/features/automation-wire`): people's events alone, every moment, and
+`@repo/features/automation-wire`): people's events alone, every moment, and
 no draft or fork where it names none. An automation cannot fire itself
 whatever its settings say: a push by Vespin's agents, to a branch or to a pull
-request, fires nothing, and neither does a failed check on a `luke/` branch,
+request, fires nothing, and neither does a failed check on an agent's branch (`agent/`, or `luke/` before it),
 where an agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
@@ -1933,7 +1924,7 @@ App or store the service could not read `unavailable`, the task standing as
 it was. A change naming null clears it.
 
 A `repository-not-reachable` refusal says why in `unreached`
-(`@luke/features/repository-reach-wire`, read by `repositoryReach` on the
+(`@repo/features/repository-reach-wire`, read by `repositoryReach` on the
 `GitHubApp`), naming the repository: the workspace has nothing connected
 (`not-connected`); the installation GitHub no longer knows or its account
 suspended (`connection-lapsed`); the installation is on another account
@@ -2100,7 +2091,7 @@ reproduction on 18 already. On either dialect an opening of the test
 database is a database of that opening's own: a fresh PGlite, or a clone of
 the database `APP_STORE_TEST_DATABASE_URL` names, made with
 `create database ... template ...` on the cluster's `postgres` maintenance
-database and dropped when the file closes it (`@luke/database/testing`, the
+database and dropped when the file closes it (`@repo/database/testing`, the
 one door that reads the variable). Nothing writes to the named database
 itself after `db:migrate`, so a statement a test forgets to scope by account
 or conversation reaches its own file's rows and no other file's. To run a
@@ -2109,38 +2100,15 @@ may `create database`, migrated by `db:migrate` alone, because that is the
 runner which records what it applied and the tests copy what it recorded:
 
 ```sh
-DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
+DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @repo/web db:migrate
 APP_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
-
-## Reaching eve as the deployment
-
-A hosted route that holds no bearer of the account's reaches an agent's
-sessions as the deployment acting for one account
-(`src/agents/deployment-eve.ts`'s `deploymentEve`, and the agent tools'
-doors in `src/agents/coder-host/agent-doors.ts`): a cookie request's
-`eveFor`, a GitHub wake, an automation's run, an agent's own `start_agent`
-and `message_agent`, and a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`). Every coding agent's session it composes is
-answered by the harness its conversation runs on
-(`src/agents/coder-host/runtime-sessions.ts`), so nothing reaches eve, whose
-service and door are gone, and an agent that ran on eve is refused as ended.
-The composition still asks for the deployment's `EVE_DEPLOYMENT_SECRET` and
-an eve origin (`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`:
-`APP_EVE_ORIGIN` where it is set, otherwise the project's production domain
-in production and the deployment's own host on any other deployment), and
-answers unavailable where either is missing, although neither is sent
-anywhere that checks it now. Production and Preview each hold a secret of
-their own, and neither is `CRON_SECRET`'s. One set to the cron's value is
-read as unset (`environment.ts`), as a blank one is: the build logs that
-once, by the two names, and the admin dashboard's Reliability screen shows it
-as not configured.
 
 ## Vespin Sync
 
 `src/sync/` is what a wait on the database waits through. A reader opens a
 watch on the topics its rows notify (`src/sync/watch.ts`; the topics and the
-triggers that send them are `@luke/database/sync`), reads, and waits on the
+triggers that send them are `@repo/database/sync`), reads, and waits on the
 watch's `next` before each read after; `heldUntil` (`src/http/held-read.ts`)
 holds every held read this way. The watch is opened before the first read, so
 a write that commits while that read runs still wakes the next look.
@@ -2194,10 +2162,8 @@ at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
-routes alone, this one and the provider-key rewrap asked by hand: every
-other web function acts for an account as the deployment instead
-("Reaching eve as the deployment"), under a secret that is never the cron's,
-so the scheduler's secret opens no session. Without it the route answers 503 and the schedule is
+routes alone, this one and the provider-key rewrap asked by hand, so the
+scheduler's secret opens nothing else. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

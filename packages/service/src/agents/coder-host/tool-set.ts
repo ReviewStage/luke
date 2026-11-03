@@ -1,9 +1,9 @@
-import type { Agent } from "@luke/database/models/agent-store";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+import type { Agent } from "@repo/database/models/agent-store";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@repo/features/agent-tools";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { inboxSandboxPicturePaths } from "@repo/features/inbox-attachment-link";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { ToolSet } from "ai";
 import { Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -179,7 +179,7 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * repository or where it runs offers it, `run_on_mac` where no one but its
  * starter has put words into it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn started; an eve agent's MCP popover reads it (`../luke-tools.ts`).
+ * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,

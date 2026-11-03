@@ -5,7 +5,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Option, Schema } from "effect";
 import { AGENT_TOOL } from "./agent-tools.js";
 import {

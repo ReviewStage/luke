@@ -1,5 +1,5 @@
-import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { TRANSCRIPT_KIND } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
@@ -15,28 +15,28 @@ import {
   type AgentTranscriptMessage,
   agentMessageWords,
   QUEUE_CHANGE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
-import { threadLineWords } from "@luke/features/inbox-wire";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
-import type { KnownNames } from "@luke/features/place-chip-model";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type FailureReason, remedyLabel } from "@repo/features/failure-remedy";
+import { threadLineWords } from "@repo/features/inbox-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@repo/features/models-wire";
+import type { KnownNames } from "@repo/features/place-chip-model";
 import {
   FAILURE_CONDITION,
   FAILURE_SURFACE,
   type FailureAbout,
-} from "@luke/features/shown-failure";
-import type { TaskStatus } from "@luke/features/task-wire";
-import { workingTime } from "@luke/features/time-format";
+} from "@repo/features/shown-failure";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { workingTime } from "@repo/features/time-format";
 import {
   CALL_KIND,
   CALL_WORDS,
   isMadeCallKind,
   sameFieldsBy,
   sameShape,
-} from "@luke/features/turn-rows";
-import { replyFromWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { AGENT_ENTER } from "@luke/settings";
+} from "@repo/features/turn-rows";
+import { replyFromWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
   announce,
@@ -69,14 +69,14 @@ import {
   TEXT_VARIANT,
   Text,
   useAnnounce,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE } from "@luke/ui/icons";
-import { skillWord } from "@luke/ui/skill-mention";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
+import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { skillWord } from "@repo/ui/skill-mention";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
+import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,
@@ -354,7 +354,7 @@ export const AGENT_LEAD: TranscriptLead = {
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
-/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--luke-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
+/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
 
 /**
@@ -2374,7 +2374,7 @@ function AgentTranscriptView({
               {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
               {olderFailed && onOlder !== undefined ? (
                 <div
-                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
+                  className={`${FLOATING_OVER_LOG_CLASS} top-ui-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
                   <ErrorState
                     failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}

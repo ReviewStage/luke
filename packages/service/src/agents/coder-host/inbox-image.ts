@@ -1,8 +1,8 @@
 import { posix } from "node:path";
-import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
-import { SIGNATURE_BYTES } from "@luke/features/image-signature";
-import { INBOX_BOUNDS, type InboxImageType } from "@luke/features/inbox-wire";
-import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature";
+import { type ConversationMediaType, isVideoType } from "@repo/features/conversation-picture-wire";
+import { SIGNATURE_BYTES } from "@repo/features/image-signature";
+import { INBOX_BOUNDS, type InboxImageType } from "@repo/features/inbox-wire";
+import { mediaDimensions, sniffMediaType } from "@repo/features/media-signature";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
@@ -163,7 +163,7 @@ function postedBytesOf(type: ConversationMediaType): number {
  * A picture or a WebM recording a post draws, at the path, or the one
  * sentence refusing it in the refusals' words: a still held to the picture
  * bound, and a recording to the video bound and refused where it states no
- * size, as `show_image` refuses one (`@luke/features/media-signature`).
+ * size, as `show_image` refuses one (`@repo/features/media-signature`).
  * Note that the stream is read to the larger bound and a still is held to
  * its own once its type is known, because the type is sniffed from bytes
  * the bound has already let in.

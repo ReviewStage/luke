@@ -3,7 +3,7 @@
  *
  * The one registry of the agent runtime's tools:
  * each tool, named once by the name a model calls it by
- * (`@luke/features/agent-tools`, which the desktop reads its calls by too),
+ * (`@repo/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
  * twice is derived from it: what each coding agent's authored tools are
  * (`../coder-host/tool-set.ts`), and every set the store writer holds a
@@ -19,7 +19,7 @@
  * registry imports no tool and no host, and every module may import it.
  */
 
-import { AGENT_TOOL, type AgentTool } from "@luke/features/agent-tools";
+import { AGENT_TOOL, type AgentTool } from "@repo/features/agent-tools";
 import { AGENT_ROLE, type AgentRole } from "./role.js";
 
 export { AGENT_TOOL, type AgentTool };

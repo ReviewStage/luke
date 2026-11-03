@@ -1,5 +1,5 @@
-import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
+import { BUTTON_VARIANT, Button, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 import { useRef, useState } from "react";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import {

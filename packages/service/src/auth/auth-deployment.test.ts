@@ -8,7 +8,7 @@ const PRODUCTION_URL = "https://vespin.dev";
 
 const PRODUCTION = {
   VERCEL_ENV: "production",
-  VERCEL_URL: "luke-abc123-luke.vercel.app",
+  VERCEL_URL: "vespin-abc123-other.vercel.app",
   BETTER_AUTH_URL: PRODUCTION_URL,
   BETTER_AUTH_PROXY_SECRET: "shared",
 } as const;
@@ -43,30 +43,33 @@ test("production trusts every preview, by deployment or by branch, and the dev s
 
 test("production trusts no other host", async () => {
   assert.equal(await productionTrusts("https://evil-stage-review.vercel.app"), false);
-  assert.equal(await productionTrusts("https://luke-abc-stage-review.vercel.app.evil.com"), false);
-  assert.equal(await productionTrusts("https://luke-abc-stage-review.evil.com"), false);
-  assert.equal(await productionTrusts("http://luke-abc-stage-review.vercel.app"), false);
+  assert.equal(
+    await productionTrusts("https://vespin-abc-stage-review.vercel.app.evil.com"),
+    false,
+  );
+  assert.equal(await productionTrusts("https://vespin-abc-stage-review.evil.com"), false);
+  assert.equal(await productionTrusts("http://vespin-abc-stage-review.vercel.app"), false);
   assert.equal(await productionTrusts("http://localhost:3000"), false);
 });
 
 test("a preview trusts its own hostnames and no other preview", () => {
   const deployment = authDeployment({
     VERCEL_ENV: "preview",
-    VERCEL_URL: "luke-abc123-stage-review.vercel.app",
-    VERCEL_BRANCH_URL: "luke-web-git-feature-stage-review.vercel.app",
+    VERCEL_URL: "vespin-abc123-stage-review.vercel.app",
+    VERCEL_BRANCH_URL: "vespin-git-feature-stage-review.vercel.app",
     BETTER_AUTH_URL: PRODUCTION_URL,
   });
 
-  assert.equal(deployment.baseURL, "https://luke-abc123-stage-review.vercel.app");
+  assert.equal(deployment.baseURL, "https://vespin-abc123-stage-review.vercel.app");
   assert.deepEqual(deployment.trustedOrigins, [
-    "https://luke-web-git-feature-stage-review.vercel.app",
+    "https://vespin-git-feature-stage-review.vercel.app",
   ]);
 });
 
 test("a blank proxy secret is no secret", () => {
   const deployment = authDeployment({
     VERCEL_ENV: "preview",
-    VERCEL_URL: "luke-abc123-luke.vercel.app",
+    VERCEL_URL: "vespin-abc123-other.vercel.app",
     BETTER_AUTH_URL: PRODUCTION_URL,
     BETTER_AUTH_PROXY_SECRET: "  ",
   });

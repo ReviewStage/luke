@@ -1,6 +1,6 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { type TerminalAction, type TerminalBar, terminalLook } from "@repo/features/terminal-model";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   ANNOUNCE,
   ERROR_STATE_PLACEMENT,
@@ -12,7 +12,7 @@ import {
   Shortcut,
   TEXT_BUTTON_TONE,
   TextButton,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -101,7 +101,7 @@ function StateBar({
   useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
     <div
-      className="terminal-bar flex min-h-7 flex-none flex-wrap items-center gap-x-control-gap gap-y-list-gap whitespace-nowrap border-b border-border bg-muted py-tight-gap pr-list-inset pl-luke-16 font-mono text-caption text-muted-foreground"
+      className="terminal-bar flex min-h-7 flex-none flex-wrap items-center gap-x-control-gap gap-y-list-gap whitespace-nowrap border-b border-border bg-muted py-tight-gap pr-list-inset pl-ui-16 font-mono text-caption text-muted-foreground"
       data-late={String(bar.late)}
       onAnimationEnd={() => setRevealed(true)}
     >
@@ -124,7 +124,7 @@ function StateBar({
             {action.label}
             <Shortcut
               chord={{ key: SHORTCUT_KEY.ENTER, bare: true }}
-              className="ms-tight-gap [--luke-shortcut-ink:currentColor]"
+              className="ms-tight-gap [--ui-shortcut-ink:currentColor]"
             />
           </TextButton>
         )}

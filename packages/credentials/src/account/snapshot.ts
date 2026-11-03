@@ -1,5 +1,5 @@
-import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
-import type { UnparsedWireValue } from "@luke/wire";
+import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 
 export const ACCOUNT_PROVIDER = {

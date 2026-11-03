@@ -2,8 +2,8 @@ import {
   DIFF_SETTING_GROUPS,
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   type SettingsRowsInput,
-} from "@luke/settings";
-import { SettingsSection } from "@luke/ui";
+} from "@repo/settings";
+import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 

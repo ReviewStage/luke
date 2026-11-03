@@ -5,17 +5,17 @@ import {
   type MentionPlace,
   type PlanMention,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import { type PlanSection, planSections } from "@luke/features/plan-document";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+} from "@repo/features/mention-link";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import { type PlanSection, planSections } from "@repo/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
   type Task,
-} from "@luke/features/task-wire";
-import { agoText, momentText, sinceText } from "@luke/features/time-format";
+} from "@repo/features/task-wire";
+import { agoText, momentText, sinceText } from "@repo/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
@@ -29,11 +29,11 @@ import {
   Tooltip,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
-import type { MarkdownTaskToggler } from "@luke/ui/markdown";
-import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
+import type { MarkdownTaskToggler } from "@repo/ui/markdown";
+import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { diffArrays } from "diff";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
@@ -118,7 +118,7 @@ import {
  *
  * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address
- * (`@luke/features/mention-link`), which a transcript or the plan draws as
+ * (`@repo/features/mention-link`), which a transcript or the plan draws as
  * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
@@ -356,7 +356,7 @@ function ChangedLine({
   const editors = editorsOf(edits, marks.place);
   // Note that the line keeps the room it always had under "Edited by" and Dismiss overhangs it, so the button does not push the document down.
   return (
-    <p className="plan-changed-note -mt-luke-6 mb-luke-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
+    <p className="plan-changed-note -mt-ui-6 mb-ui-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
       <span className="actor-line">
         {changedLine(looks.changed.size, editors.length > 0)}
         {editors.length === 0 ? null : (
@@ -442,7 +442,7 @@ const UNIT_CLASS = "plan-unit";
 
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
 const CHANGED_CLASS =
-  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
+  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-ui-6 after:-inset-y-ui-2 after:-z-1 after:rounded-ui-6 after:bg-plan-changed";
 
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
@@ -667,12 +667,12 @@ function attributed(
   if (byline === null && menu === null) return drawn;
   // Note that the byline and the ⋯ share one row, because a row centres the
   // line on the button's box where two separately placed boxes never quite do.
-  // The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always
+  // The row hangs past the column's edge by `--ui-space-6`, as the ⋯ always
   // has, and takes no pointer itself, only its byline and its ⋯ do.
   return (
     <div className={UNIT_ATTRIBUTED_CLASS}>
       {drawn}
-      <div className="plan-unit-row pointer-events-none absolute top-0 -right-luke-6 flex h-control w-plan-unit-row items-center justify-end gap-tight-gap">
+      <div className="plan-unit-row pointer-events-none absolute top-0 -right-ui-6 flex h-control w-plan-unit-row items-center justify-end gap-tight-gap">
         {byline}
         {menu}
       </div>

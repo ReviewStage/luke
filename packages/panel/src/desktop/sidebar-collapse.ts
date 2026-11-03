@@ -54,8 +54,8 @@ type SidebarOverlay = PaneFloat;
 
 /** The fold and the width, kept on this Mac. */
 const KEPT = {
-  COLLAPSED: keptKey("luke.sidebar-collapsed", keptFlag),
-  WIDTH: keptKey("luke.sidebar-width", Schema.FiniteFromString),
+  COLLAPSED: keptKey("app.sidebar-collapsed", keptFlag),
+  WIDTH: keptKey("app.sidebar-width", Schema.FiniteFromString),
 } as const;
 
 function clampWidth(width: number): number {

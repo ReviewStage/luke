@@ -44,7 +44,7 @@
         "server/feedback.d.mts"
       ],
       "project": ["src/**", "server/**", "scripts/**", "tests/**"],
-      "ignoreDependencies": ["@luke/brand"]
+      "ignoreDependencies": ["@repo/brand"]
     },
     "packages/*": {
       "entry": [

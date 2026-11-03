@@ -1,12 +1,12 @@
-import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
 import {
   ATTACHMENT_VIEW,
   attachmentView,
   chipBase64,
   type FileChip,
   sizeLabel,
-} from "@luke/features/attachment-model";
-import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
+} from "@repo/features/attachment-model";
+import { keptPictureIdOf } from "@repo/features/conversation-picture-wire";
 import {
   ALIGN,
   ATTACHMENT_CHIP_STATE,
@@ -17,8 +17,8 @@ import {
   LIST_MOTION_WAY,
   ListMotion,
   useLeaving,
-} from "@luke/ui";
-import { isRecord, isWireString } from "@luke/wire";
+} from "@repo/ui";
+import { isRecord, isWireString } from "@repo/wire";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { FileTypeIcon } from "./file-type-icon.js";

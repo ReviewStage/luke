@@ -1,16 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@luke/database/github-installation-vocabulary";
-import { listAgentsOnBranches } from "@luke/database/models/agent-store";
+} from "@repo/database/github-installation-vocabulary";
+import { listAgentsOnBranches } from "@repo/database/models/agent-store";
 import {
   noteGitHubRepository,
   type RepositorySighting,
-} from "@luke/database/models/github-repositories";
-import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/database/models/github-repositories";
+import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,
@@ -19,9 +19,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { agentPublished } from "../agents/coder-host/published.js";
-import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
-import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -62,7 +60,7 @@ import { setInstallationStatus } from "./github-installations.js";
  *
  * Before anything else of a delivery is read, the repository it names is
  * recorded by GitHub's id under the name it carries
- * (`@luke/database/models/github-repositories`), which relabels every stored
+ * (`@repo/database/models/github-repositories`), which relabels every stored
  * name of the repository where GitHub renamed or transferred it since it was
  * last seen, so the agents, tasks, and automations below are found under
  * its name now; a delivery late or redelivered, older by the repository's
@@ -73,7 +71,7 @@ import { setInstallationStatus } from "./github-installations.js";
  *
  * An installation's own deliveries, which GitHub sends every App without
  * its subscribing, move the status of the workspace that stands for it
- * (`@luke/service/github/github-installations`): removed or suspended marks it
+ * (`@repo/service/github/github-installations`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
  * suspended and brought back keeps its members and its tasks. GitHub never
  * redelivers a failed delivery on its own, so a status one missed is mended
@@ -455,12 +453,8 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     // Note that the checks finishing are read after the agents' pull requests were read again above,
     // because a wake tells only the agents whose row keeps the finished commit as their head.
     const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
-    // eve's coding-agent service as the deployment acting for each agent's owner, as an automation's
-    // run reaches it (`agents/deployment-eve.ts`); a deployment that cannot reach it tells nobody.
-    const eveForAccount: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
-      deploymentEveOrigin(),
-      EVE_MOUNT.CODER,
-    );
+    // Each agent's sessions as the deployment acting for its owner, as an automation's run reaches them.
+    const eveForAccount: EveForAccount = routedSessions;
     const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
         ? Effect.succeed(0)

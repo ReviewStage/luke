@@ -59,7 +59,7 @@ export interface ProcessTableShape {
 }
 
 export class ProcessTable extends Context.Service<ProcessTable, ProcessTableShape>()(
-  "@luke/agent-runner/ProcessTable",
+  "@repo/agent-runner/ProcessTable",
 ) {}
 
 /** The program and the listening address of Claude Code's command-sandbox bridge, as its command line spells them. */

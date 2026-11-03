@@ -7,10 +7,10 @@
  * without an evaluation-order cycle.
  */
 
-import type { IntegrationProvider } from "@luke/features/integration-wire";
-import type { TasksView } from "@luke/features/planning-view";
-import type { ActKind, ActPayload, ActResultFor } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
+import type { IntegrationProvider } from "@repo/features/integration-wire";
+import type { TasksView } from "@repo/features/planning-view";
+import type { ActKind, ActPayload, ActResultFor } from "@repo/host/acts";
+import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
 import type { MainTab } from "../tasks/use-main-tabs";

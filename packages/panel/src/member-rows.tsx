@@ -1,7 +1,7 @@
-import { readFailedWords, TERM, VERB } from "@luke/features/words";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { MENU_DETAIL } from "@luke/ui";
-import { memberActor, type PersonActor } from "@luke/ui/actor-model";
+import { readFailedWords, TERM, VERB } from "@repo/features/words";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
+import { MENU_DETAIL } from "@repo/ui";
+import { memberActor, type PersonActor } from "@repo/ui/actor-model";
 import { UserIcon, UsersIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, PersonCard } from "./actor-ref.js";
 import type { MenuAction } from "./desktop/action-menu.js";

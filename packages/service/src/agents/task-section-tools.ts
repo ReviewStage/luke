@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { deleteTaskSectionIn, writeTaskSections } from "@luke/database/models/task-section-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { deleteTaskSectionIn, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -7,8 +7,8 @@ import {
   type TaskSection,
   taskSectionEmojiSchema,
   taskSectionTitleSchema,
-} from "@luke/features/task-section-wire";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/features/task-section-wire";
+import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
@@ -35,7 +35,7 @@ import { calledId } from "./called-id.js";
  * `list_tasks`, which names each task's section and the sections themselves,
  * and `update_task`, whose `sectionId` moves a task into one or out of them
  * (`agent-tools.ts`). A section is its maker's
- * own, as the sidebar's are (`@luke/features/task-section-wire`), so each
+ * own, as the sidebar's are (`@repo/features/task-section-wire`), so each
  * call acts on the sections of the member the caller acts for (the coding
  * agent's starter), in the caller's own
  * workspace, read on that member's standing now; a section of another

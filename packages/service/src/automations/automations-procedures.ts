@@ -3,9 +3,9 @@ import {
   listAutomationRuns,
   listAutomations,
   readAutomation,
-} from "@luke/database/models/automation-store";
+} from "@repo/database/models/automation-store";
 import { Effect, Option } from "effect";
-import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { SERVER_AUTOMATION_SOURCE } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -49,7 +49,7 @@ import {
  * run's agent is summarized with its status as the agent's tab reads it.
  */
 
-export interface AutomationsProcedureSeams extends EveReach {
+export interface AutomationsProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
@@ -145,7 +145,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       }
       // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
       const ran = yield* runAutomationNowAs(userId, automation.value, key, () =>
-        eveFor<EveTypedTurn>(seams, context.request, userId),
+        routedSessions<EveTypedTurn>(userId),
       );
       return {
         status: ran.made ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,

@@ -7,7 +7,7 @@
  * process the first time a block arrives, and a block that cannot be
  * coloured is answered plain, so the asking side always hears back.
  */
-import { catchAllButInterrupt } from "@luke/runtime/effect";
+import { catchAllButInterrupt } from "@repo/runtime/effect";
 import { Effect, Option, Queue, Schema } from "effect";
 import { highlightSnippet } from "./task-code.js";
 import {

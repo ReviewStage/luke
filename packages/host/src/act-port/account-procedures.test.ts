@@ -5,8 +5,8 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   type SignInAnswer,
-} from "@luke/credentials/snapshot";
-import { SIGN_IN_FAILURE } from "@luke/features/words";
+} from "@repo/credentials/snapshot";
+import { SIGN_IN_FAILURE } from "@repo/features/words";
 import { Effect, Option } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import { accountProcedures } from "./account-procedures.js";

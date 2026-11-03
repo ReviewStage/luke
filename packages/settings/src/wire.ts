@@ -1,4 +1,4 @@
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Predicate, Schema } from "effect";
 import type { ExperimentChoices } from "./experiments.js";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";

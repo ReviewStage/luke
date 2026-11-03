@@ -1,20 +1,20 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { HOST_TARGET } from "@luke/features/host-release";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@repo/features/device-agent-wire";
+import { HOST_TARGET } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   type HostPairingStartAnswer,
-} from "@luke/features/host-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+} from "@repo/features/host-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import {
   jsonResponse,
   type RecordedRequest,
   type RecordingHttpClient,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
@@ -98,7 +98,7 @@ const settled = (done: () => boolean) =>
 
 /** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
-  const root = yield* temporaryDirectoryScoped("luke-host-daemon-");
+  const root = yield* temporaryDirectoryScoped("host-daemon-");
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
@@ -241,7 +241,7 @@ describe("a host's daemon", () => {
           XDG_CACHE_HOME: `${folder}/cache`,
           PNPM_HOME: `${folder}/home/.local/share/pnpm`,
           NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
-          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/agent/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.

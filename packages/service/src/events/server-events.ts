@@ -1,17 +1,17 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { settledTurnAgent } from "@luke/database/models/agent-store";
-import { readWorkspaceFace, type WorkspaceFace } from "@luke/database/models/workspace-store";
-import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
-import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
-import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
-import type { AgentKind, AgentMachineKind } from "@luke/features/agent-wire";
-import type { AutomationFiringKind, AutomationTriggerKind } from "@luke/features/automation-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
-import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
-import type { TASK_STATUS } from "@luke/features/task-wire";
-import { TURN_FAILURE } from "@luke/features/turn-run";
-import type { INVITATION_ROLE } from "@luke/features/workspace-invitation-wire";
-import { TURN_STATUS } from "@luke/wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { settledTurnAgent } from "@repo/database/models/agent-store";
+import { readWorkspaceFace, type WorkspaceFace } from "@repo/database/models/workspace-store";
+import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/models/writer";
+import { PULL_REQUEST_CHAPTERS_FAILURE } from "@repo/database/pull-request-chapters-vocabulary";
+import type { ConversationRuntime } from "@repo/database/storage-vocabulary";
+import type { AgentKind, AgentMachineKind } from "@repo/features/agent-wire";
+import type { AutomationFiringKind, AutomationTriggerKind } from "@repo/features/automation-wire";
+import type { IntegrationProvider } from "@repo/features/integration-wire";
+import type { ProviderKeyProvider } from "@repo/features/provider-key-wire";
+import type { TASK_STATUS } from "@repo/features/task-wire";
+import { TURN_FAILURE } from "@repo/features/turn-run";
+import type { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
+import { TURN_STATUS } from "@repo/wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { readAccountPerson } from "../accounts/account-person.js";
@@ -34,7 +34,7 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./ev
  * and a member's changes to their skills, channels, machines, and workspace.
  *
  * It holds to the desktop's counted events' rule
- * (`@luke/features/analytics`'s `product-events.ts`): an event is a name from
+ * (`@repo/features/analytics`'s `product-events.ts`): an event is a name from
  * this file, and every property is one of this file's fixed words, a boolean,
  * a count, or an id from a catalog the service itself checked (a provider, a
  * model, an effort). Nothing typed, nothing a model wrote, and no title, branch,
@@ -222,7 +222,8 @@ export const SERVER_SIGN_IN_METHOD = {
 
 /** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
-  LUKE_HOST: "luke_host",
+  // Note that the box's word keeps the host program's old name, because the counted events before the rename carry it and a new word would split their history.
+  BOX_HOST: "luke_host",
   THIS_MAC: "this_mac",
 } as const;
 

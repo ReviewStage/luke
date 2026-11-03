@@ -1,5 +1,5 @@
-import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@luke/features/task-wire";
-import { THING_KIND, THING_WORD } from "@luke/features/thing-kind";
+import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@repo/features/task-wire";
+import { THING_KIND, THING_WORD } from "@repo/features/thing-kind";
 import {
   type ComboboxOption,
   HOVER_CARD_ROW_LOOK,
@@ -10,8 +10,8 @@ import {
   HoverCardSkeleton,
   INLINE_REF_LOOK,
   InlineRef,
-} from "@luke/ui";
-import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
+} from "@repo/ui";
+import { type SkillOption, skillWord } from "@repo/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { SkillSourceBadge } from "./skill-source-badge.js";
@@ -27,7 +27,7 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  * pill (`SkillRef`) in a sent message and in the composer's box alike, and
  * its card is the one a skill's row hangs, read as the skills land. Each place that can
  * open the skill's file hangs the one card while the pointer rests on the
- * name, drawn from every card's parts (`@luke/ui`'s `HoverCard`) and a task card's
+ * name, drawn from every card's parts (`@repo/ui`'s `HoverCard`) and a task card's
  * rows (`task-card.tsx`): the skill's mark and name at its head, with where
  * it comes from on the line under the name, what it is for under that, and, for one of the repository's, its file's line, named
  * from the repository's root, which says and does not open, since every

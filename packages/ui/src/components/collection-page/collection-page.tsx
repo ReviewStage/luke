@@ -108,13 +108,13 @@ function said(words: ReactNode): boolean {
  */
 function CollectionPageRowsSkeleton(): React.JSX.Element {
   return (
-    <div className="luke-collection-page-skeleton">
+    <div className="ui-collection-page-skeleton">
       {Array.from({ length: LOADING_ROWS }, (_, row) => (
-        <div key={row} className="luke-collection-page-skeleton-row">
-          <span className="luke-collection-page-skeleton-title">
+        <div key={row} className="ui-collection-page-skeleton-row">
+          <span className="ui-collection-page-skeleton-title">
             <Skeleton shape={SKELETON_SHAPE.LINE} width="40%" />
           </span>
-          <span className="luke-collection-page-skeleton-description">
+          <span className="ui-collection-page-skeleton-description">
             <Skeleton shape={SKELETON_SHAPE.LINE} width="65%" />
           </span>
         </div>
@@ -174,7 +174,7 @@ export function CollectionPage({
   const sized = WIDTH_CLASS[width];
   const filterLine = said(filters) ? (
     <div
-      className={`luke-collection-page-filters ${COLUMN_CLASS} ${sized.measure} flex-wrap items-center gap-control-gap pt-section-gap`}
+      className={`ui-collection-page-filters ${COLUMN_CLASS} ${sized.measure} flex-wrap items-center gap-control-gap pt-section-gap`}
     >
       {filters}
     </div>
@@ -183,7 +183,7 @@ export function CollectionPage({
   const toolbarGap = underToolbar && filterLine === null ? "pt-section-gap" : "";
   return (
     <section
-      className="luke-collection-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
+      className="ui-collection-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
       data-frame={heading.frame}
       data-width={width}
       aria-labelledby={underToolbar ? undefined : titleId}
@@ -193,13 +193,13 @@ export function CollectionPage({
         <>
           {heading.toolbar}
           {filterLine === null ? null : (
-            <div className={`luke-collection-page-top ${TOP_CLASS}`}>{filterLine}</div>
+            <div className={`ui-collection-page-top ${TOP_CLASS}`}>{filterLine}</div>
           )}
         </>
       ) : (
-        <div className={`luke-collection-page-top ${TOP_CLASS}`}>
+        <div className={`ui-collection-page-top ${TOP_CLASS}`}>
           <div
-            className={`luke-collection-page-header ${COLUMN_CLASS} ${sized.measure} pt-collection-page-inset`}
+            className={`ui-collection-page-header ${COLUMN_CLASS} ${sized.measure} pt-collection-page-inset`}
           >
             <PageHeader
               title={heading.title}
@@ -212,20 +212,20 @@ export function CollectionPage({
         </div>
       )}
       <div
-        className={`luke-collection-page-scroll flex flex-1 flex-col min-h-0 ${sized.scroll} overflow-y-auto overscroll-contain scrollbar-gutter-stable`}
+        className={`ui-collection-page-scroll flex flex-1 flex-col min-h-0 ${sized.scroll} overflow-y-auto overscroll-contain scrollbar-gutter-stable`}
         ref={scrollRef}
       >
         <div
-          className={`luke-collection-page-content ${COLUMN_CLASS} ${sized.measure} flex flex-col ${sized.content} ${toolbarGap}`}
+          className={`ui-collection-page-content ${COLUMN_CLASS} ${sized.measure} flex flex-col ${sized.content} ${toolbarGap}`}
         >
           {state === COLLECTION_STATE.LOADING ? (
             <CollectionPageSkeleton label={loadingLabel} skeleton={skeleton} />
           ) : null}
           {state === COLLECTION_STATE.EMPTY ? (
-            <div className={`luke-collection-page-notice ${NOTICE_CLASS}`}>{empty}</div>
+            <div className={`ui-collection-page-notice ${NOTICE_CLASS}`}>{empty}</div>
           ) : null}
           {state === COLLECTION_STATE.ERROR ? (
-            <div className={`luke-collection-page-notice ${NOTICE_CLASS}`}>{error}</div>
+            <div className={`ui-collection-page-notice ${NOTICE_CLASS}`}>{error}</div>
           ) : null}
           {state === COLLECTION_STATE.READY ? children : null}
         </div>

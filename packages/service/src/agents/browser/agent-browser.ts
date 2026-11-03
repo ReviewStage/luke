@@ -36,8 +36,8 @@ import {
   type CdpFailureKind,
   type CdpSession,
   type PageTarget,
-} from "@luke/features/browser-cdp";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/browser-cdp";
+import { readEither } from "@repo/wire/effect";
 import {
   Context,
   Data,

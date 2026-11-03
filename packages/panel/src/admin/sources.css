@@ -5,5 +5,5 @@
    against this file, so the web's standalone `/admin` page, which mounts these
    screens without the rest of the panel, reads their utilities and no other
    panel module's. A shell that mounts the whole panel takes
-   `@luke/panel/sources.css` instead, which covers this directory too. */
+   `@repo/panel/sources.css` instead, which covers this directory too. */
 @source "./";

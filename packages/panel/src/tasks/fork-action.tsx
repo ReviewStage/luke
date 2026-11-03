@@ -1,5 +1,5 @@
-import { AGENT_MACHINE, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { AGENT_MACHINE, type AgentAttachment, type AgentSummary } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -12,9 +12,9 @@ import {
   OneLine,
   TextButton,
   Tooltip,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
 import { createContext, Fragment, type ReactNode, useContext } from "react";
 import { ActorRef } from "../actor-ref.js";

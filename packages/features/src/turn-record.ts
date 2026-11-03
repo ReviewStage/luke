@@ -11,7 +11,7 @@
  * alone, so it reads nothing.
  */
 
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS } from "@repo/wire";
 import { Option, Schema } from "effect";
 import {
   AGENT_BOUNDS,

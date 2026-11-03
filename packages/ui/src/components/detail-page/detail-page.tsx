@@ -69,7 +69,7 @@ export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAG
  * inside it, because the page clips anything drawn past its edge.
  */
 const COLUMN_CLASS =
-  "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--luke-focus-ring-inset)]";
+  "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--ui-focus-ring-inset)]";
 
 /** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
@@ -115,7 +115,7 @@ export function DetailPage({
   }, [onPickUp, named.name, named.away]);
   return (
     <section
-      className="luke-detail-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
+      className="ui-detail-page @container flex flex-1 flex-col min-w-0 h-full min-h-0 text-foreground font-ui text-body"
       data-frame={heading.frame}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
       data-inset={inset}
@@ -127,13 +127,13 @@ export function DetailPage({
       ) : barOutside ? null : (
         <Toolbar pickUp={{ name: named.name, shown: named.away }} />
       )}
-      <div ref={body} className="luke-detail-page-body flex-1 min-h-0">
+      <div ref={body} className="ui-detail-page-body flex-1 min-h-0">
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a column scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by. */}
-        <div className={`luke-detail-page-main ${COLUMN_CLASS}`} tabIndex={0}>
+        <div className={`ui-detail-page-main ${COLUMN_CLASS}`} tabIndex={0}>
           {underToolbar ? null : (
             <div
               ref={header}
-              className="luke-detail-page-header pt-detail-page-inset pb-section-gap room-narrow:pt-title-under-bar"
+              className="ui-detail-page-header pt-detail-page-inset pb-section-gap room-narrow:pt-title-under-bar"
             >
               <PageHeader
                 title={heading.title}
@@ -143,16 +143,16 @@ export function DetailPage({
               />
             </div>
           )}
-          <div className={`luke-detail-page-content ${CONTENT_CLASS}`}>{children}</div>
+          <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>{children}</div>
         </div>
         {secondary === undefined ? null : (
           <aside
-            className={`luke-detail-page-secondary ${COLUMN_CLASS}`}
+            className={`ui-detail-page-secondary ${COLUMN_CLASS}`}
             aria-label={secondary.label}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls on its own, as the main column does.
             tabIndex={0}
           >
-            <div className={`luke-detail-page-content ${CONTENT_CLASS}`}>{secondary.content}</div>
+            <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>{secondary.content}</div>
           </aside>
         )}
       </div>

@@ -6,7 +6,7 @@
  * first account's Realtime client and rows. A full page load drops them, and
  * the page then loads for whoever the session names now, or for nobody.
  */
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { Effect, type Scope, Stream } from "effect";
 import type { AppStateStore } from "./app-state-store.js";
 

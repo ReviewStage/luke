@@ -3,7 +3,7 @@
  * press that answers them, and long words in a column narrower than the line.
  */
 
-import { Button, TabNotice } from "@luke/ui";
+import { Button, TabNotice } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

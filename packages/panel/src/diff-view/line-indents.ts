@@ -11,7 +11,7 @@
  */
 
 /** The custom property a line's row wears: its leading whitespace's width, in `ch`. */
-const LINE_INDENT_PROPERTY = "--luke-line-indent";
+const LINE_INDENT_PROPERTY = "--ui-line-indent";
 
 /** A line's leading run of spaces and tabs. */
 const LEADING_WHITESPACE = /^[ \t]*/;

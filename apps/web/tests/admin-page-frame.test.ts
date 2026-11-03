@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import type { AdminMetrics } from "@luke/features/admin-answer-wire";
-import { AccountScreen } from "@luke/panel/admin/screens/account";
-import { CostScreen } from "@luke/panel/admin/screens/cost";
-import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
-import { DayScreen } from "@luke/panel/admin/screens/day";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
-import type { AdminRead } from "@luke/panel/admin/use-admin-read";
+import type { AdminMetrics } from "@repo/features/admin-answer-wire";
+import { AccountScreen } from "@repo/panel/admin/screens/account";
+import { CostScreen } from "@repo/panel/admin/screens/cost";
+import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
+import { DayScreen } from "@repo/panel/admin/screens/day";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
+import type { AdminRead } from "@repo/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -129,7 +129,7 @@ class StillResizeObserver {
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillResizeObserver);
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
 });
 
 afterEach(() => {
@@ -157,19 +157,19 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
 
 /** The toolbar heading the page, inside the page's own landmark. */
 function toolbar(page: HTMLElement): HTMLElement {
-  const found = page.querySelector<HTMLElement>("main header.luke-toolbar");
+  const found = page.querySelector<HTMLElement>("main header.ui-toolbar");
   if (found === null) throw new Error("no toolbar heads the page");
   return found;
 }
 
 /** The toolbar's heading, its title or its way back and the page's name. */
 function heading(page: HTMLElement): string {
-  return toolbar(page).querySelector(".luke-toolbar-heading")?.textContent ?? "";
+  return toolbar(page).querySelector(".ui-toolbar-heading")?.textContent ?? "";
 }
 
 /** The toolbar's controls at its end: their words, and the names of those drawn as a glyph alone. */
 function controls(page: HTMLElement): string {
-  const actions = toolbar(page).querySelector(".luke-toolbar-actions");
+  const actions = toolbar(page).querySelector(".ui-toolbar-actions");
   const named = [...(actions?.querySelectorAll("[aria-label]") ?? [])].map(
     (each) => each.getAttribute("aria-label") ?? "",
   );

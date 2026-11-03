@@ -12,7 +12,7 @@
  * place Enter writes and ⌘ or Ctrl with Enter finishes (`modEnterSends`).
  */
 
-import { ENTER_KEY_HINT, type EnterKeyHint, TEXT_AREA_SUBMIT, type TextAreaSubmit } from "@luke/ui";
+import { ENTER_KEY_HINT, type EnterKeyHint, TEXT_AREA_SUBMIT, type TextAreaSubmit } from "@repo/ui";
 
 /** The pointer a phone or a tablet has, a finger. */
 const COARSE_POINTER = "(pointer: coarse)";

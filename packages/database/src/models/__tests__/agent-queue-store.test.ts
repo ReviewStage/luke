@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

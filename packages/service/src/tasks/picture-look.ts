@@ -1,10 +1,10 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readPlanAttachment } from "@luke/database/models/plan-attachments";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { type Picture, type PictureType, pictureTypeSchema } from "@luke/features/picture-wire";
-import { planAttachmentOf } from "@luke/features/plan-attachment-link";
-import { type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readPlanAttachment } from "@repo/database/models/plan-attachments";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { type Picture, type PictureType, pictureTypeSchema } from "@repo/features/picture-wire";
+import { planAttachmentOf } from "@repo/features/plan-attachment-link";
+import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type { ToolModelOutput } from "eve/tools";
@@ -16,7 +16,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * picture-look.ts -- `look_at_picture`, a model's eyes on one of the plan's pictures: the picture its text names, handed back as an image.
  *
  * A picture stands in a plan's text as `![alt](<address> "caption")`
- * (`@luke/features/plan-attachment-link`), so every model that reads the
+ * (`@repo/features/plan-attachment-link`), so every model that reads the
  * plan, the planning model's turn and a coding agent's brief alike, already
  * reads what each picture shows in its alt text and caption. Most never need
  * more, and a picture is a large cost in a model's context, so the picture

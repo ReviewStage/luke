@@ -1,9 +1,9 @@
-import type { SocialProvider } from "@luke/features/sign-in-provider";
+import type { SocialProvider } from "@repo/features/sign-in-provider";
 import type { createAuthClient } from "better-auth/react";
 import { useState } from "react";
 
 /**
- * sign-in-choices.tsx -- the one social sign-in path a page on the browser's session takes: the Better Auth call behind the `@luke/ui` sign-in card's buttons.
+ * sign-in-choices.tsx -- the one social sign-in path a page on the browser's session takes: the Better Auth call behind the `@repo/ui` sign-in card's buttons.
  */
 
 /** The one call the buttons make, which every Better Auth client has. */

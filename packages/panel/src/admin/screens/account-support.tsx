@@ -3,7 +3,7 @@
  * the window, its newest agents, its workspaces, keys and connections,
  * defaults and experiments, and its recent failures.
  *
- * Each section draws what `@luke/features/admin-answer-wire`'s `AdminAccountSupport` says and
+ * Each section draws what `@repo/features/admin-answer-wire`'s `AdminAccountSupport` says and
  * nothing more: counts, statuses, models, names of workspaces and
  * repositories, and the service's own enumerated words for why something
  * failed, drawn as they are spelled so a maintainer can search the code
@@ -14,18 +14,18 @@ import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
-} from "@luke/features/admin-account-wire";
+} from "@repo/features/admin-account-wire";
 import type {
   AdminAccountAgent,
   AdminAccountFailure,
   AdminAccountSupport,
   AdminAccountWorkspace,
-} from "@luke/features/admin-answer-wire";
-import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { AGENT_STATUS_WORDS } from "@luke/features/automation-list-model";
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { formatInstant } from "@luke/features/time-format";
+} from "@repo/features/admin-answer-wire";
+import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { AGENT_STATUS_WORDS } from "@repo/features/automation-list-model";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { formatInstant } from "@repo/features/time-format";
 import {
   Badge,
   DATA_TABLE_COLUMN_KIND,
@@ -42,7 +42,7 @@ import {
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { AGENT_STATUS_TONE } from "../../tasks/agent-model.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";

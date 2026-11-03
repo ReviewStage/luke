@@ -29,9 +29,9 @@
  * request and may outlast the reach `GitHubApp` keeps.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { GitHubPullRequestSummary } from "@luke/features";
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { GitHubPullRequestSummary } from "@repo/features";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { Cache, Context, Data, Duration, Effect, Exit, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import {

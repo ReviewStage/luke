@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_COMMAND, APP_SHORTCUTS, COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
-import { Shortcut } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS, COMMAND_KEY, type CommandKey } from "@repo/settings/shortcuts";
+import { Shortcut } from "@repo/ui";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -64,7 +64,7 @@ function pressK(held: "ctrlKey" | "metaKey"): void {
 
 /** The palette's hint as its keys read, one word or glyph to a key. */
 function hint(): string {
-  return [...document.querySelectorAll(".luke-shortcut-glyph")]
+  return [...document.querySelectorAll(".ui-shortcut-glyph")]
     .map((glyph) => glyph.textContent)
     .join(" ");
 }

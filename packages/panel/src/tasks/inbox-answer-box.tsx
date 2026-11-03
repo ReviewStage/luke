@@ -1,9 +1,9 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
-import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { pasteCutWords } from "@luke/features/words";
-import { EXPERIMENT } from "@luke/settings";
+import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@repo/features/agent-wire";
+import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@repo/features/inbox-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pasteCutWords } from "@repo/features/words";
+import { EXPERIMENT } from "@repo/settings";
 import {
   Checkbox,
   ComposerBody,
@@ -11,10 +11,10 @@ import {
   type ComposerNote,
   type ComposerRefusal,
   STATUS_TONE,
-} from "@luke/ui";
-import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { UNREPORTED } from "@luke/ui/reported-failure";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
+import { UNREPORTED } from "@repo/ui/reported-failure";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
@@ -402,7 +402,7 @@ function NewThreadChoice({
   onChange: (checked: boolean) => void;
 }): React.JSX.Element {
   return (
-    <div className="inbox-new-thread flex min-w-0 pt-luke-8 pl-luke-4 text-muted-foreground">
+    <div className="inbox-new-thread flex min-w-0 pt-ui-8 pl-ui-4 text-muted-foreground">
       <Checkbox checked={checked} disabled={held} onChange={onChange}>
         {SEND_AS_NEW} {offer.agent}
         {offer.channel === undefined ? null : (

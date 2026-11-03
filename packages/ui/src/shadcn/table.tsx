@@ -24,7 +24,7 @@ import { cn } from "../cn.js";
  *   rule for a checkbox column, which the window's tables do not draw.
  * - `TableFooter` and `TableCaption` are left out, since no table draws one.
  *
- * `@luke/ui`'s `DataTable` (`components/data-table/data-table.tsx`) is what
+ * `@repo/ui`'s `DataTable` (`components/data-table/data-table.tsx`) is what
  * an app draws; this is its inside.
  */
 

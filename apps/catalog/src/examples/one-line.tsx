@@ -6,7 +6,7 @@
  * tooltip (`wholeWordsHint`).
  */
 
-import { GAP, ONE_LINE_ELEMENT, ONE_LINE_END, OneLine, Stack, wholeWordsHint } from "@luke/ui";
+import { GAP, ONE_LINE_ELEMENT, ONE_LINE_END, OneLine, Stack, wholeWordsHint } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

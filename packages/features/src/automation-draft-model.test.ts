@@ -303,7 +303,7 @@ test("a GitHub trigger's settings are written as the row of choices leaves them,
   const chosen = {
     ...opened,
     githubSettings: {
-      senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS],
+      senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.APP_AGENTS],
       moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.READY],
       drafts: true,
       forks: false,

@@ -16,10 +16,10 @@
  * pushed is gone with its folder.
  */
 
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
-import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
+import { type Agent, readAgent } from "@repo/database/models/agent-store";
+import { queueDeviceAgentLine } from "@repo/database/models/device-agent-store";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
 import { Effect, Option } from "effect";
 import { holdingRunner } from "./coder-host/runner-lease.js";
 

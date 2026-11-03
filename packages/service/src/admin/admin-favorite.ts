@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { adminUserId } from "@luke/features/admin-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { adminUserId } from "@repo/features/admin-wire";
 import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";

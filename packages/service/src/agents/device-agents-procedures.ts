@@ -25,7 +25,7 @@
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
  * An own enroll, and a host's first register, which is a paired box's first
  * word naming its machine, fold the account's other Macs on that machine
- * into it (`@luke/database/models/host-store`), and the
+ * into it (`@repo/database/models/host-store`), and the
  * turns their agents had running are settled lost as a removed host's are;
  * a later register never folds, so two hosts already running never remove
  * each other.
@@ -52,7 +52,7 @@
  * on the origin the request reached that opens it. Its poll
  * (`POST /api/device-agents/pairing/poll`) reads the poll secret as its
  * bearer alone (`pollSecretMiddleware`), and answers where the pairing
- * stands (`@luke/database/models/host-pairing-store`): once a member
+ * stands (`@repo/database/models/host-pairing-store`): once a member
  * approved it, the host's id and a device secret minted for it, this once,
  * counted as an install as an own enroll is.
  */
@@ -64,17 +64,17 @@ import {
   liveDeviceAgents,
   openDeviceAgentLaunches,
   stepDeviceAgentLaunch,
-} from "@luke/database/models/device-agent-store";
-import { beatDevice, machineColumns } from "@luke/database/models/device-store";
+} from "@repo/database/models/device-agent-store";
+import { beatDevice, machineColumns } from "@repo/database/models/device-store";
 import {
   HOST_PAIRING,
   type HostPairingOpening,
   openHostPairing,
   pollHostPairing,
-} from "@luke/database/models/host-pairing-store";
-import { enrollOwnDevice, hostsOf, registerHost } from "@luke/database/models/host-store";
-import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
-import { HOST_RELEASE } from "@luke/features/host-release";
+} from "@repo/database/models/host-pairing-store";
+import { enrollOwnDevice, hostsOf, registerHost } from "@repo/database/models/host-store";
+import { type DeviceAgentRelease, knownDeviceCapabilities } from "@repo/features/device-agent-wire";
+import { HOST_RELEASE } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -82,7 +82,7 @@ import {
   hostVersionMeets,
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
-} from "@luke/features/host-wire";
+} from "@repo/features/host-wire";
 import { Duration, Effect, Option } from "effect";
 import {
   admittedHostVersion,
@@ -252,7 +252,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         SERVER_EVENT.HOST_INSTALL,
         { userId: polled.userId },
         {
-          kind: SERVER_HOST_KIND.LUKE_HOST,
+          kind: SERVER_HOST_KIND.BOX_HOST,
         },
       );
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };

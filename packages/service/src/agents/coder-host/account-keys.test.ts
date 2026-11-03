@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
-import { openHostedStoreTestDatabase } from "@luke/database/testing";
-import type { ModelChoice } from "@luke/features/models-wire";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { openHostedStoreTestDatabase } from "@repo/database/testing";
+import type { ModelChoice } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
-} from "@luke/features/provider-key-wire";
-import { jsonResponse } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { jsonResponse } from "@repo/wire/testing";
 import { generateText, type LanguageModel } from "ai";
 import { Effect, Redacted, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
@@ -184,7 +184,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING.HELD),
 };

@@ -3,7 +3,7 @@
    are Tailwind utilities on the vendored shadcn button (`button.tsx`,
    `../../shadcn/button.tsx`); what stays here is what a container's sheet
    restyles a button by from this same layer, which a utility would
-   outrank: the `--luke-button-*` inks, the fill and ink drawn from them,
+   outrank: the `--ui-button-*` inks, the fill and ink drawn from them,
    the resting inset, least width, and glyph size; and what Tailwind has no
    words for: a pseudo-element's hit area, a keyframe, and a press felt by
    the face inside. The keyboard's ring is the app's reset's, as it is for
@@ -11,12 +11,12 @@
 
 /* The fill is a registered colour, so it eases (`../../shadcn/button.tsx`
    lists it among the transitions) even where it is drawn as a gradient over
-   `--luke-button-ground`, which no transition reaches. Note that it must,
+   `--ui-button-ground`, which no transition reaches. Note that it must,
    because the ground under it eases in from transparent: a fill that landed
    at once would stand over whatever is behind the button until the ground
    arrived, a light flash over the Mac's frosted title bar. It does not
    inherit, because every button sets its own. */
-@property --luke-button-fill {
+@property --ui-button-fill {
   syntax: "<color>";
   inherits: false;
   initial-value: transparent;
@@ -26,117 +26,117 @@
   /* Note that the inset and least width are a container's to change (a
      dialog's actions, a narrow error's retry), so they rest here rather
      than in a utility; a box with an inset of its own sets it in one. */
-  .luke-button {
-    --luke-button-fill: transparent;
-    --luke-button-ink: var(--luke-color-text);
-    --luke-button-edge: transparent;
+  .ui-button {
+    --ui-button-fill: transparent;
+    --ui-button-ink: var(--ui-color-text);
+    --ui-button-edge: transparent;
     min-width: 0;
-    padding: 0 var(--luke-control-inset);
-    background: var(--luke-button-fill);
-    color: var(--luke-button-ink);
+    padding: 0 var(--ui-control-inset);
+    background: var(--ui-button-fill);
+    color: var(--ui-button-ink);
   }
 
-  .luke-button svg {
+  .ui-button svg {
     flex: none;
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
+    width: var(--ui-control-icon);
+    height: var(--ui-control-icon);
   }
 
-  .luke-button[data-icon-only="true"] {
-    --luke-button-ink: var(--luke-color-text-muted);
+  .ui-button[data-icon-only="true"] {
+    --ui-button-ink: var(--ui-color-text-muted);
   }
 
   /* A finger's target: on a coarse pointer a button takes a press
-     `--luke-touch-target` across at least, centred on it, while it draws at
+     `--ui-touch-target` across at least, centred on it, while it draws at
      its own size, so a row's 24px mark keeps its glyph and its place. */
   @media (pointer: coarse) {
-    .luke-button::before {
+    .ui-button::before {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: max(100%, var(--luke-touch-target));
-      height: max(100%, var(--luke-touch-target));
+      width: max(100%, var(--ui-touch-target));
+      height: max(100%, var(--ui-touch-target));
       transform: translate(-50%, -50%);
       content: "";
     }
   }
 
-  .luke-button[data-variant="outline"] {
-    --luke-button-edge: var(--luke-color-border-strong);
+  .ui-button[data-variant="outline"] {
+    --ui-button-edge: var(--ui-color-border-strong);
   }
 
   /* Subtle, a quiet press among quiet words: their muted ink. */
-  .luke-button[data-variant="subtle"] {
-    --luke-button-ink: var(--luke-color-text-muted);
+  .ui-button[data-variant="subtle"] {
+    --ui-button-ink: var(--ui-color-text-muted);
   }
 
-  .luke-button[data-variant="primary"] {
-    --luke-button-fill: var(--luke-color-accent);
-    --luke-button-ink: var(--luke-color-on-accent);
+  .ui-button[data-variant="primary"] {
+    --ui-button-fill: var(--ui-color-accent);
+    --ui-button-ink: var(--ui-color-on-accent);
   }
 
-  .luke-button[data-variant="danger"] {
-    --luke-button-fill: var(--luke-color-danger-fill);
-    --luke-button-ink: var(--luke-color-on-danger);
+  .ui-button[data-variant="danger"] {
+    --ui-button-fill: var(--ui-color-danger-fill);
+    --ui-button-ink: var(--ui-color-on-danger);
   }
 
-  .luke-button[data-variant="danger-outline"] {
-    --luke-button-edge: var(--luke-color-border-strong);
-    --luke-button-ink: var(--luke-color-danger-text);
+  .ui-button[data-variant="danger-outline"] {
+    --ui-button-edge: var(--ui-color-border-strong);
+    --ui-button-ink: var(--ui-color-danger-text);
   }
 
-  .luke-button[data-variant="ink"] {
-    --luke-button-fill: var(--luke-color-text);
-    --luke-button-ink: var(--luke-color-ground);
+  .ui-button[data-variant="ink"] {
+    --ui-button-fill: var(--ui-color-text);
+    --ui-button-ink: var(--ui-color-ground);
   }
 
   /* Over a picture or a video's frame, as a player's controls stand: in the
      words a veil carries, the same in either theme, since what is under it
      is the frame's, not the window's, and a wash of that ink under the
      pointer. */
-  .luke-button[data-variant="media"] {
-    --luke-button-fill: transparent;
-    --luke-button-ink: var(--luke-color-on-veil);
+  .ui-button[data-variant="media"] {
+    --ui-button-fill: transparent;
+    --ui-button-ink: var(--ui-color-on-veil);
   }
 
-  .luke-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-on-veil) 18%, transparent);
+  .ui-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-on-veil) 18%, transparent);
   }
 
-  .luke-button[data-variant="media"]:active:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-on-veil) 28%, transparent);
+  .ui-button[data-variant="media"]:active:not(:disabled, [aria-disabled="true"]) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-on-veil) 28%, transparent);
   }
 
-  .luke-button[data-variant="working-tint"] {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
-    --luke-button-ink: var(--luke-color-working);
+  .ui-button[data-variant="working-tint"] {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-working) 14%, transparent);
+    --ui-button-ink: var(--ui-color-working);
   }
 
-  .luke-button[data-variant="danger-tint"] {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
-    --luke-button-ink: var(--luke-color-danger-text);
+  .ui-button[data-variant="danger-tint"] {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 14%, transparent);
+    --ui-button-ink: var(--ui-color-danger-text);
   }
 
   /* A row, a card's act drawn as a menu's row (its box is the `row` size's),
      lit by the menu row's fill under the pointer and the keyboard alike,
      never ringed. */
-  .luke-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
+  .ui-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
     :disabled,
     [aria-disabled="true"]
   ) {
     outline: none; /* no ring: the row's fill marks it, as a menu's does */
-    --luke-button-fill: var(--luke-color-fill-strong);
+    --ui-button-fill: var(--ui-color-fill-strong);
   }
 
   /* A danger toggle is quiet while off, and on the danger tint while on. */
-  .luke-button[data-variant="danger"][aria-pressed="false"] {
-    --luke-button-fill: transparent;
-    --luke-button-ink: var(--luke-color-text-muted);
+  .ui-button[data-variant="danger"][aria-pressed="false"] {
+    --ui-button-fill: transparent;
+    --ui-button-ink: var(--ui-color-text-muted);
   }
 
-  .luke-button[data-variant="danger"][aria-pressed="true"] {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
-    --luke-button-ink: var(--luke-color-danger-text);
+  .ui-button[data-variant="danger"][aria-pressed="true"] {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 16%, transparent);
+    --ui-button-ink: var(--ui-color-danger-text);
   }
 
   /* A quiet or outlined button lights under the pointer, while the menu or
@@ -144,98 +144,98 @@
      one brightens. One that shows and hides a pane says whether the pane is
      out (`aria-expanded`) with no popup to light for, so it rests unlit, as
      a Mac's sidebar toggle does: the pane beside it says it is open. Its
-     translucent fill, lit or pressed, is laid over `--luke-button-ground`,
+     translucent fill, lit or pressed, is laid over `--ui-button-ground`,
      which is nothing unless a container sets it: one whose buttons stand
      still while something slides beneath them, as a window's title bar
      does over its panes, names the opaque ground they rest on, so what
      passes beneath never shows through the fill. */
-  .luke-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
+  .ui-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-haspopup][aria-expanded="true"],
     [aria-pressed="true"]
   ) {
-    --luke-button-fill: var(--luke-color-fill-selected);
-    --luke-button-ink: var(--luke-color-text);
-    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
-      var(--luke-button-ground, transparent);
+    --ui-button-fill: var(--ui-color-fill-selected);
+    --ui-button-ink: var(--ui-color-text);
+    background: linear-gradient(var(--ui-button-fill), var(--ui-button-fill))
+      var(--ui-button-ground, transparent);
   }
 
   /* A quiet mark standing in a row, a compact one or a row's ⋯ at any
      size (`button.tsx`'s `lights`), lights its glyph alone, under the
      pointer, while its menu is open, and while a toggle stands on, because
      the row it stands in is already lit. */
-  .luke-button[data-icon-only="true"][data-lights="glyph"]:where(
+  .ui-button[data-icon-only="true"][data-lights="glyph"]:where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
     [aria-pressed="true"]
   ),
-  .luke-button[data-icon-only="true"][data-lights="glyph"]:active:not(
+  .ui-button[data-icon-only="true"][data-lights="glyph"]:active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
-    --luke-button-fill: transparent;
+    --ui-button-fill: transparent;
     background: transparent;
   }
 
   /* A button that goes to the page on show reads in the full ink, as one
      under the pointer does, without a fill: the page is where it stands,
      not a state it holds. */
-  .luke-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
-    --luke-button-ink: var(--luke-color-text);
+  .ui-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
+    --ui-button-ink: var(--ui-color-text);
   }
 
-  .luke-button[data-variant="danger"][aria-pressed="false"]:hover:not(
+  .ui-button[data-variant="danger"][aria-pressed="false"]:hover:not(
     :disabled,
     [aria-disabled="true"]
   ) {
-    --luke-button-fill: var(--luke-color-fill-selected);
-    --luke-button-ink: var(--luke-color-text);
+    --ui-button-fill: var(--ui-color-fill-selected);
+    --ui-button-ink: var(--ui-color-text);
   }
 
-  .luke-button[data-variant="danger"][aria-pressed="false"]:active:not(
+  .ui-button[data-variant="danger"][aria-pressed="false"]:active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
-    --luke-button-fill: var(--luke-color-fill-pressed);
+    --ui-button-fill: var(--ui-color-fill-pressed);
   }
 
-  .luke-button[data-variant="danger"][aria-pressed="true"]:hover:not(
+  .ui-button[data-variant="danger"][aria-pressed="true"]:hover:not(
     :disabled,
     [aria-disabled="true"]
   ) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 24%, transparent);
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 24%, transparent);
   }
 
-  .luke-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
+  .ui-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-working) 22%, transparent);
   }
 
-  .luke-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
+  .ui-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 22%, transparent);
   }
 
-  .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
+  .ui-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 12%, transparent);
   }
 
-  .luke-button:is(
+  .ui-button:is(
     [data-variant="quiet"],
     [data-variant="subtle"],
     [data-variant="outline"]
   ):active:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: var(--luke-color-fill-pressed);
-    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
-      var(--luke-button-ground, transparent);
+    --ui-button-fill: var(--ui-color-fill-pressed);
+    background: linear-gradient(var(--ui-button-fill), var(--ui-button-fill))
+      var(--ui-button-ground, transparent);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
+  .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
     :disabled,
     [aria-disabled="true"]
   ) {
     filter: brightness(1.1);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):active:not(
+  .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
@@ -248,12 +248,12 @@
      on iOS leaves the button hovered, and a change a hover draws there
      can spend the tap. */
   @media (hover: hover) {
-    .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
+    .ui-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
       opacity: 0.85;
     }
   }
 
-  .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
+  .ui-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
     opacity: 0.7;
   }
 
@@ -264,30 +264,29 @@
      and the release would land on its container and be no click. A row is
      a menu's row, lit rather than pressed, so it holds still; an
      unavailable or busy one takes no press, so it gives none. */
-  .luke-button-face {
+  .ui-button-face {
     transition:
-      transform var(--luke-duration-fast) var(--luke-spring-fast),
-      opacity var(--luke-duration-quick) var(--luke-motion-exit);
+      transform var(--ui-duration-fast) var(--ui-spring-fast),
+      opacity var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
   /* Note that the face goes down on the quick exit beat and comes back on
      the spring, because a click holds the press for a tenth of a second,
      which the spring's beat would spend before the face had moved. */
-  .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"])
-  .luke-button-face {
+  .ui-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"]) .ui-button-face {
     transform: scale(0.9);
-    transition: transform var(--luke-duration-exit) var(--luke-motion-exit);
+    transition: transform var(--ui-duration-exit) var(--ui-motion-exit);
   }
 
   /* Every press a button takes is answered once it lands, so even a click
      too quick to hold the press down is seen: its face springs back from
      pressed, and a row, a menu's row, gives a little whole (`press-pulse.css`).
      A submit's arrow lifts away as the message goes and drops back in. */
-  .luke-button[data-submit="ready"][data-pulse="face"] svg {
-    animation: luke-button-send var(--luke-duration-fast) var(--luke-spring-fast);
+  .ui-button[data-submit="ready"][data-pulse="face"] svg {
+    animation: ui-button-send var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  @keyframes luke-button-send {
+  @keyframes ui-button-send {
     30% {
       transform: translateY(-6px);
       opacity: 0;
@@ -301,11 +300,11 @@
   /* A press an unavailable button refuses shakes it, once per press, so the
      refusal reads as an answer rather than a press that went nowhere
      (`button.tsx` restarts `data-denied` on each). */
-  .luke-button[data-denied="true"] {
-    animation: luke-button-deny var(--luke-duration-fast) var(--luke-motion-exit);
+  .ui-button[data-denied="true"] {
+    animation: ui-button-deny var(--ui-duration-fast) var(--ui-motion-exit);
   }
 
-  @keyframes luke-button-deny {
+  @keyframes ui-button-deny {
     20% {
       transform: translateX(-3px);
     }
@@ -324,28 +323,28 @@
      utilities'), but a read-only one, which records a press given and so
      stands at full strength, and one that keeps the keyboard its fill and
      its words alone, so the app's ring around it is drawn at full strength. */
-  .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"], [data-read-only]) {
-    --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
-    background: var(--luke-button-fill-faded);
-    color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
+  .ui-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"], [data-read-only]) {
+    --ui-button-fill-faded: color-mix(in srgb, var(--ui-button-fill) 45%, transparent);
+    background: var(--ui-button-fill-faded);
+    color: color-mix(in srgb, var(--ui-button-ink) 45%, transparent);
   }
 
   /* A read-only button records a press given rather than offering one, so
      its words are read and select, as the window's words do (`base.css`
      keeps a control's from selecting); a badge or a count beside them
      stays out of a copy. */
-  .luke-button[data-read-only] .luke-button-words {
+  .ui-button[data-read-only] .ui-button-words {
     -webkit-user-select: text;
     user-select: text;
   }
 
   /* A submit unavailable stands on the strong fill with a muted glyph rather
      than fading, so the glyph stays a colour apart from its disc. */
-  .luke-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
-    --luke-button-fill: var(--luke-color-fill-strong);
-    --luke-button-ink: var(--luke-color-text-muted);
-    background: var(--luke-button-fill);
-    color: var(--luke-button-ink);
+  .ui-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+    --ui-button-fill: var(--ui-color-fill-strong);
+    --ui-button-ink: var(--ui-color-text-muted);
+    background: var(--ui-button-fill);
+    color: var(--ui-button-ink);
     opacity: 1;
     filter: none;
   }
@@ -357,51 +356,51 @@
      Note that the words fade (its face's utilities) rather than hide,
      because a hidden face would take the button's name with it while its
      check, which says nothing, stands. */
-  .luke-button[data-done="true"] .luke-button-face {
+  .ui-button[data-done="true"] .ui-button-face {
     /* Note that the words leave at once, because a busy button's words stood
        hidden under its ring and would show through a fade as the check
        lands; they come back on the face's own fade as the check goes. */
     transition: none;
   }
 
-  .luke-button-done {
+  .ui-button-done {
     animation:
-      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      ui-button-done-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-button-done-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* Note that the check wears the button's ink, over the green a connected
      line draws it in, because it stands on the act's own fill. */
-  .luke-button-done svg {
+  .ui-button-done svg {
     color: inherit;
   }
 
   /* A busy button's press landing: the check springs in where the ring
      stood and holds, then goes, and its words fade back (`button.tsx`
-     waits on the hold). The hold is `--luke-confirm-delay`, how long a
+     waits on the hold). The hold is `--ui-confirm-delay`, how long a
      Saved stands, which reduced motion keeps, so the check is still seen
      there, only without its spring. */
-  .luke-button-done[data-hold="true"] {
+  .ui-button-done[data-hold="true"] {
     animation:
-      luke-button-done-hold var(--luke-confirm-delay) var(--luke-motion-exit),
-      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      ui-button-done-hold var(--ui-confirm-delay) var(--ui-motion-exit),
+      ui-button-done-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-button-done-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* Its hold done, the check fades out as the words fade back over it, on
      the face's own beat, so the one hands over to the other. */
-  .luke-button-done[data-leaving="true"] {
-    animation: luke-button-done-leave var(--luke-duration-quick) var(--luke-motion-exit) forwards;
+  .ui-button-done[data-leaving="true"] {
+    animation: ui-button-done-leave var(--ui-duration-quick) var(--ui-motion-exit) forwards;
   }
 
-  @keyframes luke-button-done-leave {
+  @keyframes ui-button-done-leave {
     to {
       opacity: 0;
     }
   }
 
   /* Note that the hold moves nothing; it is a beat the check is waited on for. */
-  @keyframes luke-button-done-hold {
+  @keyframes ui-button-done-hold {
     to {
       opacity: 1;
     }
@@ -410,23 +409,23 @@
   /* A button that turns, a refresh's or a retry's, turns its glyph once as
      a press lands, on the spring, beside its face's pulse (`button.tsx`
      restarts `data-turn` on each press). */
-  .luke-button[data-turn="true"] .luke-button-face > svg:first-child {
-    animation: luke-button-turn-once var(--luke-duration-shape) var(--luke-spring);
+  .ui-button[data-turn="true"] .ui-button-face > svg:first-child {
+    animation: ui-button-turn-once var(--ui-duration-shape) var(--ui-spring);
   }
 
-  @keyframes luke-button-turn-once {
+  @keyframes ui-button-turn-once {
     to {
       transform: rotate(1turn);
     }
   }
 
-  @keyframes luke-button-done-fade {
+  @keyframes ui-button-done-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-button-done-spring {
+  @keyframes ui-button-done-spring {
     from {
       transform: scale(0.5);
     }

@@ -2,18 +2,18 @@ import {
   AGENT_TODO_STATUS,
   type AgentTodoStatus,
   type AgentTodos,
-} from "@luke/features/agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { readLink } from "@luke/features/link-grammar";
+} from "@repo/features/agent-wire";
+import type { IntegrationProvider } from "@repo/features/integration-wire";
+import { readLink } from "@repo/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
   MENTION_KIND,
   mayNameMention,
-} from "@luke/features/mention-link";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { formatBytes } from "@luke/features/number-format";
-import { planAttachmentOf } from "@luke/features/plan-attachment-link";
+} from "@repo/features/mention-link";
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
+import { formatBytes } from "@repo/features/number-format";
+import { planAttachmentOf } from "@repo/features/plan-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -30,8 +30,8 @@ import {
   sameTurnRow,
   TURN_ROW,
   type TurnRow,
-} from "@luke/features/turn-rows";
-import { keySpansIn } from "@luke/features/workspace-key";
+} from "@repo/features/turn-rows";
+import { keySpansIn } from "@repo/features/workspace-key";
 import {
   DISCLOSURE_BODY,
   DISCLOSURE_LOOK,
@@ -65,9 +65,9 @@ import {
   Tooltip,
   useDisclosurePreviewShown,
   useDisclosureState,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
-import { githubShapes, wholeRendering } from "@luke/ui/github-html";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
+import { githubShapes, wholeRendering } from "@repo/ui/github-html";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -108,9 +108,9 @@ import {
   TerminalIcon,
   TimerIcon,
   WrenchIcon,
-} from "@luke/ui/icons";
-import { siteName } from "@luke/ui/link-face";
-import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+} from "@repo/ui/icons";
+import { siteName } from "@repo/ui/link-face";
+import { gluedRun, LINK_GLUE } from "@repo/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
   type MarkdownComponents,
@@ -118,10 +118,10 @@ import {
   type MarkdownSteps,
   markdownStep,
   TRANSCRIPT_REMARK_STEPS,
-} from "@luke/ui/markdown";
-import { QUOTE_CLASS } from "@luke/ui/quote-face";
-import { UNREPORTED } from "@luke/ui/reported-failure";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/ui/markdown";
+import { QUOTE_CLASS } from "@repo/ui/quote-face";
+import { UNREPORTED } from "@repo/ui/reported-failure";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import {
   type ComponentProps,
   type ComponentType,
@@ -272,13 +272,13 @@ function SiteChip({ href }: { href: string }): ReactNode {
 
 /** The element a mention's link is drawn as, and the one attribute that carries its target to the chip. */
 const MENTION_ELEMENT = {
-  TAG: "luke-mention",
+  TAG: "app-mention",
   TARGET: "to",
 } as const;
 
 /** The element a picture's Markdown is drawn as, and the attributes that carry its address, its words, and its caption. */
 const PICTURE_ELEMENT = {
-  TAG: "luke-picture",
+  TAG: "app-picture",
   ADDRESS: "to",
   WORDS: "words",
   CAPTION: "caption",
@@ -286,14 +286,14 @@ const PICTURE_ELEMENT = {
 
 /** The element a paragraph holding a link alone is drawn as in words drawn as a document, and the attributes that carry the link's target and its words. */
 const LONE_LINK_ELEMENT = {
-  TAG: "luke-lone-link",
+  TAG: "app-lone-link",
   TARGET: "to",
   WORDS: "words",
 } as const;
 
 /** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
 const PICTURE_ROW_ELEMENT = {
-  TAG: "luke-pictures",
+  TAG: "app-pictures",
   CLASS: "transcript-pictures",
 } as const;
 
@@ -760,7 +760,7 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
 /**
  * The steps GitHub's rendering is drawn through: the library's own HTML
  * parse, GitHub's dress reshaped into the window's own while its classes
- * still say what each part is (`@luke/ui/github-html`), then the library's
+ * still say what each part is (`@repo/ui/github-html`), then the library's
  * own sanitizer, GitHub's own allowlist, and its link hardening.
  */
 const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
@@ -1550,7 +1550,7 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
         )}
       </GlyphSlot>
       <span
-        className={`min-w-0 wrap-anywhere transition-[color] duration-(--luke-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
+        className={`min-w-0 wrap-anywhere transition-[color] duration-(--ui-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
       >
         {todo.content}
       </span>

@@ -3,9 +3,9 @@ import {
   type ProductEventPropertiesFor,
   type ProductSurfaceEventName,
   productEventFromWire,
-} from "@luke/features/analytics";
-import type { UnparsedWireValue } from "@luke/wire";
-import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
+} from "@repo/features/analytics";
+import type { UnparsedWireValue } from "@repo/wire";
+import { wireResult as result, type WireGuard } from "@repo/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
 
@@ -102,7 +102,7 @@ type DerivedAppBridge = {
 };
 
 /**
- * What the preload exposes as `window.luke`: the invokes and the sends. What
+ * What the preload exposes as `window.appBridge`: the invokes and the sends. What
  * main pushes reaches the window on its act port instead (`contract/pushes.ts`).
  */
 export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {

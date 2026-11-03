@@ -62,7 +62,10 @@ SSO_HOST=vercel.com
 SSO_PATH=/sso-api
 # An agent's branch builds no preview on a push (`vercel.json`'s
 # `git.deploymentEnabled`); one is built only when asked for, through Vercel.
-AGENT_BRANCH_PREFIX=luke/
+# Note that `luke/` is the prefix agents' branches had before `agent/`, kept
+# in both places until no branch under it is still open.
+AGENT_BRANCH_PREFIX=agent/
+LEGACY_AGENT_BRANCH_PREFIX=luke/
 # The deployed tree is whatever the deployment's ignoreCommand diffs, read
 # from its script so the two cannot drift apart.
 VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"
@@ -207,7 +210,7 @@ read_preview() {
                 printf 'preview: %s was skipped by the Ignored Build Step; nothing it deploys changed\n' "$sha" >&2
                 return
             fi
-            if ((quiet >= quiet_attempts)) && [[ $branch == "$AGENT_BRANCH_PREFIX"* ]]; then
+            if ((quiet >= quiet_attempts)) && [[ $branch == "$AGENT_BRANCH_PREFIX"* || $branch == "$LEGACY_AGENT_BRANCH_PREFIX"* ]]; then
                 printf 'NOT_REQUESTED: %s is an agent branch, which builds no preview on a push; ask an agent to build one through the Vercel connection, or use Create Deployment in Vercel, or pass --preview URL\n' "$branch" >&2
                 exit "$EXIT_NOT_REQUESTED"
             fi

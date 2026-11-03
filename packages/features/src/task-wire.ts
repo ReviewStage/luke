@@ -1,4 +1,4 @@
-import { WireValueSchema } from "@luke/wire";
+import { WireValueSchema } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AGENT_MACHINE,

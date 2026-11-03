@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -21,7 +21,7 @@ import {
   Text,
   Tooltip,
   useResizeEdge,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   type ComponentProps,
   Fragment,
@@ -255,7 +255,7 @@ export interface PaneOver {
   readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
 }
 
-/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--luke-space-6`. */
+/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--ui-space-6`. */
 const PEEK_EDGE = 6;
 
 /** The toggle that opens the pane beside the tab, which the stylesheet draws only where the pane can stand there. */
@@ -265,7 +265,7 @@ const BESIDE_TOGGLE = '.file-tree-toggle[data-place="beside"]';
 const OVER_TOGGLE = '.file-tree-toggle[data-place="over"]';
 
 /** The pane floated over the tab, whose box the pointer may be in. */
-const OVER_PANE = ".luke-over-pane";
+const OVER_PANE = ".ui-over-pane";
 
 /** The strip a closed pane may leave in its place, which peeks the pane over the tab (`changes-strip.tsx`). */
 const PANE_STRIP = ".file-tree-strip";

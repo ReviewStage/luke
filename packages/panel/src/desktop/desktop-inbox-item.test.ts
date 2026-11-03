@@ -7,9 +7,9 @@ import {
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+} from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -22,19 +22,19 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { formatCount } from "@luke/features/number-format";
-import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { pasteCutWords } from "@luke/features/words";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { experimentsOn } from "@luke/settings/testing";
-import { DocumentIcon } from "@luke/ui";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { formatCount } from "@repo/features/number-format";
+import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { pasteCutWords } from "@repo/features/words";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { experimentsOn } from "@repo/settings/testing";
+import { DocumentIcon } from "@repo/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -170,15 +170,15 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   await settle();
   const pane = itemPane(page);
   const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
-  assert.equal(pane.querySelector(".luke-length-counter"), null);
+  const note = () => pane.querySelector(".ui-composer-foot-note")?.textContent;
+  assert.equal(pane.querySelector(".ui-length-counter"), null);
 
   pasteInComposer(pane, "x".repeat(cap + 100));
   await settle();
   assert.equal(composerEditor(pane).textContent?.length, cap);
   assert.equal(note(), pasteCutWords(cap));
   assert.equal(
-    pane.querySelector(".luke-length-counter")?.textContent,
+    pane.querySelector(".ui-length-counter")?.textContent,
     `${formatCount(cap)}/${formatCount(cap)}`,
   );
 
@@ -225,7 +225,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     "the agent's crumb wears its mark",
   );
   assert.deepEqual(
-    [...page.querySelectorAll(".inbox-view-items .luke-toolbar button")]
+    [...page.querySelectorAll(".inbox-view-items .ui-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
     ["Inbox item actions"],
@@ -356,7 +356,7 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
   );
   assert.equal(
     page.querySelector(
-      '[data-inbox-message-text] [data-lone-link="pull-request"] .luke-list-row-title',
+      '[data-inbox-message-text] [data-lone-link="pull-request"] .ui-list-row-title',
     )?.textContent,
     "#42",
   );
@@ -392,7 +392,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
+    return [card.querySelector<HTMLImageElement>(".ui-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
@@ -440,7 +440,7 @@ test("a picture of an item stays open in its viewer while a new thread lands in 
   act(() => world.deliverChannels(channels({ ...GENERAL, latestPostedAt: 9_000, threads: 2 })));
   await settle();
   const shown = () =>
-    document.querySelector<HTMLImageElement>('[role="dialog"] .luke-zoom-image')?.alt;
+    document.querySelector<HTMLImageElement>('[role="dialog"] .ui-zoom-image')?.alt;
   assert.equal(shown(), "The form.png", "the viewer stays open as the thread lands");
   // A channel made is a new name the words chip, so they are drawn again whole.
   const made = { ...GENERAL, id: "c0ffee00-0000-4000-8000-000000000002", name: "billing" };
@@ -502,7 +502,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     assert.ok(inline, "the recording plays where its words draw it");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
     assert.deepEqual(
-      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
@@ -535,7 +535,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     const player = card?.querySelector("video");
     assert.ok(player, "the viewer plays the recording");
     assert.deepEqual(
-      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
@@ -558,7 +558,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
       ),
     );
     assert.equal(
-      document.querySelector('[role="dialog"] .luke-zoom-image')?.getAttribute("alt"),
+      document.querySelector('[role="dialog"] .ui-zoom-image')?.getAttribute("alt"),
       "The email.png",
       "the walk goes on to the picture drawn with it",
     );
@@ -643,7 +643,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
+    return [card.querySelector<HTMLImageElement>(".ui-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
@@ -663,11 +663,11 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
 });
 
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "an agent's card is hung");
   return [
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    card.querySelector(".luke-hover-card-corner")?.textContent,
+    card.querySelector(".ui-hover-card-name")?.textContent,
+    card.querySelector(".ui-hover-card-corner")?.textContent,
   ];
 }
 
@@ -697,7 +697,7 @@ test("the thread names its agent as one button wherever it does, its message's c
     page.querySelector('[data-inbox-comment="message"]') ??
     assert.fail("the agent's message is a comment");
   assert.equal(
-    faceKind(asking.querySelector(".luke-comment-face")),
+    faceKind(asking.querySelector(".ui-comment-face")),
     "agent",
     "the agent's tile leads its comment",
   );
@@ -759,10 +759,10 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
   assert.match(words, /Answered/u);
   assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
+    document.querySelector<HTMLElement>(".ui-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the thread's card is hung");
   assert.ok(
-    card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    card.querySelector('.ui-hover-card-row-end .state-glyph[data-state="working"]'),
     "the spinner stands beside the agent at the card's foot, no words",
   );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
@@ -771,7 +771,7 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     card.click();
   });
   assert.equal(row.getAttribute("aria-current"), null);
-  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-item-card]"));
+  assert.ok(document.querySelector(".ui-tooltip-card [data-inbox-item-card]"));
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
@@ -811,31 +811,31 @@ test("an item's card names its task as the window names a task everywhere: the k
   await settle();
   hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-item-card]");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
+    document.querySelector<HTMLElement>(".ui-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the row's card is hung");
   const head = card.querySelector("[data-holder-detail]");
   assert.deepEqual(
     [...(head?.children ?? [])].map((each) => [each.classList[0], each.textContent]),
     [
       ["task-key", "STAG-182"],
-      ["luke-inline-ref", LONG],
+      ["ui-inline-ref", LONG],
     ],
     "the key, then the task's chip, on one line, with no status in words",
   );
-  assert.ok(head?.querySelector("[data-task-key] .luke-text"), "the key is the shared key's words");
+  assert.ok(head?.querySelector("[data-task-key] .ui-text"), "the key is the shared key's words");
   assert.equal(head?.querySelector(".task-card-chip"), null, "the key is no chip");
   const chip =
-    head?.querySelector<HTMLElement>('.luke-inline-ref[data-look="pill"][data-holder-ref]') ??
+    head?.querySelector<HTMLElement>('.ui-inline-ref[data-look="pill"][data-holder-ref]') ??
     assert.fail("the task is named by the mention pill");
   assert.ok(
-    chip.querySelector('.luke-inline-ref-glyph .luke-task-status-mark[data-status="in-progress"]'),
+    chip.querySelector('.ui-inline-ref-glyph .ui-task-status-mark[data-status="in-progress"]'),
     "the pill wears the task's status's mark",
   );
   restOn(chip);
-  const cards = [...document.querySelectorAll(".luke-tooltip-card")];
+  const cards = [...document.querySelectorAll(".ui-tooltip-card")];
   assert.ok(
     cards.some(
-      (each) => each !== card.closest(".luke-tooltip-card") && each.textContent?.includes(LONG),
+      (each) => each !== card.closest(".ui-tooltip-card") && each.textContent?.includes(LONG),
     ),
     "the pill hangs a card naming the task whole",
   );
@@ -896,7 +896,7 @@ test("split, K and J hand the keyboard to the row they choose, so the arrows go 
 
 /** The titles of the list's rows Tab stops on, in the order drawn. */
 function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
-  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")]
     .filter((row) => row.tabIndex === 0)
     .map((row) => row.querySelector(ROW_TITLE)?.textContent);
 }
@@ -1155,13 +1155,13 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
 
   typeInComposer(pane, "See @roll");
   await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const offered = [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (name) => name.textContent,
   );
   pressInComposer(pane, "Enter");
   await settle();
   const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
-    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+    (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
   );
   pressInComposer(pane, "Enter");
   await settle();
@@ -1209,7 +1209,7 @@ test("in the window's Inbox an @ in the box of a task's item offers that plan's 
   await settle();
 
   const offered = [
-    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .luke-combobox-option-label'),
+    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .ui-combobox-option-label'),
   ].map((name) => name.textContent);
   assert.deepEqual(offered, ["Thresholds"]);
 });
@@ -1260,7 +1260,7 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
     ...itemPane(page).querySelectorAll('[data-inbox-comment="message"] [data-inbox-message-text]'),
   ].at(-1);
   const chip = [...(note?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-    (button) => button.querySelector(".luke-inline-ref-label")?.textContent === name,
+    (button) => button.querySelector(".ui-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
@@ -1379,8 +1379,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    faceKind(entry.querySelector(".luke-comment-face")),
-    wordsOf(entry.querySelector(".luke-comment-name")),
+    faceKind(entry.querySelector(".ui-comment-face")),
+    wordsOf(entry.querySelector(".ui-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
 }
@@ -1433,7 +1433,7 @@ test("a thread draws its messages after the question in the order they were writ
   ]);
   const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[4];
   assert.equal(
-    mine?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    mine?.querySelector("[data-mention-ref] .ui-inline-ref-label")?.textContent,
     "rollout-store.ts",
   );
 });
@@ -1655,7 +1655,7 @@ test("a message refused as naming no agent says the agent is archived where it i
   const pane = itemPane(page);
   const note = () => pane.querySelector('.agent-composer [role="alert"]');
   const unarchive = () =>
-    [...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button")].find(
+    [...pane.querySelectorAll<HTMLButtonElement>(".ui-composer-foot-note button")].find(
       (button) => button.textContent === "Unarchive",
     );
 
@@ -1686,7 +1686,7 @@ test("a message refused as naming no agent says the agent is archived where it i
     "This agent no longer exists.",
   );
   assert.equal(
-    goneItem.querySelector(".luke-composer-foot-note button"),
+    goneItem.querySelector(".ui-composer-foot-note button"),
     null,
     "nothing to unarchive",
   );
@@ -1727,7 +1727,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
   send();
   await settle();
   const unarchive = [
-    ...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button"),
+    ...pane.querySelectorAll<HTMLButtonElement>(".ui-composer-foot-note button"),
   ].find((button) => button.textContent === "Unarchive");
   act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
   refusal = AGENT_CALL_FAILURE.UNANSWERED;
@@ -2097,9 +2097,9 @@ function commentHeads(pane: HTMLElement): (string | undefined | (string | undefi
   return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
     (comment) => [
       comment.dataset.inboxComment,
-      [...comment.querySelectorAll<HTMLElement>(".luke-comment-face")].map(faceKind),
+      [...comment.querySelectorAll<HTMLElement>(".ui-comment-face")].map(faceKind),
       [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
-        .filter((mark) => mark.closest(".luke-comment-head, .inbox-comment-body") === null)
+        .filter((mark) => mark.closest(".ui-comment-head, .inbox-comment-body") === null)
         .map((mark) => mark.dataset.kind),
     ],
   );
@@ -2123,11 +2123,11 @@ test("each comment of a thread is headed by its writer's face and name, its face
     ["draft", ["person"], []],
   ]);
   const draft =
-    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .luke-comment-head') ??
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .ui-comment-head') ??
     assert.fail("the draft reply has a head");
   assert.equal(wordsOf(draft), "You", "the reader's name alone, no draft and no time after it");
   assert.ok(
-    draft.querySelector('.luke-comment-name > [data-actor-ref][data-kind="person"]'),
+    draft.querySelector('.ui-comment-name > [data-actor-ref][data-kind="person"]'),
     "the reader is named by their ref",
   );
 });
@@ -2170,16 +2170,16 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     ["message", "agent", "Alerts", "That is the default elsewhere."],
   ]);
   assert.deepEqual(
-    [...pane.querySelectorAll(".inbox-thread .luke-comment-head")].map((head) =>
+    [...pane.querySelectorAll(".inbox-thread .ui-comment-head")].map((head) =>
       [...head.children].map((part) =>
-        [...part.classList].find((name) => name.startsWith("luke-comment-")),
+        [...part.classList].find((name) => name.startsWith("ui-comment-")),
       ),
     ),
     [
-      ["luke-comment-name", "luke-comment-time"],
-      ["luke-comment-name", "luke-comment-time"],
-      ["luke-comment-name", "luke-comment-time"],
-      ["luke-comment-name"],
+      ["ui-comment-name", "ui-comment-time"],
+      ["ui-comment-name", "ui-comment-time"],
+      ["ui-comment-name", "ui-comment-time"],
+      ["ui-comment-name"],
     ],
     "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
@@ -2617,7 +2617,7 @@ function draftReplyIn(pane: HTMLElement): Element {
 
 /** The words at the head's end of each comment of the thread that says its reply is on its way. */
 function sendingMarks(page: HTMLElement): (string | undefined)[] {
-  return [...itemPane(page).querySelectorAll(".inbox-thread .luke-comment-trailing")]
+  return [...itemPane(page).querySelectorAll(".inbox-thread .ui-comment-trailing")]
     .map((trailing) => wordsOf(trailing))
     .filter((words) => words === "Sending");
 }

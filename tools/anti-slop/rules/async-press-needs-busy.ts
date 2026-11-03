@@ -23,7 +23,7 @@ const FOLLOW_DEPTH = 4;
 type Node = ESTree.Node;
 
 /**
- * The rule: a `@luke/ui` button whose press is async, or hands back a
+ * The rule: a `@repo/ui` button whose press is async, or hands back a
  * promise (`pressAct`, `useAct().press`, an awaited act, a `.then`), passes
  * `busy`, so a slow answer is seen working in the one busy shape every kind of
  * button takes. A handler is read where it is written, or by the name it is
@@ -36,7 +36,7 @@ export const asyncPressNeedsBusyRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow a @luke/ui button with an async press and no `busy`, from a baseline that only shrinks.",
+        "Disallow a @repo/ui button with an async press and no `busy`, from a baseline that only shrinks.",
     },
     messages: {
       noBusy:

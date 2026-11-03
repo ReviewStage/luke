@@ -4,7 +4,7 @@
  * The capture runs inside every write to its table, so a broken trigger
  * would fail users' writes; it is therefore rendered from the declaration
  * here and never written by hand, and the drift check
- * (`@luke/database/testing`) holds the migrated database to what this
+ * (`@repo/database/testing`) holds the migrated database to what this
  * renders.
  *
  * A row trigger fires on every insert and delete, and on an update only

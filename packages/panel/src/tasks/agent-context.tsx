@@ -1,4 +1,4 @@
-import type { AgentBrief, AgentContext } from "@luke/features/agent-wire";
+import type { AgentBrief, AgentContext } from "@repo/features/agent-wire";
 import {
   AnchoredPopover,
   Fact,
@@ -14,7 +14,7 @@ import {
   Stack,
   Tooltip,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useRef, useState } from "react";
 import {
   CONTEXT_LEVEL,
@@ -41,7 +41,7 @@ import {
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
- * stand at the foot's right (`@luke/ui`'s `AnchoredPopover` and
+ * stand at the foot's right (`@repo/ui`'s `AnchoredPopover` and
  * `PopoverPanel`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the
@@ -89,11 +89,11 @@ function ContextBody({
   return (
     <>
       <p className="m-0 flex justify-between gap-control-gap tabular-nums">
-        <span className="font-luke-semibold">{contextFullLine(context)}</span>
+        <span className="font-ui-semibold">{contextFullLine(context)}</span>
         <span className="text-muted-foreground">{contextTotalLine(context)}</span>
       </p>
       <div
-        className="flex h-1.5 gap-list-gap overflow-hidden rounded-luke-full bg-fill-strong"
+        className="flex h-1.5 gap-list-gap overflow-hidden rounded-ui-full bg-fill-strong"
         aria-hidden="true"
       >
         {rows.map((row) => (
@@ -109,7 +109,7 @@ function ContextBody({
         {rows.map((row) => (
           <li key={row.part} className="flex items-center gap-icon-gap" data-part={row.part}>
             <span
-              className={`size-luke-8 flex-none rounded-luke-6 ${PART_GROUND[row.part]}`}
+              className={`size-ui-8 flex-none rounded-ui-6 ${PART_GROUND[row.part]}`}
               aria-hidden="true"
             />
             <span className="m-0 min-w-0 flex-1 text-muted-foreground">{row.label}</span>

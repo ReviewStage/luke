@@ -1683,8 +1683,8 @@ that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
 account id it files under while you are signed in, an id of its own it
-keeps beside it, and whether it may send, under `luke_app_replay` and
-`luke_app_replay_consent`, apart from the site's own counting. A connect
+keeps beside it, and whether it may send, under `app_replay` and
+`app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
 lands on, or the app opened again in that tab, lets go of it. A sign-in

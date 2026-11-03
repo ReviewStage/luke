@@ -1,4 +1,4 @@
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
@@ -10,7 +10,7 @@ import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 /**
  * toast-swipe.ts -- a toast sent away sideways: dragged by the pointer or swept by a trackpad's two fingers, it follows, flies off past a threshold, and springs back under it.
  *
- * The drag writes the toast's offset to `--luke-toast-drag` alone, which its
+ * The drag writes the toast's offset to `--ui-toast-drag` alone, which its
  * `translate` reads, and plays nothing while the pointer is down, so the
  * card stays under the finger. Let go past `SWIPE_AWAY` of its width (and no
  * less than `SWIPE_LEAST`), it is marked with the side it went (`data-swiped`)
@@ -37,7 +37,7 @@ const SWIPE_AWAY = 0.35;
 /** The least travel, in CSS pixels, that sends a toast away, however narrow it is drawn. */
 const SWIPE_LEAST = 64;
 
-/** How long a sweep stands with no wheel delta before the toast springs home: `--luke-duration-quick`'s. */
+/** How long a sweep stands with no wheel delta before the toast springs home: `--ui-duration-quick`'s. */
 const SWIPE_QUIET = MOTION_DURATION_MS.QUICK;
 
 /** What a spring home plays on where motion is held still: a frame, which only stands out a sweep's delay. */
@@ -69,7 +69,7 @@ export interface ToastSwipe {
 
 /** Puts the toast at `offset` sideways, as the drag's own frame, playing nothing. */
 function place(toast: HTMLLIElement, offset: number): void {
-  toast.style.setProperty("--luke-toast-drag", `${offset}px`);
+  toast.style.setProperty("--ui-toast-drag", `${offset}px`);
 }
 
 /** Whether `offset` has gone far enough to send `toast` away. */

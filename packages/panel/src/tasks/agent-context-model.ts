@@ -1,6 +1,6 @@
-import { AGENT_BRIEF, type AgentBrief, type AgentContext } from "@luke/features/agent-wire";
-import { formatCompact } from "@luke/features/number-format";
-import { agoText } from "@luke/features/time-format";
+import { AGENT_BRIEF, type AgentBrief, type AgentContext } from "@repo/features/agent-wire";
+import { formatCompact } from "@repo/features/number-format";
+import { agoText } from "@repo/features/time-format";
 
 /**
  * agent-context-model.ts -- what the agent box's context ring and its popover say of the agent's model's context.

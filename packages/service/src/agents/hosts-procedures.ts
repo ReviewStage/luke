@@ -3,7 +3,7 @@
  *
  * A machine is any device of the account's that holds a device secret, a
  * box its approved pairing keyed and a Mac its desktop enrolled alike
- * (`@luke/database/models/host-store`), so each is listed, judged against
+ * (`@repo/database/models/host-store`), so each is listed, judged against
  * the floor, and removed the same way; a desktop that never enrolled is not
  * listed.
  *
@@ -16,11 +16,11 @@
  * release stands, whether its program has called in since it joined, and,
  * for a Mac, the user it runs as, and every answer
  * names the install script on the service's own origin, which the
- * install and upgrade commands name (`@luke/features/host-wire`).
+ * install and upgrade commands name (`@repo/features/host-wire`).
  *
  * A box's pairing is read, approved, or denied by its user code, whatever
  * its case and dash, and only while it is pending and its code has not
- * lapsed (`@luke/database/models/host-pairing-store`). The read answers
+ * lapsed (`@repo/database/models/host-pairing-store`). The read answers
  * what the approve screen shows: the box as it named itself and the
  * address its start came from, so a member sees whose box they would let
  * run their agents. An approve makes the account's host under an id minted
@@ -32,17 +32,17 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { runningTurnIds } from "@luke/database/models/abandoned-turns";
-import { devicesSeenSince } from "@luke/database/models/device-store";
+import { runningTurnIds } from "@repo/database/models/abandoned-turns";
+import { devicesSeenSince } from "@repo/database/models/device-store";
 import {
   approveHostPairing,
   denyHostPairing,
   HOST_PAIRING_GUESS,
   type HostPairingGuessed,
   readHostPairing,
-} from "@luke/database/models/host-pairing-store";
-import { hostAgentConversations, hostsOf, removeHost } from "@luke/database/models/host-store";
-import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host-wire";
+} from "@repo/database/models/host-pairing-store";
+import { hostAgentConversations, hostsOf, removeHost } from "@repo/database/models/host-store";
+import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@repo/features/host-wire";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import {

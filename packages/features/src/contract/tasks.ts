@@ -9,7 +9,7 @@
  * params apart from it (`exactBodyInput`).
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_START_BODY_BYTES } from "../agent-wire.js";

@@ -5,14 +5,14 @@ import {
   type SidebarRows,
   sidebarLiveRowsSchema,
   sidebarRowsOfLive,
-} from "@luke/features/sidebar-live";
+} from "@repo/features/sidebar-live";
 import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";

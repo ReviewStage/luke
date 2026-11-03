@@ -1,8 +1,8 @@
-import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/agent-wire";
-import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
-import type { ModelProvider } from "@luke/features/models-wire";
-import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
-import { readEither } from "@luke/wire/effect";
+import type { LocalAgentRefusal, RefusedDevice } from "@repo/features/agent-wire";
+import type { InstalledSkillFilesRefusal } from "@repo/features/installed-skill-route-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
+import type { RepositoryUnreached } from "@repo/features/repository-reach-wire";
+import { readEither } from "@repo/wire/effect";
 import { type Cause, Effect, type Layer, Option, Result, type Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type UnparsedWireValue, unparsedWire, wireUuidSchema } from "../core.js";
@@ -254,8 +254,7 @@ export function upstreamRefused(upstreamStatus: number): HostedRefusal {
  * does not verify). An endpoint that does on a GET what a link must not
  * make a browser do asks for this itself, because a Lax cookie rides a
  * top-level navigation and every function holding a group answers every
- * path the group declares; and the work that reaches eve picks its caller
- * by it (`agents/coder-host/stop.ts`'s `eveFor`).
+ * path the group declares.
  */
 export function hostedCarriesBearer(request: Request): boolean {
   return request.headers.has("authorization");

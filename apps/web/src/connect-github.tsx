@@ -5,22 +5,22 @@ import {
   failedLinkAddress,
   LINK_FAILED,
   linkErrorWords,
-} from "@luke/features/connect-github-step";
-import { browserClient, browserRefusal } from "@luke/features/contract/browser-client";
+} from "@repo/features/connect-github-step";
+import { browserClient, browserRefusal } from "@repo/features/contract/browser-client";
 import {
   GITHUB_CONNECT_CLAIM,
   GITHUB_CONNECT_PAGE,
   type GitHubConnectClaim,
-} from "@luke/features/github-connection-wire";
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/features/github-connection-wire";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   LANDING_OUTCOME,
   LANDING_TONE,
   type LandingOutcome,
   type LandingWords,
   landingWords,
-} from "@luke/features/landing-outcome";
-import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
+} from "@repo/features/landing-outcome";
+import { SOCIAL_PROVIDER } from "@repo/features/sign-in-provider";
 import {
   AuthMark,
   AuthPage,
@@ -29,14 +29,14 @@ import {
   SocialSignInChoices,
   TEXT_LINK_LOOK,
   TextLink,
-} from "@luke/ui";
+} from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 /**
@@ -52,7 +52,7 @@ import { mountPrerenderedPage } from "./mount-page";
  * browser happens to be signed in to. A browser with no session signs in and
  * comes back to the same address. Nothing of the address is drawn: how the
  * connect ended is said in every landing's words
- * (`@luke/features/landing-outcome`), and an error by our words for its code,
+ * (`@repo/features/landing-outcome`), and an error by our words for its code,
  * or by Better Auth's own. Once the page says how it ended it offers the
  * Open link (`connect-return.ts`), and a connect the web app started closes where
  * that is `done=1`; never while the page is still on its way to GitHub.
@@ -116,7 +116,7 @@ async function connect(intent: string): Promise<View> {
     );
   }
   if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) return said(LANDING_OUTCOME.EXPIRED);
-  if (claim === CLAIM_UNSETTLED.UNANSWERED) return said(LANDING_OUTCOME.LUKE_UNREACHABLE);
+  if (claim === CLAIM_UNSETTLED.UNANSWERED) return said(LANDING_OUTCOME.SERVICE_UNREACHABLE);
   const linked = await authClient.linkSocial({
     provider: SOCIAL_PROVIDER.GITHUB,
     callbackURL: `${GITHUB_CONNECT_PAGE.PATH}?${GITHUB_CONNECT_PAGE.DONE_PARAM}=${GITHUB_CONNECT_PAGE.FLAG}`,

@@ -15,8 +15,8 @@
  * seam (`SpawnTaskCodeProcess`), so the desktop forks it with Electron's
  * `utilityProcess` and a test with Node's own child process.
  */
-import { type CodeLines, type CodeToken, codeLinesSchema } from "@luke/features/tasks-view";
-import { catchAllButInterrupt } from "@luke/runtime/effect";
+import { type CodeLines, type CodeToken, codeLinesSchema } from "@repo/features/tasks-view";
+import { catchAllButInterrupt } from "@repo/runtime/effect";
 import { type Cause, Deferred, Duration, Effect, Exit, Option, Queue, Schema, Scope } from "effect";
 
 /**

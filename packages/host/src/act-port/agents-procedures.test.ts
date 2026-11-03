@@ -19,14 +19,14 @@ import {
   type AgentTranscriptKey,
   type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+} from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/pull-request-write-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import { AGENT_ACT_KIND, type PortActKind } from "../contract/index.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
@@ -87,7 +87,8 @@ const REFUSAL = {
     "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
     "Could not read the repository's reviewers and labels on this system.",
-  [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: "Could not read the agent's Vespin tools on this system.",
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]:
+    "Could not read the agent's Vespin tools on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]:
     "Could not read the pull request's checks on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
@@ -217,9 +218,9 @@ const ACTS: readonly {
     ask: "agentReviewOptions",
   },
   {
-    kind: AGENT_ACT_KIND.AGENTS_LUKE_TOOLS,
+    kind: AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS,
     payload: { agentId: AGENT_ID },
-    ask: "agentLukeTools",
+    ask: "agentWorkspaceTools",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS,

@@ -1,32 +1,32 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/integration-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_SKILL_SOURCE,
   TASK_TREE_ENTRY,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
-} from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/settings/settings-views";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -269,7 +269,7 @@ async function mount(
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
     /** The round Start button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
-      document.querySelector<HTMLButtonElement>('.luke-composer-foot button[type="submit"]') ??
+      document.querySelector<HTMLButtonElement>('.ui-composer-foot button[type="submit"]') ??
       assert.fail("the round Start button stands"),
     /** The card's buttons in order, as a reader meets them. */
     controls: () =>
@@ -283,7 +283,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
-  const foot = card.dialog()?.querySelector(".luke-composer-foot");
+  const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
@@ -511,7 +511,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
 
   typeInComposer(document, "@roll");
   await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const offered = [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (row) => row.textContent,
   );
   pressInComposer(document, "Enter");
@@ -527,7 +527,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
     [{ workspaceId: "workspace-acme", repository: "acme/web", path: "", recursive: true }],
   );
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["rollout-store.ts"],
   );
   const file = { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" } as const;
@@ -780,7 +780,7 @@ test("the workspace first resolving keeps a repository picked before the workspa
 
 /** The lines the repository menu says in its rows' place. */
 function menuNotes(): (string | null)[] {
-  return [...document.querySelectorAll(".luke-combobox-note")].flatMap((note) => {
+  return [...document.querySelectorAll(".ui-combobox-note")].flatMap((note) => {
     const lines = [...note.querySelectorAll("p")];
     return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
   });
@@ -789,7 +789,7 @@ function menuNotes(): (string | null)[] {
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
-    document.querySelector<HTMLButtonElement>(".luke-chip") ??
+    document.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the dialog draws the repository chip");
   act(() => chip.click());
   await settle();
@@ -1042,8 +1042,8 @@ test("the repository menu names each repository first and its owner after it, so
   await openChip();
   const rows = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
+      row.querySelector(".ui-combobox-option-label")?.textContent,
+      row.querySelector(".ui-combobox-option-detail")?.textContent,
     ]);
 
   assert.deepEqual(rows(), [

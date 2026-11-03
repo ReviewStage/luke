@@ -14,8 +14,8 @@ import {
   valueFromJsonText,
   type WireValue,
   WireValueSchema,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Result, Schema } from "effect";
 import { DRIVER_EVENT, LEAK_CHECK_MARKER } from "./pins.js";
 

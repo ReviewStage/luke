@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
-import { type CommentSpan, spanWithin, textChange } from "@luke/features/plan-comment-anchor";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
+import { type CommentSpan, spanWithin, textChange } from "@repo/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -22,8 +22,9 @@ import {
   type PlanCommentStartRequest,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
-} from "@luke/features/plan-comment-wire";
-import { planSections } from "@luke/features/plan-document";
+  planCommentActorSchema,
+} from "@repo/features/plan-comment-wire";
+import { planSections } from "@repo/features/plan-document";
 import { and, asc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
@@ -158,12 +159,12 @@ const EntryRowSchema = Schema.Struct({
   id: Schema.String,
   threadId: Schema.String,
   kind: Schema.Literals(Object.values(PLAN_COMMENT_ENTRY)),
-  actor: Schema.Literals(Object.values(PLAN_COMMENT_ACTOR)),
+  actor: planCommentActorSchema,
   userId: Schema.NullOr(Schema.String),
   userName: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   words: Schema.NullOr(Schema.String),
-  askedActor: Schema.NullOr(Schema.Literals(Object.values(PLAN_COMMENT_ACTOR))),
+  askedActor: Schema.NullOr(planCommentActorSchema),
   askedAgentId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   editedAt: Schema.NullOr(InstantColumnSchema),
@@ -323,7 +324,7 @@ const findKeyedEntry = SqlSchema.findOneOption({
   Result: Schema.Struct({
     threadId: Schema.String,
     kind: Schema.String,
-    askedActor: Schema.NullOr(Schema.String),
+    askedActor: Schema.NullOr(planCommentActorSchema),
     askedAgentId: Schema.NullOr(Schema.String),
   }),
   execute: ({ taskId, clientKey }) =>
@@ -404,8 +405,8 @@ function entryOf(row: EntryRow, files: readonly FileRow[]): PlanCommentEntry {
       : undefined;
   const agent = row.agentId === null ? undefined : { agentId: row.agentId };
   const asked: PlanCommentAsked | undefined =
-    row.askedActor === PLAN_COMMENT_ACTOR.LUKE
-      ? { actor: PLAN_COMMENT_ACTOR.LUKE }
+    row.askedActor === PLAN_COMMENT_ACTOR.APP
+      ? { actor: PLAN_COMMENT_ACTOR.APP }
       : row.askedActor === PLAN_COMMENT_ACTOR.AGENT && row.askedAgentId !== null
         ? { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: row.askedAgentId }
         : undefined;

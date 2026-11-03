@@ -12,7 +12,7 @@ import { cn } from "../cn.js";
  *   (`max-w-empty-state`), inset, and gap, with no width, flex share,
  *   dashed edge, corner, or `text-balance` of its own, because the room it
  *   stands in, which shares its space above and below two to three, is
- *   `@luke/ui`'s `EmptyState` (`components/empty-state/`), and its words
+ *   `@repo/ui`'s `EmptyState` (`components/empty-state/`), and its words
  *   wrap as a paragraph's do.
  * - `EmptyHeader` is the heading and the line together, at the item gap
  *   between them, with no measure of its own, since the block's is the
@@ -20,9 +20,9 @@ import { cn } from "../cn.js";
  *   than the muted ink, its stroke thinned (no `variant`, and no `mb-2`,
  *   since the block's gap stands between it and the words).
  * - `EmptyTitle`, `EmptyDescription`, and `EmptyContent` are dropped,
- *   because the heading and the line are `@luke/ui`'s `Text` in their roles,
+ *   because the heading and the line are `@repo/ui`'s `Text` in their roles,
  *   and the ways on stand in the block itself, a gap under the words.
- * - Each part keeps the `luke-empty-state-*` class it wore before the move,
+ * - Each part keeps the `ui-empty-state-*` class it wore before the move,
  *   which other sheets and tests find it by.
  */
 
@@ -31,7 +31,7 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty"
       className={cn(
-        "luke-empty-state-body m-auto box-border flex max-w-empty-state flex-col items-center gap-luke-12 p-luke-24 text-center",
+        "ui-empty-state-body m-auto box-border flex max-w-empty-state flex-col items-center gap-ui-12 p-ui-24 text-center",
         className,
       )}
       {...props}
@@ -43,7 +43,7 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty-header"
-      className={cn("luke-empty-state-words flex flex-col gap-luke-4", className)}
+      className={cn("ui-empty-state-words flex flex-col gap-ui-4", className)}
       {...props}
     />
   );
@@ -54,7 +54,7 @@ function EmptyMedia({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="empty-icon"
       className={cn(
-        "luke-empty-state-icon flex text-muted-foreground opacity-60 [&_svg]:size-luke-40 [&_svg]:stroke-[1.4]",
+        "ui-empty-state-icon flex text-muted-foreground opacity-60 [&_svg]:size-ui-40 [&_svg]:stroke-[1.4]",
         className,
       )}
       {...props}

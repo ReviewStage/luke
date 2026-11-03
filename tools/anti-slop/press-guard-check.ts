@@ -34,13 +34,13 @@ import {
 /**
  * The design system's guards have no escape hatch: oxlint honors every
  * inline disable and has no flag to refuse one, so `pnpm lint` runs this
- * after it. It fails on a JSX-capable file outside `@luke/ui` holding a
+ * after it. It fails on a JSX-capable file outside `@repo/ui` holding a
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components` or
  * `async-press-needs-busy`, whose baseline is the only way past it, on a
- * JSX-capable file outside `@luke/ui` holding one that would silence
+ * JSX-capable file outside `@repo/ui` holding one that would silence
  * `no-open-page-from-button`, `no-raw-heading-outside-ui` or
- * `no-hand-written-live-region`, on any TypeScript file outside `@luke/ui`
+ * `no-hand-written-live-region`, on any TypeScript file outside `@repo/ui`
  * that names an arrow key and holds one that would silence
  * `no-hand-written-arrow-keys`, on any TypeScript file holding one that would
  * silence `no-lucide-outside-door` or, where it adds a listener,
@@ -87,7 +87,7 @@ const GUARDS = [
     rule: PRESS_GUARD_RULE,
     sources: JSX_SOURCE,
     watches: (absolute: string) => isOutsideUi(absolute),
-    remedy: "Move the press onto a @luke/ui component or variant instead",
+    remedy: "Move the press onto a @repo/ui component or variant instead",
   },
   {
     rule: SKELETON_GUARD_RULE,
@@ -115,14 +115,14 @@ const GUARDS = [
     sources: JSX_SOURCE,
     watches: (absolute: string) => isOutsideUi(absolute),
     remedy:
-      "Draw the heading with Text from @luke/ui (`as` for the element, a type role for the look) instead",
+      "Draw the heading with Text from @repo/ui (`as` for the element, a type role for the look) instead",
   },
   {
     rule: LIVE_REGION_GUARD_RULE,
     sources: JSX_SOURCE,
     watches: (absolute: string) => isOutsideUi(absolute),
     remedy:
-      "Say it with `announce` from @luke/ui, or draw the words in FailureNote, ErrorState, EmptyState or NoteLine, instead",
+      "Say it with `announce` from @repo/ui, or draw the words in FailureNote, ErrorState, EmptyState or NoteLine, instead",
   },
   {
     rule: ARROW_KEY_GUARD_RULE,
@@ -133,7 +133,7 @@ const GUARDS = [
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
       NAMES_ARROW_KEY.test(readFileSync(absolute, "utf8")),
-    remedy: "Step the list with useRovingKeys or List from @luke/ui instead",
+    remedy: "Step the list with useRovingKeys or List from @repo/ui instead",
   },
   {
     rule: LUCIDE_GUARD_RULE,
@@ -144,7 +144,7 @@ const GUARDS = [
       !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
       existsSync(absolute) &&
       readFileSync(absolute, "utf8").includes("lucide-react"),
-    remedy: "Import the icon from @luke/ui/icons instead",
+    remedy: "Import the icon from @repo/ui/icons instead",
   },
   {
     rule: PRESS_LISTENER_GUARD_RULE,

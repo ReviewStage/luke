@@ -36,7 +36,7 @@ import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
  */
 
 /** The mark every message of the pick wears, setting it apart from whatever else the page posts. */
-export const PAGE_PICK_TYPE = "luke-page-pick";
+export const PAGE_PICK_TYPE = "app-page-pick";
 
 /** What the panel asks of the frame. */
 export const PAGE_PICK_ACT = {
@@ -158,9 +158,9 @@ export const PAGE_PICK_SCRIPT = `(() => {
   const MAX_PATH = ${PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS};
   const MAX_QUOTE = ${PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS};
   const MAX_SECTION = ${PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS};
-  const MARK = "data-luke-pick";
+  const MARK = "data-ui-pick";
   const PRESSES = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu"];
-  const WORDS = "luke-comment-words";
+  const WORDS = "ui-comment-words";
   const pick = { on: false, hovered: null, shown: null, hinted: null, styled: false };
   const painted = typeof CSS !== "undefined" && CSS.highlights !== undefined && typeof Highlight === "function";
 

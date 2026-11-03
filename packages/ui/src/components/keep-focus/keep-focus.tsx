@@ -32,7 +32,7 @@ export function KeepFocus({
     "div",
     {
       ...rest,
-      className: className === undefined ? "luke-keep-focus" : `luke-keep-focus ${className}`,
+      className: className === undefined ? "ui-keep-focus" : `ui-keep-focus ${className}`,
       onMouseDown: keepFocus,
     },
     children,

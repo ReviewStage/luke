@@ -1,31 +1,31 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
-import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
-import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
-import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { EXPERIMENT } from "@luke/settings";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
+import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
+import { CHANNEL_TOOL } from "@repo/features/channel-wire";
+import { INBOX_TOOL } from "@repo/features/inbox-wire";
+import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { EXPERIMENT } from "@repo/settings";
 import {
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
-import { webmBytes } from "@luke/wire/testing";
+} from "@repo/wire";
+import { webmBytes } from "@repo/wire/testing";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -81,16 +81,16 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
-  LUKE_INTEGRATION_MCP_PATH,
-  LUKE_MCP_PATH,
-  LUKE_MCP_PROTOCOL_VERSIONS,
-  type LukeMcpBrowser,
-  lukeMcpApp,
+  WORKSPACE_INTEGRATION_MCP_PATH,
+  WORKSPACE_MCP_PATH,
+  WORKSPACE_MCP_PROTOCOL_VERSIONS,
+  type WorkspaceMcpBrowser,
+  workspaceMcpApp,
 } from "./app.js";
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
-import { lukeMcpDoorSeams } from "./door-seams.js";
-import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
+import { workspaceMcpDoorSeams } from "./door-seams.js";
+import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
@@ -124,7 +124,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
@@ -176,13 +175,13 @@ const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
   instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
-  browser: LukeMcpBrowser = noSandboxBrowserLayer,
+  browser: WorkspaceMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
+      workspaceMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },
@@ -280,7 +279,11 @@ const agentInSandbox = Effect.gen(function* () {
 });
 
 /** An SDK client connected under the bearer to the server at the path given, our own unless another is named. */
-function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
+function connected(
+  fetch: typeof globalThis.fetch,
+  bearer: string,
+  path: string = WORKSPACE_MCP_PATH,
+) {
   return Effect.promise(async () => {
     const client = new Client({ name: "runner-test", version: "1.0.0" });
     const transport = new StreamableHTTPClientTransport(new URL(`${ORIGIN}${path}`), {
@@ -305,7 +308,7 @@ function post(
     headers.set("content-type", "application/json");
     headers.set("accept", "application/json, text/event-stream");
     if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
-    const response = await fetch(`${ORIGIN}${LUKE_MCP_PATH}`, {
+    const response = await fetch(`${ORIGIN}${WORKSPACE_MCP_PATH}`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -363,7 +366,7 @@ type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   seams: AgentDoorSeams,
-) => Effect.Effect<object, never, LukeMcpServices>;
+) => Effect.Effect<object, never, WorkspaceMcpServices>;
 
 const agentTool =
   (tool: AgentToolCall["tool"]): DirectCall =>
@@ -548,7 +551,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const unspoken = yield* post(fetch, agent.bearer, initialize("2099-01-01"));
 
         assert.equal(spoken.body.result.protocolVersion, "2025-03-26");
-        assert.equal(unspoken.body.result.protocolVersion, LUKE_MCP_PROTOCOL_VERSIONS[0]);
+        assert.equal(unspoken.body.result.protocolVersion, WORKSPACE_MCP_PROTOCOL_VERSIONS[0]);
       }),
   );
 
@@ -609,7 +612,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
-          const served = LUKE_MCP_TOOLS.get(tool.name);
+          const served = WORKSPACE_MCP_TOOLS.get(tool.name);
           assert.ok(served !== undefined);
           // A tool whose words differ by workspace opens on its words for every agent, its workspace's after them.
           if (served.describe === undefined) assert.equal(tool.description, served.description);
@@ -632,9 +635,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const agent = yield* agentInSandbox;
         const teammate = `user-${randomUUID()}`;
         yield* Database.use((db) =>
-          db
-            .insert(user)
-            .values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
+          db.insert(user).values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
         );
         yield* Database.use((db) =>
           db.insert(messages).values({
@@ -775,7 +776,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
-        const seams = yield* lukeMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
+        const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);
 
         for (const [name, door] of Object.entries(DOOR_OF)) {
@@ -933,8 +934,16 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           NO_SANDBOX,
           Layer.merge(LINEAR_AND_NOTION_CONNECT, linearServer(linearTokenOf(agent.userId), heard)),
         );
-        const linear = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/linear`);
-        const notion = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/notion`);
+        const linear = yield* connected(
+          fetch,
+          agent.bearer,
+          `${WORKSPACE_INTEGRATION_MCP_PATH}/linear`,
+        );
+        const notion = yield* connected(
+          fetch,
+          agent.bearer,
+          `${WORKSPACE_INTEGRATION_MCP_PATH}/notion`,
+        );
 
         const linearTools = yield* Effect.promise(() => linear.listTools());
         const drawn = yield* Effect.promise(() => linear.callTool({ name: "draw", arguments: {} }));
@@ -987,8 +996,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
             }),
           );
 
-        const unbearered = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/linear`, undefined);
-        const unknown = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/luke`, agent.bearer);
+        const unbearered = yield* ask(`${WORKSPACE_INTEGRATION_MCP_PATH}/linear`, undefined);
+        const unknown = yield* ask(`${WORKSPACE_INTEGRATION_MCP_PATH}/luke`, agent.bearer);
 
         assert.equal(unbearered.status, 401);
         assert.equal(unknown.status, 404);

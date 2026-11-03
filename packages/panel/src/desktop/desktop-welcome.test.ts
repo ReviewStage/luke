@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { ModelChoice } from "@luke/features/models-wire";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { ModelChoice } from "@repo/features/models-wire";
+import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

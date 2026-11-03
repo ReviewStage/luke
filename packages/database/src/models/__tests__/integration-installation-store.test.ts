@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { DateTime, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";

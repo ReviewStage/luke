@@ -49,9 +49,9 @@
  * by its repository, nor its opening, generates chapters.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAccountPreferences } from "@luke/database/models/account-store";
-import { type Agent, hasRepository } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAccountPreferences } from "@repo/database/models/account-store";
+import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   CHAPTER_GENERATION_STALE_MS,
@@ -62,20 +62,20 @@ import {
   latestPullRequestChapters,
   type PullRequestChapters,
   type PullRequestChaptersEffect,
-} from "@luke/database/models/pull-request-chapters-store";
+} from "@repo/database/models/pull-request-chapters-store";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
-} from "@luke/database/pull-request-chapters-vocabulary";
-import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@luke/features/chapters-model-choice";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { chapterSchema } from "@luke/features/pull-request-chapters";
+} from "@repo/database/pull-request-chapters-vocabulary";
+import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { chapterSchema } from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersAnswer,
   type PullRequestChaptersState,
-} from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-wire";
 import { Cause, Clock, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { reachedAgentById } from "../agents/agent-reach.js";

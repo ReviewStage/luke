@@ -9,7 +9,7 @@ import {
   CircleDollarSignIcon,
   LayoutDashboardIcon,
   UsersIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import { ADMIN_TAB, type AdminTab } from "../routing.js";
 
 /** One section: the tab it opens, its name, and its glyph. */

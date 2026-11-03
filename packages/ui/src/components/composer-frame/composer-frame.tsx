@@ -48,7 +48,7 @@ const LOOK_CLASS: Record<ComposerLook, string> = {
   [COMPOSER_LOOK.CARD]: "rounded-dialog border border-border bg-surface shadow-composer",
   [COMPOSER_LOOK.FIELD]: "rounded-control border border-border bg-ground",
   [COMPOSER_LOOK.INPUT]:
-    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit focus-within:bg-field-focus",
+    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit focus-within:bg-field-focus",
   [COMPOSER_LOOK.BARE]: "rounded-dialog border-0 bg-transparent",
 };
 
@@ -81,7 +81,7 @@ export function ComposerFrame({
     {
       ...rest,
       ref,
-      className: ["luke-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
+      className: ["ui-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
         .filter((part) => part !== "")
         .join(" "),
       noValidate: Element === COMPOSER_ELEMENT.FORM ? true : undefined,

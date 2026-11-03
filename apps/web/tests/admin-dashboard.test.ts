@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import type { AdminMetrics, AdminOverview } from "@luke/features/admin-answer-wire";
+import type { AdminMetrics, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/features/admin-overview-vocabulary";
-import { ADMIN_READ } from "@luke/features/admin-wire";
-import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
-import type { AdminRead } from "@luke/panel/admin/use-admin-read";
+} from "@repo/features/admin-overview-vocabulary";
+import { ADMIN_READ } from "@repo/features/admin-wire";
+import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
+import type { AdminRead } from "@repo/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

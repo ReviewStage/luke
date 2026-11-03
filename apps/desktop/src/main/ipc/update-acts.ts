@@ -5,8 +5,8 @@
  * asked.
  */
 
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { UPDATE_ACT_KIND } from "@luke/host/contract";
+import { actPortFor, type PlatformActProcedures } from "@repo/host/act-port";
+import { UPDATE_ACT_KIND } from "@repo/host/contract";
 import type { WebContents } from "electron";
 import type { UpdateServiceHost } from "../services/update-service-host";
 

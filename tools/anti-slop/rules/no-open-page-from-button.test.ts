@@ -21,7 +21,7 @@ RuleTester.it = it;
 
 const tester = new RuleTester();
 
-const IMPORT = 'import { Button, ButtonLink, Chip, TextButton, TextLink } from "@luke/ui";\n';
+const IMPORT = 'import { Button, ButtonLink, Chip, TextButton, TextLink } from "@repo/ui";\n';
 
 function panel(code: string): { code: string; filename: string } {
   return { code: IMPORT + code, filename: PANEL_FILE };
@@ -45,7 +45,7 @@ tester.run("no-open-page-from-button", noOpenPageFromButtonRule, {
     panel(
       "function A({ openLink }) { return <Button onClick={() => { const later = () => openLink(U); later; }} />; }",
     ),
-    // A name that is no `@luke/ui` button is not the rule's.
+    // A name that is no `@repo/ui` button is not the rule's.
     {
       code: 'import { Button } from "./my-button.js"; function A({ openLink }) { return <Button onClick={() => openLink(U)} />; }',
       filename: PANEL_FILE,
@@ -54,7 +54,7 @@ tester.run("no-open-page-from-button", noOpenPageFromButtonRule, {
     panel(
       "function A({ openLink }) { const go = () => openLink(U); return <Button onClick={go} />; } function B() { const go = () => 1; return null; }",
     ),
-    // `@luke/ui` draws its own buttons for what they do, and a test its for what they show.
+    // `@repo/ui` draws its own buttons for what they do, and a test its for what they show.
     {
       code: 'import { Button } from "../button/button.js"; function A({ openLink }) { return <Button onClick={() => openLink(U)} />; }',
       filename: UI_FILE,
@@ -120,9 +120,9 @@ tester.run("no-open-page-from-button", noOpenPageFromButtonRule, {
       ),
       errors: [{ messageId: "opensPage" }],
     },
-    // A button under a `@luke/ui` subpath, or renamed on import.
+    // A button under a `@repo/ui` subpath, or renamed on import.
     {
-      code: 'import { Button as Press } from "@luke/ui/button"; function A({ openLink }) { return <Press onClick={() => openLink(U)} />; }',
+      code: 'import { Button as Press } from "@repo/ui/button"; function A({ openLink }) { return <Press onClick={() => openLink(U)} />; }',
       filename: PANEL_FILE,
       errors: [{ messageId: "opensPage" }],
     },

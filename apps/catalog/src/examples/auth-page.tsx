@@ -1,5 +1,5 @@
-import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AuthMark,
   AuthPage,
@@ -12,7 +12,7 @@ import {
   SocialSignInCard,
   TEXT_FIELD_TYPE,
   TextField,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -27,7 +27,7 @@ import { CatalogSection } from "../section";
  */
 
 /** The Open link as a page offers it; the catalog goes nowhere. */
-const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
+const OPEN_APP = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
 function Mark(): React.JSX.Element {
   return (
@@ -114,7 +114,7 @@ function AuthPages(): React.JSX.Element {
               mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={LANDING_TONE.COMPLETE} />}
               title="GitHub is connected to your workspace"
               description="Everyone in the workspace can use it. You can close this tab."
-              action={OPEN_LUKE}
+              action={OPEN_APP}
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
@@ -122,13 +122,13 @@ function AuthPages(): React.JSX.Element {
               mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.DANGER} />}
               title={`${PRODUCT_NAME} could not reach Notion`}
               description="Try again in a moment."
-              action={OPEN_LUKE}
+              action={OPEN_APP}
             />
           </div>
         </div>
       </CatalogSection>
       <CatalogSection
-        id="auth-luke"
+        id="auth-open-app"
         title={`${PRODUCT_NAME}'s own mark, on its way and failed, with no Open ${PRODUCT_NAME}`}
       >
         <div className="catalog-screens">

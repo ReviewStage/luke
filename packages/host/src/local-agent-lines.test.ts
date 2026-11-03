@@ -15,7 +15,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke/features";
+import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@repo/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -25,9 +25,9 @@ import {
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { ConfigProvider, Deferred, Effect, Exit, Layer, Option, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { composeLocalAgents } from "./compose-local-agents.js";
@@ -88,8 +88,8 @@ const directMac = (unsavedWork: Script | undefined) => ({
   }),
   tools: {
     node: RUNNER,
-    claude: "/opt/luke/agent-tools/claude",
-    codex: "/opt/luke/agent-tools/codex",
+    claude: "/opt/agent/agent-tools/claude",
+    codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
   formerlyDirect: true,
@@ -115,7 +115,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
+    const root = yield* temporaryDirectoryScoped("agent-lines-");
     const home = path.join(root, "home");
     const fileSystem = yield* FileSystem.FileSystem;
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
@@ -276,7 +276,7 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  */
 const launching = (workStands: boolean) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-launch-");
+    const root = yield* temporaryDirectoryScoped("agent-launch-");
     const home = path.join(root, "home");
     const layout = deviceAgentLayout(home, AGENT_ID);
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });

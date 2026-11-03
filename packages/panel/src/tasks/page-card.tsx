@@ -1,13 +1,13 @@
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   PAGE_SHOWER,
   type PageLine,
   type PagePlace,
   type PageShower,
-} from "@luke/features/page-wire";
-import { HoverCard, HoverCardHead, HoverCardSkeleton, PageThumb, Time, useMinute } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/features/page-wire";
+import { HoverCard, HoverCardHead, HoverCardSkeleton, PageThumb, Time, useMinute } from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { AppWindowIcon } from "lucide-react";
 import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { appPlatform } from "../app-platform.js";
@@ -66,7 +66,7 @@ function showerActor(
   agents: ReadonlyMap<string, string>,
 ): Actor | undefined {
   if (shownBy === undefined) return undefined;
-  if (shownBy.kind === PAGE_SHOWER.LUKE) return LUKE_ACTOR;
+  if (shownBy.kind === PAGE_SHOWER.APP) return APP_ACTOR;
   return {
     kind: ACTOR_KIND.AGENT,
     agentId: shownBy.agentId,

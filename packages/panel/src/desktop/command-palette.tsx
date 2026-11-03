@@ -1,7 +1,7 @@
 /**
  * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, the Inbox's items, the workspace's automations, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
- * The palette is `@luke/ui`'s command dialog (`@luke/ui/command`), its
+ * The palette is `@repo/ui`'s command dialog (`@repo/ui/command`), its
  * rows the window's menu rows, under a row of filters as Cursor's palette has them: All, then
  * one kind each. All lists each kind's best few rows under its heading, and
  * a filter that kind's alone, as many as are worth reading. ← and → step
@@ -9,7 +9,7 @@
  * any time, where they mean Back and Forward elsewhere; once anything is
  * typed, ← and → move the caret, as in any text field. A press on a filter
  * chooses it. The palette ranks the rows itself with the one tiered scorer
- * (`@luke/ui/search-score`), so each kind keeps its own best few however
+ * (`@repo/ui/search-score`), so each kind keeps its own best few however
  * many rows the others hold, and marks in each row what found it. Letters
  * typed in order find only a file and a command, whose words are typed by
  * their first letters, so "thm" finds no Theme setting.
@@ -61,22 +61,22 @@
  * each row's words instead.
  */
 
-import type { TasklessAgent } from "@luke/features/agent-wire";
-import { automationTriggerText } from "@luke/features/automation-list-model";
-import type { AutomationSummary } from "@luke/features/automation-wire";
-import type { Channel } from "@luke/features/channel-wire";
-import { formatCount } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { TasklessAgent } from "@repo/features/agent-wire";
+import { automationTriggerText } from "@repo/features/automation-list-model";
+import type { AutomationSummary } from "@repo/features/automation-wire";
+import type { Channel } from "@repo/features/channel-wire";
+import { formatCount } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_RELATION_KIND,
   TASK_TREE_BOUNDS,
   TASK_TREE_ENTRY,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
+} from "@repo/features/task-wire";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { TERMINAL_ASK } from "@repo/features/terminal-entry";
 import {
   noMatchWords,
   REFRESH_FAILED_WORDS,
@@ -84,9 +84,9 @@ import {
   readingWords,
   TERM,
   VERB,
-} from "@luke/features/words";
-import { taskKey } from "@luke/features/workspace-key";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+} from "@repo/features/words";
+import { taskKey } from "@repo/features/workspace-key";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import {
   EXPERIMENT,
   type Experiment,
@@ -94,8 +94,8 @@ import {
   experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
-} from "@luke/settings";
-import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
+} from "@repo/settings";
+import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -109,7 +109,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
   shortcutLabel,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   CHOICE_BAR_FOCUS,
   CHOICE_BAR_LOOK,
@@ -121,25 +121,25 @@ import {
   NoteLine,
   Shortcut,
   useMinute,
-} from "@luke/ui";
-import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@repo/ui/actor-model";
 import {
   COMMAND_FILTER,
   CommandDialog,
   type CommandDialogProps,
   type CommandGroup,
   type CommandItem,
-} from "@luke/ui/command";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui/command";
+import { GLYPH } from "@repo/ui/icons";
 import {
   hitRangesIn,
   SEARCH_TIER,
   type SearchHit,
   type SearchSubject,
   searchHit,
-} from "@luke/ui/search-score";
-import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { inTaskOrder } from "@luke/ui/tab-strip-model";
+} from "@repo/ui/search-score";
+import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@repo/ui/search-tokens";
+import { inTaskOrder } from "@repo/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -147,8 +147,8 @@ import {
   TASK_ROW,
   type TaskRow,
   taskRow,
-} from "@luke/ui/task-list-model";
-import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
+} from "@repo/ui/task-list-model";
+import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@repo/ui/tasks-model";
 import {
   Fragment,
   isValidElement,
@@ -766,7 +766,7 @@ function steppedFilter(
 
 /** The word a task the app or an agent made is also found by, beside its maker's name. */
 const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
-  [ACTOR_KIND.LUKE]: "luke",
+  [ACTOR_KIND.APP]: "app",
   [ACTOR_KIND.AGENT]: "agent",
   [ACTOR_KIND.AUTOMATION]: "automation",
 };
@@ -1529,7 +1529,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history, New sub-task, Add relation, which
+ * the door its ⋯ asks, Version history, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -1553,7 +1553,7 @@ function taskCommandRows(
       item: PANEL_COMMAND.NEW_CHILD_TASK,
       run: () => tasks.onNewRelatedTask(task.id, TASK_CREATE_RELATION_KIND.SUB_TASK_OF),
     },
-    // Add relation opens the head's add menu on its first kind, whose pinned Relation row switches it.
+    // Add task relation opens the head's add menu on its first kind, whose pinned Relation row switches it.
     {
       item: PANEL_COMMAND.ADD_RELATION,
       run: () => tasks.onAddRelation(task.id, TASK_RELATION_KIND.SUB_TASK),

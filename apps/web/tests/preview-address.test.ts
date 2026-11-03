@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { type TestContext, test } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -16,10 +16,10 @@ const SCRIPTS = [
 const WORKSPACE = {
   "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',
   "vercel.json": `${JSON.stringify({ services: { web: { root: "apps/web" } } })}\n`,
-  "apps/web/package.json": `${JSON.stringify({ name: "@luke/web" })}\n`,
+  "apps/web/package.json": `${JSON.stringify({ name: "@repo/web" })}\n`,
 } as const;
-const REPOSITORY = "ReviewStage/luke";
-const BRANCH = "luke/rebased";
+const REPOSITORY = "acme/web";
+const BRANCH = "agent/rebased";
 
 /** The script's own exit for a commit no build serves the deployed tree of. */
 const EXIT_NOT_AFFECTED = 3;
@@ -56,7 +56,7 @@ function git(root: string, ...args: string[]): string {
       "-c",
       "user.name=Vespin",
       "-c",
-      "user.email=luke@example.com",
+      "user.email=agent@example.com",
       "-c",
       "commit.gpgsign=false",
       ...args,
@@ -167,7 +167,7 @@ interface Fixture {
  * was first pushed and built, and a checkout of the branch rebased onto it.
  */
 async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<Fixture> {
-  const origin = await temporaryDirectory(t, "luke-preview-address-origin-");
+  const origin = await temporaryDirectory(t, "preview-address-origin-");
   git(origin, "init", "-q", "-b", "main");
   git(origin, "config", "uploadpack.allowAnySHA1InWant", "true");
   for (const script of SCRIPTS) {
@@ -192,10 +192,10 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   const head = commit(origin, "apps/web/src/main.tsx", "web v1\n");
   git(origin, "checkout", "-q", "main");
 
-  const checkout = await temporaryDirectory(t, "luke-preview-address-checkout-");
+  const checkout = await temporaryDirectory(t, "preview-address-checkout-");
   git(checkout, "clone", "-q", "--branch", BRANCH, `file://${origin}`, ".");
-  const answers = await temporaryDirectory(t, "luke-preview-address-answers-");
-  const bin = await temporaryDirectory(t, "luke-preview-address-bin-");
+  const answers = await temporaryDirectory(t, "preview-address-answers-");
+  const bin = await temporaryDirectory(t, "preview-address-bin-");
   writeFileSync(join(bin, "gh"), FAKE_GH);
   writeFileSync(join(bin, "curl"), FAKE_CURL);
   chmodSync(join(bin, "gh"), 0o755);

@@ -7,44 +7,44 @@ import {
   type InputLine,
   RUNNER_ENV,
   RUNNER_HARNESS,
-} from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+} from "@repo/agent-runner/protocol";
+import { Database } from "@repo/database/core/query";
 import {
   type Agent,
   createAgent,
   readAgentRouting,
   recordAgentNativeSession,
   updateAgentChoice,
-} from "@luke/database/models/agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+} from "@repo/database/models/agent-store";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
 import {
   type KeyRing,
   parseKeyRing,
   sealProviderKey,
-} from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   removeProviderKey,
   saveProviderKey,
   setPlanStatus,
   setProviderKeyStatus,
-} from "@luke/database/models/provider-key-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { deviceAgentLine } from "@luke/database/schemas/device-agent";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
+} from "@repo/database/models/provider-key-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { deviceAgentLine } from "@repo/database/schemas/device-agent";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import {
   deviceAgentLaunchSecretsSchema,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -69,10 +69,10 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
@@ -139,7 +139,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };
@@ -413,7 +412,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
-          installedSkills: "/opt/luke/installed-skills",
+          installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);

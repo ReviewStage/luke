@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import "@luke/panel/testing/resize-observer";
-import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
-import { DayScreen } from "@luke/panel/admin/screens/day";
+import "@repo/panel/testing/resize-observer";
+import type { AdminDayAccount, AdminDayDetail } from "@repo/features/admin-answer-wire";
+import { DayScreen } from "@repo/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -78,7 +78,7 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
           }),
         ),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const opened: string[] = [];
   const backs: number[] = [];
   const page = document.createElement("div");

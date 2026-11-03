@@ -3,23 +3,23 @@
  */
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { loopbackConsent } from "@luke/credentials/node";
+import { loopbackConsent } from "@repo/credentials/node";
 import {
   CHATGPT_FAKE,
   fakeChatGptAuthorizationServer,
   grantedCallback,
   returnToLoopback,
-} from "@luke/credentials/testing";
-import { fixedBearer, HostedAgentClient } from "@luke/features";
+} from "@repo/credentials/testing";
+import { fixedBearer, HostedAgentClient } from "@repo/features";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
   type ProviderKeysAnswer,
-} from "@luke/features/provider-key-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
-import { HTTP_STATUS, jsonResponse, type RecordedRequest } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@repo/gateway";
+import { HTTP_STATUS, jsonResponse, type RecordedRequest } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 

@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@repo/agent-runner/protocol";
+import { Database } from "@repo/database/core/query";
 import {
   createAgent,
   dispatchMentioningServers,
   recordAgentRunnerToken,
   updateAgentServers,
-} from "@luke/database/models/agent-store";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { isRecord, type WireRecord } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/database/models/agent-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { isRecord, type WireRecord } from "@repo/wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import {
   Clock,
   DateTime,
@@ -31,8 +31,8 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { admitRunnerBearer, runnerTokenDigest } from "../agents/luke-mcp/bearer.js";
 import { RUNNER_EVENTS_PATH, runnerEventsApp } from "../agents/native-events/runner-events-app.js";
+import { admitRunnerBearer, runnerTokenDigest } from "../agents/workspace-mcp/bearer.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,

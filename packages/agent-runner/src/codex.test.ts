@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import {
   type Cause,
   Deferred,
@@ -49,8 +49,8 @@ import {
   type Spawned,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { makeFakeService } from "./testing/fake-service.js";
 import { UNREAD_PROC } from "./testing/fake-proc.js";
+import { makeFakeService } from "./testing/fake-service.js";
 
 const BEARER = "runner-bearer-for-tests";
 const EVENTS_URL = "https://app.test/runner/events";
@@ -400,10 +400,10 @@ it.effect(
         'model_providers.openai_chatgpt_plan.wire_api="responses"',
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
-        'mcp_servers.luke.url="https://app.test/runner/mcp"',
-        'mcp_servers.luke.bearer_token_env_var="APP_RUNNER_TOKEN"',
-        'mcp_servers.luke.default_tools_approval_mode="approve"',
-        "mcp_servers.luke.tool_timeout_sec=600.0",
+        'mcp_servers.workspace.url="https://app.test/runner/mcp"',
+        'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
+        'mcp_servers.workspace.default_tools_approval_mode="approve"',
+        "mcp_servers.workspace.tool_timeout_sec=600.0",
         'mcp_servers.linear.url="https://app.test/runner/mcp/integrations/linear"',
         'mcp_servers.linear.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.linear.default_tools_approval_mode="approve"',
@@ -688,13 +688,13 @@ it.effect("ends the launch as failed when app-server exits, its secrets taken ou
 
 it.effect("ends an idle launch at once on a stop, and on stdin closing, with no turn started", () =>
   Effect.gen(function* () {
-    const stoppedLuke = fakeService();
-    const stopped = yield* launch([{ exchanges: OPEN }], stoppedLuke);
+    const stoppedService = fakeService();
+    const stopped = yield* launch([{ exchanges: OPEN }], stoppedService);
     yield* stopped.write(CONFIG);
     yield* stopped.write({ type: INPUT_LINE.STOP });
     assert.equal(yield* Fiber.join(stopped.run), RUNNER_END.STOPPED);
     assert.deepEqual(received(stopped.spawned[0], "turn/start"), []);
-    assert.deepEqual(kinds(stoppedLuke.applied), [...notified(OPEN), RUNNER_EVENT.END]);
+    assert.deepEqual(kinds(stoppedService.applied), [...notified(OPEN), RUNNER_EVENT.END]);
 
     const closed = yield* launch([{ exchanges: OPEN }], fakeService());
     yield* closed.write(CONFIG);

@@ -17,7 +17,7 @@ import { type RepositoryPin, repositoryPinSchema } from "./task-wire.js";
  * The rows are the wire's own values, each instant as epoch milliseconds and
  * what the wire leaves out as null, in no order; the host keeps them in
  * collections and draws them in the held reads' order
- * (`@luke/host`'s `sidebar-collections.ts`).
+ * (`@repo/host`'s `sidebar-collections.ts`).
  */
 
 /**

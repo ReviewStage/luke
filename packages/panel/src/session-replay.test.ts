@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { afterEach, expect, test, vi } from "vitest";
 import { sessionReplay } from "./session-replay.js";
 
@@ -78,7 +78,7 @@ test("a recording is grouped under the listed workspace, follows a switch, and l
     platform: PRODUCT_PLATFORM.DESKTOP,
     projectApiKey: () => "test-project-key",
     host: { api: "https://us.i.posthog.com", ui: "https://us.posthog.com" },
-    address: "luke://panel",
+    address: "app://desktop/panel",
     namesOwnAddress: () => false,
     importRecorder: () => Promise.resolve(undefined),
   });

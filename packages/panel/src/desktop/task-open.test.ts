@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentTranscriptPage } from "@luke/features/agent-view";
+import type { AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import type { Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -177,11 +177,11 @@ async function settle(): Promise<void> {
 function columnLog(container: HTMLElement): string {
   const pane = container.querySelector(".desktop-agent");
   if (pane === null || pane.textContent === null) return "empty";
-  if (pane.querySelector(".luke-spinner") !== null) return "spinner";
+  if (pane.querySelector(".ui-spinner") !== null) return "spinner";
   if (/Reading the agent/u.test(pane.textContent)) return "loading agent";
   const region = pane.querySelector(".agent-tab > .agent-log-skeleton-wait");
   if (region !== null) {
-    const blocks = [...region.querySelectorAll(".luke-skeleton")].map(
+    const blocks = [...region.querySelectorAll(".ui-skeleton")].map(
       (block) => `${block.getAttribute("data-shape")}:${block.getAttribute("style")}`,
     );
     return `skeleton ${blocks.join(" ")}`;
@@ -209,7 +209,7 @@ test("opening a task on its agent passes through one placeholder, from the task'
   await settle();
   const seen = [columnLog(page.container)];
   const tabBlock = () =>
-    page.container.querySelector(".luke-toolbar-heading .luke-skeleton")?.getAttribute("style");
+    page.container.querySelector(".ui-toolbar-heading .ui-skeleton")?.getAttribute("style");
   const tabWhileRead = tabBlock();
 
   page.draw(opened({ read: true, listed: false, follower: held.follower }));

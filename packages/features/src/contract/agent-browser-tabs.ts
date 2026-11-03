@@ -8,7 +8,7 @@
  * stands, so a tab another member drives answers them as its driver.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {

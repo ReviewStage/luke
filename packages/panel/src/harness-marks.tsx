@@ -1,9 +1,9 @@
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
-import { HarnessMark as Mark } from "@luke/ui";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import { HarnessMark as Mark } from "@repo/ui";
 import { assetUrl } from "./app-platform.js";
 
 /**
- * harness-marks.tsx -- `@luke/ui`'s harness mark, Codex's drawn from its files under the shell's asset base.
+ * harness-marks.tsx -- `@repo/ui`'s harness mark, Codex's drawn from its files under the shell's asset base.
  */
 
 /** The Codex mark's files under the shell's asset base, where the desktop's build copies them beside `panel.js` (`scripts/build.mjs`). */

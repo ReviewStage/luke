@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { Button, PROFILE, type Profile, TextLink } from "@luke/ui";
+import { Button, PROFILE, type Profile, TextLink } from "@repo/ui";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -11,7 +11,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * press-cursor.test.ts -- the one cursor rule: a control gives the Mac's
  * arrow in the desktop's window and the pointing hand on the web, and a real
  * link the hand on both, read through the sheets every app lays (the tokens,
- * the panel's reset, `@luke/ui`'s sheet, and the compiled utilities).
+ * the panel's reset, `@repo/ui`'s sheet, and the compiled utilities).
  */
 
 const roots: Root[] = [];
@@ -28,10 +28,10 @@ afterEach(() => {
 function drawnAt(profile: Profile, element: ReactElement): HTMLElement {
   laid ??= layContainersAt(
     {},
-    { only: ["@luke/ui/tokens.css", "./base.css", "@luke/ui/styles.css", "tailwind.css"] },
+    { only: ["@repo/ui/tokens.css", "./base.css", "@repo/ui/styles.css", "tailwind.css"] },
   );
   const surface = document.body.appendChild(document.createElement("div"));
-  surface.dataset.lukeProfile = profile;
+  surface.dataset.uiProfile = profile;
   const root = createRoot(surface);
   roots.push(root);
   act(() => root.render(element));

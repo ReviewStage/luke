@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer, CALL_FAULT } from "./account-call.js";

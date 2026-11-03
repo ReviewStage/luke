@@ -10,8 +10,8 @@
  * draws while that chunk loads draws through the same bar.
  */
 
-import { CHOICE_BAR_LOOK, ChoiceBar, IconButton, IconButtonLink, Tooltip } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { CHOICE_BAR_LOOK, ChoiceBar, IconButton, IconButtonLink, Tooltip } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { AdminPlaceFrame } from "../admin/chrome/page-header.js";
 import { ADMIN_PLACES } from "../admin/chrome/places.js";
 import {

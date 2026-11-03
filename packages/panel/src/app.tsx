@@ -1,38 +1,38 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { AccountLink, ReadLink } from "@luke/features/link-grammar";
-import type { ModelProvider } from "@luke/features/models-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
+import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { FEEDBACK_KIND, type FeedbackKind } from "@repo/features/feedback";
+import type { AccountLink, ReadLink } from "@repo/features/link-grammar";
+import type { ModelProvider } from "@repo/features/models-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppInboxAgentHolding,
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
   RUN_PROFILE,
-} from "@luke/host/app-state";
+} from "@repo/host/app-state";
 import {
   APP_SETTING_SCHEMA,
   EXPERIMENT,
   type Experiment,
   type HostCapability,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
-} from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { cssCustomProperties } from "@luke/ui";
-import { isComposingKey } from "@luke/ui/composing-key";
-import { useLinkOpener } from "@luke/ui/held-link";
-import { LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
-import { forgetPictures } from "@luke/ui/picture-cache";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { cssCustomProperties } from "@repo/ui";
+import { isComposingKey } from "@repo/ui/composing-key";
+import { useLinkOpener } from "@repo/ui/held-link";
+import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
+import { forgetPictures } from "@repo/ui/picture-cache";
+import { useStateWithRef } from "@repo/ui/use-state-with-ref";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
@@ -412,7 +412,7 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
   );
-  // An app link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
+  // An app link, handed by the system or pressed in the window, opens where its place stands (`@repo/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
   const listedAgents = planning?.tasklessAgents;
@@ -422,7 +422,7 @@ function AppWindow(): React.JSX.Element {
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
-  const openLukeLink = useSteadyDoor((link: ReadLink) => {
+  const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       adminOn: adminOn || adminPending,
@@ -441,7 +441,7 @@ function AppWindow(): React.JSX.Element {
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
-  const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
+  const openLink = useLinkOpener(accountGated || workspacesUnread, openAppLink);
   // A link of the account's own names no workspace, so it waits on the sign-in alone.
   const openAccount = useLinkOpener(accountGated, openAccountLink);
   useEffect(
@@ -655,7 +655,7 @@ function AppWindow(): React.JSX.Element {
 
   return (
     <OpenSettingsProvider value={openSettings}>
-      <OpenLinkProvider value={openLukeLink}>
+      <OpenLinkProvider value={openAppLink}>
         <ListedPullRequests tasks={listedTasks} agents={listedAgents}>
           <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
             <OpenPersonProvider value={openPerson}>

@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE, TURN_STATUS } from "@luke/wire";
+import { MESSAGE_ROLE, TURN_STATUS } from "@repo/wire";
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

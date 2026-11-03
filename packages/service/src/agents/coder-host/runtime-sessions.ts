@@ -4,12 +4,9 @@
  * Every place that reaches a coding agent's session holds one
  * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
  * wake, an automation's run, the agent tools, Stop, delete, and a Start,
- * Fork, or Continue. Each composes eve's client for its caller as it always
- * has, and wraps it here (`routedSessions`), so each call is answered by the
- * implementation the conversation's `runtime` names. Note that the client
- * is no longer called, since eve runs nothing any more; it is still composed
- * because its composition holds each caller to the deployment's secret and
- * origin, which the harness's own reach is yet to take over:
+ * Fork, or Continue. Each reads it here for the account it acts for
+ * (`routedSessions`), so each call is answered by the implementation the
+ * conversation's `runtime` names:
  *
  * - `open` and `send` carry the conversation, whose agent and runtime are
  *   read as the caller reads them. One that runs on no harness
@@ -32,14 +29,14 @@
  * (`RUNTIME_REFUSAL.NOT_HERE`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@repo/database/models/agent-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
-import { causeKind, failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/recorded-session";
+import { LOCAL_AGENT_REFUSAL } from "@repo/features/agent-wire";
+import { causeKind, failureKind } from "@repo/runtime/effect";
 import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -147,33 +144,28 @@ const ENDED_ROUTE = { ended: true } as const;
 type Route = { readonly runtime: NativeRuntime; readonly starter: string } | typeof ENDED_ROUTE;
 
 /**
- * eve's client for one caller, `account`, with every call answered by the
+ * The sessions of one caller, `account`, with every call answered by the
  * runtime its conversation runs on, as above. The caller reads the
  * conversation's agent as it reads it everywhere, through its workspace.
  */
 export const routedSessions = <Turn extends EveHostTurn>(
-  eve: AgentSessions<Turn>,
   account: string,
 ): Effect.Effect<AgentSessions<Turn>, never, DatabaseServices> =>
-  Effect.map(sessionsRouter, (route) => route(eve, account));
+  Effect.map(sessionsRouter, (route) => route<Turn>(account));
 
-/** Wraps eve's client for one caller as `routedSessions` does, calling none of it. */
-export type SessionsRouter = <Turn extends EveHostTurn>(
-  eve: AgentSessions<Turn>,
-  account: string,
-) => AgentSessions<Turn>;
+/** The sessions of each account a composer acts for, as `routedSessions` reads them. */
+export type SessionsRouter = <Turn extends EveHostTurn>(account: string) => AgentSessions<Turn>;
 
 /**
  * `routedSessions` over the calling fiber's store and native harnesses,
- * read once, for a composer that wraps a client for each account it acts
- * for (`../deployment-eve.ts`, the agent doors).
+ * read once, for a caller that acts for more than one account (a queue's
+ * members, a sweep's agents, the agent doors).
  */
 export const sessionsRouter: Effect.Effect<SessionsRouter, never, DatabaseServices> = Effect.gen(
   function* () {
     const store = yield* Effect.context<DatabaseServices>();
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    return <Turn extends EveHostTurn>(_eve: AgentSessions<Turn>, account: string) =>
-      routed<Turn>(account, store, native);
+    return <Turn extends EveHostTurn>(account: string) => routed<Turn>(account, store, native);
   },
 );
 

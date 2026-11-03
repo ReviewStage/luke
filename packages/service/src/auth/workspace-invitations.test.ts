@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { openMigratedPglite } from "@luke/database/testing";
+import { openMigratedPglite } from "@repo/database/testing";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";

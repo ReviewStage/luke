@@ -1,5 +1,5 @@
 import { useAtomMount } from "@effect/atom-react";
-import { textChange } from "@luke/features/plan-comment-anchor";
+import { textChange } from "@repo/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
@@ -10,7 +10,7 @@ import {
   type PlanCommentStart,
   type PlanCommentStartRequest,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import {
   PLAN_COMMENT_CALL_FAILURE,
   type TasksCommentActParams,
@@ -18,7 +18,7 @@ import {
   type TasksCommentStartParams,
   type TasksCommentsAnswer,
   type TasksCommentsParams,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { Data, Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";

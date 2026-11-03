@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { ProductMark, SidebarIdentity } from "@luke/ui";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { ProductMark, SidebarIdentity } from "@repo/ui";
 
 /**
  * The product at the head of the sidebar: its mark and its name. The head does

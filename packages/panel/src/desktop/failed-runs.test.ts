@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
+import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
+import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

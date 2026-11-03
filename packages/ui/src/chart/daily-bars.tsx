@@ -1,4 +1,4 @@
-import { formatDayTick } from "@luke/features/time-format";
+import { formatDayTick } from "@repo/features/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "../admin-format.js";
 import { partialDayKey } from "../daily-series.js";
@@ -70,7 +70,7 @@ export function DailyBars<Day extends { readonly day: string }>({
   return (
     <ChartContainer
       config={config}
-      className="luke-daily-bars"
+      className="ui-daily-bars"
       data-opens={onOpenDay === undefined ? undefined : ""}
       style={{ height }}
     >

@@ -1,4 +1,4 @@
-import { GAP, Pagination, Stack } from "@luke/ui";
+import { GAP, Pagination, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

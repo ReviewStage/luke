@@ -1,12 +1,12 @@
-import type { AdminDailyUsage, AdminTrend } from "@luke/features/admin-answer-wire";
-import type { ChartConfig } from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
-import { seriesHasNoData } from "@luke/ui/daily-series";
+import type { AdminDailyUsage, AdminTrend } from "@repo/features/admin-answer-wire";
+import type { ChartConfig } from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
+import { seriesHasNoData } from "@repo/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
 export const USAGE_CHART = {
-  calls: { label: "Hosted calls", color: "var(--luke-color-chart-1)" },
+  calls: { label: "Hosted calls", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 /** The plot's height, which the chart and its skeleton both stand. */

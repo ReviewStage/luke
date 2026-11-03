@@ -1,10 +1,10 @@
 /**
  * agent-machine.ts -- the machine a native coding agent runs on, as the one interface its launch and our doors to its files reach it through.
  *
- * A native agent's runner (`@luke/agent-runner`) runs on a machine we
+ * A native agent's runner (`@repo/agent-runner`) runs on a machine we
  * open for it, today a Vercel Sandbox (`vercel-machine.ts`). Its launch
  * (`../coder-host/runner-sessions.ts`) and the door our MCP tools read
- * a file through (`../luke-mcp/sandbox-door.ts`) reach that machine here
+ * a file through (`../workspace-mcp/sandbox-door.ts`) reach that machine here
  * and nowhere else, so a second kind of machine shares one launch path and
  * one door rather than a copy of each that drifts.
  *
@@ -35,10 +35,10 @@
  * machine that did not answer.
  */
 
-import type { Agent } from "@luke/database/models/agent-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import type { AgentMachineKind } from "@luke/features/agent-wire";
-import type { DeviceIsolation, DeviceSignedIn } from "@luke/features/device-agent-wire";
+import type { Agent } from "@repo/database/models/agent-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import type { AgentMachineKind } from "@repo/features/agent-wire";
+import type { DeviceIsolation, DeviceSignedIn } from "@repo/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
@@ -92,7 +92,7 @@ export interface MachineLayout {
   readonly isolation: DeviceIsolation | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
-   * (`@luke/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
+   * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
    * from its stdin, as a Mac's follower writes them to the runner its
    * release bundled.
    */
@@ -308,7 +308,7 @@ export interface AgentMachineService {
    * here is not sealed, and a Mac keeps its lines in the store until it
    * takes them, so no line may carry a secret: Codex asks the service for each
    * access token over HTTPS through the runner's token command
-   * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
+   * (`@repo/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
    * A machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
    * as a sandbox's does, is never written to here.
    */

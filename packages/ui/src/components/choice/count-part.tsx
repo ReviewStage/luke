@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import { Fragment, type ReactNode } from "react";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
@@ -37,8 +37,8 @@ export type CountPart = {
  * glyph stands at the caption's size.
  */
 const PART =
-  "luke-count-part inline-flex items-center gap-0.5 [&:not([data-tone=neutral])]:text-tone-ink";
-const GLYPH = "luke-count-glyph inline-flex [&>svg]:size-caption-glyph";
+  "ui-count-part inline-flex items-center gap-0.5 [&:not([data-tone=neutral])]:text-tone-ink";
+const GLYPH = "ui-count-glyph inline-flex [&>svg]:size-caption-glyph";
 
 /** One part, its glyph named for a reader who cannot see it. */
 function CountPartView({ part }: { part: CountPart }): React.JSX.Element {

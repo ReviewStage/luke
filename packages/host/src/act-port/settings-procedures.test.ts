@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { SETTING_SIDE_EFFECT, SETTINGS_RESET_SCOPE, THEME } from "@luke/settings";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { SETTING_SIDE_EFFECT, SETTINGS_RESET_SCOPE, THEME } from "@repo/settings";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { type ActPortClient, SETTINGS_ACT_KIND } from "../contract/index.js";
 import type { ActSender } from "./base.js";

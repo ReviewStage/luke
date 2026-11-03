@@ -12,7 +12,7 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "
  * text as the plan holds it, which is the edit's base: what the developer's
  * words were written from. Each save sends that base and the words, and the
  * service lays the change over whatever anyone else wrote meanwhile
- * (`@luke/features/plan-edit`). Each save that lands moves the base to what
+ * (`@repo/features/plan-edit`). Each save that lands moves the base to what
  * was saved, so the next save is a change from the developer's own last
  * words. One save is out at a time; words typed while it is out are saved
  * once it answers. A conflict holds the editor open with the developer's

@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
   type Task,
   type TaskAgentsSummary,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,7 +45,7 @@ afterEach(() => {
 function changedFor(
   readerId: string | undefined,
   edits: readonly Omit<PlanSectionEdit, "at" | "duringCall">[],
-  key = "luke.taskLooks",
+  key = "app.taskLooks",
 ): string[] {
   const task: Task = {
     ...DOCUMENT_TASK,
@@ -76,14 +76,14 @@ test("a teammate's saves are shown as changed, and the reader's own are not", ()
 });
 
 test("the looks a window kept before tasks had their name are read under their earlier key, and the look opening takes is kept under the new one", () => {
-  assert.deepEqual(changedFor(DEAN.userId, EDITS, "luke.planLooks"), ["Approach", "Context"]);
+  assert.deepEqual(changedFor(DEAN.userId, EDITS, "app.planLooks"), ["Approach", "Context"]);
   assert.equal(
-    window.localStorage.getItem("luke.planLooks"),
+    window.localStorage.getItem("app.planLooks"),
     JSON.stringify({ [DOCUMENT_TASK.id]: LOOKED_AT }),
     "the earlier key is left as it was",
   );
   assert.notEqual(
-    window.localStorage.getItem("luke.taskLooks"),
+    window.localStorage.getItem("app.taskLooks"),
     null,
     "the look is kept under the new key",
   );
@@ -101,7 +101,7 @@ test("a reader's id arriving while the plan stays open lights a teammate's saves
     ...DOCUMENT_TASK,
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("app.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
   let changed: readonly string[] = [];
   function Reader({ readerId }: { readerId: string | undefined }) {
     changed = [...useTaskLooks(task, readerId).changed];
@@ -182,8 +182,8 @@ test("a plan opened is read at once, and still lights what changed since the las
     updatedAt: LOOKED_AT + 1,
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  window.localStorage.setItem("app.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("app.taskLooksSeededWithAgents", "1");
   const { drawn, draw } = windowOn(task);
 
   draw(undefined);
@@ -208,8 +208,8 @@ test("a plan marked unread lights, as it next opens, what changed since its last
       { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 1 },
     ].map((edit) => ({ ...edit, duringCall: false })),
   };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  window.localStorage.setItem("app.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("app.taskLooksSeededWithAgents", "1");
   const { drawn, draw, mark } = windowOn(task);
 
   draw(undefined);
@@ -222,8 +222,8 @@ test("a plan marked unread lights, as it next opens, what changed since its last
 
 test("a save landing while the plan stays open is read as it lands, and stays read once the plan is left", () => {
   const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  window.localStorage.setItem("app.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("app.taskLooksSeededWithAgents", "1");
   const saved: Task = {
     ...task,
     updatedAt: LOOKED_AT + 1,
@@ -243,8 +243,8 @@ test("a save landing while the plan stays open is read as it lands, and stays re
 
 test("an agent finishing after the look makes its task unread, opening it reads it, and what its agents do while it stays open is read as it lands", () => {
   const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  window.localStorage.setItem("app.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("app.taskLooksSeededWithAgents", "1");
   const { drawn, draw } = windowOn({ ...task, agents: agentsAt(LOOKED_AT) });
 
   draw(undefined);
@@ -261,8 +261,8 @@ test("an agent finishing after the look makes its task unread, opening it reads 
 
 test("a pull request merging alone leaves a read task read", () => {
   const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT + 1 }));
-  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  window.localStorage.setItem("app.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT + 1 }));
+  window.localStorage.setItem("app.taskLooksSeededWithAgents", "1");
   const { drawn, draw } = windowOn({ ...task, agents: agentsAt(LOOKED_AT + 1) });
 
   draw(undefined);
@@ -291,10 +291,10 @@ test("the first list read since agents counted marks their old activity read, an
   };
   const listed = [read, saved, unmarked];
   window.localStorage.setItem(
-    "luke.taskLooks",
+    "app.taskLooks",
     JSON.stringify({ [read.id]: LOOKED_AT, [saved.id]: LOOKED_AT }),
   );
-  window.localStorage.setItem("luke.taskLooksSeeded", "1");
+  window.localStorage.setItem("app.taskLooksSeeded", "1");
   let unread: (task: TaskSummary) => boolean = () => false;
   function Sidebar() {
     unread = useUnreadTasks(listed, { listRead: true, staged: false });
@@ -326,7 +326,7 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
     ],
   };
   const stay = (dismissing: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+    window.localStorage.setItem("app.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
     let looks = NO_LOOKS;
     function Reader({ open, readerId }: { open: Task; readerId: string | undefined }) {
       looks = useTaskLooks(open, readerId);
@@ -361,7 +361,7 @@ test("an agent with no task is looked at as its page opens, which takes back a m
   const registry = AtomRegistry.make();
   const draw = (open: typeof agent | undefined) =>
     act(() => root.render(onRegistry(registry, createElement(Window, { open }))));
-  const kept = () => JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "{}");
+  const kept = () => JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "{}");
 
   draw(undefined);
   act(() => marks?.mark({ id: agent.id, updatedAt: agent.activityAt }, true));

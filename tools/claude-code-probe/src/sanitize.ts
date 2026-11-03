@@ -12,7 +12,7 @@
  * is the same bytes for the same stream.
  */
 
-import { isRecord, isWireString, type WireValue } from "@luke/wire";
+import { isRecord, isWireString, type WireValue } from "@repo/wire";
 
 export const REDACTED = {
   SECRET: "[redacted-secret]",

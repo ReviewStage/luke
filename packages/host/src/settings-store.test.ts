@@ -3,9 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { LINK_OPEN } from "@luke/features/link-open";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { LINK_OPEN } from "@repo/features/link-open";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -22,22 +22,22 @@ import {
   SETTINGS_RESET_SCOPE,
   snapshotAccountPreferences,
   THEME,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   DIFF_FONT,
   DIFF_INDICATORS,
   DIFF_LAYOUT,
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
   type SettingsUpdateResult,
-} from "@luke/settings/wire";
-import { isRecord, unparsedWire } from "@luke/wire";
-import { temporaryDirectory } from "@luke/wire/testing";
+} from "@repo/settings/wire";
+import { isRecord, unparsedWire } from "@repo/wire";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { Context, Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -226,7 +226,7 @@ test("every setting starts at its default, survives a reopen, and can be cleared
   for (const field of APP_SETTING_FIELDS) {
     const fallback = APP_SETTING_SCHEMA[field].guard(undefined).value;
     const sample = SAMPLE_VALUE[field];
-    const directory = await temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "settings-");
     const store = storeIn(directory);
 
     assert.deepEqual(await store.get(field), fallback, `${field} did not start at its default`);
@@ -262,7 +262,7 @@ it.effect(
   "a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them",
   () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const directory = yield* temporaryDirectoryScoped("settings-");
       const opened = () =>
         new SettingsStore({
           directory: () => directory,
@@ -288,7 +288,7 @@ it.effect(
   "Open Vespin at login, which stands on This Mac, keeps the choice already stored through a reopen and through Appearance's reset",
   () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const directory = yield* temporaryDirectoryScoped("settings-");
       const opened = () =>
         new SettingsStore({
           directory: () => directory,
@@ -312,7 +312,7 @@ it.effect(
   "usage data is shared by default in a packaged build, not in a run from source, and as chosen in either",
   () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const directory = yield* temporaryDirectoryScoped("settings-");
       const opened = (packaged: boolean) =>
         new SettingsStore({
           directory: () => directory,
@@ -335,7 +335,7 @@ it.effect(
 );
 
 test("the Mac commands switch an earlier build stored reads as a mode: on as Ask, off as Never", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   await storeIn(directory).set("macCommands", MAC_COMMAND_MODE.ALWAYS);
   const file = path.join(directory, SETTINGS_FILE_NAME);
   const stored = await readSettingsFile(directory);
@@ -355,7 +355,7 @@ test.for([
 ])(
   "$setting, which an earlier build stored, is let go unread, and the choices beside it stay",
   async ({ field }, t) => {
-    const directory = await temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "settings-");
     await storeIn(directory).set("theme", THEME.DARK);
     const file = path.join(directory, SETTINGS_FILE_NAME);
     const stored = JSON.parse(await readSettingsFile(directory));
@@ -368,7 +368,7 @@ test.for([
 );
 
 test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   await storeIn(directory).set("theme", THEME.DARK);
   const file = path.join(directory, SETTINGS_FILE_NAME);
   const stored = JSON.parse(await readSettingsFile(directory));
@@ -387,7 +387,7 @@ test("every provider key an earlier build stored is dropped, and the choices bes
 
 test("a stored account and a chosen preference survive each other's writes", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
-    const directory = await temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "settings-");
     const store = storeIn(directory);
     const replacement = { ...TEST_ACCOUNT, accessToken: "access-token-replacement" };
 
@@ -402,7 +402,7 @@ test("a stored account and a chosen preference survive each other's writes", asy
 });
 
 test("the day a usage count was sent survives a reopen and a sign-out, by account, and only the newest day stays", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   const store = storeIn(directory);
   const dayActive = { name: "app:day_active", discriminator: "day" } as const;
 
@@ -436,7 +436,7 @@ test("the day a usage count was sent survives a reopen and a sign-out, by accoun
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   const store = storeIn(directory);
 
   const snapshot = await store.setAccount(TEST_ACCOUNT);
@@ -461,7 +461,7 @@ test("round-trips an encrypted account without exposing either token in snapshot
 });
 
 test("an account's ciphertext is kept as the standard base64 of the cipher's bytes, as earlier builds wrote it", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   await storeIn(directory).setAccount(TEST_ACCOUNT);
 
   const written = unparsedWire(JSON.parse(await readSettingsFile(directory)));
@@ -472,7 +472,7 @@ test("an account's ciphertext is kept as the standard base64 of the cipher's byt
 });
 
 test("the Mac's session rides sealed beside the OAuth tokens, and reads back with them", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   const withSession = {
     ...TEST_ACCOUNT,
     sessionToken: "session-token-secret.signature",
@@ -491,7 +491,7 @@ test("the Mac's session rides sealed beside the OAuth tokens, and reads back wit
 });
 
 test("a stored account that signed in with Google still loads", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   const signedInWithGoogle = {
     ...TEST_ACCOUNT,
     provider: "google",
@@ -513,7 +513,7 @@ it.effect(
   "refuses to store an account when encrypted storage is unavailable, as a typed failure",
   () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const directory = yield* temporaryDirectoryScoped("settings-");
       const store = new SettingsStore({
         directory: () => directory,
         cipher: testCipher(false),
@@ -536,11 +536,11 @@ function throughSnapshot(preferences: AccountPreferences): AccountPreferences | 
 }
 
 test("a link choice made on one Mac reaches another through the snapshot", async (t) => {
-  const chooser = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  const chooser = storeIn(await temporaryDirectory(t, "settings-"));
   await chooser.setAccount(TEST_ACCOUNT);
   await chooser.set("linkOpen", LINK_OPEN.MAC_APP);
 
-  const other = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  const other = storeIn(await temporaryDirectory(t, "settings-"));
   await other.setAccount(TEST_ACCOUNT);
   const baseline = await other.accountPreferences();
   await other.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
@@ -561,7 +561,7 @@ test("a Mac takes the web's newer link choice over the one it last synced, and k
   const synced = { linkOpen: LINK_OPEN.BROWSER };
   const remote = { linkOpen: LINK_OPEN.MAC_APP };
 
-  const untouched = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  const untouched = storeIn(await temporaryDirectory(t, "settings-"));
   await untouched.setAccount(TEST_ACCOUNT);
   await untouched.set("linkOpen", LINK_OPEN.BROWSER);
   await untouched.applyAccountPreferences(
@@ -570,7 +570,7 @@ test("a Mac takes the web's newer link choice over the one it last synced, and k
   );
   assert.equal(await untouched.get("linkOpen"), LINK_OPEN.MAC_APP);
 
-  const changed = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  const changed = storeIn(await temporaryDirectory(t, "settings-"));
   await changed.setAccount(TEST_ACCOUNT);
   await changed.set("linkOpen", LINK_OPEN.BROWSER);
   await changed.applyAccountPreferences(
@@ -582,7 +582,7 @@ test("a Mac takes the web's newer link choice over the one it last synced, and k
 
 test("a first link choice made before the first sync is kept to be written, whether or not a shared part was written", async (t) => {
   for (const sharedWritten of [false, true]) {
-    const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+    const mac = storeIn(await temporaryDirectory(t, "settings-"));
     await mac.setAccount(TEST_ACCOUNT);
     await mac.set("linkOpen", LINK_OPEN.MAC_APP);
     // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
@@ -606,7 +606,7 @@ test("a first link choice made before the first sync is kept to be written, whet
 });
 
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   const memoryOn = { [EXPERIMENT.MEMORY]: true };
@@ -625,7 +625,7 @@ test("the experiments the service answered stand for the account signed in, acro
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
   const memoryOn = { [EXPERIMENT.MEMORY]: true };
 
-  const signedOut = await temporaryDirectory(t, "luke-settings-");
+  const signedOut = await temporaryDirectory(t, "settings-");
   const store = storeIn(signedOut);
   await store.setAccount(TEST_ACCOUNT);
   await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
@@ -634,7 +634,7 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   await store.setAccount(TEST_ACCOUNT);
   assert.deepEqual((await storeIn(signedOut).snapshot()).experiments, {});
 
-  const switched = await temporaryDirectory(t, "luke-settings-");
+  const switched = await temporaryDirectory(t, "settings-");
   const other = storeIn(switched);
   await other.setAccount(TEST_ACCOUNT);
   await other.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
@@ -644,7 +644,7 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
 
 it.effect("two stores on one file, as two browser tabs are, each keep the other's change", () =>
   Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-tabs-");
+    const directory = yield* temporaryDirectoryScoped("settings-tabs-");
     // A browser tab's store: the cookie session hands it no cipher.
     const tab = () =>
       new SettingsStore({
@@ -691,7 +691,7 @@ it.effect(
   "the file's one writer, as the desktop is, writes over its held copy when the read before a write fails, and one of several writers does not",
   () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const directory = yield* temporaryDirectoryScoped("settings-");
       const failing = { reads: false };
       const storeOf = (writer?: string) =>
         new SettingsStore({

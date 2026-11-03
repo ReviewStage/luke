@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -114,9 +114,9 @@ async function render(element: ReactNode): Promise<HTMLElement> {
 /** The pill of the tab labelled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === label,
+    (each) => each.querySelector(".ui-tab-label")?.textContent === label,
   );
-  return tab?.closest<HTMLElement>(".luke-tab") ?? assert.fail(`${label}'s tab stands`);
+  return tab?.closest<HTMLElement>(".ui-tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
 /** The tab labelled `label` itself, the press inside its pill. */
@@ -126,7 +126,7 @@ function tabOf(container: HTMLElement, label: string): HTMLElement {
 
 /** The strip drawn in `container`. */
 function stripOf(container: HTMLElement): HTMLElement {
-  return container.querySelector<HTMLElement>(".luke-tabs") ?? assert.fail("it stands");
+  return container.querySelector<HTMLElement>(".ui-tabs") ?? assert.fail("it stands");
 }
 
 /**
@@ -139,26 +139,26 @@ function layOut(width: number, count: number): void {
   vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const strip = this.closest(".luke-tabs");
-    return strip === null ? 0 : [...strip.querySelectorAll(".luke-tab")].indexOf(this) * TAB_WIDTH;
+    const strip = this.closest(".ui-tabs");
+    return strip === null ? 0 : [...strip.querySelectorAll(".ui-tab")].indexOf(this) * TAB_WIDTH;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.matches(".luke-tab") ? TAB_WIDTH : 0;
+    return this.matches(".ui-tab") ? TAB_WIDTH : 0;
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".luke-tabs") ? width : 0;
+    return this.matches(".ui-tabs") ? width : 0;
   });
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    if (this.matches(".luke-tabs")) return DOMRect.fromRect({ width, height: 30 });
-    const strip = this.closest(".luke-tabs");
-    if (!this.matches(".luke-tab") || strip === null) return DOMRect.fromRect();
-    const at = [...strip.querySelectorAll(".luke-tab")].indexOf(this);
+    if (this.matches(".ui-tabs")) return DOMRect.fromRect({ width, height: 30 });
+    const strip = this.closest(".ui-tabs");
+    if (!this.matches(".ui-tab") || strip === null) return DOMRect.fromRect();
+    const at = [...strip.querySelectorAll(".ui-tab")].indexOf(this);
     return DOMRect.fromRect({ x: at * TAB_WIDTH - scrolled, width: TAB_WIDTH, height: 30 });
   });
   vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".luke-tabs") ? count * TAB_WIDTH : 0;
+    return this.matches(".ui-tabs") ? count * TAB_WIDTH : 0;
   });
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(() => scrolled);
   vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation((left: number) => {
@@ -235,7 +235,7 @@ test("the chosen tab, pinned at the strip's start after a scroll, dragged along 
 
 test("the arrow keys, Home, and End move the focus along the strip, wrapping at its ends, and a key held with a modifier moves none", async () => {
   const container = await render(createElement(Strip, { count: 4 }));
-  const focused = () => document.activeElement?.querySelector(".luke-tab-label")?.textContent;
+  const focused = () => document.activeElement?.querySelector(".ui-tab-label")?.textContent;
   act(() => tabOf(container, "Tab 1").focus());
   press(tabOf(container, "Tab 1"), "ArrowLeft");
   assert.equal(focused(), "Tab 4");

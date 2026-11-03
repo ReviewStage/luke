@@ -2,7 +2,7 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 /**
- * The `Database` service (`@luke/database/core/query`), read as `db`,
+ * The `Database` service (`@repo/database/core/query`), read as `db`,
  * builds statements that are Effects of Drizzle's Effect driver, so a
  * statement is yielded, never awaited. Examples of plain Drizzle await it, and this is the
  * line an agent copying one would get wrong. `authDatabase`, Better Auth's

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { TOPIC } from "@luke/database/sync/notification";
+import { TOPIC } from "@repo/database/sync/notification";
 import { Duration, Effect, Option } from "effect";
 import { Sync, type SyncShape } from "../sync/watch.js";
 import { heldUntil } from "./held-read.js";

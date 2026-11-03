@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { test } from "vitest";
 import { LINK_ROUTE, linkRoute } from "./link-route.js";
 

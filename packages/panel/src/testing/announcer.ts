@@ -8,7 +8,7 @@
  * draws.
  */
 
-import { Announcer } from "@luke/ui";
+import { Announcer } from "@repo/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";

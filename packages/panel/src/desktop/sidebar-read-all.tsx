@@ -1,5 +1,5 @@
-import type { DrawnMenu } from "@luke/ui";
-import { CheckCheckIcon } from "@luke/ui/icons";
+import type { DrawnMenu } from "@repo/ui";
+import { CheckCheckIcon } from "@repo/ui/icons";
 import { useMemo } from "react";
 import { useAct } from "../act.js";
 import { channelGroups, isUnread } from "../tasks/inbox-model.js";

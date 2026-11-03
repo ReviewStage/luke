@@ -6,20 +6,20 @@ import {
   automationOwner,
   automationRunStanding,
   automationTriggerText,
-} from "@luke/features/automation-list-model";
+} from "@repo/features/automation-list-model";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
   type AutomationView,
-} from "@luke/features/automation-view";
-import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { momentText } from "@luke/features/time-format";
-import { REFRESH_FAILED_WORDS } from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/automation-view";
+import type { AutomationScope, AutomationSummary } from "@repo/features/automation-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { momentText } from "@repo/features/time-format";
+import { REFRESH_FAILED_WORDS } from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BackButton,
   BUTTON_VARIANT,
@@ -58,9 +58,9 @@ import {
   useLeaving,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
 import { unreachedAs, useAct } from "../act.js";
@@ -649,7 +649,7 @@ function ListPage({
         </ErrorState>
       ) : null}
       {groups.length === 0 ? (
-        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
+        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
         </div>
       ) : (

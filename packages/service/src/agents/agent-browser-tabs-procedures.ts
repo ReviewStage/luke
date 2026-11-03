@@ -26,7 +26,7 @@
  *
  * Who reaches a tab is the rule a whole agent is read by: a member who sees
  * the coding agent whose browser holds it and, for one on a task, that task
- * too (`agentVisibleTo`, `@luke/database/models/agent-browser-tabs`),
+ * too (`agentVisibleTo`, `@repo/database/models/agent-browser-tabs`),
  * whether the path names the agent or the task; any other reads as not
  * found. A desktop built
  * before the agent's paths still names the task, which answers as it did. Driving a tab acts in the agent's browser, so it is held to who
@@ -35,7 +35,7 @@
  * from inside the service and have no route here.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   handBackBrowserTab,
   listBrowserTabs,
@@ -43,16 +43,16 @@ import {
   readBrowserTab,
   recordMemberOpenedBrowserTab,
   takeOverBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { readVisibleAgentWorkspace } from "@luke/database/models/agent-store";
-import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+} from "@repo/database/models/agent-browser-tabs";
+import { readVisibleAgentWorkspace } from "@repo/database/models/agent-store";
+import { standingSessionsOf } from "@repo/database/models/recorded-session";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import {
   type AgentBrowserTab,
   agentBrowserTabOf,
   type BrowserTabsPlace,
-} from "@luke/features/agent-browser-tab-wire";
-import { isBrowserAddress } from "@luke/features/browser-acts";
+} from "@repo/features/agent-browser-tab-wire";
+import { isBrowserAddress } from "@repo/features/browser-acts";
 import { DateTime, Duration, Effect, type Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { BROWSER_LIVE_BOUNDS } from "../browser-live/bounds.js";

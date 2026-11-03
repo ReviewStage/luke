@@ -18,15 +18,15 @@
  * resource.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   deleteSlackInstallation,
   linkSlackInstallation,
   workspaceSlackInstallation,
-} from "@luke/database/models/slack-installation-store";
-import { type Workspace, workspaceOf } from "@luke/database/models/workspace-store";
-import type { WorkspaceSlackBot } from "@luke/features/slack-bot-wire";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/database/models/slack-installation-store";
+import { type Workspace, workspaceOf } from "@repo/database/models/workspace-store";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,

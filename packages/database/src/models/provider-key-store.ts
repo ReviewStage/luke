@@ -7,7 +7,7 @@ import {
   type ProviderKeyKind,
   type ProviderKeyProvider,
   type ProviderKeyStatus,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { and, asc, eq, lte, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

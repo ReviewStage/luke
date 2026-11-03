@@ -15,8 +15,8 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/../../scripts/lib/workspace.sh"
 
-luke_require_node
-luke_ensure_dependencies
+app_require_node
+app_ensure_dependencies
 cd "$APP_REPO_ROOT"
 
 # The clients named by --client; the desktop is driven where none is named or one is it.
@@ -47,9 +47,9 @@ fi
 
 # The desktop runs as `pnpm start` does: the native helpers on the Mac, then the bundle.
 if [[ $(uname -s) == Darwin ]]; then
-    pnpm --filter @luke/desktop build:native
+    pnpm --filter @repo/desktop build:native
 fi
-pnpm --filter @luke/desktop build
+pnpm --filter @repo/desktop build
 # A Linux install skips Electron's binary (scripts/bootstrap.sh), so it is fetched here.
 (cd "$APP_DESKTOP_APP_ROOT" && node node_modules/electron/install.js)
 ELECTRON=$(cd "$APP_DESKTOP_APP_ROOT" && node -p 'require("electron")')
@@ -57,6 +57,6 @@ ELECTRON=$(cd "$APP_DESKTOP_APP_ROOT" && node -p 'require("electron")')
 if [[ $(uname -s) == Darwin ]]; then
     exec "${runner[@]}" --electron "$ELECTRON" "$@"
 fi
-luke_require_command xvfb-run
+app_require_command xvfb-run
 # A screen larger than the widest window, so no window is cut to fit it.
 exec xvfb-run -a -s "-screen 0 1920x1200x24" "${runner[@]}" --electron "$ELECTRON" "$@"

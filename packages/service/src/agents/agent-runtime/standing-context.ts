@@ -9,11 +9,11 @@
  * what was saved since the last one rather than a stale copy.
  */
 
-import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-store";
-import { dateLabel } from "@luke/features/date-mention";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
+import type { LabelledAgentEdit, StoredTask } from "@repo/database/models/task-store";
+import { dateLabel } from "@repo/features/date-mention";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import { NOTE_KIND, type PlanAgentEdit } from "@repo/features/plan-template";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 

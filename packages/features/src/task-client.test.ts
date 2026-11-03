@@ -6,7 +6,7 @@ import {
   type JsonValue,
   recordedRoutes,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";

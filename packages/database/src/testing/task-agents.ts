@@ -6,7 +6,7 @@ import {
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
-} from "@luke/features/inbox-wire";
+} from "@repo/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect } from "effect";
 import { Database } from "../core/query.js";

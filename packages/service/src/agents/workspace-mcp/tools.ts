@@ -31,7 +31,7 @@
  * sends once, as eve's run again does; and the turn's count of plan notes is
  * kept on the running turn's row in the store (`runTurnCappedEditPlan`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
- * eve narrows its own (`offeredLukeMcpTool`), `save_memory` and `search_memory` by its
+ * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
  * starter's Memory among it, and a tool left out is still refused by its
  * door where a harness calls it anyway. A tool whose words differ by
  * workspace, `post_thread`'s naming its open channels, is described for
@@ -39,18 +39,18 @@
  * turn's start.
  */
 
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   type Agent,
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
-} from "@luke/database/models/agent-store";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import { pictureTypeSchema } from "@luke/features/picture-wire";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
+} from "@repo/database/models/agent-store";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { CHANNEL_TOOL } from "@repo/features/channel-wire";
+import { INBOX_TOOL } from "@repo/features/inbox-wire";
+import { pictureTypeSchema } from "@repo/features/picture-wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { emitJsonSchema } from "@repo/wire/effect";
 import { Effect, Exit, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
@@ -135,10 +135,10 @@ import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
-export type LukeMcpToolResult = { readonly status?: string } & object;
+export type WorkspaceMcpToolResult = { readonly status?: string } & object;
 
 /** What the doors run against, every one of which a web function's runtime provides. */
-export type LukeMcpServices =
+export type WorkspaceMcpServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
@@ -148,10 +148,10 @@ export type LukeMcpServices =
   | SentryApp;
 
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
-type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
+type WorkspaceMcpToolServices = WorkspaceMcpServices | AgentBrowser;
 
 /** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
-interface LukeMcpCallContext {
+interface WorkspaceMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
   readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
   readonly seams: AgentDoorSeams;
@@ -163,7 +163,7 @@ export type McpContent =
   | { readonly type: "image" | "audio"; readonly data: string; readonly mimeType: string };
 
 /** One tool as the server offers and runs it. */
-export interface LukeMcpTool {
+export interface WorkspaceMcpTool {
   readonly description: string;
   /** The input schema as JSON Schema, emitted from the eve tool's own. */
   readonly inputSchema: object;
@@ -171,14 +171,14 @@ export interface LukeMcpTool {
   readonly run: (
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
-    context: LukeMcpCallContext,
-  ) => Effect.Effect<LukeMcpToolResult, unknown, LukeMcpToolServices>;
+    context: WorkspaceMcpCallContext,
+  ) => Effect.Effect<WorkspaceMcpToolResult, unknown, WorkspaceMcpToolServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
-  readonly content?: (result: LukeMcpToolResult) => readonly McpContent[];
+  readonly content?: (result: WorkspaceMcpToolResult) => readonly McpContent[];
   /** The tool's words as the admitted agent is shown them, where they differ by workspace; `description` otherwise. */
   readonly describe?: (
     admitted: AdmittedConversation,
-  ) => Effect.Effect<string, never, LukeMcpServices>;
+  ) => Effect.Effect<string, never, WorkspaceMcpServices>;
 }
 
 /** A tool as its eve file declares it: its name, its words, and its input schema. */
@@ -190,9 +190,9 @@ interface ToolSpec {
 
 function entry(
   spec: ToolSpec,
-  run: LukeMcpTool["run"],
-  content?: LukeMcpTool["content"],
-): readonly [string, LukeMcpTool] {
+  run: WorkspaceMcpTool["run"],
+  content?: WorkspaceMcpTool["content"],
+): readonly [string, WorkspaceMcpTool] {
   return entryOf(spec.name, spec.description, emitJsonSchema(spec.inputSchema), run, content);
 }
 
@@ -200,10 +200,10 @@ function entryOf(
   name: string,
   description: string,
   inputSchema: object,
-  run: LukeMcpTool["run"],
-  content?: LukeMcpTool["content"],
-): readonly [string, LukeMcpTool] {
-  const tool: LukeMcpTool = {
+  run: WorkspaceMcpTool["run"],
+  content?: WorkspaceMcpTool["content"],
+): readonly [string, WorkspaceMcpTool] {
+  const tool: WorkspaceMcpTool = {
     description,
     inputSchema,
     run,
@@ -214,9 +214,9 @@ function entryOf(
 
 /** An entry whose words the admitted agent is shown as `describe` answers them. */
 function described(
-  [name, tool]: readonly [string, LukeMcpTool],
-  describe: NonNullable<LukeMcpTool["describe"]>,
-): readonly [string, LukeMcpTool] {
+  [name, tool]: readonly [string, WorkspaceMcpTool],
+  describe: NonNullable<WorkspaceMcpTool["describe"]>,
+): readonly [string, WorkspaceMcpTool] {
   return [name, { ...tool, describe }];
 }
 
@@ -255,7 +255,7 @@ const LOOKED_TEXT: McpContent = {
 };
 
 /** What the agent is shown of a look: its status and the picture itself, as an image, where it looked; its JSON otherwise. */
-function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
+function lookedPictureContent(result: WorkspaceMcpToolResult): readonly McpContent[] {
   if (isLooked(result)) {
     return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: result.mediaType }];
   }
@@ -272,7 +272,7 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
  * (`../native-events/runner-moments.ts`), so the one block keeps the result
  * whole there, the kept copies' ids among it for the window to draw.
  */
-function browserContent(result: LukeMcpToolResult): readonly McpContent[] {
+function browserContent(result: WorkspaceMcpToolResult): readonly McpContent[] {
   const output = unparsedWire(result);
   const shown = browserModelOutput(output);
   const text: McpContent = { type: "text", text: JSON.stringify(storedBrowserOutput(output)) };
@@ -355,7 +355,10 @@ function runTurnCappedEditPlan(
 }
 
 /** The tools served, by name, in the order `tools/list` names them. */
-export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
+export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Map<
+  string,
+  WorkspaceMcpTool
+>([
   // The threads, posted to the workspace's channels, and the channels themselves.
   described(
     entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
@@ -430,7 +433,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
+export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
 /** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
@@ -453,8 +456,8 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
  * a tool left off the list still runs when called, so each narrowed tool's
  * door refuses on its own.
  */
-export function offeredLukeMcpTool(
-  agent: LukeMcpOfferedTo,
+export function offeredWorkspaceMcpTool(
+  agent: WorkspaceMcpOfferedTo,
   beside: OfferedBeside,
 ): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
@@ -476,7 +479,7 @@ const REFUSED_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether a door's answer is its refusal, which the server answers as a tool error the agent reads. */
-export function refusedByDoor(result: LukeMcpToolResult): boolean {
+export function refusedByDoor(result: WorkspaceMcpToolResult): boolean {
   const { status } = result;
   return (
     status !== undefined && (REFUSED_STATUSES.has(status) || status.startsWith(NOT_DONE_PREFIX))

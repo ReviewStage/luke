@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentBriefText,
@@ -19,23 +19,23 @@ import {
   renameAgent,
   takeAgentMentionedServers,
   updateAgentChoice,
-} from "@luke/database/models/agent-store";
-import { listTasks } from "@luke/database/models/task-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
+} from "@repo/database/models/agent-store";
+import { listTasks } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import {
   AGENT_BRIEF,
   type AgentPullRequest,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { listTasklessAgents, withTaskAgents } from "@luke/service/agents/task-agents";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { listTasklessAgents, withTaskAgents } from "@repo/service/agents/task-agents";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -81,7 +81,7 @@ function start(
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    repository: "reviewstage/luke",
+    repository: "acme/web",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     ...overrides,
     ...brief,
@@ -125,7 +125,7 @@ const conversationKind = (conversationId: string) =>
 const PULL_REQUEST: AgentPullRequest = {
   number: 41,
   title: "Teammate invitations",
-  url: "https://github.com/reviewstage/luke/pull/41",
+  url: "https://github.com/acme/web/pull/41",
   state: PULL_REQUEST_STATE.DRAFT,
   checks: CHECK_SUMMARY.PENDING,
   additions: 120,
@@ -212,8 +212,8 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
             }),
             started,
           );
-        const published = yield* taskless("reviewstage/luke");
-        const quiet = yield* taskless("reviewstage/luke");
+        const published = yield* taskless("acme/web");
+        const quiet = yield* taskless("acme/web");
         yield* recordAgentPublished(userId, published.id, PULL_REQUEST);
 
         const rows = yield* listTasklessAgents(userId, { includeArchived: false });
@@ -450,7 +450,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
           ),
         );
         yield* TestClock.adjust("1 minute");
-        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "luke/invite" };
+        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "agent/invite" };
         const continued = started(
           yield* createAgent(
             userId,
@@ -475,7 +475,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
-            repository: "reviewstage/luke",
+            repository: "acme/web",
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
@@ -509,7 +509,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
               automationName: "Nightly triage",
               from: source,
               workspaceId,
-              repository: "reviewstage/luke",
+              repository: "acme/web",
             },
           ],
         );

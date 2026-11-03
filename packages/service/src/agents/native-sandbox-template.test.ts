@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";
@@ -285,7 +285,7 @@ it.effect(
       );
       // Every stage of the preparation's own script is among the steps the entry runs.
       for (const stage of PREPARE_STAGES) assert.ok([...uploaded.values()].includes(stage));
-      assert.ok(uploaded.get(build.entry)?.includes("bash /tmp/luke-template/step-"));
+      assert.ok(uploaded.get(build.entry)?.includes("bash /tmp/agent-template/step-"));
       assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.PREPARING);
 
       fake.finishBuild(0);

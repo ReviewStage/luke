@@ -1,6 +1,6 @@
-import type { TurnRecord } from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
+import type { TurnRecord } from "@repo/features/agent-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { callHeading, WORKED_SEPARATOR, workingTime } from "@repo/features/time-format";
 import {
   ANNOUNCE,
   cn,
@@ -12,7 +12,7 @@ import {
   Tooltip,
   useAnnounce,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { ReactNode } from "react";
 import { TurnCard } from "./turn-card.js";
 

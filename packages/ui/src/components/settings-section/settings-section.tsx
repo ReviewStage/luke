@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import { type ReactNode, useId, useRef } from "react";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
 import { SettingsRow, SettingsRowValue } from "../settings-row/settings-row.js";
@@ -52,7 +52,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 /** A card's line where its rows would stand: a note's words, in a description's muted words, or a failure (`ErrorState`). */
 export function SettingsLine({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-settings-line m-0 box-border flex min-h-settings-row min-w-0 items-center gap-control-gap px-settings-row-inline py-settings-row-block font-sans text-caption font-caption text-muted-foreground wrap-anywhere">
+    <div className="ui-settings-line m-0 box-border flex min-h-settings-row min-w-0 items-center gap-control-gap px-settings-row-inline py-settings-row-block font-sans text-caption font-caption text-muted-foreground wrap-anywhere">
       {children}
     </div>
   );
@@ -82,7 +82,7 @@ export type SettingsSkeletonControl =
   (typeof SETTINGS_SKELETON_CONTROL)[keyof typeof SETTINGS_SKELETON_CONTROL];
 
 /** The width of the mark a provider's or a service's row leads with (`SettingsRowMark`), read inside the row. */
-export const SETTINGS_ROW_MARK_WIDTH = "var(--luke-settings-row-mark-size)";
+export const SETTINGS_ROW_MARK_WIDTH = "var(--ui-settings-row-mark-size)";
 
 /** One placeholder row, shaped as the row that lands: whether it is described, what it leads with, and what it ends in. */
 export interface SettingsRowSkeletonShape {
@@ -115,11 +115,11 @@ const SKELETON_ROW_WIDTHS = [
  * token, and a field's is the controls' whole width, as a text field's is.
  */
 const SKELETON_CONTROL_BLOCK = {
-  [SETTINGS_SKELETON_CONTROL.BUTTON]: "calc(3 * var(--luke-control-height))",
-  [SETTINGS_SKELETON_CONTROL.MORE]: "var(--luke-control-height)",
-  [SETTINGS_SKELETON_CONTROL.SELECT]: "var(--luke-select-field-width)",
-  [SETTINGS_SKELETON_CONTROL.SWITCH]: "calc(var(--luke-control-height) + var(--luke-space-4))",
-  [SETTINGS_SKELETON_CONTROL.CHOICE]: "calc(7.5 * var(--luke-control-height))",
+  [SETTINGS_SKELETON_CONTROL.BUTTON]: "calc(3 * var(--ui-control-height))",
+  [SETTINGS_SKELETON_CONTROL.MORE]: "var(--ui-control-height)",
+  [SETTINGS_SKELETON_CONTROL.SELECT]: "var(--ui-select-field-width)",
+  [SETTINGS_SKELETON_CONTROL.SWITCH]: "calc(var(--ui-control-height) + var(--ui-space-4))",
+  [SETTINGS_SKELETON_CONTROL.CHOICE]: "calc(7.5 * var(--ui-control-height))",
   [SETTINGS_SKELETON_CONTROL.FIELD]: "100%",
   [SETTINGS_SKELETON_CONTROL.VALUE]: "100%",
 } as const satisfies Record<SettingsSkeletonControl, string>;
@@ -175,7 +175,7 @@ function RowSkeleton({
 /** The placeholder rows, ruled one from the next as a card's rows are. */
 function RowsSkeleton({ rows }: { rows: readonly SettingsRowSkeletonShape[] }): React.JSX.Element {
   return (
-    <div className="luke-settings-skeleton-rows">
+    <div className="ui-settings-skeleton-rows">
       {rows.map((shape, at) => (
         <RowSkeleton key={at} at={at} shape={shape} />
       ))}
@@ -237,7 +237,7 @@ export function SettingsSectionsSkeleton({
 }): React.JSX.Element {
   return (
     <SkeletonRegion label={label}>
-      <div className="luke-settings-skeleton">
+      <div className="ui-settings-skeleton">
         {sections.map((shape, at) => (
           <SectionSkeleton key={at} at={at} shape={shape} />
         ))}
@@ -280,29 +280,27 @@ function SectionFrame({
     <section
       className={
         rows
-          ? "luke-settings-section flex min-w-0 flex-col gap-tight-gap"
-          : "luke-settings-section flex min-w-0 flex-col gap-luke-8"
+          ? "ui-settings-section flex min-w-0 flex-col gap-tight-gap"
+          : "ui-settings-section flex min-w-0 flex-col gap-ui-8"
       }
       data-frame={frame}
       aria-labelledby={labelledBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
       {head === undefined ? null : (
-        <div
-          className={rows ? "luke-settings-section-head" : "luke-settings-section-head px-luke-2"}
-        >
+        <div className={rows ? "ui-settings-section-head" : "ui-settings-section-head px-ui-2"}>
           {head}
         </div>
       )}
       {rows ? (
-        <div className="luke-settings-section-rows flex min-w-0 flex-col gap-tight-gap">
+        <div className="ui-settings-section-rows flex min-w-0 flex-col gap-tight-gap">
           {children}
         </div>
       ) : frame === SETTINGS_SECTION_FRAME.CARD ? (
         <RevealArea root={card}>
           <div
             ref={card}
-            className="luke-settings-section-card flex min-w-0 flex-col rounded-control border border-border bg-surface"
+            className="ui-settings-section-card flex min-w-0 flex-col rounded-control border border-border bg-surface"
             {...revealArea()}
           >
             {children}

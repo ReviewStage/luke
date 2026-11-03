@@ -9,15 +9,15 @@
  * loses nothing. A share of nobody draws an empty track and a dash.
  */
 
-import type { AdminFunnelStep, AdminOverview } from "@luke/features/admin-answer-wire";
+import type { AdminFunnelStep, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
   FUNNEL_STEP,
   type FunnelStep,
   REACH_FEATURE,
   type ReachFeature,
-} from "@luke/features/admin-overview-vocabulary";
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
+} from "@repo/features/admin-overview-vocabulary";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@repo/ui";
 import { AsideSkeleton, ChartEmpty, ChartFrame } from "./chart-frame.js";
 
 /** What each funnel step is called, in the words a maintainer reads it by. */
@@ -59,7 +59,7 @@ function ShareList({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <ul aria-label={label} className="grid gap-(--luke-space-8)">
+    <ul aria-label={label} className="grid gap-(--ui-space-8)">
       {children}
     </ul>
   );
@@ -78,7 +78,7 @@ function ShareRowFrame({
   share: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--luke-space-12) tabular-nums">
+    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--ui-space-12) tabular-nums">
       <Text as={TEXT_ELEMENT.SPAN}>{label}</Text>
       {bar}
       <Text as={TEXT_ELEMENT.SPAN}>{count}</Text>
@@ -108,10 +108,10 @@ function ShareRow({
       bar={
         <span
           aria-hidden="true"
-          className="block h-2 overflow-hidden rounded-full bg-(--luke-color-fill-hover)"
+          className="block h-2 overflow-hidden rounded-full bg-(--ui-color-fill-hover)"
         >
           <span
-            className="block h-full rounded-full bg-(--luke-color-chart-1)"
+            className="block h-full rounded-full bg-(--ui-color-chart-1)"
             style={{ width: `${percent}%` }}
           />
         </span>

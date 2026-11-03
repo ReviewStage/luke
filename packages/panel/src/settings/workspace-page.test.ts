@@ -6,33 +6,33 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   GITHUB_ACCESS,
   type GitHubAccess,
   type WorkspaceTokenRepository,
-} from "@luke/features/github-repositories-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import type { WorkspaceSlackBot } from "@luke/features/slack-bot-wire";
+} from "@repo/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
-} from "@luke/features/tasks-view";
-import { dayAndTimeText } from "@luke/features/time-format";
-import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import { dayAndTimeText } from "@repo/features/time-format";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import {
   ACT_KIND,
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "@luke/host/acts";
+} from "@repo/host/acts";
 import {
   type ActPortClient,
   type PortActKind,
@@ -40,10 +40,10 @@ import {
   type PortActResult,
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
-} from "@luke/host/contract";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { ProviderMark, SettingsPage } from "@luke/ui";
+} from "@repo/host/contract";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { ProviderMark, SettingsPage } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -653,11 +653,11 @@ const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
 /** Every row of the page, the shared row and the window's own alike. */
-const ROWS = ".settings-row, .luke-settings-row";
+const ROWS = ".settings-row, .ui-settings-row";
 
 /** What a row names: the shared row's label, or the window's own row's first words. */
 const nameOf = (row: Element) =>
-  row.matches(".luke-settings-row")
+  row.matches(".ui-settings-row")
     ? row.querySelector('[id$="label"]')?.textContent
     : row.querySelector("strong")?.firstChild?.textContent;
 
@@ -682,7 +682,7 @@ const invitationRows = (page: HTMLElement) =>
   );
 
 /** A pending invitation's address, its row's label. */
-const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .luke-one-line');
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .ui-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -759,14 +759,14 @@ const placeholderOf = (within: Element) => {
   const status = within.querySelector('[role="status"][aria-busy="true"]');
   return status === null
     ? undefined
-    : [status.textContent, status.querySelectorAll(".luke-settings-row").length];
+    : [status.textContent, status.querySelectorAll(".ui-settings-row").length];
 };
 
 /** The boxes the first settings row in `within` is built of, in order, its words and blocks aside. */
 const rowBoxes = (within: Element) =>
-  [...(within.querySelector(".luke-settings-row")?.querySelectorAll("[class]") ?? [])]
+  [...(within.querySelector(".ui-settings-row")?.querySelectorAll("[class]") ?? [])]
     .map((element) => element.getAttribute("class") ?? "")
-    .filter((name) => name.startsWith("luke-settings-row"));
+    .filter((name) => name.startsWith("ui-settings-row"));
 
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
@@ -1015,7 +1015,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     ["Dana", "Sam"].map(
-      (name) => memberNamed(page, name).querySelector(".luke-settings-row-value")?.textContent,
+      (name) => memberNamed(page, name).querySelector(".ui-settings-row-value")?.textContent,
     ),
     ["Owner", "Member"],
   );
@@ -1043,7 +1043,7 @@ test("a member's address and an invited one, where the row cuts them short, are 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
-    memberNamed(page, "Sam").querySelector("p .luke-one-line"),
+    memberNamed(page, "Sam").querySelector("p .ui-one-line"),
     addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
@@ -1137,10 +1137,10 @@ test("before the workspaces are read, placeholder sections stand in the page's s
   );
 
   // The identity unheaded, the members, and a row to each integration the page draws.
-  const sections = [...container.querySelectorAll('[role="status"] .luke-settings-section')].map(
+  const sections = [...container.querySelectorAll('[role="status"] .ui-settings-section')].map(
     (group) => [
-      group.querySelector(".luke-settings-section-head") !== null,
-      group.querySelectorAll(".luke-settings-row").length,
+      group.querySelector(".ui-settings-section-head") !== null,
+      group.querySelectorAll(".ui-settings-row").length,
     ],
   );
   assert.deepEqual(placeholderOf(container)?.[0], "Reading your workspaces");
@@ -1240,7 +1240,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
     ],
   ]);
   assert.equal(
-    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
     "Admin",
   );
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
@@ -1267,7 +1267,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
   assert.equal(
-    memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Ola").querySelector(".ui-settings-row-value")?.textContent,
     "Owner",
   );
 });
@@ -1324,7 +1324,7 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
   const names = offered.map((item) => item.textContent);
   const besides = offered.map((item) =>
-    item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place"),
+    item.querySelector(".ui-menu-item-copy")?.getAttribute("data-place"),
   );
   act(() => offered.find((item) => item.textContent?.includes("ola@example.com"))?.click());
   assert.equal((dialog().textContent ?? "").includes(`Transfer ownership of ${ACME.name}?`), true);
@@ -1458,7 +1458,7 @@ test("a members read sent before a role change and landing after it does not put
   await settle();
 
   assert.equal(
-    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
     "Admin",
   );
 });
@@ -1570,7 +1570,7 @@ const githubGroup = (page: HTMLElement) =>
 /** What a row says: its name, and the line under it. */
 const rowWords = (row: HTMLElement) => [
   nameOf(row),
-  row.matches(".luke-settings-row")
+  row.matches(".ui-settings-row")
     ? row.querySelector('[id$="description"]')?.textContent
     : row.querySelector("small")?.textContent,
 ];
@@ -1611,7 +1611,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
 
     assert.equal(group.querySelector("h2")?.textContent, "Workspace connections");
     assert.equal(
-      row.querySelector(".luke-settings-row-mark")?.innerHTML,
+      row.querySelector(".ui-settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
     assert.deepEqual(
@@ -1632,12 +1632,12 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     for (const name of ["acme-org", "acme-labs"]) {
       const account = rowNamed(group, name);
       assert.equal(
-        account.querySelector(".luke-avatar[data-shape='tile']")?.textContent,
+        account.querySelector(".ui-avatar[data-shape='tile']")?.textContent,
         "A",
         `${name}'s tile`,
       );
       assert.equal(
-        account.querySelector<HTMLImageElement>(".luke-avatar-picture")?.getAttribute("src"),
+        account.querySelector<HTMLImageElement>(".ui-avatar-picture")?.getAttribute("src"),
         `https://github.com/${name}.png?size=32`,
         `${name}'s picture is its own on GitHub`,
       );
@@ -1757,7 +1757,7 @@ test("the repositories members added on their tokens stand under GitHub's accoun
     ["GitHub", "acme-org", "acme-labs", "octo-member/side", "acme/relay"],
   );
   for (const name of ["octo-member/side", "acme/relay"]) {
-    assert.equal(rowNamed(group, name).querySelector(".luke-badge")?.textContent, "Token");
+    assert.equal(rowNamed(group, name).querySelector(".ui-badge")?.textContent, "Token");
   }
   assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
 
@@ -1803,7 +1803,7 @@ test("Add repository offers the repositories the reader's own token may push to 
     [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
   );
   assert.equal(
-    rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
+    rowNamed(githubGroup(page), "octo-member/side").querySelector(".ui-badge")?.textContent,
     "Token",
   );
 });
@@ -1850,7 +1850,7 @@ test("with a token saved and nothing left to add, Add repository still says ther
 
 /** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */
 function optionWords(option: Element): (string | null | undefined)[] {
-  return [".luke-combobox-option-label", ".luke-combobox-option-detail"].map(
+  return [".ui-combobox-option-label", ".ui-combobox-option-detail"].map(
     (part) => option.querySelector(part)?.textContent,
   );
 }
@@ -1878,7 +1878,7 @@ test("Add repository draws each repository as the repository chip's menu does, b
 
   assert.deepEqual(optionWords(zed()), ["zed", "side-org"]);
   assert.equal(
-    zed().querySelector("img.luke-avatar-picture")?.getAttribute("src"),
+    zed().querySelector("img.ui-avatar-picture")?.getAttribute("src"),
     "https://github.com/side-org.png?size=32",
   );
   assert.equal(document.querySelectorAll('[role="option"]').length, 1);

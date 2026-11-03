@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CDP_FAILURE, type CdpFailure } from "@luke/features/browser-cdp";
+import { CDP_FAILURE, type CdpFailure } from "@repo/features/browser-cdp";
 import { Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {

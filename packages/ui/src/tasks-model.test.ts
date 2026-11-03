@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { test } from "vitest";
 import {
   SETTLED_STATUS,

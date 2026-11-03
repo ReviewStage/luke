@@ -18,15 +18,15 @@
  */
 
 import { randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_NAME,
   type IntegrationLandingStatus,
   type IntegrationProvider,
   integrationLandingPath,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { Effect, Layer, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";

@@ -6,7 +6,7 @@
  * reads it without loading the app's own modules.
  */
 
-import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
+import { LINK_PLATFORM, type LinkPlatform } from "@repo/features/link-open";
 
 /**
  * Whether the browser runs on a Mac, where the app can be. An iPad asking

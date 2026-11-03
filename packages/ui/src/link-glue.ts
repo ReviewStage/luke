@@ -15,7 +15,7 @@
 
 /** The box a chip and its punctuation stand in: the element a transcript writes it as, and the class it is drawn with. */
 export const LINK_GLUE = {
-  TAG: "luke-glue",
+  TAG: "app-glue",
   CLASS: "link-glued",
 } as const;
 

@@ -10,7 +10,7 @@
 
 /** The metadata: its parts in a line, all but the context held whole, a draft's pencil at the attention mark's size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
 export const HOME_ROW_META =
-  "home-row-meta inline-flex items-center gap-item-gap [&>:not(.home-row-context)]:flex-none [&_.draft-mark]:size-luke-12";
+  "home-row-meta inline-flex items-center gap-item-gap [&>:not(.home-row-context)]:flex-none [&_.draft-mark]:size-ui-12";
 
 /** What the row is about, muted at the caption's size, cut short within its bound. */
 export const HOME_ROW_CONTEXT =
@@ -18,4 +18,4 @@ export const HOME_ROW_CONTEXT =
 
 /** The row's picture, a tile or a glyph at a row glyph's size; a state glyph's own drawing is left to its mark, which fills the share of the face the glyph is given (`actor-ref.tsx`). */
 export const HOME_ROW_PICTURE =
-  "home-row-picture inline-flex size-luke-16 flex-none items-center justify-center text-muted-foreground [&_:not(.state-glyph)>svg]:size-control-icon";
+  "home-row-picture inline-flex size-ui-16 flex-none items-center justify-center text-muted-foreground [&_:not(.state-glyph)>svg]:size-control-icon";

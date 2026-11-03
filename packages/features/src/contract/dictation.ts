@@ -2,7 +2,7 @@
  * dictation.ts -- a clip dictated into a message box (`dictation-wire.ts`), answered with its words.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { base64Chars } from "../agent-wire.js";

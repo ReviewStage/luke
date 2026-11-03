@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AppStateStore } from "@luke/host/client";
-import type { UpdaterEngine, UpdaterEngineEvents } from "@luke/host/update-service";
+import type { AppStateStore } from "@repo/host/client";
+import type { UpdaterEngine, UpdaterEngineEvents } from "@repo/host/update-service";
 import { Effect } from "effect";
 import { vi } from "vitest";
 import type { DesktopConfig } from "./desktop-config";

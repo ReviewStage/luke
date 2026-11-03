@@ -1,4 +1,4 @@
-import { SavedTick, SettingsRow, Switch } from "@luke/ui";
+import { SavedTick, SettingsRow, Switch } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -16,7 +16,7 @@ import {
   ProviderMark,
   STATUS_TONE,
   Stack,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -203,7 +203,7 @@ function Chips(): React.JSX.Element {
           </Chip>
           <Chip look={CHIP_LOOK.PILL}>
             <ProviderMark provider={MARK_PROVIDER.GITHUB} />
-            <ChipName mono>luke/expire-invitations</ChipName>
+            <ChipName mono>agent/expire-invitations</ChipName>
           </Chip>
         </Inline>
       </CatalogSection>
@@ -255,7 +255,7 @@ function Chips(): React.JSX.Element {
             <Chip look={CHIP_LOOK.PILL}>
               <ProviderMark provider={MARK_PROVIDER.GITHUB} />
               <ChipName mono cut={CHIP_CUT.MIDDLE}>
-                luke/pull-request-header-menu-and-pill
+                agent/pull-request-header-menu-and-pill
               </ChipName>
             </Chip>
             <Chip look={CHIP_LOOK.TOOLBAR} chevron>

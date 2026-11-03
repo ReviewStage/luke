@@ -4,7 +4,7 @@ import {
   isWireString,
   THREAD_LINE_EVENT,
   type ThreadLineMetadata,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AGENT_ATTACHMENT_TYPE,

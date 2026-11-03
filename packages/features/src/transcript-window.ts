@@ -20,7 +20,7 @@
  * (`joinedWindowRows`).
  */
 
-import { isRecord, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
+import { isRecord, LEGACY_APP_WORD, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@repo/wire";
 import { Schema } from "effect";
 import {
   AGENT_SENDER,
@@ -40,7 +40,7 @@ export const TRANSCRIPT_WINDOW = 100;
 
 /** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: PRODUCT_NAME,
+  APP: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 
@@ -109,8 +109,10 @@ function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
       return row.memberId === null || row.memberName === null
         ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
         : { userId: row.memberId, name: row.memberName, kind: AGENT_SENDER.MEMBER };
-    case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+    // Note that a row from before the app was named `app` keeps `luke`, which still reads as the app (a legacy read).
+    case LEGACY_APP_WORD:
+      return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined

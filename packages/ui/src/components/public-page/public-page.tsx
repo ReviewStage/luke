@@ -72,7 +72,7 @@ const WIDTH_CLASS = {
 } as const satisfies Record<PublicPageWidth, string>;
 
 /** A column: the measure centred in the room, inset by the page's gutter, so all three open on one edge. */
-const COLUMN_CLASS = "luke-public-page-column box-border w-full mx-auto px-page-inset";
+const COLUMN_CLASS = "ui-public-page-column box-border w-full mx-auto px-page-inset";
 
 /**
  * Each title's type: the profile's page title, or the landing's display
@@ -91,8 +91,8 @@ const TITLE_CLASS = {
  * intro's underline.
  */
 const SECTIONS_GAP_CLASS = {
-  [PUBLIC_SECTIONS.SPACED]: "mt-luke-32",
-  [PUBLIC_SECTIONS.RULED]: "mt-luke-40",
+  [PUBLIC_SECTIONS.SPACED]: "mt-ui-32",
+  [PUBLIC_SECTIONS.RULED]: "mt-ui-40",
 } as const satisfies Record<PublicSections, string>;
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -112,10 +112,10 @@ export function PublicSection({
   const titleId = `${useId()}title`;
   const titled = said(title);
   return (
-    <section className="luke-public-section" aria-labelledby={titled ? titleId : undefined}>
+    <section className="ui-public-section" aria-labelledby={titled ? titleId : undefined}>
       {titled ? (
         <h2
-          className="luke-public-section-title m-0 mb-section-gap text-section font-section"
+          className="ui-public-section-title m-0 mb-section-gap text-section font-section"
           id={titleId}
         >
           {title}
@@ -135,7 +135,7 @@ export function PublicSection({
  */
 export function PublicMedia({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-public-media mx-public-media-reach [*+&]:mt-luke-48 overflow-hidden border border-border rounded-public-media shadow-public-media">
+    <div className="ui-public-media mx-public-media-reach [*+&]:mt-ui-48 overflow-hidden border border-border rounded-public-media shadow-public-media">
       {children}
     </div>
   );
@@ -147,9 +147,9 @@ export function PublicMedia({ children }: { children: ReactNode }): React.JSX.El
  */
 function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <header className="luke-public-page-banner sticky top-0 z-public-page-banner border-b border-border bg-public-page-banner backdrop-blur-public-page-banner">
+    <header className="ui-public-page-banner sticky top-0 z-public-page-banner border-b border-border bg-public-page-banner backdrop-blur-public-page-banner">
       <div
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} luke-public-page-banner-column grid items-center min-h-luke-64`}
+        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} ui-public-page-banner-column grid items-center min-h-ui-64`}
       >
         {children}
       </div>
@@ -160,9 +160,9 @@ function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element 
 /** The site's footer: `children` on the page's column, under a rule across the page. */
 function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <footer className="luke-public-page-footer border-t border-border">
+    <footer className="ui-public-page-footer border-t border-border">
       <div
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} luke-public-page-footer-column pt-luke-48 pb-luke-64`}
+        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} ui-public-page-footer-column pt-ui-48 pb-ui-64`}
       >
         {children}
       </div>
@@ -200,16 +200,16 @@ export function PublicPage({
 }): React.JSX.Element {
   const intro = back !== undefined || said(title) || said(lead);
   return (
-    <div className="luke-public-page @container flex flex-col min-w-0 text-foreground font-ui">
+    <div className="ui-public-page @container flex flex-col min-w-0 text-foreground font-ui">
       {said(banner) ? <PublicBanner>{banner}</PublicBanner> : null}
       <main
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[width]} luke-public-page-main flex-1 pt-public-page-start pb-public-page-end wrap-anywhere`}
+        className={`${COLUMN_CLASS} ${WIDTH_CLASS[width]} ui-public-page-main flex-1 pt-public-page-start pb-public-page-end wrap-anywhere`}
         data-width={width}
       >
         {intro ? (
-          <div className="luke-public-page-intro">
+          <div className="ui-public-page-intro">
             {back !== undefined ? (
-              <div className="luke-public-page-back mb-luke-16">
+              <div className="ui-public-page-back mb-ui-16">
                 <TextLink href={back.href} variant={TEXT_VARIANT.LABEL}>
                   <span aria-hidden="true">← </span>
                   {back.label}
@@ -218,7 +218,7 @@ export function PublicPage({
             ) : null}
             {said(title) ? (
               <h1
-                className={`luke-public-page-title m-0 text-pretty ${TITLE_CLASS[titleStyle]}`}
+                className={`ui-public-page-title m-0 text-pretty ${TITLE_CLASS[titleStyle]}`}
                 data-style={titleStyle}
               >
                 {title}
@@ -226,7 +226,7 @@ export function PublicPage({
             ) : null}
             {said(lead) ? (
               <p
-                className={`luke-public-page-lead m-0 ${said(title) ? "mt-luke-24" : ""} max-w-public-page-lead text-muted-foreground text-public-page-lead text-pretty`}
+                className={`ui-public-page-lead m-0 ${said(title) ? "mt-ui-24" : ""} max-w-public-page-lead text-muted-foreground text-public-page-lead text-pretty`}
               >
                 {lead}
               </p>
@@ -235,7 +235,7 @@ export function PublicPage({
         ) : null}
         {said(children) ? (
           <div
-            className={`luke-public-page-sections ${intro ? SECTIONS_GAP_CLASS[sections] : ""}`}
+            className={`ui-public-page-sections ${intro ? SECTIONS_GAP_CLASS[sections] : ""}`}
             data-sections={sections}
           >
             {children}

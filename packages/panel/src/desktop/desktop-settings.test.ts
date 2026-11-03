@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -276,7 +276,7 @@ function shownTitle(page: HTMLElement): string | null | undefined {
 /** What scrolls the page drawn beside the sidebar: the shared settings page around its title. */
 function shownScroller(page: HTMLElement): HTMLElement {
   const title = [...page.querySelectorAll("h1")].find((each) => each.closest("nav") === null);
-  return title?.closest<HTMLElement>(".luke-settings-page") ?? assert.fail("the page scrolls");
+  return title?.closest<HTMLElement>(".ui-settings-page") ?? assert.fail("the page scrolls");
 }
 
 /** Opens the page the sidebar names, answering the page drawn beside it. */
@@ -328,7 +328,7 @@ test("a page group's head folds its pages, its one chevron turning with the fold
       ),
     ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
   const account = head("Account");
-  const turns = () => [...account.querySelectorAll(".luke-disclosure-turn")];
+  const turns = () => [...account.querySelectorAll(".ui-disclosure-turn")];
   assert.equal(turns().length, 1, "the head draws one chevron");
   assert.deepEqual(
     [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
@@ -581,8 +581,8 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
     ) ?? assert.fail("a Files changed group stands");
 
   assert.deepEqual(
-    [...group.querySelectorAll(".luke-settings-row")].map((row) => [
-      row.querySelector(".luke-settings-row-label")?.textContent,
+    [...group.querySelectorAll(".ui-settings-row")].map((row) => [
+      row.querySelector(".ui-settings-row-label")?.textContent,
       row.querySelector("kbd")?.textContent,
     ]),
     [
@@ -958,7 +958,7 @@ test("each Settings page says once, under its title, where its settings are kept
     const drawn = openPage(page, title);
     assert.deepEqual(keepLines(drawn), keep, title);
     const header =
-      drawn.querySelector<HTMLElement>(".luke-page-header") ?? assert.fail(`${title} has a header`);
+      drawn.querySelector<HTMLElement>(".ui-page-header") ?? assert.fail(`${title} has a header`);
     assert.deepEqual(keepLines(header), keep, `${title}'s line stands in its head`);
   }
 

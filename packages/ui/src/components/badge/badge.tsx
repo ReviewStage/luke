@@ -54,7 +54,7 @@ const BADGE_FACE = {
 } as const;
 
 /** A provider's colour as a dot before the words, in the muted ink until the badge names one it can paint. */
-const SWATCH = "luke-badge-swatch size-badge-swatch flex-none rounded-full bg-muted-foreground";
+const SWATCH = "ui-badge-swatch size-badge-swatch flex-none rounded-full bg-muted-foreground";
 
 /** How light a fill reads, past which GitHub writes on it in dark words rather than white. */
 const LIGHT_FILL = 0.453;
@@ -110,12 +110,12 @@ function fillColours(colour: string): CSSProperties | undefined {
     lightness >= DARK_GROUND_WORDS ? 0 : (DARK_GROUND_WORDS - lightness) / (1 - lightness);
   const words = hexOf(mixed(rgb, 255, lift));
   return cssCustomProperties({
-    "--luke-badge-fill-light": fill,
-    "--luke-badge-edge-light": hexOf(mixed(rgb, 0, EDGE_SHADE)),
-    "--luke-badge-words-light": lightness > LIGHT_FILL ? DARK_WORDS : LIGHT_WORDS,
-    "--luke-badge-fill-dark": `${fill}${TINT_ALPHA}`,
-    "--luke-badge-edge-dark": `${words}${EDGE_ALPHA}`,
-    "--luke-badge-words-dark": words,
+    "--ui-badge-fill-light": fill,
+    "--ui-badge-edge-light": hexOf(mixed(rgb, 0, EDGE_SHADE)),
+    "--ui-badge-words-light": lightness > LIGHT_FILL ? DARK_WORDS : LIGHT_WORDS,
+    "--ui-badge-fill-dark": `${fill}${TINT_ALPHA}`,
+    "--ui-badge-edge-dark": `${words}${EDGE_ALPHA}`,
+    "--ui-badge-words-dark": words,
   });
 }
 
@@ -125,7 +125,7 @@ function FilledWords({ children }: { children: string }): React.JSX.Element {
   return (
     <bdi
       ref={measured}
-      className="luke-badge-line block overflow-hidden"
+      className="ui-badge-line block overflow-hidden"
       data-overflow={String(clipped)}
     >
       {children}
@@ -155,7 +155,7 @@ export function Badge({
   dot?: boolean;
   /** Whether it stands in the ink, as a pressed filter chip does: the reader's own. */
   lit?: boolean;
-  /** Give the words up, to a reader alone, once the room around the badge (a `luke-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or dot says the state in their place. */
+  /** Give the words up, to a reader alone, once the room around the badge (a `ui-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or dot says the state in their place. */
   hideWordsUnder?: VisuallyHiddenUnder | undefined;
   /** The state's words, which the colour only repeats; a filled badge's are one string. */
   children: ReactNode;
@@ -168,7 +168,7 @@ export function Badge({
   const face = lit ? BADGE_FACE.LIT : filled === undefined ? BADGE_FACE.PLAIN : BADGE_FACE.FILLED;
   return (
     <ShadcnBadge
-      className={lit && filled !== undefined ? "luke-badge whitespace-nowrap" : "luke-badge"}
+      className={lit && filled !== undefined ? "ui-badge whitespace-nowrap" : "ui-badge"}
       variant={tone}
       face={face}
       dot={toneDot}
@@ -187,7 +187,7 @@ export function Badge({
       {dot ? <span className={SWATCH} aria-hidden="true" /> : null}
       {icon}
       <span
-        className="luke-badge-words min-w-0 wrap-break-word"
+        className="ui-badge-words min-w-0 wrap-break-word"
         data-under={marked ? hideWordsUnder : undefined}
       >
         {filled !== undefined && typeof children === "string" ? (

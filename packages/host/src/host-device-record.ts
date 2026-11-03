@@ -1,4 +1,4 @@
-import { HOST_WIRE } from "@luke/features/host-wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
 import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 

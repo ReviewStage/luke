@@ -9,7 +9,7 @@
  *
  * A workspace's owner or admin connects the bot, which reads the team the
  * token answers for (`auth.test`) and keeps it
- * (`@luke/database/models/slack-installation-store`). Writing to a member
+ * (`@repo/database/models/slack-installation-store`). Writing to a member
  * finds their Slack user id by their email (`users.lookupByEmail`) the first
  * time and keeps it, a miss included, which is asked again only after
  * `SLACK_MEMBER_MISS_LIFETIME`; a member with no match is written nothing.
@@ -20,12 +20,12 @@
  * yielded inside a transaction, because each waits on Slack.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   recordSlackMemberLookup,
   slackMemberLookup,
   workspaceSlackInstallation,
-} from "@luke/database/models/slack-installation-store";
+} from "@repo/database/models/slack-installation-store";
 import { getToken } from "@vercel/connect";
 import { Config, Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";

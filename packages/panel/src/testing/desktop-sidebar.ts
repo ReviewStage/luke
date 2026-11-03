@@ -1,5 +1,5 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { UPDATE_STATUS } from "@luke/settings/update";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { UPDATE_STATUS } from "@repo/settings/update";
 import type { ComponentProps } from "react";
 import type { DesktopSidebar } from "../desktop/desktop-sidebar.js";
 import { SIDEBAR_OVERLAY } from "../desktop/sidebar-collapse.js";

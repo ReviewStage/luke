@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { type TestContext, test } from "vitest";
 import { PREPARE_SCRIPT } from "./sandbox-image.js";
 

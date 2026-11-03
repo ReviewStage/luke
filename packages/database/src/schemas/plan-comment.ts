@@ -3,7 +3,7 @@ import type {
   PlanCommentEntryKind,
   PlanCommentScope,
   PlanCommentStatus,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
@@ -17,7 +17,7 @@ import { task } from "./task.js";
  * A thread's anchor is kept here as offsets into the plan's Markdown
  * (`task.document`) rather than written into the text, so every reader of the
  * text reads none of it; the plan's one save moves every anchor with its
- * words (`@luke/features/plan-comment-anchor`), and nulls both offsets of an
+ * words (`@repo/features/plan-comment-anchor`), and nulls both offsets of an
  * anchor whose every word it deleted, the thread keeping its quote. The
  * section is the heading the words stood under when the anchor last moved.
  * A thread is the plan's, shared by every member of its workspace, and goes

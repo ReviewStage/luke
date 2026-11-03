@@ -1,7 +1,7 @@
 import type {
   HostedInstalledSkillClient,
   InstalledSkillCallResult,
-} from "@luke/features/installed-skill-client";
+} from "@repo/features/installed-skill-client";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -22,8 +22,8 @@ import {
   installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
   installedSkillUpdateParamsSchema,
-} from "@luke/features/installed-skill-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@luke/gateway";
+} from "@repo/features/installed-skill-view";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@repo/gateway";
 import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";

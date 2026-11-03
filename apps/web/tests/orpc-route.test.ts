@@ -20,15 +20,15 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ADMIN_ERROR } from "@luke/features/admin-wire";
-import { HOSTED_ERRORS, type hostedContract } from "@luke/features/contract";
-import { CHAPTERS_BOUNDS } from "@luke/service/chapters/chapters-generator";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import type { HostedContext } from "@luke/service/orpc/base";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { POSTHOG_ENVIRONMENT } from "@luke/service/providers/posthog";
-import { recordingSentry } from "@luke/service/testing/sentry-transport";
-import { HTTP_METHOD } from "@luke/wire";
+import { ADMIN_ERROR } from "@repo/features/admin-wire";
+import { HOSTED_ERRORS, type hostedContract } from "@repo/features/contract";
+import { CHAPTERS_BOUNDS } from "@repo/service/chapters/chapters-generator";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import type { HostedContext } from "@repo/service/orpc/base";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { POSTHOG_ENVIRONMENT } from "@repo/service/providers/posthog";
+import { recordingSentry } from "@repo/service/testing/sentry-transport";
+import { HTTP_METHOD } from "@repo/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
@@ -43,7 +43,7 @@ import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
 
 /** The web runtime's layer names a database; nothing here queries it, so it is never dialled (`route-effect.test.ts`). */
-const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/app";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);

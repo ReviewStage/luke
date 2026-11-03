@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { WireRecord } from "@luke/wire";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { WireRecord } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -193,8 +193,8 @@ test("in a worker's transcript, a call about an agent opens its tab, and an agen
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: TEAMMATE.id }]);
   const chip = container.querySelector('[data-call-id="message-call"] [data-tool-agent-ref]');
   restOn(chip ?? assert.fail("the message's agent chip"));
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Invoice export");
 });
 
 test("in a worker's transcript, a worker of its own, which opens no tab, folds open on its job's task and answer", async () => {

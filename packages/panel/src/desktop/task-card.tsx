@@ -1,6 +1,6 @@
-import type { CatalogModel } from "@luke/features/models-wire";
-import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   AttentionMark,
   AVATAR_SIZE,
@@ -21,11 +21,11 @@ import {
   TIME_LOOK,
   Time,
   Tooltip,
-} from "@luke/ui";
-import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
-import { subTaskCount, subTasksOf, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { repositoryPageUrl } from "@luke/ui/tasks-model";
+} from "@repo/ui";
+import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
+import { subTaskCount, subTasksOf, TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
+import { repositoryPageUrl } from "@repo/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
@@ -53,7 +53,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  *
  * The icon is how the task's agents stand, most pressing first: a question
  * waiting on the reader, a failure, an agent at work, or the pull request
- * they left, in `@luke/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card leads, as the
+ * they left, in `@repo/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card leads, as the
  * task board's card does, with its status's mark and its name, its key, its
  * repository, and how long ago it was updated under the name, and its
  * priority's mark and its assignee's face in the corner, icons alone, each
@@ -75,7 +75,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * opens its agent's Pull request tab where the window knows the agent and
  * GitHub otherwise, and an agent opens the task on its tab; the creator's
  * line opens their page where the window offers one. The rest are facts,
- * left as text, the repository among them, which the task's menu opens. Its rows are `@luke/ui`'s
+ * left as text, the repository among them, which the task's menu opens. Its rows are `@repo/ui`'s
  * `HoverCardRow`, set as a menu's rows are, and a pinned tab's card
  * (`sidebar-pinned-tab.tsx`) is drawn from the same rows
  * (`RepositoryDetail`, `PullRequestLine`).
@@ -98,7 +98,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-ui-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&>.ui-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
@@ -106,7 +106,7 @@ export const SIDEBAR_ROW_REPOSITORY =
 
 /** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
 export const TASK_MARK_GLYPH =
-  "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
+  "task-mark-glyph inline-block size-ui-12 flex-none text-muted-foreground";
 
 /**
  * The one icon at a task row's end, before its time: how its agents stand

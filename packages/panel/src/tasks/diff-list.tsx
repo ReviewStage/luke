@@ -1,5 +1,5 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   Button,
   cssCustomProperties,
@@ -14,8 +14,8 @@ import {
   TooltipPill,
   useHintRest,
   usePressAway,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";

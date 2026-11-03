@@ -1,6 +1,6 @@
-import { LINK_PLACE, type LinkPlace, linkOf, readLink } from "@luke/features/link-grammar";
-import { stayingOnWeb } from "@luke/features/link-open";
-import { GLYPH } from "@luke/ui/icons";
+import { LINK_PLACE, type LinkPlace, linkOf, readLink } from "@repo/features/link-grammar";
+import { stayingOnWeb } from "@repo/features/link-open";
+import { GLYPH } from "@repo/ui/icons";
 import { appPlatform } from "./app-platform.js";
 import type { MenuAction } from "./desktop/action-menu.js";
 
@@ -8,7 +8,7 @@ import type { MenuAction } from "./desktop/action-menu.js";
  * open-in-browser-item.tsx -- Open in browser as a page's menus offer it: the page's own app link opened in the browser, flagged to stay there.
  *
  * An agent's page is framed from an address only a frame may load (the
- * desktop's `luke-page:` scheme, the web's sandbox site, which answers
+ * desktop's `app-page:` scheme, the web's sandbox site, which answers
  * nothing else), so its Open in browser opens the page's app link, the
  * web app's own address for it, where the page opens in its tab. The link
  * is written from the page's place and the workspace (`linkOf`), never from

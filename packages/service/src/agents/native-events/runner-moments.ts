@@ -1,10 +1,10 @@
-import { RUNNER_END, RUNNER_EVENT, type RunnerEnd } from "@luke/agent-runner/protocol";
-import { redactCredentials } from "@luke/features/credential-redaction";
+import { RUNNER_END, RUNNER_EVENT, type RunnerEnd } from "@repo/agent-runner/protocol";
+import { redactCredentials } from "@repo/features/credential-redaction";
 import {
   TOOL_CALL_SETTLEMENT,
   type ToolCallSettlement,
   toolCallSettlementOf,
-} from "@luke/features/turn-run";
+} from "@repo/features/turn-run";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -12,7 +12,7 @@ import {
   type UnparsedWireValue,
   valueFromJsonText,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Option, Schema } from "effect";
 import {
   NATIVE_ENDING,
@@ -24,7 +24,7 @@ import {
 /**
  * runner-moments.ts -- what every harness's reader reads alike: the runner's own events, and a tool's answer as the transcript settles its call.
  *
- * The runner posts its own events (`@luke/agent-runner/protocol`) among its
+ * The runner posts its own events (`@repo/agent-runner/protocol`) among its
  * harness's messages, the same for Claude Code and Codex: a line we handed
  * the harness, the launch waiting on work in flight, the agent's turn over
  * with the launch kept warm, and the launch's end. A
@@ -144,11 +144,11 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
  */
 export function toolAnswerSettlement(
   answer:
-    | { readonly lukeTool: true; readonly text: string }
-    | { readonly lukeTool: false; readonly text: string; readonly output: UnparsedWireValue },
+    | { readonly workspaceTool: true; readonly text: string }
+    | { readonly workspaceTool: false; readonly text: string; readonly output: UnparsedWireValue },
   isError: boolean,
 ): ToolCallSettlement {
-  const output: UnparsedWireValue = answer.lukeTool
+  const output: UnparsedWireValue = answer.workspaceTool
     ? valueFromJsonText(answer.text)
     : answer.output;
   if (isError) {
@@ -159,7 +159,7 @@ export function toolAnswerSettlement(
       status: ACTION_RESULT_STATUS.REJECTED,
     };
   }
-  if (!answer.lukeTool) return toolCallSettlementOf(JSON.stringify(answer.output), undefined);
+  if (!answer.workspaceTool) return toolCallSettlementOf(JSON.stringify(answer.output), undefined);
   const status = isRecord(output) && isWireString(output.status) ? output.status : undefined;
   return toolCallSettlementOf(answer.text, status);
 }

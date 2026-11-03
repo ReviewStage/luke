@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { hostedUsage } from "@luke/database/schemas/usage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { COST_SOURCE } from "@luke/features/admin-cost-wire";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { Database } from "@repo/database/core/query";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { hostedUsage } from "@repo/database/schemas/usage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
+import { COST_SOURCE } from "@repo/features/admin-cost-wire";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import {
   type AgentPullRequest,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { Effect } from "effect";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { USER_ROLE } from "./admin-access.js";
@@ -191,7 +191,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           },
           {
             day: TODAY,
-            source: COST_SOURCE.LUKE,
+            source: COST_SOURCE.APP,
             model: MODEL.OPUS,
             fastRefused: false,
             inputTokens: 100,
@@ -199,7 +199,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           },
           {
             day: TODAY,
-            source: COST_SOURCE.LUKE,
+            source: COST_SOURCE.APP,
             model: MODEL.MINI,
             fastRefused: false,
             inputTokens: 57,

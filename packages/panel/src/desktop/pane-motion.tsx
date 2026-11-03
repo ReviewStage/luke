@@ -22,13 +22,13 @@
  * frame with nothing easing behind it.
  */
 
-import { MOTION_TOKEN, tokenTiming } from "@luke/ui";
+import { MOTION_TOKEN, tokenTiming } from "@repo/ui";
 import { Component, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
 const GLIDERS = [
-  ".luke-toolbar-heading",
-  ".luke-toolbar-actions",
+  ".ui-toolbar-heading",
+  ".ui-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-agent > *",
   ".desktop-empty-region > *",

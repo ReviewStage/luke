@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@luke/ui";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -106,7 +106,7 @@ test("a right-click on a row that opens an address offers the same menu, opening
       }),
     ),
   );
-  const title = document.querySelector(".luke-list-row-title");
+  const title = document.querySelector(".ui-list-row-title");
   assert.ok(title);
 
   rightClick(title);
@@ -130,7 +130,7 @@ test("a right-click on a row naming an agent's page offers Open in browser, whic
     ),
   );
   fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url) => opened.push(url) });
-  const title = document.querySelector(".luke-list-row-title");
+  const title = document.querySelector(".ui-list-row-title");
   assert.ok(title);
 
   rightClick(title);

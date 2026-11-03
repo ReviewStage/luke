@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
+} from "@repo/features/automation-wire";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -19,20 +19,20 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@luke/host/app-state";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -96,7 +96,7 @@ const ROLLOUT_PAGE: PageLine = {
   title: "Rollout tracker",
   version: 1,
   at: AT,
-  shownBy: { kind: PAGE_SHOWER.LUKE },
+  shownBy: { kind: PAGE_SHOWER.APP },
 };
 
 const SAM = "user-sam";
@@ -252,7 +252,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Unfurl matrix",
           version: 3,
           at: AT,
-          shownBy: { kind: PAGE_SHOWER.LUKE },
+          shownBy: { kind: PAGE_SHOWER.APP },
         },
       ],
     },
@@ -464,22 +464,20 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     card: [...card.attributes].map((attribute) => attribute.name).find((name) => name !== "class"),
-    name: card.querySelector(".luke-hover-card-name")?.textContent,
-    sub: card.querySelector(".luke-hover-card-sub")?.textContent,
-    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
+    name: card.querySelector(".ui-hover-card-name")?.textContent,
+    sub: card.querySelector(".ui-hover-card-sub")?.textContent,
+    corner: card.querySelector(".ui-hover-card-corner")?.textContent,
+    notes: [...card.querySelectorAll(".ui-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
-    details: [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+    details: [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map(
       (detail) => detail.textContent,
     ),
     detailWords: [
-      ...card.querySelectorAll(
-        '.luke-hover-card-row[data-look="detail"] .luke-hover-card-row-label',
-      ),
+      ...card.querySelectorAll('.ui-hover-card-row[data-look="detail"] .ui-hover-card-row-label'),
     ].map((label) => label.textContent),
   };
   assert.equal(carriesWords(card, look.name ?? ""), false, "the card's words ride no attribute");
@@ -651,7 +649,7 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   assert.deepEqual([page.sub, page.detailWords], ["Version 2", ["Shown by Sweep the flaky tests"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(
-    document.querySelector(".luke-tooltip-card .luke-page-thumb-frame")?.getAttribute("src"),
+    document.querySelector(".ui-tooltip-card .ui-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: SWEEP_PAGE.id, version: 2 }),
     "the preview is the agent's page at its newest version",
   );
@@ -728,7 +726,7 @@ test("an Inbox item's labelled chip is called by the item's title, whether it wa
   );
 
   assert.deepEqual(
-    chipsOf(container).map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
   );
 });

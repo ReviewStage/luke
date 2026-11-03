@@ -25,7 +25,7 @@ import { LIVE_POLL } from "./live-wire.js";
  * caller aborts the run.
  */
 
-import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@luke/wire";
+import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
 import {
   type Client,
   createORPCClient,
@@ -89,11 +89,11 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * default or the one a client keeps: a held read's is the service's hold and
  * room for the answer to travel after it, a message's outlasts the service's
  * wait for the conversation's lock (five seconds) and its hand-over to eve
- * under it (thirty, `@luke/database/models/writer`'s bounds) with room for
+ * under it (thirty, `@repo/database/models/writer`'s bounds) with room for
  * the reads before them, so a send that lands slowly is never read as one
  * that did not answer, a Start's outlasts the copy, and a
  * Generate of a pull request's chapters outlasts the function it runs in
- * (`@luke/service/chapters/chapters-function`'s 240 seconds), and a Browser
+ * (`@repo/service/chapters/chapters-function`'s 240 seconds), and a Browser
  * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
  * and its bridge's bound (twenty seconds, `agent-browser.ts`).
  */

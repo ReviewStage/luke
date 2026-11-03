@@ -1,6 +1,6 @@
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@luke/features/task-agents-model";
-import type { TaskAgentsSummary } from "@luke/features/task-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@repo/features/task-agents-model";
+import type { TaskAgentsSummary } from "@repo/features/task-wire";
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,
@@ -35,8 +35,8 @@ export type TaskAgentsMarkSize = (typeof TASK_AGENTS_MARK_SIZE)[keyof typeof TAS
 
 /** Each seat's box, which every mark inside it fills, the working mark through its own size. */
 const SEAT_CLASS = {
-  [TASK_AGENTS_MARK_SIZE.SMALL]: "size-luke-12 [--luke-working-mark-size:var(--spacing-luke-12)]",
-  [TASK_AGENTS_MARK_SIZE.MEDIUM]: "size-luke-16 [--luke-working-mark-size:var(--spacing-luke-16)]",
+  [TASK_AGENTS_MARK_SIZE.SMALL]: "size-ui-12 [--ui-working-mark-size:var(--spacing-ui-12)]",
+  [TASK_AGENTS_MARK_SIZE.MEDIUM]: "size-ui-16 [--ui-working-mark-size:var(--spacing-ui-16)]",
 } as const satisfies Record<TaskAgentsMarkSize, string>;
 
 /** What a pull request's status is called for where it stands. */

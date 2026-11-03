@@ -8,18 +8,18 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@luke/ui";
+} from "@repo/features/task-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@repo/ui";
 import {
   COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
   NO_TASKS_FILTER,
   TASKS_GROUPING,
   type TasksDisplay,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -239,7 +239,7 @@ function chipOf(board: HTMLElement, taskId: string, standing: string): HTMLButto
 /** Presses the item of the open menu whose label is `label`. */
 function pick(label: string): void {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
   );
   act(() => (item ?? assert.fail(`no ${label} item`)).click());
 }
@@ -269,7 +269,7 @@ test("each status has its column, its cards the most pressing first, each its ke
   const card = cardOf(board, "t-39");
   assert.equal(
     chipOf(board, "t-39", "Priority")
-      .querySelector(".luke-task-priority-mark")
+      .querySelector(".ui-task-priority-mark")
       ?.getAttribute("data-priority"),
     TASK_PRIORITY.HIGH,
   );
@@ -397,8 +397,8 @@ test("a card's box chooses it without opening it, ⌘-click one in another colum
     (each) => each.textContent?.trim() === "Status",
   );
   act(() => (status ?? assert.fail("the bar offers Status")).click());
-  const done = [...document.querySelectorAll<HTMLElement>('[role="menu"] .luke-menu-item')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "Done",
+  const done = [...document.querySelectorAll<HTMLElement>('[role="menu"] .ui-menu-item')].find(
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === "Done",
   );
   act(() => (done ?? assert.fail("Status offers Done")).click());
   assert.deepEqual(settled, [[["t-39", "t-42"], TASK_STATUS.DONE]]);
@@ -584,7 +584,7 @@ test("a card's Assignee chip drops No assignee and the members, the reader first
 
   act(() => chipOf(board, "t-40", "Assignee").click());
   assert.deepEqual(
-    [...document.querySelectorAll(".luke-menu-item-label")].map((label) => label.textContent),
+    [...document.querySelectorAll(".ui-menu-item-label")].map((label) => label.textContent),
     ["No assignee", "Dean Stratakos", "Charles Pan"],
   );
   pick("Charles Pan");
@@ -619,7 +619,7 @@ interface ColumnTabs {
 /** The tabs choosing a narrow board's column, by their names, and the one chosen. */
 function columnTabs(board: HTMLElement): ColumnTabs {
   const tabs = [...board.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]')];
-  const name = (tab: HTMLElement) => tab.querySelector(".luke-choice-bar-label")?.textContent ?? "";
+  const name = (tab: HTMLElement) => tab.querySelector(".ui-choice-bar-label")?.textContent ?? "";
   const chosen = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
   return { names: tabs.map(name), chosen: chosen === undefined ? undefined : name(chosen) };
 }
@@ -627,7 +627,7 @@ function columnTabs(board: HTMLElement): ColumnTabs {
 /** Presses the narrow board's tab named `name`. */
 function pressTab(board: HTMLElement, name: string): void {
   const tab = [...board.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
+    (each) => each.querySelector(".ui-choice-bar-label")?.textContent === name,
   );
   act(() => (tab ?? assert.fail(`no ${name} tab`)).click());
 }
@@ -743,7 +743,7 @@ test("a right-click on a card drops the task's own menu", async () => {
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
   });
-  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].map(
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
@@ -760,7 +760,7 @@ test("under a finger, a card draws no ⋯, and a long press on it drops the task
     "the card draws no ⋯",
   );
   longPress(cardOf(board, "t-40"));
-  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].map(
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
@@ -776,7 +776,7 @@ test("the menu key drops a card's menu from its press or any control in the card
       );
     });
   const offersRename = () =>
-    [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].some(
+    [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].some(
       (label) => label.textContent === "Rename",
     );
   const closeMenu = () =>
@@ -880,7 +880,7 @@ test("a card says how many of its sub-tasks are finished, and one with none says
     { ...task(44, "Test on iOS", TASK_STATUS.TODO, TASK_PRIORITY.HIGH), parentTaskId: parent.id },
   ]);
   const said = (id: string) =>
-    board.querySelector(`li[data-task-id="${id}"] .luke-progress-count`)?.textContent ?? "";
+    board.querySelector(`li[data-task-id="${id}"] .ui-progress-count`)?.textContent ?? "";
 
   assert.match(said("t-42"), /1 of 2 sub-tasks finished/u);
   assert.equal(said("t-44"), "");
@@ -895,6 +895,6 @@ test("a card's assignee hangs the person's card", async () => {
   ]);
 
   restOn(chipOf(board, "t-39", "Assignee"));
-  const card = document.querySelector(".luke-tooltip-card [data-actor-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-actor-card]");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });

@@ -1,9 +1,9 @@
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskFileRequest } from "@luke/features/task-wire";
-import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { readingWords } from "@luke/features/words";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskFileRequest } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import { readingWords } from "@repo/features/words";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -11,7 +11,7 @@ import {
   FILL_ELEMENT,
   Fill,
   SpinnerRegion,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { unreadShown } from "../failure-report.js";

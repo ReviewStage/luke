@@ -1,6 +1,6 @@
 /* banner.css -- what a banner's utilities (`../../shadcn/alert.tsx`) cannot
    say: how it gives way where it is narrow. Each banner is a container of its
-   own (`@container/luke-banner`), so it answers its own width rather than the
+   own (`@container/ui-banner`), so it answers its own width rather than the
    window's. */
 
 @layer components {
@@ -9,11 +9,11 @@
      below undo them, and a rule in this layer cannot undo a utility. A
      strip's presses never take more than half the line, their words cut
      short at the end rather than pushed out of the column. */
-  .luke-banner-actions {
+  .ui-banner-actions {
     flex: 0 1 auto;
   }
 
-  .luke-banner[data-look="strip"] .luke-banner-actions {
+  .ui-banner[data-look="strip"] .ui-banner-actions {
     max-width: 50%;
   }
 
@@ -22,34 +22,34 @@
      words end on their last letter. Note that the fade stays here, because
      Tailwind's mask utilities compose the gradient through variables rather
      than drawing it, as the chip's does (`chip.css`). */
-  .luke-banner[data-look="strip"] .luke-banner-words {
+  .ui-banner[data-look="strip"] .ui-banner-words {
     white-space: nowrap;
   }
 
-  .luke-banner[data-look="strip"] .luke-banner-words[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  .ui-banner[data-look="strip"] .ui-banner-words[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
   /* Narrow, the presses leave the words' line for one of their own beneath
      it, each as wide as the line allows, and the words wrap at their own
      width rather than being squeezed past it or cut short. A container query
      at the banner's own breakpoint, which no utility spells exactly. */
-  @container luke-banner (width < 480px) {
-    .luke-banner-row {
+  @container ui-banner (width < 480px) {
+    .ui-banner-row {
       flex-wrap: wrap;
     }
 
-    .luke-banner-actions,
-    .luke-banner[data-look="strip"] .luke-banner-actions {
+    .ui-banner-actions,
+    .ui-banner[data-look="strip"] .ui-banner-actions {
       max-width: none;
       flex: 1 0 100%;
     }
 
-    .luke-banner-actions > * {
+    .ui-banner-actions > * {
       flex: 1 1 0%;
     }
 
-    .luke-banner[data-look="strip"] .luke-banner-words {
+    .ui-banner[data-look="strip"] .ui-banner-words {
       white-space: normal;
     }
   }

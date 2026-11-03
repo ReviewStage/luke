@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
-import * as schema from "@luke/database/schemas";
-import { openHostedStoreTestDatabase } from "@luke/database/testing";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@repo/database/core/migrator";
+import * as schema from "@repo/database/schemas";
+import { openHostedStoreTestDatabase } from "@repo/database/testing";
 import { getColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";

@@ -6,7 +6,7 @@
    stand fitted is its frame's to say. */
 
 @layer components {
-  .luke-zoom-image {
+  .ui-zoom-image {
     display: block;
     max-width: 100%;
     object-fit: contain;
@@ -15,15 +15,15 @@
     user-select: none;
   }
 
-  .luke-zoom-image[data-zoom="zoomed"] {
+  .ui-zoom-image[data-zoom="zoomed"] {
     cursor: grab;
   }
 
-  .luke-zoom-image[data-zoom="zoomed"]:active {
+  .ui-zoom-image[data-zoom="zoomed"]:active {
     cursor: grabbing;
   }
 
-  .luke-zoom-image[data-glide="true"] {
-    transition: transform var(--luke-duration-quick) var(--luke-motion-exit);
+  .ui-zoom-image[data-glide="true"] {
+    transition: transform var(--ui-duration-quick) var(--ui-motion-exit);
   }
 }

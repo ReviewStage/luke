@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -99,7 +99,7 @@ test("an item an archived agent posted wears the harness that agent ran on, read
   });
 
   assert.ok(
-    container.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    container.querySelector(".actor-mark .ui-harness-mark[data-provider='openai']"),
     "the row wears Codex's mark",
   );
 });

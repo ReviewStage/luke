@@ -1,5 +1,5 @@
 {
-  "name": "@luke/database",
+  "name": "@repo/database",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -133,10 +133,10 @@
   },
   "dependencies": {
     "@effect/sql-pg": "catalog:",
-    "@luke/features": "workspace:*",
-    "@luke/runtime": "workspace:*",
-    "@luke/settings": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/features": "workspace:*",
+    "@repo/runtime": "workspace:*",
+    "@repo/settings": "workspace:*",
+    "@repo/wire": "workspace:*",
     "ai": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"

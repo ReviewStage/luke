@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { readingWords } from "@luke/features/words";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { readingWords } from "@repo/features/words";
 import {
   BUTTON_VARIANT,
   Button,
@@ -18,7 +18,7 @@ import {
   SettingsSectionsSkeleton,
   Switch,
   TextArea,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

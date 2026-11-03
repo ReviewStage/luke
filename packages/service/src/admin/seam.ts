@@ -1,5 +1,5 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { causeKind, unlessInterrupted } from "@luke/runtime/effect";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { causeKind, unlessInterrupted } from "@repo/runtime/effect";
 import { type Cause, Effect, type Schema } from "effect";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 

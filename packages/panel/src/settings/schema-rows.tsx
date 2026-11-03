@@ -8,9 +8,9 @@ import {
   settingFromOption,
   settingKeepWords,
   settingRowsForPage,
-} from "@luke/settings";
-import type { ActionResult } from "@luke/wire";
-import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
+} from "@repo/settings";
+import type { ActionResult } from "@repo/wire";
+import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@repo/wire/app-settings";
 import { SelectRow } from "./select-row.js";
 import { SwitchRow } from "./switch-row.js";
 import type { SettingsWrites } from "./writes.js";

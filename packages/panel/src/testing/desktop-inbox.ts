@@ -16,10 +16,10 @@ import {
   type AgentInboxScope,
   type AgentListAnswer,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import type { AutomationSummary } from "@luke/features/automation-wire";
-import type { Channel } from "@luke/features/channel-wire";
+} from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { AutomationSummary } from "@repo/features/automation-wire";
+import type { Channel } from "@repo/features/channel-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -32,18 +32,18 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
-} from "@luke/features/inbox-wire";
-import { answeredNow, closedNow } from "@luke/features/inbox-writes";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
-import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
-import type { TasksFileParams } from "@luke/features/tasks-view";
+} from "@repo/features/inbox-wire";
+import { answeredNow, closedNow } from "@repo/features/inbox-writes";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageLine } from "@repo/features/page-wire";
+import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
+import type { TasksFileParams } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppHolderInbox,
   AppHolderInboxes,
@@ -54,11 +54,11 @@ import type {
   AppInboxTaskHolding,
   AppInboxTasklessItem,
   AppWorkspaceChannels,
-} from "@luke/host/app-state";
-import { NO_HOLDER_INBOXES, UNREAD } from "@luke/host/app-state";
-import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@luke/host/contract";
-import { isTranscriptTab } from "@luke/ui/tab-strip-model";
-import type { TaskMark } from "@luke/ui/tasks-model";
+} from "@repo/host/app-state";
+import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
+import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
+import { isTranscriptTab } from "@repo/ui/tab-strip-model";
+import type { TaskMark } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -106,10 +106,10 @@ import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** Where the window's Inbox keeps the scope it shows. */
-export const SHOW_KEY = "luke.inboxShow";
+export const SHOW_KEY = "app.inboxShow";
 
 /** Where the window's Inbox keeps whom the items it lists are addressed to. */
-export const WHOSE_KEY = "luke.inboxWhose";
+export const WHOSE_KEY = "app.inboxWhose";
 
 export const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -929,13 +929,13 @@ export async function settle(): Promise<void> {
 }
 
 /** A row's title, as its ListRow draws it. */
-export const ROW_TITLE = ".luke-list-row-title";
+export const ROW_TITLE = ".ui-list-row-title";
 
 /** A row's title as the eye reads it, the words it says to a reader alone ("Unread") left out. */
 export function titleOf(row: Element): string {
   const title = row.querySelector(ROW_TITLE)?.cloneNode(true);
   if (!(title instanceof Element)) return "";
-  for (const hidden of title.querySelectorAll(".luke-visually-hidden")) hidden.remove();
+  for (const hidden of title.querySelectorAll(".ui-visually-hidden")) hidden.remove();
   return title.textContent ?? "";
 }
 
@@ -953,7 +953,7 @@ export function heardOf(ids: string | null): string {
       const copy = document.getElementById(id)?.cloneNode(true);
       assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
       for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
-      for (const apart of copy.querySelectorAll(".luke-visually-hidden")) {
+      for (const apart of copy.querySelectorAll(".ui-visually-hidden")) {
         apart.before(" ");
         apart.after(" ");
       }
@@ -969,8 +969,8 @@ export function heardOf(ids: string | null): string {
  * drawn on every open row again fails every listing.
  */
 export function needsYouMark(row: HTMLElement): string {
-  const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
-  const said = [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
+  const mark = row.querySelector(".ui-list-row-meta .attention-mark") !== null;
+  const said = [...row.querySelectorAll(".ui-list-row-meta .ui-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
   if (mark) return "?";
@@ -981,7 +981,7 @@ export function needsYouMark(row: HTMLElement): string {
 export function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll<HTMLButtonElement>("li button.luke-list-row-main")].map(
+  return [...list.querySelectorAll<HTMLButtonElement>("li button.ui-list-row-main")].map(
     (node) =>
       `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${titleOf(node)}`,
   );
@@ -998,7 +998,7 @@ export function wordsOf(element: Element | null | undefined): string | null {
 
 export function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main"),
   ].find((each) => titleOf(each) === title);
   assert.ok(row, `no row for ${title}`);
   return row;
@@ -1016,7 +1016,7 @@ export const SCOPE_NAMES = ["Open", "Needs you", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 export function headTitle(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .luke-toolbar-title")?.textContent;
+  return page.querySelector(".inbox-tasks .ui-toolbar-title")?.textContent;
 }
 
 /** Shows the scope `name` from the list's View options. */
@@ -1037,7 +1037,7 @@ export function chooseView(page: HTMLElement, submenu: string, choice: string): 
 /** The item of the menus open now whose label ends in `label`, a choice or a submenu, after any face's initial. */
 export function viewItem(label: string): HTMLElement {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast((each) =>
-    (each.querySelector(".luke-menu-item-label") ?? each).textContent?.endsWith(label),
+    (each.querySelector(".ui-menu-item-label") ?? each).textContent?.endsWith(label),
   );
   assert.ok(item, `the menu offers ${label}`);
   return item;
@@ -1103,7 +1103,7 @@ export function openOptions(pane: HTMLElement): HTMLButtonElement[] {
 export function checkedOptions(pane: HTMLElement): (string | null | undefined)[] {
   return openOptions(pane)
     .filter((option) => option.getAttribute("aria-checked") === "true")
-    .map((option) => option.querySelector(".luke-choice-label")?.textContent);
+    .map((option) => option.querySelector(".ui-choice-label")?.textContent);
 }
 
 /** The open item's Send, at its box's foot. */
@@ -1131,7 +1131,7 @@ export function footWords(pane: HTMLElement): string {
   const copy = box.cloneNode(true);
   assert.ok(copy instanceof Element);
   for (const part of copy.querySelectorAll(
-    ":scope > :is([data-inbox-draft-ask], .agent-composer-field), .attached-files, .luke-composer-foot-note",
+    ":scope > :is([data-inbox-draft-ask], .agent-composer-field), .attached-files, .ui-composer-foot-note",
   )) {
     part.remove();
   }
@@ -1151,7 +1151,7 @@ export function boxParts(pane: HTMLElement): string[] {
       const line = part.querySelector(".composer-editor") ?? assert.fail("the line's editor");
       return [`line: ${line.getAttribute("aria-label")}`];
     }
-    if (part.matches(".luke-composer-foot")) {
+    if (part.matches(".ui-composer-foot")) {
       const presses = [...part.querySelectorAll<HTMLElement>("button, .composer-editor")].map(
         (press) => press.getAttribute("aria-label") ?? press.textContent,
       );
@@ -1178,7 +1178,7 @@ export function keyOn(target: Element, key: string, init: KeyboardEventInit = {}
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 export function openings(card: string): string[] {
-  const standing = document.querySelector(`.luke-tooltip-card ${card}`);
+  const standing = document.querySelector(`.ui-tooltip-card ${card}`);
   assert.ok(standing, "a card is hung");
   return [...standing.querySelectorAll("button")]
     .map((button) => button.textContent ?? "")
@@ -1216,7 +1216,7 @@ export function columnsShown(page: HTMLElement): string[] {
 /** The item's bar's press named Inbox, the way back to the list, where there is one. */
 export function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .ui-toolbar button"),
   ].find((button) => button.textContent === "Inbox");
 }
 
@@ -1247,14 +1247,12 @@ export function pressKey(key: string, target: EventTarget = document.body): void
 
 /** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
 export function pagerOf(page: HTMLElement): string | null {
-  return (
-    page.querySelector(".inbox-view-items:not([hidden]) .luke-pager-count")?.textContent ?? null
-  );
+  return page.querySelector(".inbox-view-items:not([hidden]) .ui-pager-count")?.textContent ?? null;
 }
 
 /** One of the pager's arrows, by its name. */
 export function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
-  const arrow = page.querySelector<HTMLButtonElement>(`.luke-pager button[aria-label="${name}"]`);
+  const arrow = page.querySelector<HTMLButtonElement>(`.ui-pager button[aria-label="${name}"]`);
   assert.ok(arrow, `the pager offers ${name}`);
   return arrow;
 }
@@ -1344,7 +1342,7 @@ export const BUMP: InboxItem = {
 /** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
 export function hoveredCard(control: Element, card: string): string | null {
   restOn(control);
-  return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
+  return wordsOf(document.querySelector(`.ui-tooltip-card ${card}`));
 }
 
 /** One waiting item of an agent with no task, as main's read lists it. */
@@ -1385,7 +1383,7 @@ export function inOrder(on: InboxItem, messages: readonly InboxMessage[]): Inbox
 
 /** The kind of writer a comment's face draws, as its avatar's outline says it: a person's circle, or an agent's square. */
 export function faceKind(face: Element | null | undefined): string | undefined {
-  const disc = face?.querySelector<HTMLElement>(".luke-avatar");
+  const disc = face?.querySelector<HTMLElement>(".ui-avatar");
   if (disc === null || disc === undefined) return undefined;
   return disc.dataset.shape === "square" ? "agent" : "person";
 }
@@ -1440,12 +1438,12 @@ export function writtenOn(item: InboxItem, id: string) {
 /** A row's lines as a reader meets them: whether its title stands on a line of its own under the first, its task line, which holds its time, and the muted words of its last. */
 export function rowLines(page: HTMLElement, title: string): [boolean, string | null | undefined] {
   const row = rowNamed(page, title);
-  const head = row.querySelector(".luke-list-row-head");
+  const head = row.querySelector(".ui-list-row-head");
   const titled =
     titleOf(row) === title &&
     head?.querySelector(ROW_TITLE) === null &&
     head.querySelector("time") !== null;
-  return [titled, row.querySelector(".luke-list-row-description")?.textContent];
+  return [titled, row.querySelector(".ui-list-row-description")?.textContent];
 }
 
 /** A row's right-click menu as it reads: each item's words, its key where it names one, a rule between groups. */
@@ -1462,8 +1460,8 @@ export function rowMenu(page: HTMLElement, title: string): string[] {
 export function menuWords(): string[] {
   const menu = [...document.querySelectorAll('[role="menu"]')].at(-1);
   assert.ok(menu, "a menu is open");
-  return [...menu.querySelectorAll('[role^="menuitem"], .luke-menu-rule')].map((each) =>
-    each.classList.contains("luke-menu-rule") ? "—" : (each.textContent ?? ""),
+  return [...menu.querySelectorAll('[role^="menuitem"], .ui-menu-rule')].map((each) =>
+    each.classList.contains("ui-menu-rule") ? "—" : (each.textContent ?? ""),
   );
 }
 
@@ -1619,7 +1617,7 @@ export function subjectParts(pane: HTMLElement): (string | null)[] {
 export function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
-    wordsOf(box.querySelector(".luke-card-head")),
+    wordsOf(box.querySelector(".ui-card-head")),
   ]);
 }
 
@@ -1646,7 +1644,7 @@ export function draftReply(pane: HTMLElement): (string | null)[] {
   const draft =
     pane.querySelector<HTMLElement>(".inbox-thread > li:last-child") ?? assert.fail("no thread");
   assert.strictEqual(draft.dataset.inboxComment, "draft", "the draft reply ends the thread");
-  const head = wordsOf(draft.querySelector(".luke-comment-head"));
+  const head = wordsOf(draft.querySelector(".ui-comment-head"));
   const question = draft.querySelector("form.inbox-answer > [data-inbox-draft-ask]");
   if (question === null) return [head];
   assert.notMatch(
@@ -1660,7 +1658,7 @@ export function draftReply(pane: HTMLElement): (string | null)[] {
 /** The press of the open ask's controls, in the draft reply, whose own words, a badge beside them aside, are `label`. */
 export function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
   const found = [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
-    (button) => button.querySelector(".luke-button-words")?.textContent === label,
+    (button) => button.querySelector(".ui-button-words")?.textContent === label,
   );
   assert.ok(found, `the ask offers ${label}`);
   return found;

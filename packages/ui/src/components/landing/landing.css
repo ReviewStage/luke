@@ -1,0 +1,803 @@
+/* landing.css -- the landing (`landing-page.tsx`): its margin grid, the bar
+   that floats once the page scrolls, the hero beside the ball, each
+   feature's stage, the devices, the screens the scenes lay out at the app's
+   own sizes, the close, and the foot over the wordmark. The page queries its
+   own width rather than the viewport's, so it is drawn the same in a frame
+   as in a window; a container query cannot read a custom property, so the
+   width it steps under is a literal here. */
+
+@layer components {
+  .ui-landing-page {
+    position: relative;
+    container-type: inline-size;
+    overflow-x: clip;
+    background: var(--ui-color-ground);
+    color: var(--ui-color-text);
+    font-family: var(--ui-font-sans);
+  }
+
+  /* The page's two insets: where the rails stand, and where words start
+     inside them. */
+  .ui-landing-page > * {
+    --ui-landing-inset: 48px;
+    --ui-landing-gutter: calc(var(--ui-landing-inset) + 32px);
+  }
+
+  .ui-landing-page :where(h1, h2, p, dl, dd, ol) {
+    margin: 0;
+  }
+
+  /* The margin grid: a hairline rail at each of the content's edges, the
+     page's length. */
+  .ui-landing-rails {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .ui-landing-rails::before,
+  .ui-landing-rails::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--ui-color-border);
+  }
+
+  .ui-landing-rails::before {
+    left: var(--ui-landing-inset);
+  }
+
+  .ui-landing-rails::after {
+    right: var(--ui-landing-inset);
+  }
+
+  /* A rule across the page, a cross where it meets each rail. */
+  .ui-landing-rule {
+    position: relative;
+    height: 1px;
+    background: var(--ui-color-border);
+  }
+
+  .ui-landing-rule > i {
+    position: absolute;
+    top: -5px;
+    width: 11px;
+    height: 11px;
+  }
+
+  .ui-landing-rule > i:first-child {
+    left: calc(var(--ui-landing-inset) - 5px);
+  }
+
+  .ui-landing-rule > i:last-child {
+    right: calc(var(--ui-landing-inset) - 5px);
+  }
+
+  .ui-landing-rule > i::before,
+  .ui-landing-rule > i::after {
+    content: "";
+    position: absolute;
+    background: var(--ui-color-text-muted);
+  }
+
+  .ui-landing-rule > i::before {
+    left: 5px;
+    width: 1px;
+    height: 11px;
+  }
+
+  .ui-landing-rule > i::after {
+    top: 5px;
+    width: 11px;
+    height: 1px;
+  }
+
+  /* The bar: across the page at its top, then, once the page scrolls, a
+     narrower pill floating on the surface over the rails. */
+  .ui-landing-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-top: 0;
+    transition: padding-top var(--ui-duration-shape) var(--ui-motion-pane);
+  }
+
+  .ui-landing-bar-in {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    max-width: 100%;
+    height: 64px;
+    margin: 0 auto;
+    padding: 0 var(--ui-landing-inset);
+    border: 1px solid transparent;
+    border-bottom-color: var(--ui-color-border);
+    border-radius: 0;
+    background: var(--ui-color-ground);
+    transition-property: max-width, height, padding, border-radius, border-color, background-color;
+    transition-duration: var(--ui-duration-shape);
+    transition-timing-function: var(--ui-motion-pane);
+  }
+
+  .ui-landing-bar-in > :first-child {
+    flex: 1;
+  }
+
+  .ui-landing-bar-in {
+    white-space: nowrap;
+  }
+
+  .ui-landing-bar[data-floating="true"] {
+    padding-top: 12px;
+  }
+
+  .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
+    max-width: 760px;
+    height: 52px;
+    padding: 0 8px 0 18px;
+    border-color: var(--ui-color-border-strong);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-surface);
+  }
+
+  /* The hero: the one line and its calls to the left, the ball to the right. */
+  .ui-landing-hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 660px;
+    overflow: hidden;
+  }
+
+  .ui-landing-hero-words {
+    position: relative;
+    z-index: 1;
+    max-width: 600px;
+    padding: 0 var(--ui-landing-inset) 0 var(--ui-landing-gutter);
+  }
+
+  .ui-landing-title {
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-display-landing-size);
+    font-weight: var(--ui-display-landing-weight);
+    line-height: var(--ui-display-landing-leading);
+    letter-spacing: var(--ui-display-landing-tracking);
+  }
+
+  .ui-landing-hero-lead,
+  .ui-landing-lead {
+    max-width: 520px;
+    margin-top: 18px;
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-display-lead-size);
+    line-height: var(--ui-display-lead-leading);
+  }
+
+  .ui-landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+  }
+
+  .ui-landing-hero-art {
+    position: absolute;
+    top: 40px;
+    right: 72px;
+    width: 580px;
+    height: 580px;
+  }
+
+  .ui-landing-orb {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* A feature: its heading and sentence over its stage. */
+  .ui-landing-section {
+    position: relative;
+  }
+
+  .ui-landing-section-body {
+    padding: 104px var(--ui-landing-gutter) 96px;
+  }
+
+  .ui-landing-section-title {
+    max-width: 680px;
+    font-family: var(--ui-font-display);
+    font-size: var(--ui-display-feature-size);
+    font-weight: var(--ui-display-landing-weight);
+    line-height: var(--ui-display-feature-leading);
+    letter-spacing: var(--ui-display-landing-tracking);
+  }
+
+  /* A stage: a box of drifting dots holding the feature's screen, which
+     runs off its foot where the screen is a window. */
+  .ui-landing-stage {
+    position: relative;
+    margin-top: 40px;
+    padding: 48px 6%;
+    overflow: hidden;
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-radius-14);
+    background: var(--ui-color-ground);
+  }
+
+  .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
+    padding-bottom: 0;
+  }
+
+  .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
+    margin-bottom: -48px;
+  }
+
+  .ui-landing-field,
+  .ui-landing-wordmark {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ui-color-accent);
+  }
+
+  .ui-landing-scene {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* A stage with an aside: the stage, and what stands beside it. */
+  .ui-landing-beside {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 40px;
+    margin-top: 40px;
+  }
+
+  .ui-landing-beside > .ui-landing-stage {
+    margin-top: 0;
+  }
+
+  .ui-landing-facts > .ui-landing-fact {
+    padding: 16px 0;
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  .ui-landing-fact > dt {
+    font-weight: var(--ui-type-section-weight);
+  }
+
+  .ui-landing-fact > dd {
+    margin-top: 4px;
+    color: var(--ui-color-text-muted);
+  }
+
+  /* The page's close and its foot over the wordmark. */
+  .ui-landing-close {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 96px var(--ui-landing-gutter) 64px;
+  }
+
+  .ui-landing-close .ui-landing-actions {
+    margin-top: 0;
+  }
+
+  .ui-landing-foot-links {
+    padding: 0 var(--ui-landing-gutter) 40px;
+  }
+
+  .ui-landing-foot-art {
+    position: relative;
+    height: 300px;
+    overflow: hidden;
+  }
+
+  /* A message arriving in a scene rises into place. */
+  .ui-landing-enter {
+    animation: ui-landing-enter var(--ui-duration-shape) var(--ui-motion-pane) both;
+  }
+
+  @keyframes ui-landing-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  /* The devices. A screen is laid out at the device's own size and scaled
+     to the room, so the app's rows and type keep their proportions. */
+  .ui-landing-window {
+    box-sizing: border-box;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 1px solid var(--ui-color-border-strong);
+    border-radius: var(--ui-display-window-radius);
+    background: var(--ui-color-sidebar);
+  }
+
+  .ui-landing-window-fit,
+  .ui-landing-phone-fit {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .ui-landing-window-screen,
+  .ui-landing-phone-screen {
+    position: relative;
+    transform: scale(var(--ui-landing-fit, 1));
+    transform-origin: 0 0;
+    color: var(--ui-color-text);
+  }
+
+  .ui-landing-window-screen {
+    width: 1280px;
+    height: 800px;
+    background: var(--ui-color-sidebar);
+  }
+
+  .ui-landing-window-lights {
+    position: absolute;
+    top: 19px;
+    left: 20px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .ui-landing-window-lights > i {
+    width: 12px;
+    height: 12px;
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-border-strong);
+  }
+
+  .ui-landing-phone {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    aspect-ratio: 393 / 852;
+    padding: 9px;
+    border-radius: var(--ui-display-phone-radius);
+    background: var(--ui-color-sidebar);
+    box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
+  }
+
+  .ui-landing-phone-fit {
+    border-radius: var(--ui-display-phone-screen-radius);
+    background: var(--ui-color-ground);
+  }
+
+  .ui-landing-phone-screen {
+    width: 393px;
+    height: 852px;
+    background: var(--ui-color-ground);
+  }
+
+  .ui-landing-phone-island {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    width: 76px;
+    height: 22px;
+    margin-left: -38px;
+    border-radius: var(--ui-display-island-radius);
+    background: var(--ui-color-sidebar);
+  }
+
+  /* The app inside a window: the frame's sidebar beside the page, whose bar
+     stands on the frame over a sheet, as the desktop draws them. */
+  .ui-landing-app {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    height: 100%;
+  }
+
+  .ui-landing-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 51px 12px 12px;
+  }
+
+  .ui-landing-workspace {
+    padding-bottom: var(--ui-block-gap);
+  }
+
+  .ui-landing-workspace-ref {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-block-gap);
+    min-width: 0;
+  }
+
+  .ui-landing-workspace-words {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ui-landing-sidebar-group {
+    margin-top: var(--ui-section-gap);
+  }
+
+  .ui-landing-sidebar-foot {
+    margin-top: auto;
+  }
+
+  .ui-landing-row-time,
+  .ui-landing-row-marks {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-item-gap);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ui-landing-main {
+    display: grid;
+    min-height: 0;
+    margin: 0 8px 8px 0;
+  }
+
+  /* A column of the page: its bar on the frame, then its share of the sheet. */
+  .ui-landing-inbox-list,
+  .ui-landing-inbox-thread,
+  .ui-landing-agent-log {
+    position: relative;
+    display: grid;
+    grid-template-rows: 50px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .ui-landing-inbox {
+    position: relative;
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .ui-landing-agent {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 8px;
+  }
+
+  /* The sheet the columns' content stands on, under their bars. */
+  .ui-landing-inbox::before,
+  .ui-landing-agent-log::before {
+    content: "";
+    position: absolute;
+    inset: 50px 0 0;
+    border-radius: var(--ui-radius-14);
+    background: var(--ui-color-ground);
+    box-shadow:
+      0 0 0 1px var(--ui-color-border),
+      0 1px 2px var(--ui-color-shadow-soft);
+  }
+
+  .ui-landing-sheet-start,
+  .ui-landing-sheet-end {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ui-landing-inbox-list > .ui-landing-sheet-start {
+    border-right: 1px solid var(--ui-color-border);
+  }
+
+  .ui-landing-search {
+    padding: 8px var(--ui-space-12) var(--ui-row-inset);
+  }
+
+  .ui-landing-rows {
+    padding: var(--ui-row-inset) var(--ui-space-12) var(--ui-space-12);
+  }
+
+  .ui-landing-line {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-tight-gap);
+  }
+
+  .ui-landing-line-glyph {
+    display: inline-flex;
+    color: var(--ui-color-complete);
+  }
+
+  .ui-landing-line-glyph[data-open="true"] {
+    color: var(--ui-color-attention);
+  }
+
+  .ui-landing-line-glyph > svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .ui-landing-empty {
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    height: 100%;
+  }
+
+  /* The thread: its subject over the comments and the ask, on the reading
+     column. */
+  .ui-landing-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-block-gap);
+    padding: var(--ui-section-gap) max(20px, calc((100% - 720px) / 2)) 20px;
+  }
+
+  .ui-landing-subject {
+    padding-bottom: var(--ui-block-gap);
+    border-bottom: 1px solid var(--ui-color-border);
+  }
+
+  .ui-landing-comments {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 8px 0 0;
+    list-style: none;
+  }
+
+  .ui-landing-ask {
+    padding: var(--ui-list-inset);
+  }
+
+  .ui-landing-working {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-item-gap);
+  }
+
+  /* An agent's log, with the task's sub-tasks on a second sheet beside it. */
+  .ui-landing-log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-block-gap);
+    padding: var(--ui-section-gap) 28px 20px;
+  }
+
+  .ui-landing-call {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-tight-gap);
+    color: var(--ui-color-text-body);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
+  }
+
+  .ui-landing-call-words {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--ui-tight-gap);
+    min-width: 0;
+  }
+
+  .ui-landing-call-subject {
+    color: var(--ui-color-text-muted);
+  }
+
+  .ui-landing-message {
+    align-items: flex-start;
+    max-width: 85%;
+    margin-right: auto;
+  }
+
+  .ui-landing-bubble {
+    padding: var(--ui-row-inset) var(--ui-list-inset);
+    border-radius: var(--ui-radius-14);
+    background: var(--ui-color-fill-strong);
+  }
+
+  .ui-landing-side {
+    align-self: stretch;
+    margin-top: 50px;
+    padding: 12px;
+    border-radius: var(--ui-radius-14);
+    background: var(--ui-color-well);
+    box-shadow: 0 0 0 1px var(--ui-color-border);
+  }
+
+  /* An automation, drawn as a sheet alone: its bar over its settings and
+     its runs. */
+  .ui-landing-sheet {
+    overflow: hidden;
+    border: 1px solid var(--ui-color-border-strong);
+    border-radius: var(--ui-radius-14);
+    background: var(--ui-color-ground);
+  }
+
+  .ui-landing-automation > :first-child {
+    padding: 4px var(--ui-space-12);
+    border-bottom: 1px solid var(--ui-color-border);
+  }
+
+  .ui-landing-automation-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 32px;
+    padding: 16px 20px 20px;
+  }
+
+  .ui-landing-automation-settings,
+  .ui-landing-automation-runs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-control-gap);
+  }
+
+  /* The devices: the Mac window, with the phone standing over its corner. */
+  .ui-landing-stage[data-scene="devices"] {
+    height: 620px;
+    padding: 0;
+  }
+
+  .ui-landing-devices {
+    height: 100%;
+  }
+
+  .ui-landing-devices-window {
+    position: absolute;
+    top: 64px;
+    left: 5%;
+    width: 66%;
+  }
+
+  .ui-landing-devices-phone {
+    position: absolute;
+    top: 44px;
+    right: 8%;
+    z-index: 2;
+    width: 254px;
+  }
+
+  .ui-landing-phone-app {
+    display: grid;
+    grid-template-rows: 46px minmax(0, 1fr);
+    height: 100%;
+    padding-top: 54px;
+    box-sizing: border-box;
+  }
+
+  .ui-landing-phone-body {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ui-landing-phone-body .ui-landing-thread {
+    padding-inline: var(--ui-space-12);
+  }
+
+  .ui-landing-models {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  /* Under 640px of room the page keeps to one column: the ball under the
+     words, each stage under its heading, and the phone nearer the window. */
+  /* off-scale: 640px, a phone's landing */
+  @container (width < 640px) {
+    .ui-landing-page > * {
+      --ui-landing-inset: 16px;
+      --ui-landing-gutter: calc(var(--ui-landing-inset) + 12px);
+    }
+
+    .ui-landing-bar-call {
+      display: none;
+    }
+
+    .ui-landing-bar[data-floating="true"] {
+      padding: 10px 10px 0;
+    }
+
+    .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
+      max-width: 100%;
+      padding: 0 6px 0 14px;
+    }
+
+    .ui-landing-hero {
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+    }
+
+    .ui-landing-hero-words {
+      padding: 44px var(--ui-landing-gutter) 0;
+    }
+
+    .ui-landing-title {
+      font-size: var(--ui-display-landing-size-narrow);
+    }
+
+    .ui-landing-hero-lead,
+    .ui-landing-lead {
+      font-size: var(--ui-display-lead-size-narrow);
+    }
+
+    .ui-landing-hero-art {
+      position: relative;
+      top: auto;
+      right: auto;
+      width: auto;
+      height: 340px;
+      margin: 24px var(--ui-landing-gutter);
+    }
+
+    .ui-landing-section-body {
+      padding: 64px var(--ui-landing-gutter) 56px;
+    }
+
+    .ui-landing-section-title {
+      font-size: var(--ui-display-feature-size-narrow);
+    }
+
+    .ui-landing-stage {
+      margin-top: 28px;
+      padding: 28px 5%;
+    }
+
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
+      margin-bottom: -24px;
+    }
+
+    .ui-landing-beside {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ui-landing-automation-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ui-landing-stage[data-scene="devices"] {
+      height: 420px;
+    }
+
+    .ui-landing-devices-window {
+      top: 30px;
+      left: 4%;
+      width: 86%;
+    }
+
+    .ui-landing-devices-phone {
+      top: 120px;
+      right: 5%;
+      width: 150px;
+    }
+
+    .ui-landing-phone {
+      padding: 6px;
+      border-radius: var(--ui-display-phone-radius-narrow);
+    }
+
+    .ui-landing-phone-fit {
+      border-radius: var(--ui-display-phone-screen-radius-narrow);
+    }
+
+    .ui-landing-phone-island {
+      top: 12px;
+      width: 44px;
+      height: 13px;
+      margin-left: -22px;
+    }
+
+    .ui-landing-close {
+      flex-direction: column;
+      align-items: stretch;
+      padding: 72px var(--ui-landing-gutter) 48px;
+    }
+
+    .ui-landing-foot-art {
+      height: 140px;
+    }
+  }
+}

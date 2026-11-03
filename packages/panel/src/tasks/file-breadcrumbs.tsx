@@ -8,7 +8,7 @@ import {
   MenuSurface,
   POPOVER_SIDE,
   RectFloat,
-} from "@luke/ui";
+} from "@repo/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { useSideBundles } from "../bundle-loader.js";
@@ -40,7 +40,7 @@ import { FileTreeStage, TREE_READING } from "./file-tree-pane.js";
  * and on one narrower than 300px the repository and every folder do, the
  * file alone after it; the "…" names what it stands for in its pill and
  * hangs the tree the last of them would. Each crumb says at which of the
- * bar's widths it is drawn (`@luke/ui`'s `Breadcrumbs`, read off the
+ * bar's widths it is drawn (`@repo/ui`'s `Breadcrumbs`, read off the
  * `BreadcrumbBar` the bar holds its row in, `file-view.tsx`), so both "…"
  * are drawn, and the stylesheet shows the one the bar's width asks for.
  */
@@ -78,7 +78,7 @@ function fromRoot(folder: string, path: string): string {
 }
 
 /**
- * A crumb's tree, hung under the crumb as a menu is (`@luke/ui`'s
+ * A crumb's tree, hung under the crumb as a menu is (`@repo/ui`'s
  * `RectFloat`), as tall as the rows it shows up to its bound, its rows
  * scrolling within. It closes as a menu does: Escape, which hands the
  * keyboard back to the crumb, a press elsewhere, which the layer hears, or
@@ -156,7 +156,7 @@ function CrumbTree({
     // from out of sight (planning.css), so the tree goes, as it does when the
     // window resizes. Note that it watches only while a tree stands, and
     // reads nothing of the layout.
-    const bar = opener.closest(".luke-pane-bar");
+    const bar = opener.closest(".ui-pane-bar");
     let first = true;
     const folded = new ResizeObserver(() => {
       if (first) first = false;

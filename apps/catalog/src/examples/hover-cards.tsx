@@ -1,4 +1,4 @@
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -26,8 +26,8 @@ import {
   Tooltip,
   TooltipCard,
   UserIcon,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

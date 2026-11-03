@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";

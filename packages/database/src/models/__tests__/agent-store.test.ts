@@ -10,20 +10,21 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
-import { sessionKey } from "@luke/runtime/vocabulary";
+} from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
+import { sessionKey } from "@repo/runtime/vocabulary";
 import {
+  LEGACY_APP_WORD,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
-} from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
-import { eq } from "drizzle-orm";
+} from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
+import { eq, sql } from "drizzle-orm";
 import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -231,7 +232,13 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           kind: MESSAGE_SENDER.MEMBER,
           userId: teammate,
         });
-        const byLuke = yield* line("luke", { kind: MESSAGE_SENDER.LUKE });
+        const byApp = yield* line("app", { kind: MESSAGE_SENDER.APP });
+        // A line the app sent before it was named `app`, whose row names it `luke`.
+        const byLegacyApp = yield* line("legacy-app", { kind: MESSAGE_SENDER.APP });
+        yield* db
+          .update(messages)
+          .set({ sender: sql`${LEGACY_APP_WORD}` })
+          .where(eq(messages.id, byLegacyApp));
         const byAutomation = yield* line("automation", {
           kind: MESSAGE_SENDER.AUTOMATION,
           name: "Nightly triage",
@@ -268,7 +275,8 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           .returning({ id: messages.id });
         const ids = [
           byTeammate,
-          byLuke,
+          byApp,
+          byLegacyApp,
           byAutomation,
           byGitHub,
           byAgent,
@@ -281,7 +289,8 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           ids.map((id) => senders.get(id)),
           [
             { kind: MESSAGE_SENDER.MEMBER, member: { userId: teammate, name: "Charles Pan" } },
-            { kind: MESSAGE_SENDER.LUKE },
+            { kind: MESSAGE_SENDER.APP },
+            { kind: MESSAGE_SENDER.APP },
             { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
             { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
             {
@@ -2385,7 +2394,7 @@ it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
         const line = {
           text: "Use seven days.",
           clientKey: "send-1",
-          sender: { kind: MESSAGE_SENDER.LUKE },
+          sender: { kind: MESSAGE_SENDER.APP },
         };
         const written = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));
         const again = yield* writer.writeAwaitingLine(target, line, Effect.succeed(true));

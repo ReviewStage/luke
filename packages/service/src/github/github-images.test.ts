@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE, githubImageOf } from "@luke/features/github-image";
+import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE, githubImageOf } from "@repo/features/github-image";
 import { Effect, Option, Redacted } from "effect";
 import { fakeGitHub, type SentToGitHub } from "../testing/github-app-fake.js";
 import { githubImage } from "./github-images.js";

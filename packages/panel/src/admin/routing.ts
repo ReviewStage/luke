@@ -18,8 +18,8 @@ import {
   type AdminWindowedQuery,
   type AdminWorkspacesQuery,
   isUtcDayKey,
-} from "@luke/features/admin-wire";
-import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@luke/features/link-grammar";
+} from "@repo/features/admin-wire";
+import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@repo/features/link-grammar";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted

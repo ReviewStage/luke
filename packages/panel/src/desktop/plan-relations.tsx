@@ -3,7 +3,7 @@ import {
   type Task,
   type TaskRelationKind,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   BUTTON_SIZE,
   GROUP_ACTIONS,
@@ -16,10 +16,10 @@ import {
   PROGRESS_COUNT_LOOK,
   ProgressCount,
   Tooltip,
-} from "@luke/ui";
-import { GLYPH, NetworkIcon, PlusIcon } from "@luke/ui/icons";
-import { subTaskCount, subTasksOf, taskFinished } from "@luke/ui/task-list-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { GLYPH, NetworkIcon, PlusIcon } from "@repo/ui/icons";
+import { subTaskCount, subTasksOf, taskFinished } from "@repo/ui/task-list-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 import { RelationKindPill } from "../tasks/relation-kind-pill.js";
 import {
@@ -45,7 +45,7 @@ import { chipSubmenu } from "./standing-submenus.js";
  * them in a badge, as a sub-task row with sub-tasks of its own and a Board
  * card count theirs, and nests theirs under each to any depth, folded until opened, as
  * the sidebar nests and folds them; it reads the task list's
- * `parentTaskId` and nothing more. Relations, by the network glyph, holds a
+ * `parentTaskId` and nothing more. Task relations, by the network glyph, holds a
  * row for each task the task waits on and each that waits on it, led by its
  * kind as a compact pill by its icon, its words, and a chevron, so the row
  * reads as a sentence, Blocked by, the task's key, its status, its name: an
@@ -65,17 +65,17 @@ import { chipSubmenu } from "./standing-submenus.js";
 /** What each group is called, and its list for a reader moving between lists. */
 const GROUP_WORDS = {
   SUB_TASKS: "Sub-tasks",
-  RELATIONS: "Relations",
+  RELATIONS: "Task relations",
 } as const;
 
 /** What each group's + is called, said beside its glyph. */
 const ADD_WORDS = {
   SUB_TASK: "Add sub-task",
-  RELATION: "Add relation",
+  RELATION: "Add task relation",
 } as const;
 
-/** What the Relations group's count counts, said to a reader beside the figure. */
-const RELATIONS_NOUN = { one: "relation", many: "relations" } as const;
+/** What the Task relations group's count counts, said to a reader beside the figure. */
+const RELATIONS_NOUN = { one: "task relation", many: "task relations" } as const;
 
 /** What a row's menu and a pill's menu name the relation's change and its taking away. */
 const CHANGE_RELATION = "Change relation";
@@ -286,7 +286,7 @@ function blockTasks(
 }
 
 /**
- * The open task's Sub-tasks and Relations groups at the head of its plan,
+ * The open task's Sub-tasks and Task relations groups at the head of its plan,
  * each only while it holds a row; nothing for a task with neither. Its
  * relations change through the task list's doors, and each group's + adds
  * one through the add menu's `door`.

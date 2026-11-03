@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
-import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Schema } from "effect";
 import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
 import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "./function-dispatch.js";
@@ -124,7 +124,7 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
 
 /**
  * PostHog's traffic, passed on from a path of our own origin
- * (`@luke/features/posthog-proxy`) as PostHog's Vercel proxy guide lays it
+ * (`@repo/features/posthog-proxy`) as PostHog's Vercel proxy guide lays it
  * out: its scripts and its configuration to its assets host, and everything
  * else under the path to its ingestion host. Each takes the request's
  * cookies off on the way, because Vercel passes on every header of a request
@@ -266,7 +266,7 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
  * A condition that a request was made to one host, as a pattern held to its
  * whole value, which names each spelling a browser may send of it, the one
  * with a trailing dot among them: what holds the sandbox's host to the page
- * route (`@luke/features/page-frame`). Note that it is written `re` and
+ * route (`@repo/features/page-frame`). Note that it is written `re` and
  * anchored, because a bare string is a pattern Vercel may match anywhere in
  * the host, and a list of spellings would be reflowed by the formatter that
  * runs on commit, against the generation this file holds the file to.

@@ -2,29 +2,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@luke/database/github-installation-vocabulary";
-import { agentTable } from "@luke/database/schemas/agent";
-import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { planRevision } from "@luke/database/schemas/plan-revision";
-import { conversations } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
+} from "@repo/database/github-installation-vocabulary";
+import { agentTable } from "@repo/database/schemas/agent";
+import { invitation, member, organization, user } from "@repo/database/schemas/auth";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { planRevision } from "@repo/database/schemas/plan-revision";
+import { conversations } from "@repo/database/schemas/storage";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_WORKSPACES_KIND,
   type AdminMetricsScope,
   type AdminWorkspacesKind,
-} from "@luke/features/admin-wire";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/admin-wire";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { describe, test } from "vitest";
 import { USER_ROLE } from "./admin-access.js";

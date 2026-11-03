@@ -1,5 +1,12 @@
-import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
-import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import {
+  keepIdentity,
+  LEGACY_APP_WORD,
+  literalsReadingLegacy,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  WireValueSchema,
+} from "@repo/wire";
+import { readEither, verbatimJsonSchema, wireKeys } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
@@ -165,19 +172,26 @@ export const AGENT_PAYER = {
   CLAUDE_SUBSCRIPTION: "claude_plan",
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
-  LUKE: "luke",
+  APP: "app",
   /** A local agent's own Mac, by its harness's login there (`deviceSignedInSchema`), with the account's saved credential as the fallback. */
   MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
 export type AgentPayer = (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER];
 
+/** A payer as a row stores it. Note that it reads `luke`, which rows from before the app was named `app` hold, as the app (a legacy read). */
+export const agentPayerSchema = literalsReadingLegacy(
+  Object.values(AGENT_PAYER),
+  LEGACY_APP_WORD,
+  AGENT_PAYER.APP,
+);
+
 /**
  * What answers a coding agent's conversation, as its conversation's row
  * records it: eve, as every agent ran before the native harnesses, or the
  * provider's own harness, Claude Code or Codex, which we launch in the
  * agent's sandbox. The store's own vocabulary spells the same words
- * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
+ * (`@repo/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
 export const AGENT_RUNTIME = {
   EVE: "eve",
@@ -208,7 +222,7 @@ export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
  * agent from before the column does, or one of the starter's devices, which
- * takes its work as rows it follows (`@luke/features/device-agent-wire`).
+ * takes its work as rows it follows (`@repo/features/device-agent-wire`).
  */
 export const AGENT_MACHINE = {
   VERCEL: "vercel",
@@ -803,11 +817,18 @@ export const AGENT_LIST_ARCHIVED = {
  */
 export const AGENT_ARCHIVER = {
   MEMBER: "member",
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
 } as const;
 
 export type AgentArchiver = (typeof AGENT_ARCHIVER)[keyof typeof AGENT_ARCHIVER];
+
+/** Who archived an agent as a row stores it. Note that it reads `luke`, which rows from before the app was named `app` hold, as the app (a legacy read). */
+export const agentArchiverSchema = literalsReadingLegacy(
+  Object.values(AGENT_ARCHIVER),
+  LEGACY_APP_WORD,
+  AGENT_ARCHIVER.APP,
+);
 
 /**
  * Who archived an agent, as its banner and card say it: a member, or the app or
@@ -818,7 +839,7 @@ export type AgentArchiver = (typeof AGENT_ARCHIVER)[keyof typeof AGENT_ARCHIVER]
  * task; a build from before it reads the archive as the member's own.
  */
 const agentArchivedBySchema = EffectSchema.Struct({
-  by: EffectSchema.Literals(Object.values(AGENT_ARCHIVER)),
+  by: agentArchiverSchema,
   member: EffectSchema.optionalKey(memberRefSchema),
   agent: EffectSchema.optionalKey(
     EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
@@ -2043,7 +2064,7 @@ export type TurnRecord = typeof turnRecordSchema.Type;
  */
 export const MESSAGE_SENDER = {
   MEMBER: "member",
-  LUKE: "luke",
+  APP: "app",
   AUTOMATION: "automation",
   GITHUB: "github",
   AGENT: "agent",
@@ -2051,11 +2072,18 @@ export const MESSAGE_SENDER = {
 
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
+/** What sent a line as its row stores it. Note that it reads `luke`, which rows from before the app was named `app` hold, as the app (a legacy read). */
+export const messageSenderSchema = literalsReadingLegacy(
+  Object.values(MESSAGE_SENDER),
+  LEGACY_APP_WORD,
+  MESSAGE_SENDER.APP,
+);
+
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, the app from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
-  LUKE: "luke",
+  APP: "app",
   AUTOMATION: "automation",
   GITHUB: "github",
 } as const;
@@ -2165,7 +2193,7 @@ const agentTranscriptMessageSchema = EffectSchema.Struct({
   sentBy: EffectSchema.optionalKey(agentSenderSchema),
   /**
    * The id one of the developer's lines was written under, which a line a
-   * window sent is its send key's (`sentLineId` of `@luke/wire/host-ids`), so
+   * window sent is its send key's (`sentLineId` of `@repo/wire/host-ids`), so
    * the window that sent it knows the row as it lands and draws it in the
    * place of the line it drew at once; absent on every other row, and from a
    * service older than it.
@@ -2232,7 +2260,7 @@ const agentUsageSchema = EffectSchema.Struct({
    * per token. Absent on a worker's, an agent from before payers were
    * recorded, and from a service older than it.
    */
-  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_PAYER))),
+  payer: EffectSchema.optionalKey(agentPayerSchema),
 });
 
 export type AgentUsage = typeof agentUsageSchema.Type;
@@ -2393,7 +2421,7 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * or none, from the first. Absent on a worker's page, for an agent from
    * before payers were recorded, and from a service older than it.
    */
-  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_PAYER))),
+  payer: EffectSchema.optionalKey(agentPayerSchema),
   /**
    * What the newest turn alone cost. No service sends it any more, since a
    * price the window draws means the whole run's (`usage`); it stays an

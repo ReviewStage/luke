@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.js";

@@ -4,7 +4,7 @@
  * Three seats and one for empty states: 12 beside a caption's words, 16 in a
  * button, a tab, a chip, and a menu row, 20 as a row's or a card's lead mark,
  * and 40 over an empty state's words. An icon is drawn at a seat and never at
- * a size of its own; the pixels are `--luke-icon-*` in `tokens/scale.css`, so
+ * a size of its own; the pixels are `--ui-icon-*` in `tokens/scale.css`, so
  * this table names the seats and the stylesheet sizes them.
  */
 

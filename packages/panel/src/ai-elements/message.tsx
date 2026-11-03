@@ -8,14 +8,14 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   MARKDOWN_LOOK,
   Markdown,
   type MarkdownComponents,
   type MarkdownProps,
-} from "@luke/ui/markdown";
-import { QUOTE_CLASS } from "@luke/ui/quote-face";
+} from "@repo/ui/markdown";
+import { QUOTE_CLASS } from "@repo/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type HTMLAttributes, memo, type ReactNode } from "react";
@@ -28,7 +28,7 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * restyled to our tokens: the developer's turn stands at the right in a
  * raised bubble, the app's at the left in plain text across the whole column,
  * as a chat app draws them. The actions on a message are the
- * registry's, each one a quiet icon button in `@luke/ui`'s `MessageActions`,
+ * registry's, each one a quiet icon button in `@repo/ui`'s `MessageActions`,
  * which shows while the pointer or the keyboard is on the message, in the
  * line under it (`MessageLine`), with the window's own
  * hover hint in place of the registry's tooltip. The registry's branches, attachments, and toolbar are
@@ -51,7 +51,7 @@ export type MessageProps = Omit<HTMLAttributes<HTMLDivElement>, "onClick"> & {
 };
 
 /**
- * A turn, `@luke/ui`'s `MessageFrame` in the transcript's skin: a column of
+ * A turn, `@repo/ui`'s `MessageFrame` in the transcript's skin: a column of
  * its words and what stands with them, the developer's own against the
  * column's right edge at a bubble's measure, whose actions a tap shows on a
  * screen with no hover. A line written again where it stands
@@ -91,8 +91,8 @@ export function MessageContent({ children, className, ...props }: MessageContent
     // developer's turn and a received line raise it in a bubble.
     <div
       className={cn(
-        "message-content min-w-0 max-w-full overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-body leading-reading text-foreground",
-        "group-[:is(.is-user,.is-received)]/message:w-fit group-[:is(.is-user,.is-received)]/message:rounded-luke-14 group-[:is(.is-user,.is-received)]/message:bg-fill-strong group-[:is(.is-user,.is-received)]/message:px-list-inset group-[:is(.is-user,.is-received)]/message:py-row-inset",
+        "message-content min-w-0 max-w-full overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-body leading-reading text-foreground",
+        "group-[:is(.is-user,.is-received)]/message:w-fit group-[:is(.is-user,.is-received)]/message:rounded-ui-14 group-[:is(.is-user,.is-received)]/message:bg-fill-strong group-[:is(.is-user,.is-received)]/message:px-list-inset group-[:is(.is-user,.is-received)]/message:py-row-inset",
         className,
       )}
       {...props}
@@ -107,7 +107,7 @@ export type MessageActionProps = {
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
-  /** A hover card hung in the hint's place, saying more about the action than its label (`@luke/ui`'s `Tooltip`'s `card`). */
+  /** A hover card hung in the hint's place, saying more about the action than its label (`@repo/ui`'s `Tooltip`'s `card`). */
   card?: ReactNode;
   onClick: () => void;
   /** Its glyph. */
@@ -150,7 +150,7 @@ const TRANSCRIPT_HEADING = {
  * A heading of a rendered message: its look from the role its level maps to,
  * its spacing from tasks.css, and no heading element. Note that a model's `#`
  * line is words in a conversation, not a part of the window's outline, so it
- * is a paragraph, as a note's headings are (`@luke/ui/markdown`).
+ * is a paragraph, as a note's headings are (`@repo/ui/markdown`).
  */
 function TranscriptHeading({
   level,
@@ -172,11 +172,11 @@ function TranscriptHeading({
 }
 
 /**
- * Markdown drawn at the panel's own scale (`@luke/ui/markdown`'s transcript look). Streamdown's headings and lists
+ * Markdown drawn at the panel's own scale (`@repo/ui/markdown`'s transcript look). Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
- * Markdown in the window draws (`@luke/ui/quote-face`) rather than
+ * Markdown in the window draws (`@repo/ui/quote-face`) rather than
  * Streamdown's, which stood the browser's 40px in from the column. A list and
  * a quote are drawn by their classes; a heading is `Text`, its role chosen by
  * its level. Note that their margins are a step apart, a heading's a step more
@@ -190,8 +190,8 @@ export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
   h4: ({ children }) => <TranscriptHeading level={4}>{children}</TranscriptHeading>,
   h5: ({ children }) => <TranscriptHeading level={5}>{children}</TranscriptHeading>,
   h6: ({ children }) => <TranscriptHeading level={6}>{children}</TranscriptHeading>,
-  ul: ({ children }) => <ul className="my-tight-gap list-disc pl-luke-20">{children}</ul>,
-  ol: ({ children }) => <ol className="my-tight-gap list-decimal pl-luke-20">{children}</ol>,
+  ul: ({ children }) => <ul className="my-tight-gap list-disc pl-ui-20">{children}</ul>,
+  ol: ({ children }) => <ol className="my-tight-gap list-decimal pl-ui-20">{children}</ol>,
   li: ({ children }) => <li className="my-list-gap">{children}</li>,
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };

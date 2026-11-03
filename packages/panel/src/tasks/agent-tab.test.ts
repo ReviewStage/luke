@@ -6,15 +6,15 @@ import {
   type AgentSummary,
   type AgentTranscriptMessage,
   agentMessageReplyLine,
-} from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanMention } from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { ProviderMark } from "@luke/ui";
-import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { PlanMention } from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { ProviderMark } from "@repo/ui";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -217,7 +217,7 @@ for (const call of OPENING_CALLS) {
     const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
     assert.ok(row, "the row is a fold's line");
     const chip = row.querySelector<HTMLElement>("[data-mention-ref]");
-    assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, call.made);
+    assert.equal(chip?.querySelector(".ui-inline-ref-label")?.textContent, call.made);
     assert.equal(row.querySelector(".tool-label")?.textContent?.trim(), call.verb);
     act(() => chip?.click());
     assert.deepEqual(left, [call.opens], "the chip's press opens what it names");
@@ -431,12 +431,12 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the row hangs its agent's card");
   return [
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    card.querySelector(".luke-hover-card-corner")?.textContent,
-    card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
+    card.querySelector(".ui-hover-card-name")?.textContent,
+    card.querySelector(".ui-hover-card-corner")?.textContent,
+    card.querySelector('.ui-hover-card-lead .state-glyph[data-state="working"]') !== null,
   ];
 }
 
@@ -545,9 +545,9 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
 
   // Note that the chip is words, not a control, so the pointer is how it is reached.
   restOn(chip ?? assert.fail("the call's agent chip"));
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
 
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Invoice export");
 });
 
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
@@ -608,7 +608,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(said("archive_agent"), "Archived Retry audit");
   assert.ok(
     line("archive_agent")?.querySelector(
-      "[data-tool-agent-ref] .luke-harness-mark[data-provider='openai']",
+      "[data-tool-agent-ref] .ui-harness-mark[data-provider='openai']",
     ),
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
@@ -748,7 +748,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
 
   assert.equal(chip?.textContent, "Retry audit");
   assert.ok(
-    chip?.querySelector(".luke-harness-mark[data-provider='openai']"),
+    chip?.querySelector(".ui-harness-mark[data-provider='openai']"),
     "the chip wears Codex's mark",
   );
   fakeAppBridge({});
@@ -835,11 +835,11 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
     focusRestOn(chip);
-    const card = [...document.querySelectorAll(".luke-tooltip-card [data-page-card]")].at(-1);
+    const card = [...document.querySelectorAll(".ui-tooltip-card [data-page-card]")].at(-1);
     return {
-      name: card?.querySelector(".luke-hover-card-name")?.textContent,
-      sub: card?.querySelector(".luke-hover-card-sub")?.textContent,
-      preview: card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+      name: card?.querySelector(".ui-hover-card-name")?.textContent,
+      sub: card?.querySelector(".ui-hover-card-sub")?.textContent,
+      preview: card?.querySelector(".ui-page-thumb-frame")?.getAttribute("src"),
     };
   };
 
@@ -918,10 +918,10 @@ test("a call about the plan or another task hangs that task's card as its Plan t
     const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
     focusRestOn(chip);
-    const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+    const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
     return {
       task: card?.getAttribute("data-task-card") ?? undefined,
-      name: card?.querySelector("b, .luke-hover-card-name")?.textContent,
+      name: card?.querySelector("b, .ui-hover-card-name")?.textContent,
     };
   };
 
@@ -1070,7 +1070,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
   assert.ok(bubble, "the message draws as its sender's bubble");
   assert.equal(bubble.dataset.messageId, "message", "a link to the line finds its bubble");
   assert.match(
-    bubble.querySelector(".luke-message-head-sender")?.textContent ?? "",
+    bubble.querySelector(".ui-message-head-sender")?.textContent ?? "",
     /Invite expiry/u,
   );
   assert.equal(
@@ -1082,7 +1082,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
 test("a message from an agent the line keeps no chip of is named by the name its row keeps", () => {
   const bubble = agentMessageDrawn(AGENT_MESSAGE).querySelector("[data-agent-message]");
   assert.match(
-    bubble?.querySelector(".luke-message-head-sender")?.textContent ?? "",
+    bubble?.querySelector(".ui-message-head-sender")?.textContent ?? "",
     /Invite emails/u,
   );
 });
@@ -1131,7 +1131,7 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);
   assert.equal(
-    head?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    head?.querySelector("[data-mention-ref] .ui-inline-ref-label")?.textContent,
     'Ship " (key fake): the invites?',
     "the head wears the thread's chip, named by its title before the item is read",
   );

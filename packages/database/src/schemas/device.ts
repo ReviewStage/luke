@@ -8,7 +8,7 @@ import {
   type DeviceSetup,
   type DeviceSignedIn,
   type HostUpdate,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";

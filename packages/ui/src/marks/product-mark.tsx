@@ -1,4 +1,4 @@
-import { MARK_ART } from "@luke/brand";
+import { MARK_ART } from "@repo/brand";
 import React from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -16,7 +16,7 @@ interface ProductMarkProps {
 }
 
 /**
- * The product's mark, drawn from `@luke/brand`'s generated `MARK_ART` so every
+ * The product's mark, drawn from `@repo/brand`'s generated `MARK_ART` so every
  * surface that wears it stays tied to the artwork the icons are cut from, in
  * one colour, `currentColor`, so its holder decides the ink. Decorative:
  * whatever stands beside it already says the product's name.
@@ -33,7 +33,7 @@ export function ProductMark({
 }: ProductMarkProps): React.JSX.Element {
   return (
     <svg
-      className="luke-product-mark"
+      className="ui-product-mark"
       viewBox={MARK_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"

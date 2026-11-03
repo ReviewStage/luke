@@ -27,7 +27,7 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
 
 /**
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
- * and the design system's guards against controls and headings built outside `@luke/ui`,
+ * and the design system's guards against controls and headings built outside `@repo/ui`,
  * forms the browser checks with its own bubble, loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page,
  * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, a follow
  * opened beside `useHostRead`, a vendored

@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { fakeHttpClient } from "@luke/wire/testing";
+import { fakeHttpClient } from "@repo/wire/testing";
 import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { expect } from "vitest";

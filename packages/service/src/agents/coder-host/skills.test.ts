@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { createAgent } from "@luke/database/models/agent-store";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { createAgent } from "@repo/database/models/agent-store";
 import {
   type InstalledSkillFileInput,
   type InstalledSkillOwner,
   installSkill,
   setInstalledSkillEnabled,
-} from "@luke/database/models/installed-skill-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/database/models/installed-skill-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { noNetwork } from "@repo/wire/testing";
 import { sql } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 import {

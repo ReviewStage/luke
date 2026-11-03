@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { Tooltip } from "@luke/ui";
+import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -66,7 +66,7 @@ function tap(target: Element): void {
 
 /** Whether a card stands, drawn and not on its way out. */
 function cardStands(): boolean {
-  const card = document.querySelector(".luke-tooltip-card");
+  const card = document.querySelector(".ui-tooltip-card");
   return card !== null && !card.hasAttribute("data-leaving");
 }
 

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { fixedBearer } from "@luke/features";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fixedBearer } from "@repo/features";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@repo/settings";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -44,7 +44,7 @@ const CIPHER: SecretCipher = {
 
 /** A store over a directory of its own, the test's account signed in. */
 const signedInStore = Effect.gen(function* () {
-  const directory = yield* temporaryDirectoryScoped("luke-experiments-");
+  const directory = yield* temporaryDirectoryScoped("experiments-");
   const store = new SettingsStore({
     directory: () => directory,
     cipher: CIPHER,

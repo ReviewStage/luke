@@ -4,8 +4,8 @@ import {
   type TaskCreateRelation,
   type TaskCreateRelationKind,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
+} from "@repo/features/task-wire";
+import { taskKey } from "@repo/features/workspace-key";
 import {
   BUTTON_SIZE,
   type FootRow,
@@ -22,11 +22,12 @@ import {
   TaskRows,
   TaskStatusMark,
   VisuallyHidden,
-} from "@luke/ui";
-import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useState } from "react";
 import { RelationKindPill } from "./relation-kind-pill.js";
+import { TASK_RELATION_MENU } from "./task-relation-menu.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 
 /**
@@ -74,7 +75,7 @@ const KIND_ORDER: readonly TaskCreateRelationKind[] = [
 
 /** The menu's words, the rows', and why a task cannot take a kind. */
 const WORDS = {
-  MENU: "Task relation",
+  MENU: TASK_RELATION_MENU,
   KIND: "Relation",
   FIND: "Find a task",
   NO_MATCH: "No tasks match",

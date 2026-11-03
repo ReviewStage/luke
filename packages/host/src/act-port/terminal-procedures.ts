@@ -22,9 +22,9 @@ import {
   type TerminalPortOutbound,
   type TerminalPortTicket,
   terminalPortInboundSchema,
-} from "@luke/features/terminal-acts";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/terminal-acts";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import { TERMINAL_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";

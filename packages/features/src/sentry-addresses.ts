@@ -3,7 +3,7 @@
  *
  * Every process that reports to Sentry hands its spans, events, and log
  * lines through here: the service's functions and eve roots
- * (`@luke/service/observability/sentry`), and the clients' span filter
+ * (`@repo/service/observability/sentry`), and the clients' span filter
  * (`sentry-breadcrumbs.ts`) beneath the desktop's main process, its
  * renderers, and the web app's tab. Sentry's own URL filter redacts only a
  * query value whose name it knows (`token`, `auth`, `key`, ...), and keeps a

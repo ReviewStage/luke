@@ -1,5 +1,5 @@
 {
-  "name": "@luke/settings",
+  "name": "@repo/settings",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -28,8 +28,8 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@luke/features": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/features": "workspace:*",
+    "@repo/wire": "workspace:*",
     "effect": "catalog:"
   }
 }

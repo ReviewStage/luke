@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_SITE } from "@luke/features/link-site";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LINK_SITE } from "@repo/features/link-site";
 import React, { useId } from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -56,11 +56,11 @@ export type ProviderMarkSize = (typeof PROVIDER_MARK_SIZE)[keyof typeof PROVIDER
 
 /** The class each size wears; a slot's mark wears the base alone. */
 const MARK_CLASS = {
-  [PROVIDER_MARK_SIZE.SLOT]: "luke-provider-mark",
-  [PROVIDER_MARK_SIZE.CAPTION]: "luke-provider-mark luke-provider-mark-caption",
-  [PROVIDER_MARK_SIZE.ICON]: "luke-provider-mark luke-provider-mark-icon",
-  [PROVIDER_MARK_SIZE.ROW]: "luke-provider-mark luke-provider-mark-row",
-  [PROVIDER_MARK_SIZE.TILE]: "luke-provider-mark luke-provider-mark-tile",
+  [PROVIDER_MARK_SIZE.SLOT]: "ui-provider-mark",
+  [PROVIDER_MARK_SIZE.CAPTION]: "ui-provider-mark ui-provider-mark-caption",
+  [PROVIDER_MARK_SIZE.ICON]: "ui-provider-mark ui-provider-mark-icon",
+  [PROVIDER_MARK_SIZE.ROW]: "ui-provider-mark ui-provider-mark-row",
+  [PROVIDER_MARK_SIZE.TILE]: "ui-provider-mark ui-provider-mark-tile",
 } as const satisfies Record<ProviderMarkSize, string>;
 
 interface MarkProps {

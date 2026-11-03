@@ -1,10 +1,10 @@
-import { type Announce, announce } from "@luke/ui";
+import { type Announce, announce } from "@repo/ui";
 import { useEffect } from "react";
 
 /**
  * use-announce-shown.ts -- says the words a surface draws as a failure or a notice, from the moment it first draws them.
  *
- * `@luke/ui`'s `useAnnounce` says words each time they change and none a
+ * `@repo/ui`'s `useAnnounce` says words each time they change and none a
  * component first draws, as a live region drawn already holding its words
  * would. A note that appears with what went wrong (a refusal under a row, a
  * failed save under an editor) is drawn at that moment and must be heard at

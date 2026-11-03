@@ -13,8 +13,8 @@ import {
   adminFavoriteParamsSchema,
   adminReadAnswerSchema,
   adminReadParamsSchema,
-} from "@luke/features/admin-wire";
-import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
+} from "@repo/features/admin-wire";
+import { agentBrowserTabsAnswerSchema } from "@repo/features/agent-browser-tab-wire";
 import {
   codeLinesSchema,
   type TasksBrowserTabsAnswer,
@@ -73,7 +73,7 @@ import {
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {

@@ -8,7 +8,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
-} from "@luke/wire";
+} from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option } from "effect";

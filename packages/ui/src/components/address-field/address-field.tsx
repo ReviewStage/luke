@@ -5,7 +5,7 @@ import { TEXT_FIELD_SIZE, TextField } from "../text-field/text-field.js";
  * address-field.tsx -- a Browser tab's address bar: one compact line for an address or a search, which every place that asks for a page's address draws alike.
  *
  * The field is controlled, as a TextField is: the caller owns what is typed
- * and reads it as an address (`@luke/features/browser-acts`'s
+ * and reads it as an address (`@repo/features/browser-acts`'s
  * `browserAddressOf`), since what an address opens, and where, is the
  * caller's. It fills the room its row leaves, takes no correction or
  * capital the system would make of a host, and selects every word as the

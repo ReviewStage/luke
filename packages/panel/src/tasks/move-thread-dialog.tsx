@@ -1,6 +1,6 @@
-import type { Channel } from "@luke/features/channel-wire";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { Channel } from "@repo/features/channel-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   ChoiceList,
   DIALOG_SIZE,
@@ -11,8 +11,8 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useRef, useState } from "react";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";

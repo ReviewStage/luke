@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Task } from "@luke/features/task-wire";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { Task } from "@repo/features/task-wire";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -113,7 +113,7 @@ function drawn(node: ReactNode): HTMLElement {
 
 /** What each plain link drawn says. */
 function plainLinks(container: HTMLElement): (string | null)[] {
-  return [...container.querySelectorAll<HTMLElement>(".luke-text-link")].map(
+  return [...container.querySelectorAll<HTMLElement>(".ui-text-link")].map(
     (link) => link.textContent,
   );
 }
@@ -151,7 +151,7 @@ test("the plan and a version draw a link they have no chip for as one plain link
 
 test("a transcript draws a bare address as the plan does, cut short, and opens it in the browser", async () => {
   const transcript = drawn(createElement(TranscriptWords, { text: WORDS }));
-  const bare = [...transcript.querySelectorAll<HTMLElement>(".luke-text-link")].at(-1);
+  const bare = [...transcript.querySelectorAll<HTMLElement>(".ui-text-link")].at(-1);
 
   assert.deepEqual(plainLinks(transcript), PLAIN);
   assert.equal(transcript.querySelectorAll("[data-mention-ref]").length, 2);
@@ -188,7 +188,7 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
     }),
   );
 
-  for (const link of container.querySelectorAll<HTMLElement>(".luke-text-link")) {
+  for (const link of container.querySelectorAll<HTMLElement>(".ui-text-link")) {
     act(() => link.click());
   }
   await act(async () => undefined);
@@ -202,7 +202,7 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
 
 test("a plain link pressed in a version opens in the browser", () => {
   const surface = drawn(createElement(Version));
-  const docs = [...surface.querySelectorAll<HTMLElement>(".luke-text-link")].find(
+  const docs = [...surface.querySelectorAll<HTMLElement>(".ui-text-link")].find(
     (link) => link.textContent === "the docs",
   );
   assert.ok(docs !== undefined);
@@ -226,7 +226,7 @@ test("a bare address a change marks inside is drawn whole, its marks where they 
 
   assert.deepEqual(plainLinks(changed), [BARE]);
   assert.equal(
-    changed.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
+    changed.querySelector(".ui-text-link ins.markdown-inserted")?.textContent,
     "current",
   );
 });
@@ -242,7 +242,7 @@ test("a plain link to an address the window refuses to open is drawn going nowhe
       sectionLinks: SECTION_LINKS,
     }),
   );
-  const link = container.querySelector<HTMLElement>(".luke-text-link");
+  const link = container.querySelector<HTMLElement>(".ui-text-link");
   assert.ok(link !== null);
 
   act(() => link.click());
@@ -256,7 +256,7 @@ test("a plain link hangs its whole address in the window's hint, an address past
   const container = drawn(
     createElement(MarkdownMessage, { words: `See ${BARE} and [the long page](${long}).` }),
   );
-  const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".luke-text-link")];
+  const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".ui-text-link")];
   assert.ok(bare !== undefined && longLink !== undefined);
   const hint = (link: HTMLElement): string | null | undefined => {
     restOn(link);

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
-import { ACT_KIND } from "@luke/host/acts";
-import { askAct } from "@luke/panel/act";
-import { THEME } from "@luke/settings";
-import tokens from "@luke/ui/tokens.css?inline";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
+import { ACT_KIND } from "@repo/host/acts";
+import { askAct } from "@repo/panel/act";
+import { THEME } from "@repo/settings";
+import tokens from "@repo/ui/tokens.css?inline";
 import { afterAll, beforeAll, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
@@ -18,7 +18,7 @@ import { fakeService } from "./support/fake-service";
  * first frame. One mount, because the panel's state read is the tab's once.
  */
 
-/** The site palette's two grounds (`@luke/ui`'s `palettes.css`), which the chrome is tinted with. */
+/** The site palette's two grounds (`@repo/ui`'s `palettes.css`), which the chrome is tinted with. */
 const GROUND = { light: "#fffcfa", dark: "#0f0d0b" } as const;
 
 /** The query a machine's dark appearance answers. */
@@ -60,8 +60,8 @@ beforeAll(() => {
       }) satisfies MediaQueryList,
   );
   // The page's own tags, as app.html writes them: the profile, and the chrome's tint.
-  document.documentElement.setAttribute("data-luke-profile", "web");
-  document.documentElement.setAttribute("data-luke-theme", "light");
+  document.documentElement.setAttribute("data-ui-profile", "web");
+  document.documentElement.setAttribute("data-ui-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
   meta.name = "theme-color";
   meta.content = GROUND.light;
@@ -79,9 +79,9 @@ afterAll(async () => {
 /** What the tab wears now: its root's theme, the chrome's tint, and the choice kept for the next load. */
 function worn() {
   return {
-    theme: document.documentElement.getAttribute("data-luke-theme"),
+    theme: document.documentElement.getAttribute("data-ui-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    kept: localStorage.getItem("luke.theme"),
+    kept: localStorage.getItem("app.theme"),
   };
 }
 

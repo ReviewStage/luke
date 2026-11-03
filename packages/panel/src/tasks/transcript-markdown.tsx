@@ -1,8 +1,8 @@
-import type { CodeLines } from "@luke/features/tasks-view";
-import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
-import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@luke/ui";
-import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
-import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
+import type { CodeLines } from "@repo/features/tasks-view";
+import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@repo/host/acts";
+import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@repo/ui";
+import { SUGGESTED_CHANGE_LANGUAGE } from "@repo/ui/github-html";
+import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
 import {
   type ComponentProps,
   createContext,
@@ -34,7 +34,7 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * and is drawn plain until it does, so a long answer is coloured once
  * rather than once a word. What main answered is held by language and
  * code, so a block drawn again, or twice, asks once. A block stands in
- * `@luke/ui`'s `CodeCard`, as every block of code in the window does, so
+ * `@repo/ui`'s `CodeCard`, as every block of code in the window does, so
  * its header, its one Copy, its cut at 40 lines, and the screen recording's
  * leaving its lines out are the card's.
  */
@@ -214,7 +214,7 @@ function useColouredLines(language: string, code: string, whole: boolean): CodeL
  * A block's lines as rows tinted by what each does, or none for a block of
  * plain lines. A suggestion as written holds the new lines alone, every one
  * added; a suggested change GitHub rendered marks each line `-` or `+`
- * (`@luke/ui/github-html`), which the row stands for in its mark's place, as
+ * (`@repo/ui/github-html`), which the row stands for in its mark's place, as
  * GitHub draws one; a diff's lines keep their marks, and its other lines
  * stand untinted.
  */

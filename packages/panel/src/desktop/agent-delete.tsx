@@ -1,14 +1,14 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   nextRowOrHead,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { agentName } from "../tasks/agent-model.js";

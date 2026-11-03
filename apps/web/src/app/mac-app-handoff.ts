@@ -1,7 +1,7 @@
 /**
  * mac-app-handoff.ts -- an app link opened in a tab handed to the Mac app, once, where the account chose the Mac app and the tab is on a Mac.
  *
- * An account chooses where its app links open (`@luke/features/link-open`,
+ * An account chooses where its app links open (`@repo/features/link-open`,
  * Settings › Profile's Links). The web serves the app at every link's own
  * address, so a link opened in a browser lands here first; the root asks this
  * once per page load, after the panel's first paint, and the address it asks
@@ -17,15 +17,15 @@
  * the web, and nothing asks again until the next fresh navigation.
  */
 
-import { accountCall, HOSTED_SERVICE_PATH } from "@luke/features";
+import { accountCall, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   LINK_OPEN,
   LINK_OPEN_LIST,
   type LinkPlatform,
   linkOpenTarget,
   withoutStayOnWeb,
-} from "@luke/features/link-open";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/link-open";
+import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { savedEntry } from "./browser-history";

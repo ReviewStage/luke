@@ -3,7 +3,7 @@ import { realpathSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { build, type Metafile, type Plugin } from "esbuild";
 import { test } from "vitest";
 import {
@@ -76,7 +76,7 @@ test("no function bundle reaches a module only the local server may carry", {
 
 test("a module esbuild injects is bundled, not an undeclared dependency", async (t) => {
   // Note that we resolve the folder, because esbuild reports macOS's /tmp as /private/tmp.
-  const root = realpathSync(await temporaryDirectory(t, "luke-undeclared-imports-"));
+  const root = realpathSync(await temporaryDirectory(t, "undeclared-imports-"));
   writeFileSync(join(root, "entry.js"), 'import pad from "left-pad";\nexport default pad;\n');
   // A virtual module handed to `inject`, as Sentry's esbuild plugin hands its release stub.
   const stub = join(root, "_injected-stub");

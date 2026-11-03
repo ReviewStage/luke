@@ -3,7 +3,7 @@ import {
   WRITING_INSERT,
   WRITING_MARK,
   type WritingAction,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   BoldIcon,
   BulletedListIcon,
@@ -26,7 +26,7 @@ import {
  * writing-glyph.tsx -- the glyph of each writing action, a mark or a block, as the format toolbar, Turn into, and the `/` menu all draw it.
  *
  * The vocabulary names each action's words and chord
- * (`@luke/settings/shortcuts`' `WRITING_SHORTCUTS`); this names its glyph,
+ * (`@repo/settings/shortcuts`' `WRITING_SHORTCUTS`); this names its glyph,
  * once, so every surface that offers an action shows it alike.
  */
 

@@ -35,17 +35,17 @@ import { ChevronRightIcon } from "../face/glyphs.js";
  *   a hint stands before it and an unchecked setting keeps its room; a
  *   submenu's trigger ends in the menu's chevron slot. A separator is a
  *   rule (`<hr>`), as the menu's always was.
- * - The parts `@luke/ui`'s `Menu` draws nothing with (trigger, group,
+ * - The parts `@repo/ui`'s `Menu` draws nothing with (trigger, group,
  *   label, radio group and item, shortcut, and the bare portal) are left
  *   out, because nothing would call them.
  *
- * `@luke/ui`'s `Menu` (`components/menu/menu.tsx`) is what an app draws;
+ * `@repo/ui`'s `Menu` (`components/menu/menu.tsx`) is what an app draws;
  * this is its inside.
  */
 
 /** A menu row's shape, as every item, checkbox item, and submenu trigger draws it, which a row standing outside any menu wears too. */
 export const DROPDOWN_MENU_ITEM =
-  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-row-inset py-0 text-left font-sans text-body leading-[normal] font-text whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-luke-4 disabled:opacity-disabled aria-disabled:opacity-disabled";
+  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-row-inset py-0 text-left font-sans text-body leading-[normal] font-text whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-ui-4 disabled:opacity-disabled aria-disabled:opacity-disabled";
 
 /**
  * A row in a menu lit by the fill every row is lit by, never ringed: under

@@ -21,7 +21,7 @@ import { OneLine } from "../one-line/one-line.js";
  */
 
 /** The attribute the document's root wears the room it stands in, and the room a phone's layout is (the panel's `stage-room.ts`). */
-const ROOM_ATTRIBUTE = "data-luke-room";
+const ROOM_ATTRIBUTE = "data-ui-room";
 const NARROW_ROOM = "narrow";
 
 /**
@@ -174,17 +174,12 @@ export function MenuSheetFrame({
       onDismiss={onAway}
       onKeyDown={onKeyDown}
     >
-      <div
-        ref={framed}
-        id={id}
-        className="luke-menu-sheet"
-        data-leaving={open ? undefined : "true"}
-      >
-        <div className="luke-menu-sheet-head" {...head}>
-          <span className="luke-menu-sheet-grip" aria-hidden="true" />
-          <div className="luke-menu-sheet-title">
+      <div ref={framed} id={id} className="ui-menu-sheet" data-leaving={open ? undefined : "true"}>
+        <div className="ui-menu-sheet-head" {...head}>
+          <span className="ui-menu-sheet-grip" aria-hidden="true" />
+          <div className="ui-menu-sheet-title">
             {back === undefined ? null : (
-              <span className="luke-menu-sheet-back">
+              <span className="ui-menu-sheet-back">
                 <BackButton
                   label={back.label}
                   place={back.label}
@@ -194,23 +189,23 @@ export function MenuSheetFrame({
               </span>
             )}
             {back === undefined && mark !== undefined ? (
-              <span className="luke-menu-sheet-mark" aria-hidden="true">
+              <span className="ui-menu-sheet-mark" aria-hidden="true">
                 {mark}
               </span>
             ) : null}
-            <span className="luke-menu-sheet-words">
-              <span id={nameId} className="luke-menu-sheet-name">
+            <span className="ui-menu-sheet-words">
+              <span id={nameId} className="ui-menu-sheet-name">
                 <OneLine>{name}</OneLine>
               </span>
               {detail === undefined ? null : (
-                <span className="luke-menu-sheet-detail">
+                <span className="ui-menu-sheet-detail">
                   <OneLine>{detail}</OneLine>
                 </span>
               )}
             </span>
           </div>
           {field === undefined || field === null ? null : (
-            <div className="luke-menu-sheet-field">{field}</div>
+            <div className="ui-menu-sheet-field">{field}</div>
           )}
         </div>
         {children}

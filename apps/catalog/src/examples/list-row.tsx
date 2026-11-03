@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   IconButton,
   LIST_DENSITY,
@@ -21,8 +21,8 @@ import {
   Switch,
   TrashIcon,
   UserIcon,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -430,7 +430,7 @@ function ListRows(): React.JSX.Element {
           <List label="Plans" density={LIST_DENSITY.DENSE}>
             <ListRow
               title="Ship the release"
-              description="luke"
+              description="web"
               meta="2h"
               current={LIST_ROW_CURRENT.ITEM}
               onPress={() => undefined}
@@ -439,7 +439,7 @@ function ListRows(): React.JSX.Element {
             />
             <ListRow
               title="Draw the sidebar with the shared rows"
-              description="luke"
+              description="web"
               meta="1d"
               onPress={() => undefined}
               actionsAt={LIST_ROW_ACTIONS.HOVER}

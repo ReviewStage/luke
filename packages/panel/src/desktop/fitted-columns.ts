@@ -14,7 +14,7 @@
  * nothing, folds nothing.
  */
 
-import { LIST_FOLD_ORDER, type ListColumn, listPropertiesFitting } from "@luke/ui/tasks-page-model";
+import { LIST_FOLD_ORDER, type ListColumn, listPropertiesFitting } from "@repo/ui/tasks-page-model";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /** Whether two runs of columns are the same, in the same order. */

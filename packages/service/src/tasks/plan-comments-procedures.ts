@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -7,12 +7,12 @@ import {
   readPlanCommentThreads,
   startPlanCommentThread,
   withdrawPlanCommentAsk,
-} from "@luke/database/models/plan-comments";
-import { readPageById } from "@luke/database/models/plan-pages";
-import { readTaskHeader, readTaskWorkspace } from "@luke/database/models/task-store";
-import { TOPIC } from "@luke/database/sync/notification";
-import { askedInWords } from "@luke/features/mention-link";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+} from "@repo/database/models/plan-comments";
+import { readPageById } from "@repo/database/models/plan-pages";
+import { readTaskHeader, readTaskWorkspace } from "@repo/database/models/task-store";
+import { TOPIC } from "@repo/database/sync/notification";
+import { askedInWords } from "@repo/features/mention-link";
+import { PAGE_SHOWER } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -22,7 +22,7 @@ import {
   type PlanCommentsAnswer,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
@@ -40,7 +40,6 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   askableAgent,
-  type CommentAskSeams,
   type CommentRecipient,
   commentAskMessage,
   handCommentAskOver,
@@ -54,15 +53,15 @@ import {
  * Inbox is read, and woken by Sync on the plan's topic, so a window
  * hears a teammate's or an agent's comment the moment it lands; `POST`
  * starts a thread with its first comment, anchored to words of the plan's
- * text (`@luke/database/models/plan-comments`).
+ * text (`@repo/database/models/plan-comments`).
  * `POST /api/plans/{id}/comments/{thread}` is one thing done to a thread,
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
  * or an archived one for a write, answers as not found, and a thread the plan
  * does not hold as not found too. A member's comment reaches the agents in
- * its thread, each the thread handed to it (\`mentionsHandedOver\`): every
+ * its thread, each the thread handed to it (`mentionsHandedOver`): every
  * agent a comment was handed to before and every one that answered in it,
- * and each one of the task's agents its words mention with \`@\`, which
+ * and each one of the task's agents its words mention with `@`, which
  * joins it.
  *
  * A page of the task is commented on through the same doors: the read names
@@ -78,7 +77,7 @@ import {
  * adds times it out first.
  */
 
-export interface PlanCommentsProcedureSeams extends CommentAskSeams {
+export interface PlanCommentsProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
@@ -138,8 +137,6 @@ interface MentioningComment {
  * it, whose words, not the new ones, say whom it asks.
  */
 const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   outcome: PlanCommentOutcome,
   comment: MentioningComment,
 ) {
@@ -161,7 +158,7 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
       entry.writer.by?.userId === comment.userId &&
       entry.words === comment.words,
   )
-    ? yield* mentionsHandedOver(seams, request, thread, comment)
+    ? yield* mentionsHandedOver(thread, comment)
     : [];
   return unsent.length === 0 ? answer : { thread, unsent };
 });
@@ -181,7 +178,7 @@ const pageWriterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (shownBy === undefined) return undefined;
   return shownBy.kind === PAGE_SHOWER.AGENT
     ? { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: shownBy.agentId }
-    : { actor: PLAN_COMMENT_ACTOR.LUKE };
+    : { actor: PLAN_COMMENT_ACTOR.APP };
 });
 
 /** One the thread is handed to, and whether a hand-over that could not land is said back, as one asked whatever the words say is. */
@@ -215,8 +212,8 @@ function agentsIn(
 /**
  * Whom a member's comment hands its thread to: the one rule of who a comment
  * wakes, for the plan's threads and the pages' alike, which is that a thread
- * reaches the agents in it (\`agentsIn\`), and each agent its words mention
- * with \`@\` joins it. One already in the thread that cannot take it, an
+ * reaches the agents in it (`agentsIn`), and each agent its words mention
+ * with `@` joins it. One already in the thread that cannot take it, an
  * archived one say, is said back as not sent; a mention of one that cannot
  * take it is a reference, which asks no one.
  */
@@ -239,19 +236,17 @@ function handedTo(
 
 /**
  * The thread handed to each of the task's standing agents the comment reaches
- * (\`handedTo\`); an agent of another task, or an archived one, cannot take
+ * (`handedTo`); an agent of another task, or an archived one, cannot take
  * it, and neither can the app's own assistant, which no task has any more.
  * Who can take it is read before the answer, which says back the ones in the
  * thread who could not; the hand-overs themselves run past it
- * (\`afterResponse\`), because waking an idle agent resumes its sandbox, which
+ * (`afterResponse`), because waking an idle agent resumes its sandbox, which
  * can outlast the member's request, and a comment posted must never read as
  * not posted. Each ask is written under a key drawn from the words' own, so
  * the words sent again ask no one twice; a hand-over that does not land is
  * taken back and logged, the words posted all the same.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   thread: PlanCommentThread,
   comment: MentioningComment,
 ) {
@@ -274,7 +269,7 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     Effect.forEach(
       taking,
       ({ to, agent }) =>
-        handedOver(seams, request, thread, comment, to, agent).pipe(
+        handedOver(thread, comment, to, agent).pipe(
           // Note that one hand-over not taken leaves the others, and the words, as they are.
           Effect.catch((refusal) =>
             Effect.logWarning(`a comment's hand-over was not taken: ${String(refusal)}`),
@@ -288,8 +283,6 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The ask written in the thread and the thread handed to the agent, under a key drawn from the comment's own. */
 const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   thread: PlanCommentThread,
   comment: MentioningComment,
   to: PlanCommentAsked,
@@ -301,7 +294,7 @@ const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
   );
   if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) return;
-  yield* askHandedOver(seams, request, {
+  yield* askHandedOver({
     userId,
     taskId,
     thread: outcome.answer.thread,
@@ -326,18 +319,14 @@ function mentionKey(clientKey: string, to: PlanCommentAsked): string {
  * thread as it now stands, its line taken back where the hand-over fails, so
  * the thread never says someone was asked who was not.
  */
-const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
-  input: {
-    readonly userId: string;
-    readonly taskId: string;
-    readonly thread: PlanCommentThread;
-    readonly clientKey: string;
-    readonly words: string;
-    readonly to: CommentRecipient;
-  },
-) {
+const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
+  readonly userId: string;
+  readonly taskId: string;
+  readonly thread: PlanCommentThread;
+  readonly clientKey: string;
+  readonly words: string;
+  readonly to: CommentRecipient;
+}) {
   const { userId, taskId, thread, clientKey, words, to } = input;
   // The member's own newest ask names them, since an earlier one may be another member's.
   const asked = thread.entries.findLast(
@@ -370,7 +359,7 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? undefined
         : { id: thread.page.id, title: shown.title },
   };
-  yield* handCommentAskOver(seams, request, {
+  yield* handCommentAskOver({
     userId,
     to,
     clientKey,
@@ -412,7 +401,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
       const outcome = yield* hostedStoreOrUnavailable(
         startPlanCommentThread(writer, taskId, start),
       );
-      const body = yield* commentAnswer(seams, context.request, outcome, {
+      const body = yield* commentAnswer(outcome, {
         userId: context.userId,
         taskId,
         words: start.words,
@@ -433,7 +422,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         actOnPlanCommentThread(writer, taskId, threadId, action),
       );
       if (action.action !== PLAN_COMMENT_ACTION.REPLY) return yield* outcomeAnswer(outcome);
-      return yield* commentAnswer(seams, context.request, outcome, {
+      return yield* commentAnswer(outcome, {
         userId: context.userId,
         taskId,
         words: action.words,

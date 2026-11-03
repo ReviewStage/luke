@@ -21,7 +21,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * under the Button's ring; a gate button shows it beside a ring standing in
  * the mark's place, and keeps its full strength while the others beside it,
  * disabled by the caller, step back. Either shows its ring only once the
- * sign-in has been out a moment (`--luke-settle-delay`), as every busy
+ * sign-in has been out a moment (`--ui-settle-delay`), as every busy
  * button does.
  *
  * The way in taken last (`lastUsed`) wears "Last used" on its top-right
@@ -48,7 +48,7 @@ export type ProviderButtonSize = (typeof PROVIDER_BUTTON_SIZE)[keyof typeof PROV
  * desktop's window is dragged, so a press on its bar stays a press.
  */
 const GATE =
-  "luke-provider-button m-0 flex h-provider-gate items-center justify-center gap-icon-gap rounded-control border-0 bg-muted px-luke-16 py-0 font-ui text-label-inline font-label text-foreground shadow-provider-gate transition-[background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit pointer-coarse:h-provider-gate-touch in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag] [&:hover:not(:disabled)]:bg-fill-strong [&:disabled:not([aria-busy=true])]:opacity-disabled " +
+  "ui-provider-button m-0 flex h-provider-gate items-center justify-center gap-icon-gap rounded-control border-0 bg-muted px-ui-16 py-0 font-ui text-label-inline font-label text-foreground shadow-provider-gate transition-[background-color,opacity] duration-(--ui-duration-hover) ease-motion-exit pointer-coarse:h-provider-gate-touch in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag] [&:hover:not(:disabled)]:bg-fill-strong [&:disabled:not([aria-busy=true])]:opacity-disabled " +
   "data-[primary=true]:bg-primary data-[primary=true]:text-primary-foreground data-[primary=true]:shadow-none data-[primary=true]:[&:hover:not(:disabled)]:bg-ink";
 
 /**
@@ -61,7 +61,7 @@ const GATE =
  * button, and steps back with a button held while another's sign-in is out.
  */
 const LAST_USED_PILL =
-  "luke-provider-button-last-used pointer-events-none absolute -top-luke-8 -right-luke-6 rounded-luke-full border border-transparent bg-provider-last-used px-luke-6 py-0 text-tag leading-caption font-tag whitespace-nowrap text-provider-last-used-ink transition-opacity duration-(--luke-duration-hover) ease-motion-exit [.luke-provider-button:disabled:not([aria-busy=true])+&]:opacity-disabled [.luke-button:disabled+&]:opacity-disabled";
+  "ui-provider-button-last-used pointer-events-none absolute -top-ui-8 -right-ui-6 rounded-ui-full border border-transparent bg-provider-last-used px-ui-6 py-0 text-tag leading-caption font-tag whitespace-nowrap text-provider-last-used-ink transition-opacity duration-(--ui-duration-hover) ease-motion-exit [.ui-provider-button:disabled:not([aria-busy=true])+&]:opacity-disabled [.ui-button:disabled+&]:opacity-disabled";
 
 /** What the last-used pill says. */
 const LAST_USED = "Last used";
@@ -101,7 +101,7 @@ function GateButton({
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
     >
       {ringShown ? (
-        <span className="luke-provider-button-wait size-luke-16 flex-[0_0_auto]">
+        <span className="ui-provider-button-wait size-ui-16 flex-[0_0_auto]">
           <SpinnerRing />
         </span>
       ) : (
@@ -139,7 +139,7 @@ export function ProviderButton({
   const words = `Continue with ${name}`;
   const describedBy = lastUsed ? badge : undefined;
   return (
-    <span className="luke-provider-button-slot relative flex flex-col">
+    <span className="ui-provider-button-slot relative flex flex-col">
       {size === PROVIDER_BUTTON_SIZE.GATE ? (
         <GateButton
           provider={provider}

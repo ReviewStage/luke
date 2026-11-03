@@ -1,4 +1,4 @@
-import { Prose } from "@luke/ui";
+import { Prose } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

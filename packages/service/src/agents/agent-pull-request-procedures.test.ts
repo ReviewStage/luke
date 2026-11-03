@@ -15,10 +15,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { getTestDB } from "@luke/database/testing";
-import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { HTTP_METHOD } from "@luke/wire";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { getTestDB } from "@repo/database/testing";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";

@@ -7,26 +7,26 @@
    a custom property, so the width it narrows under is a literal here. */
 
 @layer components {
-  .luke-auth-card {
-    padding: var(--luke-space-40) var(--luke-space-32);
+  .ui-auth-card {
+    padding: var(--ui-space-40) var(--ui-space-32);
   }
 
   /* Under a phone's width the card gives its inset back to what it holds. */
   /* off-scale: 400px, a phone's card */
   @container (width < 400px) {
-    .luke-auth-card {
-      padding: var(--luke-space-32) var(--luke-space-20);
+    .ui-auth-card {
+      padding: var(--ui-space-32) var(--ui-space-20);
     }
   }
 
   /* The ring's mark, a provider's or the app's, at about two thirds of it. */
-  .luke-auth-ring > svg {
+  .ui-auth-ring > svg {
     width: 36px;
     height: 36px;
   }
 
   /* The badge's glyph, in the badge's own ink at full strength. */
-  .luke-auth-badge > svg {
+  .ui-auth-badge > svg {
     width: 12px;
     height: 12px;
     color: inherit;
@@ -35,13 +35,13 @@
   }
 
   /* A footnote of several notes stands them one under another. */
-  .luke-auth-footnote > * {
+  .ui-auth-footnote > * {
     display: block;
   }
 
   /* The footnote can hold a press (a wait's Cancel), and the way on is one,
      which is no part of a window drag. */
-  [data-luke-profile="desktop"] :is(.luke-auth-footnote, .luke-auth-action) {
+  [data-ui-profile="desktop"] :is(.ui-auth-footnote, .ui-auth-action) {
     -webkit-app-region: no-drag;
   }
 }

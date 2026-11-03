@@ -11,7 +11,7 @@
  * nothing. How many streams stand open of each is all else held here. Every
  * item the account reaches reaches a panel on app state the same way, so a
  * panel asks only that either be read again; the notices
- * (`@luke/host/agent-notices`) watch what waits across the account on a
+ * (`@repo/host/agent-notices`) watch what waits across the account on a
  * read of their own.
  */
 
@@ -30,7 +30,7 @@ import type {
   AgentInboxScope,
   AgentInboxStartParams,
   AgentPictureParams,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";

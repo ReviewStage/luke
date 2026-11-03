@@ -37,7 +37,7 @@ function takesFocus(attribute: ESTree.JSXAttribute): boolean {
 }
 
 /**
- * Outside `@luke/ui`, an intrinsic JSX element is drawn and never pressed:
+ * Outside `@repo/ui`, an intrinsic JSX element is drawn and never pressed:
  * no raw control, no pressable role, no press event, and no key event on an
  * element that takes the focus itself. A ui component or variant is where a
  * press lives. A spread is invisible here and allowed, which is how a ui
@@ -48,19 +48,19 @@ export const noRawPressOutsideUiRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow raw controls and press handlers on intrinsic JSX elements outside @luke/ui.",
+        "Disallow raw controls and press handlers on intrinsic JSX elements outside @repo/ui.",
     },
     messages: {
       rawControl:
-        "`<{{tag}}>` is a raw control. Draw it with a `@luke/ui` component, or add the component or variant to `@luke/ui`.",
+        "`<{{tag}}>` is a raw control. Draw it with a `@repo/ui` component, or add the component or variant to `@repo/ui`.",
       pressableRole:
-        '`role="{{role}}"` makes `<{{tag}}>` a hand-built control. Draw it with a `@luke/ui` component, or add the component or variant to `@luke/ui`.',
+        '`role="{{role}}"` makes `<{{tag}}>` a hand-built control. Draw it with a `@repo/ui` component, or add the component or variant to `@repo/ui`.',
       unknownRole:
-        "`<{{tag}}>`'s `role` is no literal, so it may be a pressable one. Spell it as a literal, or draw the element with a `@luke/ui` component.",
+        "`<{{tag}}>`'s `role` is no literal, so it may be a pressable one. Spell it as a literal, or draw the element with a `@repo/ui` component.",
       pressEvent:
-        "`{{event}}` on `<{{tag}}>` hears a press outside `@luke/ui`. Give the press a home in `@luke/ui`: an existing component's prop, or a new component or variant named for what it does.",
+        "`{{event}}` on `<{{tag}}>` hears a press outside `@repo/ui`. Give the press a home in `@repo/ui`: an existing component's prop, or a new component or variant named for what it does.",
       focusableKey:
-        "`{{event}}` on a `<{{tag}}>` that takes the focus (`{{focus}}`) makes it a hand-built control. Draw it with a `@luke/ui` component, or add one; key events are allowed only on a container that takes no focus itself.",
+        "`{{event}}` on a `<{{tag}}>` that takes the focus (`{{focus}}`) makes it a hand-built control. Draw it with a `@repo/ui` component, or add one; key events are allowed only on a container that takes no focus itself.",
     },
   },
   createOnce(context) {

@@ -46,7 +46,7 @@ export interface ThumbStripItem {
  * pointer, the shown one ringed.
  */
 const THUMB =
-  "luke-thumb-strip-thumb flex flex-none cursor-press rounded-control border-0 bg-popover p-0 brightness-60 transition-[filter] duration-(--luke-duration-hover) ease-motion-exit hover:brightness-100 aria-[current=true]:brightness-100 aria-[current=true]:[&>.luke-page-thumb]:outline-2 aria-[current=true]:[&>.luke-page-thumb]:outline-offset-1 aria-[current=true]:[&>.luke-page-thumb]:outline-foreground aria-[current=true]:[&>.luke-page-thumb]:outline-solid";
+  "ui-thumb-strip-thumb flex flex-none cursor-press rounded-control border-0 bg-popover p-0 brightness-60 transition-[filter] duration-(--ui-duration-hover) ease-motion-exit hover:brightness-100 aria-[current=true]:brightness-100 aria-[current=true]:[&>.ui-page-thumb]:outline-2 aria-[current=true]:[&>.ui-page-thumb]:outline-offset-1 aria-[current=true]:[&>.ui-page-thumb]:outline-foreground aria-[current=true]:[&>.ui-page-thumb]:outline-solid";
 
 /** A strip of the files `items`, the one at `at` shown, `onPick` showing another. */
 export function ThumbStrip({
@@ -79,7 +79,7 @@ export function ThumbStrip({
   return (
     <ul
       ref={list}
-      className="luke-thumb-strip ph-no-capture m-0 flex max-w-full list-none gap-luke-8 overflow-x-auto p-luke-4 [scrollbar-width:none]"
+      className="ui-thumb-strip ph-no-capture m-0 flex max-w-full list-none gap-ui-8 overflow-x-auto p-ui-4 [scrollbar-width:none]"
       aria-label={label}
     >
       {items.map((item, index) => (

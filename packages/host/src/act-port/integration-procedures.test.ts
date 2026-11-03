@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { INTEGRATION_CALL_FAILURE } from "@luke/features/integration-view";
+import { INTEGRATION_CALL_FAILURE } from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { Effect } from "effect";
 import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
 import type { ActSender } from "./base.js";

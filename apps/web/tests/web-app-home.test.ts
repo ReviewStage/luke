@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService, LISTED_TASK } from "./support/fake-service";
@@ -35,5 +35,5 @@ test("with a session, the panel rests on the Inbox beside the tasks the service 
     );
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
   });
-  assert.equal(root.querySelector("section.luke-auth-card"), null, "no sign-in is drawn");
+  assert.equal(root.querySelector("section.ui-auth-card"), null, "no sign-in is drawn");
 });

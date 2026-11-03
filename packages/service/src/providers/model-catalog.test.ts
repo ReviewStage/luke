@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
 import {
   type JsonValue,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { ModelCatalog, modelCatalogLayer, validateModelChoice } from "./model-catalog.js";

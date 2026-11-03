@@ -1,4 +1,4 @@
-import { AGENT_ARCHIVER } from "@luke/features/agent-wire";
+import { agentArchiverSchema } from "@repo/features/agent-wire";
 import { Schema, SchemaTransformation } from "effect";
 
 /** An optional field as its nullable column takes it. */
@@ -53,7 +53,7 @@ export const InstantColumnSchema = Schema.Union([Schema.DateFromMillis, Schema.D
 /** An agent's `archived_by` column as a row holds it (`StoredArchive`). */
 export const ArchivedByColumnSchema = Schema.NullOr(
   Schema.Struct({
-    by: Schema.Literals(Object.values(AGENT_ARCHIVER)),
+    by: agentArchiverSchema,
     userId: Schema.String,
     agentId: Schema.optionalKey(Schema.String),
     agentName: Schema.optionalKey(Schema.String),

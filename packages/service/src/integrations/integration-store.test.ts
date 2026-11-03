@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { getTestDB } from "@luke/database/testing";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { noNetwork } from "@luke/wire/testing";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { getTestDB } from "@repo/database/testing";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Effect, Layer } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { firstIntegrationAccount } from "../testing/integration-connect.js";

@@ -1,4 +1,4 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   TABS_FOLD,
   TABS_GROUND,
@@ -12,7 +12,7 @@ import {
   Tooltip,
   tabMenuPlacement,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { createContext, useContext, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -22,10 +22,10 @@ import { ActionMenu, type MenuEnds, type MenuEntry } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 
 /**
- * tab-strip.tsx -- the window's one tab strip, `@luke/ui`'s Tabs, drawn alike across the task's column and the side panel, with what is the window's own: its chords, its hints, and each tab's menu.
+ * tab-strip.tsx -- the window's one tab strip, `@repo/ui`'s Tabs, drawn alike across the task's column and the side panel, with what is the window's own: its chords, its hints, and each tab's menu.
  *
  * The strip itself, its keys, its drag, its scroll, and its look, is
- * `@luke/ui`'s (`components/tabs`). What the window adds: how its tabs fold
+ * `@repo/ui`'s (`components/tabs`). What the window adds: how its tabs fold
  * for the pointer that works them (`useCoarsePointer`), and where they
  * stand, on the window's frame above the sheet they head wherever panes
  * stand side by side (shell.css); the focused tab
@@ -74,7 +74,7 @@ export function TabStrip({
   // A finger's tabs keep their labels rather than turning to glyphs, since a
   // finger has no hint to name a glyph and two agents' glyphs look alike. Note
   // that the room says nothing here: each tab folds by its own width
-  // (`@luke/ui`'s tabs.css), so a narrow window worked by a mouse folds as a
+  // (`@repo/ui`'s tabs.css), so a narrow window worked by a mouse folds as a
   // wide one does, its glyphs named under the pointer.
   const finger = useCoarsePointer();
   // Where panes stand side by side the strip stands on the window's frame;
@@ -107,7 +107,7 @@ export function TabStrip({
  * or the keyboard's menu keys, hung where the pointer is or under the tab;
  * closing the menu hands focus back to the tab, and a press on the tab
  * closes it, as a press on a menu's own button does. Every other part is
- * `@luke/ui`'s `Tab`'s, with this window's hint.
+ * `@repo/ui`'s `Tab`'s, with this window's hint.
  */
 export function MenuTab({
   groups,

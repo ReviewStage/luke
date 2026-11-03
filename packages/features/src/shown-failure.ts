@@ -1,7 +1,7 @@
 /**
  * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
- * The panel hands every failure it shows here (`@luke/panel/failure-report`),
+ * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
  * alike. Each becomes one Sentry log line, searchable by every attribute
  * below: at `warn` for a refusal something named, such as a limit or a

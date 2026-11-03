@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
-import { INBOX_ASK } from "@luke/features/inbox-wire";
-import { postInboxThread, readInboxItem } from "@luke/service/inbox/inbox-store";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
+import { INBOX_ASK } from "@repo/features/inbox-wire";
+import { postInboxThread, readInboxItem } from "@repo/service/inbox/inbox-store";
 import { Effect, Layer, Option, Result } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -29,7 +29,7 @@ const MIGRATION = "20261018153718_inbox_item_read";
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-inbox-read-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-inbox-read-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
   );

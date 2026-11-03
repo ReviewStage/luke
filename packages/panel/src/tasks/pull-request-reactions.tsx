@@ -23,14 +23,14 @@
  * again, and where GitHub would not take it, why stands under the row.
  */
 
-import type { GitHubPerson, ReactionGroup } from "@luke/features/agent-wire";
-import { formatCount } from "@luke/features/number-format";
+import type { GitHubPerson, ReactionGroup } from "@repo/features/agent-wire";
+import { formatCount } from "@repo/features/number-format";
 import {
   PULL_REQUEST_ACTION,
   REACTION,
   type Reaction,
-} from "@luke/features/pull-request-write-wire";
-import { andList } from "@luke/features/words";
+} from "@repo/features/pull-request-write-wire";
+import { andList } from "@repo/features/words";
 import {
   AnchoredPopover,
   Badge,
@@ -45,8 +45,8 @@ import {
   POPOVER_PANEL_LOOK,
   PopoverPanel,
   Tooltip,
-} from "@luke/ui";
-import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, actorName, githubActor } from "@repo/ui/actor-model";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";

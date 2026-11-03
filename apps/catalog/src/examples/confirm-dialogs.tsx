@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,7 +14,7 @@ import {
   Text,
   TextField,
   useConfirmDialog,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useRef, useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -31,7 +31,7 @@ import { CatalogSection } from "../section";
  * (`FootQuestion`): a key's Remove, refused the first time.
  */
 
-/** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
+/** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@repo/ui`. */
 type ActionResult = Awaited<ReturnType<Parameters<typeof useConfirmDialog>[1]>>;
 
 const ACCEPTED: ActionResult = { status: "accepted" };

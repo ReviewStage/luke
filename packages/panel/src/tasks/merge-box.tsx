@@ -6,14 +6,14 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   REVIEW_DECISION,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   MERGE_METHOD,
   type MergeMethod,
   PULL_REQUEST_ACTION,
   type PullRequestAction,
-} from "@luke/features/pull-request-write-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+} from "@repo/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   Badge,
   BUTTON_VARIANT,
@@ -32,8 +32,8 @@ import {
   useMenu,
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -211,7 +211,7 @@ const storedMethods = Schema.fromJsonString(
 );
 
 /** Where the method chosen is kept, by repository. */
-const KEPT = { METHODS: keptKey("luke.pullRequestMergeMethods", storedMethods) } as const;
+const KEPT = { METHODS: keptKey("app.pullRequestMergeMethods", storedMethods) } as const;
 
 /** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(

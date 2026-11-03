@@ -1,6 +1,6 @@
-import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@luke/features/agent-view";
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@repo/features/agent-view";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -20,8 +20,8 @@ import {
   useConfirmDialog,
   useRowMenu,
   withContextMenu,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -85,7 +85,7 @@ export const SUMMARY_GLYPH =
 
 /** Whether the reader left Archived open, one choice for every task's summary, kept on this Mac. */
 const KEPT = {
-  UNFOLDED: keptKey("luke.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
+  UNFOLDED: keptKey("app.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
 } as const;
 
 /** What the archived agents' fold says. */
@@ -233,7 +233,7 @@ function ArchivedAgentRow({
         cardBeside
         cardRegion={item}
       >
-        <span className="task-summary-row flex h-control w-full items-center gap-icon-gap rounded-control bg-none px-row-inset text-left text-body-size text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit">
+        <span className="task-summary-row flex h-control w-full items-center gap-icon-gap rounded-control bg-none px-row-inset text-left text-body-size text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit">
           <span className={SUMMARY_GLYPH}>
             <AgentGlyph agent={agent} />
           </span>
@@ -241,7 +241,7 @@ function ArchivedAgentRow({
           {agentEndMark(agent, false)}
         </span>
       </Tooltip>
-      <span className="task-summary-marks pointer-events-none absolute top-0 right-luke-4 flex h-control items-center opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit">
+      <span className="task-summary-marks pointer-events-none absolute top-0 right-ui-4 flex h-control items-center opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit">
         <Tooltip label={UNARCHIVE.label}>
           <IconButton
             icon={UNARCHIVE.icon}

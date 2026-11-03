@@ -1,14 +1,14 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
-import type { TasksSkillsAnswer } from "@luke/features/tasks-view";
-import { keepIdentity } from "@luke/wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wire";
+import type { TasksSkillsAnswer } from "@repo/features/tasks-view";
+import { keepIdentity } from "@repo/wire";
 import type { SkillSource, SkillsRead } from "./skill-picker.js";
 
 /**
  * repository-skills.ts -- the skills of the open task's repository a `/` in an agent's box offers, drawn at once as last read and read again behind.
  *
  * Each ask goes to the host, which answers the skills it holds at once and
- * reads them again behind the answer (`@luke/host`'s `compose-tasks.ts`),
+ * reads them again behind the answer (`@repo/host`'s `compose-tasks.ts`),
  * so a skill added on GitHub is offered the next time a box asks; one ask
  * is out at a time, shared by every box that asks meanwhile. An answer
  * naming the skills last read keeps their identity, so nothing drawn from

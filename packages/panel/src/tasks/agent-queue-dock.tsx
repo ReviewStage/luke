@@ -1,6 +1,6 @@
-import { QUEUE_PAUSE, type QueuedMessage, type QueuePaused } from "@luke/features/agent-queue-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
+import { QUEUE_PAUSE, type QueuedMessage, type QueuePaused } from "@repo/features/agent-queue-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   BANNER_LOOK,
   Banner,
@@ -21,9 +21,9 @@ import {
   PlayIcon,
   STATUS_TONE,
   useConfirmDialog,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
 import { confirmFailure } from "../failure-report.js";

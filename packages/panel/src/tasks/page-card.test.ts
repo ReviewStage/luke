@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,7 +48,7 @@ test("a version written while the card stands is hidden until it loads, never th
         onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
       ),
     );
-  const preview = () => container.querySelector<HTMLElement>(".luke-page-thumb");
+  const preview = () => container.querySelector<HTMLElement>(".ui-page-thumb");
   const load = () =>
     act(() => {
       container.querySelector("iframe")?.dispatchEvent(new Event("load"));
@@ -60,7 +60,7 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "true");
 
   render({ ...FUNNEL, version: 3 });
-  assert.equal(container.querySelector(".luke-hover-card-sub")?.textContent, "Version 3");
+  assert.equal(container.querySelector(".ui-hover-card-sub")?.textContent, "Version 3");
   assert.equal(
     container.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version: 3 }),
@@ -80,13 +80,13 @@ test("a provenance row says who showed the version, wherever the card hangs: Ves
         onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
       ),
     );
-    return container.querySelector(".luke-hover-card-row")?.textContent;
+    return container.querySelector(".ui-hover-card-row")?.textContent;
   };
 
   assert.deepEqual(
     [
-      subOf({ ...FUNNEL, shownBy: { kind: PAGE_SHOWER.LUKE } }),
-      subOf({ ...FUNNEL, version: 1, shownBy: { kind: PAGE_SHOWER.LUKE } }),
+      subOf({ ...FUNNEL, shownBy: { kind: PAGE_SHOWER.APP } }),
+      subOf({ ...FUNNEL, version: 1, shownBy: { kind: PAGE_SHOWER.APP } }),
       subOf({
         ...FUNNEL,
         shownBy: { kind: PAGE_SHOWER.AGENT, agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
@@ -117,7 +117,7 @@ test("a press on the agent that showed the version opens its tab, on the page's 
       ),
     ),
   );
-  const shower = container.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]");
+  const shower = container.querySelector<HTMLElement>(".ui-hover-card-row [data-actor-ref]");
   assert.equal(shower?.tagName, "BUTTON", "the agent's name is a press");
   act(() => shower?.click());
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: TASK, agentId }]);

@@ -1,16 +1,16 @@
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@luke/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@repo/wire";
 import {
   APP_PANEL_TAB,
   APP_SETTING_ID,
   type AppPanelTab,
   type AppSettingId,
-} from "@luke/wire/app-settings";
+} from "@repo/wire/app-settings";
 import { Option, Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
- * run over it. The rest of `@luke/features` holds the contracts for what our service
+ * run over it. The rest of `@repo/features` holds the contracts for what our service
  * *answers*; this holds the contract for what the desktop *asks* it to record.
  *
  * The vocabulary is the privacy boundary, not a convention on top of one. An

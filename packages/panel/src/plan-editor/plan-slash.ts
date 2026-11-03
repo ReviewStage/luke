@@ -1,4 +1,4 @@
-import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
+import { WRITING_BLOCK, WRITING_INSERT } from "@repo/settings/shortcuts";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";

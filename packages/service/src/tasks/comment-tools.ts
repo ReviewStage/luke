@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -7,7 +7,7 @@ import {
   type PlanCommentWriterRef,
   readPlanCommentThread,
   readPlanCommentThreads,
-} from "@luke/database/models/plan-comments";
+} from "@repo/database/models/plan-comments";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -16,9 +16,9 @@ import {
   type PlanCommentEntry,
   type PlanCommentThread,
   planCommentWordsSchema,
-} from "@luke/features/plan-comment-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import {
@@ -139,7 +139,7 @@ export const UPDATE_COMMENT_TOOL = {
   inputSchema: UPDATE_INPUT,
 } as const;
 
-/** The four tools, in the order an agent is offered them. */
+/** The tools, in the order an agent is offered them. */
 const COMMENT_TOOLS = [READ_COMMENTS_TOOL, REPLY_TO_COMMENT_TOOL, UPDATE_COMMENT_TOOL] as const;
 
 type CommentTool = (typeof COMMENT_TOOLS)[number];
@@ -159,7 +159,7 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 /** Who wrote an entry, as an agent reads it. */
 function writerOf(entry: PlanCommentEntry): string {
   switch (entry.writer.actor) {
-    case PLAN_COMMENT_ACTOR.LUKE:
+    case PLAN_COMMENT_ACTOR.APP:
       return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
@@ -185,7 +185,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
     .map((entry) => ({
       by: writerOf(entry),
       to:
-        entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
+        entry.asked?.actor === PLAN_COMMENT_ACTOR.APP
           ? PRODUCT_NAME
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));
@@ -274,10 +274,10 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as the task's assistant is handed them every turn, beside the
- * saved document: one line each, read again every turn, so a comment a
- * member left since its last turn is there to raise. Nothing where the plan
- * holds no open thread.
+ * The plan's open threads as a coding agent's standing context hands them
+ * beside the saved document (`agent-runtime/standing-context.ts`): one line
+ * each, so a comment a member left since its last turn is there to raise.
+ * Nothing where the plan holds no open thread.
  */
 export function openThreadsText(threads: readonly PlanCommentThread[]): readonly string[] {
   const open = threads.filter((thread) => thread.status === PLAN_COMMENT_STATUS.OPEN);
@@ -285,5 +285,5 @@ export function openThreadsText(threads: readonly PlanCommentThread[]): readonly
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in the assistant's standing context. */
+/** The marker the open threads ride behind in an agent's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

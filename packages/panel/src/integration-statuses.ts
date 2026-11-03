@@ -1,14 +1,14 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import {
   signInBegun as begunSignIn,
   SIGN_IN,
   type SignIn,
   signInAfterRead,
   signInGraced,
-} from "@luke/features/integration-sign-in";
-import type { IntegrationStatusView } from "@luke/features/integration-view";
+} from "@repo/features/integration-sign-in";
+import type { IntegrationStatusView } from "@repo/features/integration-view";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -19,8 +19,8 @@ import {
   type IntegrationSignInFailure,
   type IntegrationStatus,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

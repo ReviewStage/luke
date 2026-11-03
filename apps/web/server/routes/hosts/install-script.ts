@@ -1,4 +1,4 @@
-import { hostInstallScriptApp } from "@luke/service/agents/host-install-script-app";
+import { hostInstallScriptApp } from "@repo/service/agents/host-install-script-app";
 import template from "../../../install/install.sh?raw";
 import { routeFromHttpRouter } from "../../route-effect.js";
 

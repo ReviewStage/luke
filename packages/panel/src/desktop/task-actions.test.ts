@@ -3,17 +3,20 @@
 import assert from "node:assert/strict";
 import {
   PLAN_ACTOR,
+  TASK_BLOCK_CHANGE,
   TASK_PRIORITY,
+  TASK_RELATION_KIND,
   TASK_STATUS,
   type Task,
+  type TaskBlockRequest,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -208,12 +211,12 @@ function menuItems(): HTMLButtonElement[] {
 }
 /** What an item says, without the chord printed at its end. */
 function itemLabel(item: HTMLElement): string | null {
-  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
+  return item.querySelector(".ui-menu-item-label")?.textContent ?? null;
 }
 /** Each item of the open menu that prints a chord, as what it says and the chord's glyphs. */
 function itemChords(): [string | null, string][] {
   return menuItems().flatMap((item): [string | null, string][] => {
-    const keys = item.querySelector(".luke-shortcut");
+    const keys = item.querySelector(".ui-shortcut");
     return keys === null ? [] : [[itemLabel(item), keys.textContent ?? ""]];
   });
 }
@@ -385,7 +388,7 @@ function planShown(tasks: TasksControl): TasksControl {
 
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
-  const notes = document.querySelectorAll('[role="menu"] .luke-menu-footer p');
+  const notes = document.querySelectorAll('[role="menu"] .ui-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
@@ -393,7 +396,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   openMenu(mountPlanTab(planShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
-  const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
+  const faces = document.querySelectorAll('[role="menu"] .ui-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
     [
@@ -401,7 +404,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
       ["person", "D"],
     ],
   );
-  const times = document.querySelectorAll('[role="menu"] .luke-menu-footer time');
+  const times = document.querySelectorAll('[role="menu"] .ui-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),
     [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
@@ -431,7 +434,7 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
     );
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
-    const line = container.querySelector(".luke-list-row-title");
+    const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
       .join("")
@@ -471,7 +474,7 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
-    const line = container.querySelector(".luke-list-row-title");
+    const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
       .join("")
@@ -508,10 +511,10 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
   };
   const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
   const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
-  const byLuke = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
+  const byApp = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
   assert.deepEqual(marks(byAgent), ["unassigned"]);
-  assert.deepEqual(marks({ ...byLuke, assignee: DEAN }), []);
-  assert.deepEqual(marks({ ...byLuke, assignee: CHARLES }), ["person"]);
+  assert.deepEqual(marks({ ...byApp, assignee: DEAN }), []);
+  assert.deepEqual(marks({ ...byApp, assignee: CHARLES }), ["person"]);
 
   const { asked } = openTab();
   const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
@@ -528,7 +531,7 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
       tasks: sharedTab(DEAN.userId),
     }),
   );
-  assert.equal(container.querySelector('.luke-toolbar [aria-label="Task actions"]'), null);
+  assert.equal(container.querySelector('.ui-toolbar [aria-label="Task actions"]'), null);
   assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
 
   act(() => {
@@ -579,7 +582,7 @@ test("a sidebar task's press says its status after its name, as a List row's doe
         children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
       }),
     );
-    const press = container.querySelector(".luke-list-row-title");
+    const press = container.querySelector(".ui-list-row-title");
     const words = press === null ? "" : heard(press);
     unmountAll();
     return words;
@@ -605,7 +608,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
     "the row wears its agents' icon",
   );
   assert.deepEqual(
-    [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
+    [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map(heard),
     ["Repository belongs to Stage"],
   );
 });
@@ -658,7 +661,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   openMenu(mountPlanTab(tasks));
   await copyFromMenu();
   const title = document.querySelector<HTMLButtonElement>(
-    '.luke-page-header-actions button[aria-label="Copy link"]',
+    '.ui-page-header-actions button[aria-label="Copy link"]',
   );
   assert.ok(title, "the title has a Copy link button");
   await act(async () => title.click());
@@ -682,8 +685,8 @@ test("a task's card says who created it where others share its workspace, the re
         children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
       }),
     );
-    const lines = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
-      (line) => heard(line).replace(/ · .*$/u, ""),
+    const lines = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return lines;
@@ -722,7 +725,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
           : card,
       }),
     );
-    return [...view.querySelectorAll<HTMLElement>('.luke-hover-card-row[data-look="detail"]')].find(
+    return [...view.querySelectorAll<HTMLElement>('.ui-hover-card-row[data-look="detail"]')].find(
       (each) => each.textContent?.includes("Created by"),
     );
   };
@@ -765,8 +768,8 @@ test("a task's card says you of the reader's own task outside a member directory
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const said = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
-      (line) => heard(line).replace(/ · .*$/u, ""),
+    const said = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return said;
@@ -868,6 +871,56 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   unmountAll();
   const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
+});
+
+test("a sidebar row's Task relation searches the workspace's tasks beside the menu and relates the one picked from the row, never opening either task", async () => {
+  const parented: [string, string | null][] = [];
+  const blocked: [string, TaskBlockRequest][] = [];
+  const other: TaskSummary = {
+    ...OTHER,
+    id: "5d1c9b7a-3e2f-4a6b-8c9d-0e1f2a3b4c5d",
+    name: "Ship signup",
+  };
+  const tasks = tasksControl({
+    tasks: [OTHER, other],
+    onSetTaskParent: (taskId, parentTaskId) => parented.push([taskId, parentTaskId]),
+    onSetTaskBlock: (taskId, block) => blocked.push([taskId, block]),
+  });
+  const asked: Asked = { opened: [], changed: [], deleted: [], renamed: [], marked: [] };
+  const row = mountSidebarTask(tasks, OTHER, asked);
+  const pick = (words: string) => {
+    const found = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="option"], [data-steered="true"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(words));
+    assert.ok(found, `the menu offers ${words}`);
+    act(() => found.click());
+  };
+
+  rightClick(row, 40, 60);
+  choose("Task relation");
+  await act(async () => undefined);
+  pick("Ship signup");
+  rightClick(row, 40, 60);
+  choose("Task relation");
+  await act(async () => undefined);
+  pick("Relation");
+  pick("Blocked by");
+  pick("Ship signup");
+
+  assert.deepEqual(
+    parented,
+    [[other.id, OTHER.id]],
+    "Sub-task, the kind it opens on, sets the parent of the task picked",
+  );
+  assert.deepEqual(blocked, [
+    [
+      OTHER.id,
+      { change: TASK_BLOCK_CHANGE.ADD, relation: TASK_RELATION_KIND.BLOCKED_BY, taskId: other.id },
+    ],
+  ]);
+  assert.deepEqual(asked.opened, [], "relating from a row opens no task");
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */

@@ -1,4 +1,4 @@
-import { CheckIcon, PAGE_THUMB_SIZE, PageThumb } from "@luke/ui";
+import { CheckIcon, PAGE_THUMB_SIZE, PageThumb } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TODO_STATUS, type AgentTodos } from "@luke/features/agent-wire";
+import { AGENT_TODO_STATUS, type AgentTodos } from "@repo/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -72,7 +72,7 @@ test("a step done springs its check in, the next taken up arrives, and the count
   to(steps(2));
   assert.ok(view.textContent?.includes("2 of 3 done"), view.textContent ?? "");
   const mark = view.querySelector(
-    '.todo-item[data-todo-status="done"] > .luke-glyph-slot[data-arrival="check"]',
+    '.todo-item[data-todo-status="done"] > .ui-glyph-slot[data-arrival="check"]',
   );
   assert.equal(mark?.getAttribute("aria-label"), "Done");
 });

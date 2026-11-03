@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RetryButton } from "@luke/ui";
+import { RetryButton } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -47,7 +47,7 @@ function layOut(folded: boolean): void {
     const style = computed(element);
     const read = style.getPropertyValue.bind(style);
     style.getPropertyValue = (name) =>
-      name === "--luke-fold" ? (folded ? "folded" : "") : read(name);
+      name === "--ui-fold" ? (folded ? "folded" : "") : read(name);
     return style;
   });
 }

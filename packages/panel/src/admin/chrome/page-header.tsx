@@ -1,4 +1,4 @@
-import { readingWords } from "@luke/features/words";
+import { readingWords } from "@repo/features/words";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -15,8 +15,8 @@ import {
   TEXT_VARIANT,
   Text,
   Toolbar,
-} from "@luke/ui";
-import { accountLabel } from "@luke/ui/account-initials";
+} from "@repo/ui";
+import { accountLabel } from "@repo/ui/account-initials";
 import { createContext, useContext } from "react";
 import { PhoneHead } from "../../desktop/phone-head.js";
 import type { AdminTab } from "../routing.js";
@@ -167,7 +167,7 @@ function usePlacedFrame(back: AdminWayBack | undefined): AdminPlaceFrame | undef
 }
 
 /**
- * The page every view past the gate stands on: `@luke/ui`'s detail page
+ * The page every view past the gate stands on: `@repo/ui`'s detail page
  * under the app's toolbar, which holds the title, the way back where the
  * view stands under a section, and the view's controls; the view's own
  * content, or what stands in its place where it could not be read, under
@@ -215,7 +215,7 @@ export function AdminPage({
 }
 
 /**
- * The page a view of many accounts stands on: `@luke/ui`'s collection page,
+ * The page a view of many accounts stands on: `@repo/ui`'s collection page,
  * under the toolbar `AdminPage` heads a view with, the view's filters under
  * it, and the collection, or what stands in its place while it is read,
  * empty, or failed, under them.

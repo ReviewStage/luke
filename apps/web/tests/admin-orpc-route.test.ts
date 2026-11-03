@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
-import { type AdminProcedureSeams, adminProcedures } from "@luke/service/admin/admin-procedures";
-import { buildAdminUserList } from "@luke/service/admin/admin-users";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import type { WebServices } from "@luke/service/runtime";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import type { AdminViewer } from "@repo/service/admin/admin-access";
+import { type AdminProcedureSeams, adminProcedures } from "@repo/service/admin/admin-procedures";
+import { buildAdminUserList } from "@repo/service/admin/admin-users";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import type { WebServices } from "@repo/service/runtime";
 import { Context, Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 async function mount(): Promise<HTMLElement> {
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
@@ -181,7 +181,7 @@ test("an auth service that did not answer is said as the service not answering",
 });
 
 test("an answer that came through a redirect is said as something in front of the API", async () => {
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
     const login = new Response("<html>Sign in to Vercel</html>", {
       status: 200,

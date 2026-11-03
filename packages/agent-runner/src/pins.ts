@@ -1,7 +1,7 @@
 /**
  * pins.ts -- what a coding agent's sandbox pins of Claude Code and Codex: their versions and where the image puts them, read by the image, the sessions, and the protocol generator alike.
  *
- * The image (`@luke/service`'s `agent-runtime/sandbox-image.ts`) installs
+ * The image (`@repo/service`'s `agent-runtime/sandbox-image.ts`) installs
  * exactly these, the sessions (`claude-code-sessions.ts`,
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
@@ -10,7 +10,7 @@
  * What a device fetches or carries of its own, a host's Node, and the
  * Claude Code, Codex, and GitHub CLI every host keeps for its agents to
  * run on the box itself, is an `AgentToolPin` checked by size, digest, and
- * signature where it has one before it is kept (`@luke/host`'s
+ * signature where it has one before it is kept (`@repo/host`'s
  * `localAgentTool`). Erasable syntax alone, so Node runs the generator over
  * it as it stands.
  */
@@ -25,7 +25,7 @@ export const AGENT_USER = "agent";
  * the sandbox's default user and the CLI's own temp folder
  * (`/tmp/claude-<uid>`) is private to `agent`.
  */
-export const SHARED_FILES_DIRECTORY = "/tmp/luke";
+export const SHARED_FILES_DIRECTORY = "/tmp/shared";
 
 /**
  * Playwright as the image installs it, where every user of every machine
@@ -48,7 +48,7 @@ export const PLAYWRIGHT_PIN = {
 } as const;
 
 /**
- * Our own browser in an agent's sandbox, as its start (`@luke/service`'s
+ * Our own browser in an agent's sandbox, as its start (`@repo/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
  * display Xvfb draws it on. Each is started in a session of its own, so the
  * runner's reader of the sandbox's processes (`processes.ts`) tells the
@@ -67,7 +67,7 @@ export const LUKE_BROWSER_PIN = {
 /** What every command a harness runs in the cloud is handed of the image's tools: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
 export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
 
-/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
+/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. Note that it keeps its old name, because a persistent sandbox resumes from its own snapshot of the image it was made from, and a launch into one finds it there. */
 export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
 
 /**
@@ -75,7 +75,9 @@ export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
  * platform package carries (the SDK's own `claudeCodeVersion`), so
  * installing the one installs the other. Installed as root in a directory
  * only root writes; the binary is the Linux x86-64 build, the Vercel
- * sandbox's architecture.
+ * sandbox's architecture. Note that `DIRECTORY` keeps its old name, because
+ * a persistent sandbox resumes from its own snapshot of the image it was made
+ * from, and a launch into one runs the binary there.
  */
 export const CLAUDE_CODE_PIN = {
   SDK_VERSION: "0.3.304",
@@ -95,7 +97,8 @@ export const CLAUDE_EXECUTABLE = `${CLAUDE_CODE_PIN.DIRECTORY}/${CLAUDE_CODE_PIN
 /**
  * Codex, pinned exactly, installed as root under a prefix only root writes.
  * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
- * the threads it keeps there outlive a stop.
+ * the threads it keeps there outlive a stop. Note that `DIRECTORY` keeps its
+ * old name, as `CLAUDE_CODE_PIN`'s does, for the sandboxes made before.
  */
 export const CODEX_PIN = {
   VERSION: "0.163.0",
@@ -106,7 +109,7 @@ export const CODEX_PIN = {
 } as const;
 
 /**
- * A binary a local agent's Mac or host fetches once and keeps (`@luke/host`'s
+ * A binary a local agent's Mac or host fetches once and keeps (`@repo/host`'s
  * `localAgentTool`), checked before anything in it is kept: an archive at a
  * pinned address, its exact size and SHA-256, and what of it is kept. A bump
  * moves every field together, its digest and size read off the release
@@ -149,7 +152,7 @@ export interface AgentToolPin {
 
 /**
  * A tool's builds for a host (`apps/host`), one per architecture it runs on,
- * by Node's `process.arch` names (`@luke/features/device-agent-wire`'s
+ * by Node's `process.arch` names (`@repo/features/device-agent-wire`'s
  * `DEVICE_ARCH`), each decided by its digest.
  */
 export interface LinuxToolPins {

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -269,8 +269,8 @@ async function drawnOnPage(
 /** Each chip drawn: the name it says, the state after it, and the pull request's mark it wears, if any. */
 function chips(container: HTMLElement): [string | null, string | null, string | undefined][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
-    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-state")?.textContent ?? null,
     chip.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
   ]);
 }
@@ -280,8 +280,8 @@ function issueChips(container: HTMLElement): (string | null | undefined)[][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     const mark = chip.querySelector<SVGElement>("[data-issue-mark]");
     return [
-      chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
-      chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
+      chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
+      chip.querySelector(".ui-inline-ref-state")?.textContent ?? null,
       mark?.dataset.issueState,
       mark?.getAttribute("aria-label"),
     ];
@@ -326,9 +326,7 @@ test("a pull request's chip drawn again, as a plan's section opening in its edit
     PULL_READS.UNANSWERED,
   );
 
-  assert.deepEqual(chips(container), [
-    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
-  ]);
+  assert.deepEqual(chips(container), [["#42", "Merged", PULL_REQUEST_STATE.MERGED]]);
 });
 
 test("a pull request's chip drawn again once GitHub answers it is gone says its address, not the title it answered before", async () => {
@@ -379,7 +377,7 @@ test("on a page with no repository a pull request's and an issue's chip still sa
   );
 
   assert.deepEqual(
-    [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+    [...container.querySelectorAll("[data-mention-ref] .ui-inline-ref-label")].map(
       (label) => label.textContent,
     ),
     ["#42", "#5", "#7 Invitations expire too soon"],
@@ -415,7 +413,7 @@ test("a pull request's or an issue's address no GitHub App answers for is called
   );
 
   assert.deepEqual(
-    [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+    [...container.querySelectorAll("[data-mention-ref] .ui-inline-ref-label")].map(
       (label) => label.textContent,
     ),
     ["#42", "the expiry change", "#42", "ledger#5", "#7"],
@@ -435,7 +433,7 @@ test("on a page with no repository an address no GitHub App answers for names it
     );
 
     assert.deepEqual(
-      [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+      [...container.querySelectorAll("[data-mention-ref] .ui-inline-ref-label")].map(
         (label) => label.textContent,
       ),
       said,
@@ -483,7 +481,7 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
 });
 
 /** The card a chip hangs: a pull request's own, or the mention's. */
-const CHIP_CARD = ".luke-tooltip-card :is([data-mention-card], [data-pull-request-card])";
+const CHIP_CARD = ".ui-tooltip-card :is([data-mention-card], [data-pull-request-card])";
 
 /** The card a chip hangs, once the pointer rests on the chip. */
 function cardOf(chip: Element): Element | undefined {
@@ -496,8 +494,8 @@ function cardHead(chip: Element | undefined): [string | undefined, string | unde
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
   const head: [string | undefined, string | undefined] = [
-    card?.querySelector(".luke-hover-card-sub")?.textContent ?? undefined,
-    card?.querySelector(".luke-hover-card-corner")?.textContent ?? undefined,
+    card?.querySelector(".ui-hover-card-sub")?.textContent ?? undefined,
+    card?.querySelector(".ui-hover-card-corner")?.textContent ?? undefined,
   ];
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -509,9 +507,9 @@ function cardHead(chip: Element | undefined): [string | undefined, string | unde
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
-  const notes = [
-    ...(card?.querySelectorAll(".luke-hover-card-note, .luke-hover-card-row") ?? []),
-  ].map(readable);
+  const notes = [...(card?.querySelectorAll(".ui-hover-card-note, .ui-hover-card-row") ?? [])].map(
+    readable,
+  );
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -530,7 +528,7 @@ function readable(note: Element): string | null {
 function openerFace(chip: Element | undefined): [string | undefined, string | null | undefined] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
-  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-row .actor-mark");
+  const mark = card?.querySelector<HTMLElement>(".ui-hover-card-row .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
     mark?.querySelector("img")?.getAttribute("src"),
@@ -673,6 +671,6 @@ test("where GitHub answers nothing, an agent's pull request's row hangs a card n
   assert.ok(row, "the pull request's row stands");
 
   restOn(row);
-  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expire old invitations");
+  const card = [...document.querySelectorAll(".ui-tooltip-card [data-mention-card]")].at(-1);
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Expire old invitations");
 });

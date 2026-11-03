@@ -1,5 +1,5 @@
-import { AGENT_BOUNDS, type TasklessAgent } from "@luke/features/agent-wire";
-import { automationRun } from "@luke/features/model-label";
+import { AGENT_BOUNDS, type TasklessAgent } from "@repo/features/agent-wire";
+import { automationRun } from "@repo/features/model-label";
 import {
   InlineEdit,
   LIST_DENSITY,
@@ -13,9 +13,9 @@ import {
   RowHintOptions,
   Time,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
-import { agentRow, taskRowName } from "@luke/ui/task-list-model";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/actor-model";
+import { agentRow, taskRowName } from "@repo/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -225,7 +225,7 @@ export function SidebarAgent({
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
-            <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
+            <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-ui-16)]">
               {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
             </span>
           }

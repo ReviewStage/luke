@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createTask, listTasks } from "@luke/database/models/task-store";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { createTask, listTasks } from "@repo/database/models/task-store";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import {

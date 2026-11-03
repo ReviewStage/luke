@@ -31,7 +31,7 @@
  * two lines queued at once outside the lease could commit out of order.
  */
 
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
@@ -46,7 +46,7 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import {
   and,
   arrayContains,

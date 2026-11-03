@@ -1,11 +1,11 @@
-import { type Noun, noMatchWords } from "@luke/features/words";
+import { type Noun, noMatchWords } from "@repo/features/words";
 import {
   SHORTCUT_KEY,
   type ShortcutChord,
   WRITING_SHORTCUTS,
   type WritingAction,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import type { ReactNode, Ref } from "react";
 import { type ComboboxGroup, ComboboxList } from "../combobox/combobox.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
@@ -87,7 +87,7 @@ export function writingRow(action: WritingAction): BlockMenuRow {
 /** How else a row's block is made, at its end: its Markdown, or else its chord. */
 function rowHint(row: BlockMenuRow): ReactNode {
   if (row.markdown !== undefined) {
-    return <code className="luke-block-menu-markdown">{row.markdown}</code>;
+    return <code className="ui-block-menu-markdown">{row.markdown}</code>;
   }
   return row.chord === undefined ? undefined : <Shortcut chord={row.chord} />;
 }
@@ -129,7 +129,7 @@ export function BlockMenu({
   const shown = groups.filter((group) => group.rows.length > 0);
   const rows = shown.flatMap((group) => group.rows);
   return (
-    <MenuSurface ref={ref} className="luke-block-menu" inset={MENU_SURFACE_INSET.NONE}>
+    <MenuSurface ref={ref} className="ui-block-menu" inset={MENU_SURFACE_INSET.NONE}>
       <ComboboxList
         id={id}
         label={BLOCK_MENU_LABEL}

@@ -8,8 +8,8 @@ import {
   type InstalledSkillSource,
   installedSkillScopeSchema,
   installedSkillSourceSchema,
-} from "@luke/features/installed-skill-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/installed-skill-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { and, asc, eq, exists, or, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

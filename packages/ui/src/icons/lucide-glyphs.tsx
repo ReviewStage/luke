@@ -60,16 +60,16 @@ export const UnpinIcon = lucideGlyph(PinOff, "icon-button-glyph");
 export const RetryIcon = lucideGlyph(RotateCw, "icon-button-glyph");
 
 /** A ring round a mark of exclamation: something did not land. */
-export const AlertIcon = lucideGlyph(CircleAlert, "luke-glyph");
+export const AlertIcon = lucideGlyph(CircleAlert, "ui-glyph");
 
 /** A magnifier struck through: a place the window cannot show, gone or not the reader's. */
-export const NotFoundIcon = lucideGlyph(SearchX, "luke-glyph");
+export const NotFoundIcon = lucideGlyph(SearchX, "ui-glyph");
 
 /** A ring round a check: something was done. */
-export const CircleCheckIcon = lucideGlyph(CircleCheck, "luke-glyph");
+export const CircleCheckIcon = lucideGlyph(CircleCheck, "ui-glyph");
 
 /** An in-tray: something was posted to the Inbox. */
-export const InboxIcon = lucideGlyph(Inbox, "luke-glyph");
+export const InboxIcon = lucideGlyph(Inbox, "ui-glyph");
 
 /** A speech bubble, for a plan's comments: the side panel's Comments tab and the summary's row. */
 export const CommentsIcon = lucideGlyph(MessageSquare, "icon-button-glyph");

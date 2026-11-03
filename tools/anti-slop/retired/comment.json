@@ -1,5 +1,5 @@
 {
-  "instead": "Draw a comment's head with Comment, and the line under a message with MessageLine, both from @luke/ui.",
+  "instead": "Draw a comment's head with Comment, and the line under a message with MessageLine, both from @repo/ui.",
   "classes": [
     { "class": "inbox-comment-head", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "inbox-comment-name", "allow": ["packages/ui/src/components/comment/"] },

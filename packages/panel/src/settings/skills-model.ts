@@ -10,42 +10,42 @@ import {
   type InstalledSkillSummary,
   SKILL_AUDIT_RISK,
   type SkillAuditRisk,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillCallFailure,
   type InstalledSkillInstallParams,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import {
   INSTALLED_SKILL_BOUNDS,
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
   type InstalledSkillSource,
-} from "@luke/features/installed-skill-wire";
-import { formatBytes, formatExactBytes } from "@luke/features/number-format";
+} from "@repo/features/installed-skill-wire";
+import { formatBytes, formatExactBytes } from "@repo/features/number-format";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
   SKILL_KEY,
   SKILL_NAME_RULE,
-} from "@luke/features/skill-file";
+} from "@repo/features/skill-file";
 import {
   ALL_SKILLS,
   SKILL_PASTE_KIND,
   SKILL_PASTE_UNSUPPORTED,
   type SkillPaste,
   type SkillPasteUnsupportedReason,
-} from "@luke/features/skill-paste";
+} from "@repo/features/skill-paste";
 import {
   TASK_SKILL_BOUNDS,
   TASK_SKILL_SOURCE,
   type TaskSkillSource,
-} from "@luke/features/task-wire";
-import { countWords, readFailedWords, TERM } from "@luke/features/words";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@luke/ui";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+} from "@repo/features/task-wire";
+import { countWords, readFailedWords, TERM } from "@repo/features/words";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@repo/ui";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.

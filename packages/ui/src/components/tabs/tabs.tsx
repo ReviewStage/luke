@@ -1,4 +1,4 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type {
   ComponentType,
   FocusEventHandler,
@@ -76,7 +76,7 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * a wheel turned up and down running it sideways, with the chosen tab pinned
  * at whichever edge it would pass and a fade where tabs go on. All of that
  * is the stylesheet's (tabs.css): the strip measures nothing, and asks only
- * for its tabs' count, as `--luke-tab-count`, so it may ask for room for
+ * for its tabs' count, as `--ui-tab-count`, so it may ask for room for
  * every tab at its widest. A narrow tab other than the chosen one stands as
  * its glyph alone, or keeps a short label while the strip scrolls, as its
  * owner's `fold` says. A tab chosen, or reached by
@@ -110,18 +110,18 @@ const TAB = '[role="tab"]';
 
 /** The strip: tabs in a row that scrolls along with no bar drawn; that it scrolls is tabs.css's, which an app's narrow layout reads. */
 const STRIP =
-  "luke-tabs relative flex min-w-0 items-center gap-list-gap overscroll-x-contain [scrollbar-width:none]";
+  "ui-tabs relative flex min-w-0 items-center gap-list-gap overscroll-x-contain [scrollbar-width:none]";
 
 /** A tab's pill, in a label's type; where it stands, pinned while chosen, is tabs.css's. */
-const PILL = "luke-tab flex items-center rounded-control text-label font-label";
+const PILL = "ui-tab flex items-center rounded-control text-label font-label";
 
 /** The pill's button, or the field a rename stands in its place: the pill's height and corner, in its type and ink. */
 const TAB_BUTTON =
-  "luke-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
+  "ui-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
 
 /** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
-  "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-motion-exit";
+  "absolute top-1/2 right-(--ui-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--ui-duration-hover) ease-motion-exit";
 
 /** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
@@ -233,7 +233,7 @@ function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
  * page opens already scrolled.
  */
 function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
-  const pill = tab.closest<HTMLElement>(".luke-tab") ?? tab;
+  const pill = tab.closest<HTMLElement>(".ui-tab") ?? tab;
   const before = pill.previousElementSibling;
   const style = getComputedStyle(strip);
   const start =
@@ -271,7 +271,7 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
 
 /** Where a tab's menu hangs when the keyboard asks for it, or a right-click that names no point: under the tab, from its start. */
 export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
-  const bounds = (tab.closest(".luke-tab") ?? tab).getBoundingClientRect();
+  const bounds = (tab.closest(".ui-tab") ?? tab).getBoundingClientRect();
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
@@ -375,7 +375,7 @@ export function Tabs({
     if (at < 0) return;
     if (closesTab(event.key)) {
       // Only a tab that closes hands focus on; one that always stands stays.
-      const pill = event.target instanceof HTMLElement ? event.target.closest(".luke-tab") : null;
+      const pill = event.target instanceof HTMLElement ? event.target.closest(".ui-tab") : null;
       if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
     }
@@ -409,7 +409,7 @@ export function Tabs({
       className={STRIP}
       data-ground={ground}
       data-fold={fold}
-      style={cssCustomProperties({ "--luke-tab-count": count })}
+      style={cssCustomProperties({ "--ui-tab-count": count })}
       onKeyDown={keyDown}
       onPointerDown={onPointerDown}
       onWheel={wheel}
@@ -515,7 +515,7 @@ export function Tab({
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
   const glyph = (
-    <span className="luke-tab-icon relative flex flex-none text-muted-foreground [--luke-glyph-size:var(--luke-control-icon)] [&_svg]:size-control-icon">
+    <span className="ui-tab-icon relative flex flex-none text-muted-foreground [--ui-glyph-size:var(--ui-control-icon)] [&_svg]:size-control-icon">
       {icon}
     </span>
   );
@@ -532,7 +532,7 @@ export function Tab({
       {...rovingItem()}
       onClick={(event) => {
         // Note that the tab around the button is the pill a press is seen on.
-        pulsePress(event.currentTarget.closest<HTMLElement>(".luke-tab") ?? event.currentTarget);
+        pulsePress(event.currentTarget.closest<HTMLElement>(".ui-tab") ?? event.currentTarget);
         onSelect();
       }}
       onDoubleClick={preview ? onKeep : undefined}
@@ -551,7 +551,7 @@ export function Tab({
       {glyph}
       <span
         ref={words}
-        className="luke-tab-label overflow-hidden whitespace-nowrap"
+        className="ui-tab-label overflow-hidden whitespace-nowrap"
         data-overflow={String(clipped)}
       >
         {label}
@@ -559,7 +559,7 @@ export function Tab({
           <>
             {" "}
             <span
-              className="luke-tab-detail text-muted-foreground data-tone:text-tone-ink"
+              className="ui-tab-detail text-muted-foreground data-tone:text-tone-ink"
               data-tone={detailTone}
             >
               {detail}
@@ -570,9 +570,9 @@ export function Tab({
       {endMark === undefined ? null : (
         <span
           className={cn(
-            "luke-tab-end-mark",
+            "ui-tab-end-mark",
             END_SLOT,
-            "size-(--luke-tab-close) items-center justify-center",
+            "size-(--ui-tab-close) items-center justify-center",
           )}
         >
           {endMark}
@@ -602,11 +602,11 @@ export function Tab({
       ) : (
         <span className={TAB_BUTTON} data-editing="true">
           {glyph}
-          <span className="luke-tab-rename grid w-[24ch] min-w-0">{editor}</span>
+          <span className="ui-tab-rename grid w-[24ch] min-w-0">{editor}</span>
         </span>
       )}
       {onClose === undefined || editor !== undefined ? null : (
-        <span className={cn("luke-tab-close", END_SLOT)}>
+        <span className={cn("ui-tab-close", END_SLOT)}>
           <Tooltip label={`Close ${label}`} command={selected ? APP_COMMAND.CLOSE_TAB : undefined}>
             <IconButton
               icon={<CloseIcon />}
@@ -632,11 +632,7 @@ export function TabCards({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div
-      className="luke-tab-cards flex gap-2 p-3 overflow-x-auto"
-      role="listbox"
-      aria-label={label}
-    >
+    <div className="ui-tab-cards flex gap-2 p-3 overflow-x-auto" role="listbox" aria-label={label}>
       {children}
     </div>
   );
@@ -687,7 +683,7 @@ export function TabCard({
       // the keys stay where they were while a switcher is held; one picked on
       // the click is a Tab stop, so the keys reach it.
       tabIndex={pickOnPress ? -1 : 0}
-      className="luke-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-luke-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
+      className="ui-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-ui-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
       data-here={here}
       onPointerEnter={onPoint}
       onPointerDown={
@@ -709,27 +705,27 @@ export function TabCard({
       }}
       onContextMenu={pickOnPress ? (event) => event.preventDefault() : undefined}
     >
-      <div className="luke-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-luke-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
+      <div className="ui-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-ui-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
         {still === undefined ? (
-          <span className="luke-tab-card-glyph inline-flex text-muted-foreground [--luke-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
+          <span className="ui-tab-card-glyph inline-flex text-muted-foreground [--ui-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
             {icon}
           </span>
         ) : (
           <img
-            className="luke-tab-card-still size-full object-cover object-left-top"
+            className="ui-tab-card-still size-full object-cover object-left-top"
             src={still}
             alt=""
             draggable={false}
           />
         )}
       </div>
-      <div className="luke-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--luke-glyph-size:var(--luke-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.luke-text]:min-w-0 [&>.luke-text]:flex-auto [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
+      <div className="ui-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--ui-glyph-size:var(--ui-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.ui-text]:min-w-0 [&>.ui-text]:flex-auto [&>.ui-text]:overflow-hidden [&>.ui-text]:text-ellipsis">
         {icon}
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
           {label}
         </Text>
       </div>
-      <div className="luke-tab-card-detail flex items-center gap-1 whitespace-nowrap [&>.luke-text]:min-w-0 [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
+      <div className="ui-tab-card-detail flex items-center gap-1 whitespace-nowrap [&>.ui-text]:min-w-0 [&>.ui-text]:overflow-hidden [&>.ui-text]:text-ellipsis">
         {detail === undefined ? null : (
           <>
             {detailIcon}

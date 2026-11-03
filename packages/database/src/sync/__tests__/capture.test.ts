@@ -226,7 +226,7 @@ it.layer(getTestDB())("the drift check on the migrated database", (it) => {
       assert.deepEqual(
         yield* syncDrift(SYNC_TABLES),
         [],
-        "regenerate the drifted tables' capture: pnpm --filter @luke/database sync:render <migration> <table>…",
+        "regenerate the drifted tables' capture: pnpm --filter @repo/database sync:render <migration> <table>…",
       );
     }),
   );

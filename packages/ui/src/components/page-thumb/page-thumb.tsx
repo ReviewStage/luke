@@ -55,7 +55,7 @@ function VideoStill({ dataUrl }: { dataUrl: string }): React.JSX.Element | null 
   if (url === undefined) return null;
   return (
     <video
-      className="luke-page-thumb-image pointer-events-none size-full object-cover"
+      className="ui-page-thumb-image pointer-events-none size-full object-cover"
       src={url}
       muted
       playsInline
@@ -90,7 +90,7 @@ export function PageThumb({
       as="span"
       ratio={THUMB_RATIO}
       className={[
-        "luke-page-thumb group/page-thumb flex-none overflow-hidden rounded-control border border-border bg-muted text-muted-foreground",
+        "ui-page-thumb group/page-thumb flex-none overflow-hidden rounded-control border border-border bg-muted text-muted-foreground",
         SIZE_CLASS[size],
         glyph === undefined ? "" : "[&_svg]:size-control-icon",
         frame === undefined ? "" : "ph-no-capture",
@@ -103,7 +103,7 @@ export function PageThumb({
     >
       {image === undefined ? null : (
         <img
-          className="luke-page-thumb-image size-full object-cover"
+          className="ui-page-thumb-image size-full object-cover"
           src={image}
           alt=""
           draggable={false}
@@ -112,7 +112,7 @@ export function PageThumb({
       {video === undefined ? null : <VideoStill dataUrl={video} />}
       {frame === undefined ? null : (
         <iframe
-          className="luke-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"
+          className="ui-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"
           title={frame.title}
           src={frame.src}
           sandbox={frame.sandbox}

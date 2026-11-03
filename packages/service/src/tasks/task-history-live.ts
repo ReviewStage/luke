@@ -2,14 +2,14 @@ import {
   type LiveStatement,
   liveSelection,
   liveStatementOf,
-} from "@luke/database/core/live-statement";
-import { queryBuilder } from "@luke/database/core/query";
-import { taskSeenBy } from "@luke/database/models/workspace-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { member, user } from "@luke/database/schemas/auth";
-import { planRevision } from "@luke/database/schemas/plan-revision";
-import { task } from "@luke/database/schemas/task";
-import { PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
+} from "@repo/database/core/live-statement";
+import { queryBuilder } from "@repo/database/core/query";
+import { taskSeenBy } from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { member, user } from "@repo/database/schemas/auth";
+import { planRevision } from "@repo/database/schemas/plan-revision";
+import { task } from "@repo/database/schemas/task";
+import { PLAN_HISTORY_BOUNDS } from "@repo/features/task-wire";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -25,7 +25,7 @@ import { Option } from "effect";
  * does not reach is no rows. Each column is under the key `live-wire.ts`
  * reads it by and each instant in epoch milliseconds. It reads no clock, as
  * Realtime requires, and keeps no order, which the reader keeps
- * (`revisionsOfLiveRows`). Older pages are read as before.
+ * (`revisionsOfLiveRows`). Older pages are read through `listRevisions`.
  */
 
 /** The statement one task's newest page of history is followed by. */

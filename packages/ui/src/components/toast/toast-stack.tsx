@@ -69,7 +69,7 @@ export function ToastStack({
   useAnnounce(ANNOUNCE.ALERT, alert);
   return (
     <>
-      <section className="luke-toast-stack pointer-events-none fixed z-toast" aria-label={label}>
+      <section className="ui-toast-stack pointer-events-none fixed z-toast" aria-label={label}>
         <ol ref={list} className="m-0 flex list-none flex-col gap-toast-gap p-0">
           {children}
         </ol>

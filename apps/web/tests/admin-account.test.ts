@@ -4,15 +4,15 @@ import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
-} from "@luke/features/admin-account-wire";
-import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
-import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
-import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { AccountScreen } from "@luke/panel/admin/screens/account";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/features/admin-account-wire";
+import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
+import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-wire";
+import { INTEGRATION_ROW_STATUS } from "@repo/features/integration-row-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { AccountScreen } from "@repo/panel/admin/screens/account";
+import { EXPERIMENT } from "@repo/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -195,7 +195,7 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     response === undefined ? new Promise(() => undefined) : Promise.resolve(response),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const backs: number[] = [];
   const page = document.createElement("div");
   document.body.replaceChildren(page);

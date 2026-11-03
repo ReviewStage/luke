@@ -1,29 +1,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { automation, automationRun } from "@luke/database/schemas/automation";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { integrationConnection } from "@luke/database/schemas/integration";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { Database } from "@repo/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { automation, automationRun } from "@repo/database/schemas/automation";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { integrationConnection } from "@repo/database/schemas/integration";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   getTestDB,
   joinWorkspace,
   openInstallationWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import {
   ADMIN_ATTENTION_KIND,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_WINDOW,
-} from "@luke/features/admin-wire";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
+} from "@repo/features/admin-wire";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,10 +33,10 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunReason,
   type AutomationRunStatus,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { TURN_ORIGIN } from "@luke/wire";
+} from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { TURN_ORIGIN } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { REPOSITORY_REFUSAL } from "../agents/repository-shell.js";
@@ -250,7 +250,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
 
         const answer = yield* read(ADMIN_METRICS_SCOPE.NON_ADMINS);
         assert.deepEqual(answer.headline, {
-          lukeTurns: { failed: 2, total: 6 },
+          appTurns: { failed: 2, total: 6 },
           agentRuns: { failed: 4, total: 5 },
           abandonedTurns: 1,
           automationRuns: { failed: 1, skipped: 1, total: 4 },
@@ -274,12 +274,12 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             { reason: AUTOMATION_RUN_REASON.UNAVAILABLE, skipped: 0, failed: 1 },
           ],
         );
-        assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.lukeTurns, null);
+        assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.appTurns, null);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.agentRuns, 1);
         assert.equal(answer.systemHealth.database.reachable, true);
 
         const everyone = yield* read(ADMIN_METRICS_SCOPE.ALL);
-        assert.deepEqual(everyone.headline.lukeTurns, { failed: 3, total: 7 });
+        assert.deepEqual(everyone.headline.appTurns, { failed: 3, total: 7 });
       }),
   );
 });

@@ -19,7 +19,7 @@ import {
   type GatewayShutdownSteps,
   type NodeRegistry,
   shutdownGatewayEffect,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
 import type { Composer } from "../composer.js";
 import type { HostConcern } from "../host-concerns.js";
@@ -102,7 +102,7 @@ export interface HostAssembly {
 }
 
 export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssembly>()(
-  "@luke/host/HostAssembly",
+  "@repo/host/HostAssembly",
 ) {}
 
 /** The host with every composer started: what a client operates and what the quit drains. */
@@ -111,7 +111,7 @@ export interface StandingHost {
   readonly drain: HostDrain;
 }
 
-export class HostTag extends Context.Service<HostTag, StandingHost>()("@luke/host/Host") {}
+export class HostTag extends Context.Service<HostTag, StandingHost>()("@repo/host/Host") {}
 
 /**
  * The composers started in the assembly's order, the loops armed after the

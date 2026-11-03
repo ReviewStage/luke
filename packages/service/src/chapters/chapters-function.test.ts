@@ -1,4 +1,4 @@
-import { CHAPTER_GENERATION_STALE_MS } from "@luke/database/models/pull-request-chapters-store";
+import { CHAPTER_GENERATION_STALE_MS } from "@repo/database/models/pull-request-chapters-store";
 import { Duration } from "effect";
 import { expect, it } from "vitest";
 import { PULL_REQUEST_CHAPTERS_FUNCTION } from "./chapters-function.js";

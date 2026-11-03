@@ -1,5 +1,5 @@
-import { WRITING_MARK } from "@luke/settings/shortcuts";
-import { FormatToolbar, LinkField, POPOVER_SIDE, RectFloat } from "@luke/ui";
+import { WRITING_MARK } from "@repo/settings/shortcuts";
+import { FormatToolbar, LinkField, POPOVER_SIDE, RectFloat } from "@repo/ui";
 import { useRef } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

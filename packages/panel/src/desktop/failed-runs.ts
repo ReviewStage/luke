@@ -2,7 +2,7 @@
  * failed-runs.ts -- tells the developer in the window that a run of their own automation failed to start: whether the sidebar's Automations wears the failed mark.
  *
  * The window says a failed run by this mark alone, the OS's notification
- * saying it too while the window is behind (`@luke/host/agent-notices`); the
+ * saying it too while the window is behind (`@repo/host/agent-notices`); the
  * mark goes on saying it until the automation is opened. Main hands the window the
  * newest failed run of each of the account's own automations
  * (`AppInboxSlice.failedRuns`), and opening an automation sees its failure,
@@ -11,13 +11,13 @@
  * nothing, so its frames never wear a developer's choices.
  */
 
-import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { readKept, writeKept } from "../kept-storage.js";
 
 /** Where the failures seen are kept in the renderer's storage. */
-const STORAGE_KEY = "luke.seenFailedRuns";
+const STORAGE_KEY = "app.seenFailedRuns";
 
 /** The newest failed run seen of each automation, by the automation's id. */
 const storedSeen = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));

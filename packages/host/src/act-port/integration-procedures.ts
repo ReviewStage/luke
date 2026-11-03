@@ -6,7 +6,7 @@ import type {
   IntegrationStatusesView,
   IntegrationStatusView,
   IntegrationToolsView,
-} from "@luke/features/integration-view";
+} from "@repo/features/integration-view";
 import { Effect } from "effect";
 import { INTEGRATION_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";

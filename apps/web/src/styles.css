@@ -2,23 +2,23 @@
  *
  * The page chrome is Tailwind, written at its call sites. What stays in this
  * file is what utilities cannot hold: the theme. The generated documents'
- * typography is `@luke/ui`'s `Prose`.
+ * typography is `@repo/ui`'s `Prose`.
  */
 
 @import "tailwindcss";
 
-/* The shared tokens: `@luke/ui`'s scale, the web profile's roles, and its
-   light and dark palettes, keyed on each page root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
+/* The shared tokens: `@repo/ui`'s scale, the web profile's roles, and its
+   light and dark palettes, keyed on each page root's `data-ui-profile="web"` and `data-ui-theme` (the HTML entry
    points). */
-@import "@luke/ui/tokens.css";
+@import "@repo/ui/tokens.css";
 /* The shared components' own rules, in Tailwind's `components` layer, over
    the preflight and under the utilities. */
-@import "@luke/ui/styles.css";
-/* The utilities `@luke/ui`'s components spell (a button's box, corner, and
+@import "@repo/ui/styles.css";
+/* The utilities `@repo/ui`'s components spell (a button's box, corner, and
    edge), read from its own modules, and the shadcn/ui vocabulary they are
    spelled in, as every app's Tailwind entry takes them. */
-@import "@luke/ui/tailwind/sources.css";
-@import "@luke/ui/tailwind/theme.css";
+@import "@repo/ui/tailwind/sources.css";
+@import "@repo/ui/tailwind/theme.css";
 
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */
@@ -30,21 +30,21 @@
    drift waiting to happen. Every value is a shared role's, merely aliased
    here, so the utilities and the plain-CSS blocks draw the same vocabulary.
    No colour is aliased: the page and the admin dashboard spell a role
-   directly (`text-(--luke-color-text-muted)`), and the chart configs read
-   `--luke-color-chart-*`. */
+   directly (`text-(--ui-color-text-muted)`), and the chart configs read
+   `--ui-color-chart-*`. */
 @theme inline {
-  --radius-sm: var(--luke-radius-6);
-  --radius-md: var(--luke-control-radius);
+  --radius-sm: var(--ui-radius-6);
+  --radius-md: var(--ui-control-radius);
 
-  --font-sans: var(--luke-font-sans);
-  --font-mono: var(--luke-font-mono);
-  --font-brand: var(--luke-font-display);
+  --font-sans: var(--ui-font-sans);
+  --font-mono: var(--ui-font-mono);
+  --font-brand: var(--ui-font-display);
 }
 
 :root {
   /* The page's palette, its fonts, its 4px space scale, and its corner are
-     the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
-     read here as its `--luke-*` roles. A page is light unless its root asks for the dark
+     the web profile's in `@repo/ui` (`tokens/palettes.css`, `profiles.css`),
+     read here as its `--ui-*` roles. A page is light unless its root asks for the dark
      theme: the app and the admin dashboard ask for it from the account's
      Theme setting (`public/app-theme.js`), the OAuth cards by their own page. */
   font-optical-sizing: auto;
@@ -52,37 +52,37 @@
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
-   wears them by the ground (`@luke/ui`'s `marks/provider-mark.tsx`). The one
+   wears them by the ground (`@repo/ui`'s `marks/provider-mark.tsx`). The one
    page that draws an integration's mark, its landing, is on the dark ground,
    so these are the dark inks: Executor's, Notion's, and Sentry's white,
    Mercury's near-white, and Neon's green for a dark ground. */
-[data-luke-theme="dark"]
+[data-ui-theme="dark"]
 :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
   color: #fff;
 }
 
-[data-luke-theme="dark"] .integration-mark-mercury {
+[data-ui-theme="dark"] .integration-mark-mercury {
   color: #f4f5f9;
 }
 
-[data-luke-theme="dark"] .integration-mark-neon {
+[data-ui-theme="dark"] .integration-mark-neon {
   color: #34d59a;
 }
 
 @layer base {
   html {
-    font-family: var(--luke-font-sans);
+    font-family: var(--ui-font-sans);
   }
 
   body {
-    background: var(--luke-color-ground);
-    color: var(--luke-color-text);
-    line-height: var(--luke-type-reading-leading);
+    background: var(--ui-color-ground);
+    color: var(--ui-color-text);
+    line-height: var(--ui-type-reading-leading);
     -webkit-font-smoothing: antialiased;
   }
 
   :focus-visible {
-    outline: 2px solid var(--luke-color-focus-ring);
+    outline: 2px solid var(--ui-color-focus-ring);
     outline-offset: 3px;
   }
 

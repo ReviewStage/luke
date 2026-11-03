@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { authApp, type WebRequestHandler } from "@luke/service/auth/auth-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { authApp, type WebRequestHandler } from "@repo/service/auth/auth-app";
+import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
@@ -22,7 +22,7 @@ import { recordedResponse, settleResponseGolden } from "./support/response-golde
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/auth-route");
 
 /** The layer names a database and nothing here queries one, as in `web-runtime.test.ts`. */
-const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/app";
 
 const AUTH_ORIGIN = "https://app.test";
 

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -74,7 +74,7 @@ async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promi
 
 /** Which side of the caret's line a list opened in the card hangs on, as the layer it hangs in says. */
 function sideOf(list: HTMLElement): string | null {
-  const layer = list.closest(".luke-rect-float") ?? assert.fail("the list hangs in a layer");
+  const layer = list.closest(".ui-rect-float") ?? assert.fail("the list hangs in a layer");
   return layer.getAttribute("data-side");
 }
 

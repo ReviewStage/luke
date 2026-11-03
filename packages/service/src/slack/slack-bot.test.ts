@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { linkSlackInstallation } from "@luke/database/models/slack-installation-store";
-import { organization, user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
+import { organization, user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
 import { DateTime, Effect, Option } from "effect";
 import { SlackBotFailure, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 

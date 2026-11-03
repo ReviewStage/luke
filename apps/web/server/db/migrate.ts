@@ -1,9 +1,9 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { runWebMigrations } from "@luke/database/core/migrator";
-import { waitingOutNeonComputeLimit } from "@luke/database/core/neon-compute-limit";
-import { databaseOverPgClient } from "@luke/database/core/query";
+import { runWebMigrations } from "@repo/database/core/migrator";
+import { waitingOutNeonComputeLimit } from "@repo/database/core/neon-compute-limit";
+import { databaseOverPgClient } from "@repo/database/core/query";
 import { Config, Effect, Layer } from "effect";
 
 /**

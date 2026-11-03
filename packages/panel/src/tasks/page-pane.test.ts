@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import type { pageFindAnswerSchema } from "@luke/features/page-find";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@luke/features/page-pick";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import type { pageFindAnswerSchema } from "@repo/features/page-find";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@repo/features/page-pick";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { PlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/features/plan-comment-wire";
+import { type CodeLines, TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -308,7 +308,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+  return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 
@@ -341,17 +341,17 @@ test("⌘F over the page asks its frame to find, and the bar tallies what that f
     offered = runAppCommand(APP_COMMAND.FIND);
   });
   typeFind("invites");
-  postFrom(null, { type: "luke-page-find", tally: { count: 9, at: 0 } });
+  postFrom(null, { type: "app-page-find", tally: { count: 9, at: 0 } });
   const tallyBefore = findTally();
-  postFrom(frame().contentWindow, { type: "luke-page-find", tally: { count: 3, at: 0 } });
+  postFrom(frame().contentWindow, { type: "app-page-find", tally: { count: 3, at: 0 } });
   act(() => {
     runAppCommand(APP_COMMAND.FIND_NEXT);
   });
 
   assert.equal(offered, true);
   assert.deepEqual(posted, [
-    { type: "luke-page-find", act: "search", query: "invites" },
-    { type: "luke-page-find", act: "step", query: "invites", by: 1 },
+    { type: "app-page-find", act: "search", query: "invites" },
+    { type: "app-page-find", act: "step", query: "invites", by: 1 },
   ]);
   assert.equal(tallyBefore, "No results");
   assert.equal(findTally(), "1 of 3");
@@ -360,7 +360,7 @@ test("⌘F over the page asks its frame to find, and the bar tallies what that f
 test("⌘F over the page is seeded with the words selected in its frame", () => {
   const { frame } = mount(FUNNEL);
 
-  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "app-page-find", selection: "funnel" });
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
   });
@@ -381,22 +381,22 @@ test("a frame that loads again, as a Reload or another version does, is asked ag
     frame().dispatchEvent(new Event("load"));
   });
 
-  assert.deepEqual(posted, [{ type: "luke-page-find", act: "search", query: "invites" }]);
+  assert.deepEqual(posted, [{ type: "app-page-find", act: "search", query: "invites" }]);
 });
 
 test("⌘F and ⌘G pressed in the page, which the window's keys never hear, open the find over it and step, whichever column held the keys", () => {
   const { frame } = mount(FUNNEL, readSource, false);
   const posted = framePosts(frame());
 
-  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
-  postFrom(frame().contentWindow, { type: "luke-page-find", key: "find" });
-  postFrom(frame().contentWindow, { type: "luke-page-find", key: "next" });
+  postFrom(frame().contentWindow, { type: "app-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "app-page-find", key: "find" });
+  postFrom(frame().contentWindow, { type: "app-page-find", key: "next" });
 
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.equal(field?.value, "funnel");
   assert.deepEqual(posted, [
-    { type: "luke-page-find", act: "search", query: "funnel" },
-    { type: "luke-page-find", act: "step", query: "funnel", by: 1 },
+    { type: "app-page-find", act: "search", query: "funnel" },
+    { type: "app-page-find", act: "step", query: "funnel", by: 1 },
   ]);
 });
 
@@ -550,7 +550,7 @@ test("Comment asks the frame for an element, an element holding threads is pinne
     { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.STOP },
   ]);
   assert.ok(
-    container.querySelector('button.luke-comment-pin[aria-label="1 comment"]'),
+    container.querySelector('button.ui-comment-pin[aria-label="1 comment"]'),
     "the element is pinned",
   );
   const field = container.querySelector(".page-comment-float");
@@ -560,7 +560,7 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
   postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
   const standing = container.querySelector(
-    ".luke-rect-float:not([data-leaving]) .page-comment-float",
+    ".ui-rect-float:not([data-leaving]) .page-comment-float",
   );
   assert.ok(standing === null, "the comment being started goes");
 });

@@ -1,8 +1,8 @@
-import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { noMatchWords, TERM } from "@luke/features/words";
-import { managesWorkspace } from "@luke/features/workspace-role";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
+import { noMatchWords, TERM } from "@repo/features/words";
+import { managesWorkspace } from "@repo/features/workspace-role";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
@@ -11,18 +11,18 @@ import {
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   EXPERIMENT_ANCHOR,
   SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
   SETTINGS_SEARCH_ROW,
-} from "@luke/settings/settings-anchors";
+} from "@repo/settings/settings-anchors";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsView,
-} from "@luke/settings/settings-views";
+} from "@repo/settings/settings-views";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -43,7 +43,7 @@ import {
   WRITING_KEYS_IN_CONTEXT,
   WRITING_SHORTCUTS,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   commandKeyshortcuts,
   GAP,
@@ -56,12 +56,12 @@ import {
   SearchField,
   Shortcut,
   Stack,
-} from "@luke/ui";
-import { integrationLines } from "@luke/ui/integration-search";
-import { land } from "@luke/ui/landed";
-import { searchHit } from "@luke/ui/search-score";
-import { type MatchRange, searchTokens } from "@luke/ui/search-tokens";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
+} from "@repo/ui";
+import { integrationLines } from "@repo/ui/integration-search";
+import { land } from "@repo/ui/landed";
+import { searchHit } from "@repo/ui/search-score";
+import { type MatchRange, searchTokens } from "@repo/ui/search-tokens";
+import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";

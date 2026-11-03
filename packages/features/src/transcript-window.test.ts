@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { test } from "vitest";
+import { AGENT_SENDER } from "./agent-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import {
   joinedWindowRows,
   TRANSCRIPT_WINDOW,
@@ -86,4 +88,13 @@ test("a window followed by cursor joins an answer past the cursor by message id:
     { type: "text", text: "line-2" },
     { type: "text", text: "and more" },
   ]);
+});
+
+test("a line whose row names its sender `luke`, as an earlier build stored the app's, is drawn as sent by the app", () => {
+  const drawn = windowMessagesOf(
+    [{ ...row("wake", 1, 1), sender: "luke" }],
+    [part("wake", 0, "Rebase.")],
+  );
+
+  assert.deepEqual(drawn[0]?.sentBy, { name: PRODUCT_NAME, kind: AGENT_SENDER.APP });
 });

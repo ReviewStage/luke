@@ -1,5 +1,5 @@
-import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
+import { githubAvatarAt, githubAvatarUrl } from "@repo/features/account-picture";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
 import {
   type AgentOverviewChecks,
   type AgentOverviewConversation,
@@ -22,18 +22,18 @@ import {
   REVIEW_STATE,
   type ReactionGroup,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { formatCount } from "@luke/features/number-format";
-import type { FailureSurface } from "@luke/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { workingTime } from "@luke/features/time-format";
-import { INLINE_DIFF } from "@luke/settings/diff-view";
+} from "@repo/features/link-grammar";
+import { formatCount } from "@repo/features/number-format";
+import type { FailureSurface } from "@repo/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { workingTime } from "@repo/features/time-format";
+import { INLINE_DIFF } from "@repo/settings/diff-view";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -104,8 +104,8 @@ import {
   useMenu,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleSlashIcon,
@@ -116,9 +116,9 @@ import {
   ScanSearchIcon,
   TriangleAlertIcon,
   XIcon,
-} from "@luke/ui/icons";
-import { landedMark } from "@luke/ui/landed";
-import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/ui/icons";
+import { landedMark } from "@repo/ui/landed";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
 import {
   type ComponentProps,
   createContext,
@@ -352,7 +352,7 @@ const CHAPTERS_TAB = lazyRoute(() =>
  * (`SCROLL_FADE_INSET.BAND`).
  */
 const VIEW_CLASS =
-  "pull-request-view [--luke-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
+  "pull-request-view [--ui-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
 
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
@@ -658,7 +658,7 @@ export function Section({
       {/* Note that the title is cut in a line of its own, since a flex row's bare words are never cut, and the count after it stays whole. */}
       <OneLine className="flex-initial">{title}</OneLine>
       {count === undefined ? null : (
-        <span className="pull-request-count flex-none font-luke-regular text-muted-foreground tabular-nums">
+        <span className="pull-request-count flex-none font-ui-regular text-muted-foreground tabular-nums">
           {count}
         </span>
       )}
@@ -1421,7 +1421,7 @@ function ThreadComments({
         ))}
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="annotation-card-more mr-0 mb-0 mt-luke-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
+        <p className="annotation-card-more mr-0 mb-0 mt-ui-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
           <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
@@ -2502,7 +2502,7 @@ function ConversationView({
     >
       {/* Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
       stands them, so the Conversation and the Checks read alike. */}
-      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--luke-page-measure)]">
+      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--ui-page-measure)]">
         <DescriptionPart
           agentId={agentId}
           part={parts.pullRequest}
@@ -2823,7 +2823,7 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
  * Checks' page column, the Conversation's scroller, and the diff list's.
  */
 const VIEW_SCROLLER =
-  ".luke-detail-page-main, .pull-request-view > .luke-scroll-area, .diff-list > .luke-scroll-area";
+  ".ui-detail-page-main, .pull-request-view > .ui-scroll-area, .diff-list > .ui-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at

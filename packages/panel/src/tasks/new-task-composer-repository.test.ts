@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -126,7 +126,7 @@ async function mount(
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
   const { container } = await mount(TOKEN_LISTING);
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
   await settle();
@@ -146,7 +146,7 @@ test("a refresh that fails when the window comes back keeps the listed repositor
     failing ? Promise.reject(new Error("offline")) : TOKEN_LISTING(),
   );
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
   await settle();
@@ -183,18 +183,16 @@ test("a refresh that fails when the window comes back keeps the listed repositor
 
 test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
-  restOn(
-    container.querySelector(".luke-chip") ?? assert.fail("the card draws the repository chip"),
-  );
+  restOn(container.querySelector(".ui-chip") ?? assert.fail("the card draws the repository chip"));
   const card = document.querySelector("[data-repository-card]");
 
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "octo");
 });
 
 test("a repository's row in the picker hangs the same card", async () => {
   const { container } = await mount(TOKEN_LISTING);
-  act(() => container.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
   await settle();
   restOn(
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
@@ -203,14 +201,14 @@ test("a repository's row in the picker hangs the same card", async () => {
   );
   const card = document.querySelector("[data-repository-card]");
 
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "octo");
 });
 
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
@@ -242,7 +240,7 @@ test("a preset a read does not list is let go, so a later read listing it does n
   act(() => window.dispatchEvent(new Event("focus")));
   await settle();
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);
@@ -268,7 +266,7 @@ test("a preset survives a read made before the workspace resolved and stands onc
   scope.id = ACME.id;
   await redraw();
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
@@ -296,7 +294,7 @@ test("a recent default a read does not list is let go, so a later read listing i
   act(() => window.dispatchEvent(new Event("focus")));
   await settle();
   const chip =
-    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);

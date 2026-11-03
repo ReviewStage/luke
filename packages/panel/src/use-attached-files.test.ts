@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAgentAnswer } from "@luke/features/agent-view";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { FAILURE_SURFACE, type ShownFailureReport } from "@luke/features/shown-failure";
+import type { AgentAgentAnswer } from "@repo/features/agent-view";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { FAILURE_SURFACE, type ShownFailureReport } from "@repo/features/shown-failure";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -150,7 +150,7 @@ function held(container: HTMLElement) {
     chips: [...container.querySelectorAll('[aria-label="Attached files"] > li')].map(
       attachmentChipName,
     ),
-    note: container.querySelector('.luke-composer-foot-note [role="alert"]')?.textContent ?? null,
+    note: container.querySelector('.ui-composer-foot-note [role="alert"]')?.textContent ?? null,
   };
 }
 

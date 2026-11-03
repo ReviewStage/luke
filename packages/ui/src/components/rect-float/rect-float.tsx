@@ -30,7 +30,7 @@ import { type PressAway, usePressAway } from "../anchored-popover/press-away.js"
  * the focus. It is measured as it is drawn, before it is painted, each time
  * it is drawn again, whenever it resizes or the window does, and whenever
  * anything scrolls, since a scroll may leave its side no room. The height
- * its side leaves it is handed to what it holds as `--luke-popover-room`,
+ * its side leaves it is handed to what it holds as `--ui-popover-room`,
  * as the anchored popover's is, which a tall list bounds itself by. A press
  * outside it is handed to its owner, who closes it unless the press lands
  * on what it `holds`, the field whose caret it stands by say
@@ -202,7 +202,7 @@ export function RectFloat({
   return (
     <div
       ref={drawn}
-      className="luke-rect-float"
+      className="ui-rect-float"
       data-side={place?.side ?? side}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
@@ -214,7 +214,7 @@ export function RectFloat({
               left: place.left,
               top: place.top,
               maxWidth: place.width,
-              ...cssCustomProperties({ "--luke-popover-room": `${place.room}px` }),
+              ...cssCustomProperties({ "--ui-popover-room": `${place.room}px` }),
             }),
       }}
     >

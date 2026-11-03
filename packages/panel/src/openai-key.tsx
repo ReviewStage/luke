@@ -2,9 +2,9 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@luke/features/provider-key-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { agentKeyLink } from "@luke/settings/settings-views";
+} from "@repo/features/provider-key-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { agentKeyLink } from "@repo/settings/settings-views";
 import {
   createContext,
   type ReactNode,

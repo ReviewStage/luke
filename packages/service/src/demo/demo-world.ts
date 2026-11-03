@@ -1,12 +1,12 @@
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { INBOX_ASK, INBOX_FIELD, type InboxAsk } from "@luke/features/inbox-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { INBOX_ASK, INBOX_FIELD, type InboxAsk } from "@repo/features/inbox-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
 /**
  * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their plans, the comments on them, and its channels.
@@ -599,7 +599,7 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
   ],
 };
 
-/** Dana's agent on Webhook retries, finished and merged. */
+/** Dean's agent on Dana's Webhook retries, finished and merged. */
 export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
   key: "demo-agent-webhooks",
   task: DEMO_WEBHOOKS_TASK,
@@ -609,7 +609,7 @@ export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
   turns: [
     {
       id: demoId(DEMO_ID_KIND.TURN, 3),
-      from: DANA,
+      from: DEMO_DEAN,
       line: "Retry failed webhook deliveries as the plan says, with replay for the dead ones.",
       startedAgo: 5 * HOUR,
       ranFor: 24 * MINUTE,
@@ -653,7 +653,7 @@ export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
   ],
 };
 
-/** Jordan's agent on Onboarding checklist, which asked where the checklist should sit. */
+/** Dean's agent on Jordan's Onboarding checklist, which asked Jordan where the checklist should sit. */
 export const DEMO_ONBOARDING_AGENT: DemoAgent = {
   key: "demo-agent-onboarding",
   task: DEMO_ONBOARDING_TASK,
@@ -663,7 +663,7 @@ export const DEMO_ONBOARDING_AGENT: DemoAgent = {
   turns: [
     {
       id: demoId(DEMO_ID_KIND.TURN, 4),
-      from: JORDAN,
+      from: DEMO_DEAN,
       line: "Build the onboarding checklist from the plan. Keep it to what the workspace already stores.",
       startedAgo: 6 * HOUR,
       ranFor: 16 * MINUTE,
@@ -693,7 +693,12 @@ export const DEMO_ONBOARDING_AGENT: DemoAgent = {
   ],
 };
 
-/** The finished agents, each started on its task in the order given. */
+/**
+ * The finished agents, each started on its task in the order given, every
+ * one by Dean: they run on his host (`DEMO_HOST`), which runs its owner's
+ * agents alone, so he can follow up on any of them. His teammates stand in
+ * the tasks they made and are assigned, the comments, and the threads.
+ */
 export const DEMO_AGENTS: readonly DemoAgent[] = [
   DEMO_ONBOARDING_AGENT,
   DEMO_WEBHOOKS_AGENT,

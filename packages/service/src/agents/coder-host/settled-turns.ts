@@ -2,7 +2,7 @@
  * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, and the report to the agent's starter.
  *
  * The writer tells its `SettledTurnListener` once the settle's transaction
- * is done (`@luke/database/models/writer`), whichever path settled the turn:
+ * is done (`@repo/database/models/writer`), whichever path settled the turn:
  * the relay's or a runner's own end, a Stop, a lost session's, or the
  * sweep's abandon. This is the one listener the deployment provides
  * (`../../runtime.ts`), and it does two things with each turn: counts it
@@ -15,8 +15,8 @@
  * no transaction open over eve.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/models/writer";
 import { Context, Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -24,9 +24,7 @@ import type { HostedEnvironment } from "../../environment.js";
 import { turnEndCounted } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
-import { deploymentEveForAccounts } from "../deployment-eve.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
+import { routedSessions } from "./runtime-sessions.js";
 import { reportToStarter } from "./starter-report.js";
 
 /** The work run on the pool rather than on a transaction the settle ran inside, which has ended by the time the answer has left. */
@@ -56,10 +54,10 @@ export const settledTurnListener: Layer.Layer<
     const reported = (turn: SettledAgentTurn) =>
       afterResponse(
         "a started agent's final message",
-        Effect.flatMap(
-          deploymentEveForAccounts<EveTypedTurn>(deploymentEveOrigin(), EVE_MOUNT.CODER),
-          (eveFor) => reportToStarter(eveFor, turn),
-        ).pipe(Effect.provideContext(reach), outsideTransaction),
+        reportToStarter(routedSessions, turn).pipe(
+          Effect.provideContext(reach),
+          outsideTransaction,
+        ),
       );
     return {
       heard: (turn) => Effect.all([turnEndCounted(turn), reported(turn)], { discard: true }),

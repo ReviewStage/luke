@@ -5,7 +5,7 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

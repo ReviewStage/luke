@@ -7,7 +7,7 @@ import {
   PlayIcon,
   SplitButton,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -10,7 +10,7 @@ import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

@@ -7,22 +7,22 @@
    anchoring is left out of the run, because the virtualizer holds the
    reader's place itself, and both would move the scroll twice. */
 @layer components {
-  .luke-virtual-rows {
+  .ui-virtual-rows {
     overflow-anchor: none;
   }
 
-  .luke-virtual-row {
+  .ui-virtual-row {
     display: flow-root;
   }
 
-  .luke-virtual-items {
+  .ui-virtual-items {
     margin: 0;
     padding-inline: 0;
     list-style: none;
   }
 
-  .luke-virtual-row + .luke-virtual-row,
-  .luke-virtual-items > * + * {
-    margin-block-start: var(--luke-virtual-gap);
+  .ui-virtual-row + .ui-virtual-row,
+  .ui-virtual-items > * + * {
+    margin-block-start: var(--ui-virtual-gap);
   }
 }

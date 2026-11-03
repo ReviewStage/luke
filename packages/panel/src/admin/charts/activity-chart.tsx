@@ -8,11 +8,11 @@
  * apart by the heading alone, and the tooltip carries each day's exact counts.
  */
 
-import type { AdminOverview } from "@luke/features/admin-answer-wire";
-import { ACTIVITY_FEATURE, type ActivityFeature } from "@luke/features/admin-overview-vocabulary";
-import type { ChartConfig } from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
-import { seriesHasNoData } from "@luke/ui/daily-series";
+import type { AdminOverview } from "@repo/features/admin-answer-wire";
+import { ACTIVITY_FEATURE, type ActivityFeature } from "@repo/features/admin-overview-vocabulary";
+import type { ChartConfig } from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
+import { seriesHasNoData } from "@repo/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import {
   ChartEmpty,
@@ -32,19 +32,19 @@ const ACTIVITY_PLOT_HEIGHT = "15rem";
 const ACTIVITY_CHART = {
   [ACTIVITY_FEATURE.AGENTS_STARTED]: {
     label: "Agents started",
-    color: "var(--luke-color-chart-1)",
+    color: "var(--ui-color-chart-1)",
   },
   [ACTIVITY_FEATURE.PLAN_REVISIONS]: {
     label: "Plan revisions",
-    color: "var(--luke-color-chart-2)",
+    color: "var(--ui-color-chart-2)",
   },
   [ACTIVITY_FEATURE.INBOX_ANSWERED]: {
     label: "Inbox items answered",
-    color: "var(--luke-color-chart-3)",
+    color: "var(--ui-color-chart-3)",
   },
   [ACTIVITY_FEATURE.AUTOMATION_RUNS]: {
     label: "Automation runs",
-    color: "var(--luke-color-chart-4)",
+    color: "var(--ui-color-chart-4)",
   },
 } satisfies ChartConfig & Record<ActivityFeature, { label: string; color: string }>;
 

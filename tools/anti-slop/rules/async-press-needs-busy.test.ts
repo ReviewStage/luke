@@ -26,7 +26,7 @@ RuleTester.it = it;
 
 const tester = new RuleTester();
 
-const IMPORT = 'import { Button, IconButton, ProviderButton } from "@luke/ui";\n';
+const IMPORT = 'import { Button, IconButton, ProviderButton } from "@repo/ui";\n';
 
 function panel(code: string): { code: string; filename: string } {
   return { code: IMPORT + code, filename: PANEL_FILE };
@@ -63,13 +63,13 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
     panel(
       "function A() { function again() { again(); } return <Button onClick={() => again()} />; }",
     ),
-    // A name that is no `@luke/ui` button, or a lowercase element, is not the rule's.
+    // A name that is no `@repo/ui` button, or a lowercase element, is not the rule's.
     {
       code: 'import { Button } from "./my-button.js"; function A({ press }) { return <Button onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
     },
     {
-      code: 'import { TextButton } from "@luke/ui"; function A({ press }) { return <TextButton onClick={() => press(K)} />; }',
+      code: 'import { TextButton } from "@repo/ui"; function A({ press }) { return <TextButton onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
     },
     // A handler held under a name that is declared twice is no one function.
@@ -147,13 +147,13 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
       ),
       errors: [{ messageId: "noBusy" }],
     },
-    // A button under a `@luke/ui` subpath, or renamed on import.
+    // A button under a `@repo/ui` subpath, or renamed on import.
     {
-      code: 'import { Button as Press } from "@luke/ui/button"; function A({ press }) { return <Press onClick={() => press(K)} />; }',
+      code: 'import { Button as Press } from "@repo/ui/button"; function A({ press }) { return <Press onClick={() => press(K)} />; }',
       filename: PANEL_FILE,
       errors: [{ messageId: "noBusy" }],
     },
-    // Inside `@luke/ui` a relative import is the button.
+    // Inside `@repo/ui` a relative import is the button.
     {
       code: 'import { Button } from "../button/button.js"; function A({ press }) { return <Button onClick={() => press(K)} />; }',
       filename: UI_FILE,

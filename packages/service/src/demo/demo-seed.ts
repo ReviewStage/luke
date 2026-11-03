@@ -1,17 +1,17 @@
 import type { DB } from "@better-auth/drizzle-adapter";
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import { type Agent, createAgent } from "@luke/database/models/agent-store";
-import { createChannel } from "@luke/database/models/channel-store";
-import { enrollOwnDevice } from "@luke/database/models/host-store";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { type Agent, createAgent } from "@repo/database/models/agent-store";
+import { createChannel } from "@repo/database/models/channel-store";
+import { enrollOwnDevice } from "@repo/database/models/host-store";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   startPlanCommentThread,
-} from "@luke/database/models/plan-comments";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey, setProviderKeyForAgents } from "@luke/database/models/provider-key-store";
-import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
+} from "@repo/database/models/plan-comments";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey, setProviderKeyForAgents } from "@repo/database/models/provider-key-store";
+import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   createTaskOnce,
   savePlanText,
@@ -20,30 +20,34 @@ import {
   type TaskRunsOnWrite,
   type TaskTreeRepositoryLocked,
   updateTask,
-} from "@luke/database/models/task-store";
-import { type WorkspaceSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
-import { createWorkspace, ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/task-store";
+import { type WorkspaceSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
+import { createWorkspace, ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import {
   type ConversationTarget,
   type StoreWriter,
   storeWriter,
-} from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { AGENT_MACHINE, MESSAGE_SENDER } from "@luke/features/agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { INBOX_REPLY, openAskOf } from "@luke/features/inbox-wire";
+} from "@repo/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { AGENT_MACHINE, MESSAGE_SENDER } from "@repo/features/agent-wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
-} from "@luke/features/plan-comment-wire";
-import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/plan-comment-wire";
+import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { type Cause, Clock, Data, Effect, Option, type Redacted, Result } from "effect";
+import {
+  agentRuntimeChoice,
+  localAgentRuntimeChoice,
+} from "../agents/coder-host/agent-runtime-choice.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import { ORGANIZATION_OPTIONS, USER_FIELDS } from "../auth/auth-policy.js";
@@ -100,11 +104,12 @@ import {
  * Dean's own workspace and acme beside it, with Dana, Jordan, Priya, and
  * Theo as members; #product, #engineering, and #design; seven tasks across
  * every status, each with a plan and comments on it; three finished coding
- * agents with their transcripts; and their threads, with an Inbox of asks
- * waiting on Dean and one he answered.
+ * agents of Dean's with their transcripts, on his host where the run starts
+ * one; and their threads, with an Inbox of asks waiting on Dean and one he
+ * answered.
  *
  * How to run it: `DATABASE_URL=<a Postgres on loopback> pnpm --filter
- * @luke/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
+ * @repo/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
  * is migrated and `auth:seed` has run. It refuses any database that is not
  * on loopback (`demo-database.ts`). Where `APP_DEMO_CLAUDE_TOKEN` (a
  * `claude setup-token`) or `APP_DEMO_ANTHROPIC_API_KEY` is set, it is saved
@@ -114,7 +119,11 @@ import {
  * environment to its sealed row alone. Where the run starts a host on this
  * Mac for Dean (`APP_DEMO_HOST_STATE`), it is enrolled as his own under
  * `DEMO_HOST`'s id, and every task runs its agents there, with no Runs on
- * to pick.
+ * to pick, the seeded ones among them, so a follow-up to one runs on the
+ * Mac. Note that Dean started all three agents, those on his teammates'
+ * tasks too, because a host runs its owner's agents alone, and an agent on
+ * a host takes words from its starter alone (`agent-reach.ts`'s
+ * `controlsAgent`).
  *
  * Every write goes through the model a route writes through, so the seed
  * keeps up with the schema. Users are Better Auth's own rows, made by its
@@ -534,10 +543,39 @@ function seedTurn(
   return clock.ago(turn.startedAgo, write);
 }
 
-/** One finished agent on its task, started by whoever sent its first line, with every turn of its transcript. */
-function seedAgent(agent: DemoAgent, writer: StoreWriter, clock: SeedClock) {
+/**
+ * The runtime and payer a Start of the model by the member on `runsOn`
+ * records (`start.ts`'s `startRuntimeOf`): on a host, its own Claude Code
+ * login where it said it has one, else the member's saved credential, as
+ * in the cloud. Note that one with no credential to pay, which a Start
+ * refuses, records Claude Code with no payer, as an agent from before
+ * payers does, because a seeded agent finished and stands; its next turn
+ * is paid for by what pays as it launches (`claude-code-sessions.ts`).
+ */
+function seededRuntime(userId: string, model: string, runsOn: TaskRunsOnWrite) {
+  const chosen =
+    runsOn.machine === AGENT_MACHINE.DEVICE && runsOn.deviceId !== null
+      ? localAgentRuntimeChoice(userId, model, runsOn.deviceId)
+      : agentRuntimeChoice(userId, model);
+  return Effect.catchTag(chosen, "AgentCredentialMissing", () =>
+    Effect.succeed({ runtime: CONVERSATION_RUNTIME.CLAUDE_CODE, payer: undefined }),
+  );
+}
+
+/**
+ * One finished agent on its task, started by whoever sent its first line,
+ * with every turn of its transcript, running where its task runs its
+ * agents and paid for as a Start there records it.
+ */
+function seedAgent(
+  agent: DemoAgent,
+  runsOn: TaskRunsOnWrite,
+  writer: StoreWriter,
+  clock: SeedClock,
+) {
   return Effect.gen(function* () {
     const [first] = agent.turns;
+    const { runtime, payer } = yield* seededRuntime(first.from.id, agent.model, runsOn);
     const started = yield* clock.ago(
       first.startedAgo,
       createAgent(first.from.id, {
@@ -549,7 +587,10 @@ function seedAgent(agent: DemoAgent, writer: StoreWriter, clock: SeedClock) {
         effort: agent.effort,
         repository: null,
         title: agent.title,
-        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        runtime,
+        payer,
+        machine: runsOn.machine,
+        deviceId: runsOn.deviceId ?? undefined,
       }),
     );
     const { agent: row } = yield* written(agent.title, started);
@@ -730,7 +771,8 @@ function seedHost(host: DemoHost) {
  * so one that fails partway leaves a database to throw away, as `run.sh
  * --demo` throws its own away on every exit; the credential is sealed
  * first, so a ring that does not parse fails it before anything is
- * written.
+ * written, and saved before the agents, because each records the payer a
+ * Start would by what Dean keeps.
  */
 export function seedDemoWorld(
   auth: DemoAuth,
@@ -747,14 +789,14 @@ export function seedDemoWorld(
     const taskIds = yield* Effect.forEach(DEMO_TASKS, (task) =>
       seedTask(workspaceId, task, runsOn, clock, key),
     );
+    if (Option.isSome(sealed)) yield* seedCredential(sealed.value);
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const posters = new Map<DemoAgent, InboxAgent>();
     for (const agent of DEMO_AGENTS) {
-      const row: Agent = yield* seedAgent(agent, writer, clock);
+      const row: Agent = yield* seedAgent(agent, runsOn, writer, clock);
       posters.set(agent, { userId: row.userId, taskId: agent.task.id, agentId: row.id });
     }
     yield* seedThreads(posters, clock, key);
-    if (Option.isSome(sealed)) yield* seedCredential(sealed.value);
     return {
       deanId: DEMO_DEAN.id,
       personalWorkspaceId,

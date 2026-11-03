@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import {
   AGENT_CALL_FAILURE,
   type AgentChangesAnswerView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
-import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-view";
+import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -377,7 +377,7 @@ test("a version history whose version could not be read says so on its page and 
   assert.match(sections?.textContent ?? "", /The sections it changed could not be read\./u);
   assert.match(version?.textContent ?? "", /The version could not be read\./u);
   assert.equal(page.querySelector('[role="status"]'), null, "no placeholder stands");
-  assert.equal(page.querySelector(".luke-skeleton"), null, "no block stands");
+  assert.equal(page.querySelector(".ui-skeleton"), null, "no block stands");
   act(() => retryIn(sections)?.click());
   act(() => retryIn(version)?.click());
   assert.equal(retried, 2, "each Retry reads the version again");

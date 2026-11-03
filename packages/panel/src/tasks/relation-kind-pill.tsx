@@ -8,15 +8,15 @@ import {
   POPOVER_ALIGN,
   SearchableMenu,
   STATUS_TONE,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 
 /**
  * relation-kind-pill.tsx -- a relation's kind leading a related task's row: a compact pill by the kind's icon, its words, and a chevron, dropping the kinds and Remove relation.
  *
- * The plan's Relations group leads each row with it (`plan-relations.tsx`),
+ * The plan's Task relations group leads each row with it (`plan-relations.tsx`),
  * in the attention tone for a blocker still open, and New task's rows over
  * its card lead with it too (`new-task-relation.tsx`), each over its own
  * kinds: the plan's as the open task stands to the other, New task's as the

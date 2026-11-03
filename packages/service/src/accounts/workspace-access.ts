@@ -6,10 +6,10 @@
  * Mac's session, its failure read as the refusal the Mac draws.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { OrganizationRefused } from "@luke/database/models/workspace-seams";
-import { type Workspace, workspaceOf } from "@luke/database/models/workspace-store";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { OrganizationRefused } from "@repo/database/models/workspace-seams";
+import { type Workspace, workspaceOf } from "@repo/database/models/workspace-store";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {

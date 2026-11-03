@@ -31,7 +31,7 @@ import { flushSync } from "react-dom";
 const DRAG_THRESHOLD = 4;
 
 /** The strip's tabs, each the pill holding the tab and its ×. */
-const TAB_PILL = ":scope > .luke-tab";
+const TAB_PILL = ":scope > .ui-tab";
 
 /** What a tab and its strip wear while a drag lasts; tabs.css lifts the one and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
@@ -307,7 +307,7 @@ export function useTabDrag(
     const strip = event.currentTarget;
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
-    if (target.closest(".luke-tab-close, [data-editing]") !== null) return;
+    if (target.closest(".ui-tab-close, [data-editing]") !== null) return;
     const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
     const at = tabs.findIndex((tab) => tab.contains(target));
     if (at < 0 || tabs.length < 2) return;
@@ -322,7 +322,7 @@ export function useTabDrag(
     const between = Number.parseFloat(style.columnGap) || 0;
     let left = Number.parseFloat(style.paddingLeft) || 0;
     const placed = new Map<Element, { left: number; width: number }>();
-    for (const pill of strip.querySelectorAll(":scope > .luke-tab")) {
+    for (const pill of strip.querySelectorAll(":scope > .ui-tab")) {
       const width = pill.getBoundingClientRect().width;
       placed.set(pill, { left, width });
       left += width + between;

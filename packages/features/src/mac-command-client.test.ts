@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
+import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";

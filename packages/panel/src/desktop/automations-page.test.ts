@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationCreateParams,
   type AutomationListView,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -19,26 +19,26 @@ import {
   type AutomationRunSummary,
   type AutomationSummary,
   type AutomationWorkspaceRun,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+} from "@repo/features/integration-wire";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
   TRIGGER_PROVIDER,
-} from "@luke/features/trigger-catalog";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActResult } from "@luke/host/contract";
-import type { Experiment } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { PROFILE } from "@luke/ui";
+} from "@repo/features/trigger-catalog";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActResult } from "@repo/host/contract";
+import type { Experiment } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { PROFILE } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -225,7 +225,7 @@ function pushStanding(): void {
 
 /**
  * What stands pushed to every page following a workspace's list, as the host
- * draws a write on it before the write answers (`@luke/host`'s
+ * draws a write on it before the write answers (`@repo/host`'s
  * `automation-collections.ts`).
  */
 function drawWrite(): void {
@@ -656,7 +656,7 @@ test("an automation's row leads with its clock tile, wearing its newest run's st
   assert.ok(row.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
   assert.equal(row.querySelector(".automation-row-glyph"), null, "no trigger glyph on a tile");
   restOn(row.querySelector<HTMLElement>("button") ?? assert.fail("no press"));
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="automation"]');
   assert.match(card?.textContent ?? "", /Dependency bumps/u);
   assert.match(card?.textContent ?? "", /Last ran/u);
 });
@@ -850,7 +850,7 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
 
   const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent, "Reading your automations…");
-  assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
   const { parts } = bar(page);
   assert.equal(parts[0]?.querySelector("h1")?.textContent, "Automations");
   assert.ok(parts[1]?.querySelector("button"), "its acts stand at the bar's end");
@@ -1030,7 +1030,7 @@ function phoneRuns(): void {
 
 /** Whether a copy button shows its copy landed, its glyph turned to the check, once the clipboard took it. */
 function copiedShown(copyButton: HTMLButtonElement): boolean {
-  return copyButton.querySelector(".luke-copy-glyph")?.getAttribute("data-state") === "copied";
+  return copyButton.querySelector(".ui-copy-glyph")?.getAttribute("data-state") === "copied";
 }
 
 /** The option of the list standing open whose words are `words`. */
@@ -1115,7 +1115,7 @@ function pickerDescription(page: HTMLElement, label: string): (string | undefine
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
+    (each) => each.querySelector(".ui-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -1190,8 +1190,7 @@ test("under a finger, an automation's row draws its switch and no ⋯, and held 
   );
   assert.ok(row.querySelector(`[aria-label="Turn off ${SWEEP.name}"]`), "the row keeps its switch");
   longPress(
-    row.querySelector<HTMLElement>("button.luke-list-row-main") ??
-      assert.fail("the row is a press"),
+    row.querySelector<HTMLElement>("button.ui-list-row-main") ?? assert.fail("the row is a press"),
   );
   assert.ok(menuItem("Delete"), "held, it offers its menu");
 });
@@ -1536,11 +1535,7 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   await settle();
   const chip = serversChip() ?? assert.fail("the servers chip stands");
   assert.match(page.textContent ?? "", /Every connected integration is on\./u);
-  assert.equal(
-    chip.querySelectorAll(".luke-provider-mark").length,
-    2,
-    "Linear's and Sentry's marks",
-  );
+  assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 2, "Linear's and Sentry's marks");
 
   act(() => chip.click());
   await settle();
@@ -1550,7 +1545,7 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   assert.ok(sentry, "the agent box's own switches stand");
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
-  assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 1, "Linear's mark alone");
   assert.equal(nameOf(chip), "Integrations", "marks draw no words, so the field's name stands");
   const linear = document.querySelector<HTMLButtonElement>(
     "[role=switch][aria-label='Linear for this agent']",
@@ -1595,9 +1590,8 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   await settle();
   assert.match(page.textContent ?? "", /Every connected integration is on\./u);
   assert.equal(
-    (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(
-      ".luke-provider-mark",
-    ).length,
+    (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(".ui-provider-mark")
+      .length,
     2,
   );
 });
@@ -1784,7 +1778,7 @@ test("an automation's page opened before the list is read stands its toolbar's w
 
   const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent?.startsWith("Reading the automation…"), true);
-  assert.ok((wait?.querySelectorAll(".luke-settings-row .luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".ui-settings-row .ui-skeleton").length ?? 0) > 0);
   assert.match(crumbs(page), /^Automations/u);
   act(() => button("Automations").click());
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
@@ -2120,7 +2114,7 @@ test("a new automation with no repository is created to work in none, but not on
   assert.equal(creates.length, 0, "nothing on a GitHub event is created without a repository");
   assert.ok(announced(refusal), "the refusal is announced");
   const chip =
-    page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
+    page.querySelector<HTMLButtonElement>(".repository-chip .ui-chip") ??
     assert.fail("no repository chip");
   const ids = chip.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
@@ -2145,7 +2139,7 @@ test("the repository chosen first is not said again among the others its runs wo
   await settle();
   assert.match(page.textContent ?? "", /also work in acme\/web\./u);
 
-  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .ui-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
   act(() => optionWords("webacme").click());
@@ -2195,7 +2189,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .ui-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
   act(() => optionWords("webacme").click());
@@ -2204,7 +2198,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
   act(() => picker(page, "Agent").click());
 
   assert.deepEqual(
-    [...document.querySelectorAll("[role=option] .luke-combobox-option-label")].map(
+    [...document.querySelectorAll("[role=option] .ui-combobox-option-label")].map(
       (name) => name.textContent,
     ),
     ["Started by its first run", "CI digest"],
@@ -2255,7 +2249,7 @@ test("Same agent saves with none chosen, its first run starting one, or with one
 
 /** Whether the picker named wears a glyph before its name, a chip's chevron not being one. */
 function chipWearsGlyph(page: HTMLElement, label: string): boolean {
-  return picker(page, label).querySelector(".luke-chip-name")?.previousElementSibling != null;
+  return picker(page, label).querySelector(".ui-chip-name")?.previousElementSibling != null;
 }
 
 /** The Agent picker's rows, each as its glyph, its name, and its detail beside it, and the marks at its end. */
@@ -2267,11 +2261,10 @@ function agentRows(): {
 }[] {
   return [...document.querySelectorAll("[role=option]")].map((option) => ({
     glyph:
-      option.querySelector(".luke-combobox-option-glyph svg, .luke-combobox-option-glyph img") !==
-      null,
-    name: option.querySelector(".luke-combobox-option-label")?.textContent ?? null,
-    detail: option.querySelector(".luke-combobox-option-detail")?.textContent ?? null,
-    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+      option.querySelector(".ui-combobox-option-glyph svg, .ui-combobox-option-glyph img") !== null,
+    name: option.querySelector(".ui-combobox-option-label")?.textContent ?? null,
+    detail: option.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
+    ends: [...(option.querySelector(".ui-combobox-option-hint")?.children ?? [])].map((mark) =>
       mark.getAttribute("aria-label"),
     ),
   }));
@@ -2319,8 +2312,8 @@ test("the Agent picker's rows each hang their agent's card while the pointer res
 
   // The first row chooses none, so the agent's is the second.
   restOn(document.querySelectorAll("[role=option]")[1] ?? assert.fail("the menu lists the agent"));
-  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "CI digest");
+  const card = document.querySelector(".ui-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "CI digest");
 });
 
 test("a word typed in the Agent picker asks the service for the repository's agents it names, so one past the newest is found, chosen, kept named, and saved", async () => {
@@ -2415,7 +2408,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
     if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
-    if (row.querySelector(".luke-provider-mark") !== null) return "github";
+    if (row.querySelector(".ui-provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
       (name) => name.startsWith("lucide-") && name !== "lucide-icon",
@@ -2456,7 +2449,7 @@ test("an automation's runs stand on its page's right, newest first, a run that s
   );
   act(() => started?.querySelector("button")?.click());
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
-  const unstarted = refused?.querySelector<HTMLButtonElement>(".luke-list-row-main");
+  const unstarted = refused?.querySelector<HTMLButtonElement>(".ui-list-row-main");
   assert.equal(unstarted?.tagName, "BUTTON", "a run that started no agent is a press too");
   act(() => unstarted?.click());
   assert.ok(
@@ -2493,7 +2486,7 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
   await settle();
   const choiceOf = (words: string) =>
     [...page.querySelectorAll<HTMLElement>("[role=radio]")].find(
-      (each) => each.querySelector(".luke-choice-bar-label")?.textContent === words,
+      (each) => each.querySelector(".ui-choice-bar-label")?.textContent === words,
     );
   const choose = (words: string) => {
     const found = choiceOf(words);
@@ -2537,7 +2530,7 @@ test("on the Runs tab a run that started no agent and names no subject opens its
   const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
   await settle();
 
-  act(() => page.querySelector<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main")?.click());
+  act(() => page.querySelector<HTMLElement>("ul[aria-label='Runs'] .ui-list-row-main")?.click());
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
 });
 
@@ -2551,7 +2544,7 @@ test("under a finger no run draws a ⋯, and a long press opens its menu", async
   const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
   await settle();
   const presses = [
-    ...page.querySelectorAll<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main"),
+    ...page.querySelectorAll<HTMLElement>("ul[aria-label='Runs'] .ui-list-row-main"),
   ];
 
   assert.equal(presses.length, 2);
@@ -2569,14 +2562,14 @@ test("an automation's runs stand as quiet rows under the panel's heading while t
 
   const wait = page.querySelector("aside[aria-label='Runs'] [role=status]");
   assert.equal(wait?.textContent, "Reading its runs…");
-  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".ui-list-row .ui-skeleton").length ?? 0) > 0);
 });
 
 test("Run now starts a run under a key of its own, and the run stands first once it is pushed", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
+    page.querySelector("aside[aria-label='Runs'] .ui-empty-state")?.textContent ?? "",
     /^No runs yet\.$/u,
     "the panel with no run stands the empty state",
   );
@@ -2658,7 +2651,7 @@ test("a default model that could not be read is said as unknown, and a model can
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("luke-anchored-popover"))
+    if (this.classList.contains("ui-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
@@ -2666,7 +2659,7 @@ test("a default model that could not be read is said as unknown, and a model can
   act(() => button("Choose a model").click());
   await settle();
 
-  assert.ok(page.querySelector(".luke-searchable-menu"), "the model menu opens");
+  assert.ok(page.querySelector(".ui-searchable-menu"), "the model menu opens");
   assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
@@ -2686,7 +2679,7 @@ test("the reader's own automation says a model nothing of theirs pays for cannot
     assert.ok(chip, "the Model row draws the default's chip");
     act(() => chip.click());
     await settle();
-    return page.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+    return page.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
   };
 
   assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
@@ -2737,7 +2730,7 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.deepEqual(creates[0]?.trigger, {
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: "pull-request-updated",
-    senders: ["people", "luke-agents"],
+    senders: ["people", "app-agents"],
     moments: ["opened", "ready", "pushed"],
     drafts: false,
     forks: false,
@@ -3213,7 +3206,7 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
     assert.deepEqual(screensShown(page), ["setup"]);
 
     phoneRuns();
-    act(() => runsScreen?.querySelectorAll<HTMLElement>(".luke-list-row-main")[1]?.click());
+    act(() => runsScreen?.querySelectorAll<HTMLElement>(".ui-list-row-main")[1]?.click());
     assert.deepEqual(
       screensShown(page),
       ["setup"],
@@ -3315,7 +3308,7 @@ test("on a narrow stage each row says when it runs next before what fires it, un
   );
   assert.equal(page.querySelector(".automation-owner"), null, "no row names its owner");
   const line = (name: string) =>
-    rowOf(page, name).querySelector(".luke-list-row-description")?.textContent ?? "";
+    rowOf(page, name).querySelector(".ui-list-row-description")?.textContent ?? "";
   assert.match(line("Nightly flaky-test sweep"), /^Next .+ · Weekdays at 9:00 AM · UTC$/u);
   assert.equal(line("Dependency bumps"), "Weekdays at 9:00 AM · UTC");
   assert.match(
@@ -3528,7 +3521,7 @@ test("Sentry stays listed but unpickable, saying why, where this deployment hold
   await settle();
   act(() => picker(page, "Type").click());
   const sentry = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
-    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Sentry",
+    (row) => row.querySelector(".ui-combobox-option-label")?.textContent === "Sentry",
   );
   assert.ok(sentry, "Sentry is listed");
   assert.equal(sentry.getAttribute("aria-disabled"), "true");
@@ -3578,22 +3571,22 @@ test("on a phone the list is headed by New automation and one ⋯ holding Create
 test("on a phone an automation's page is headed by the way back to the list, its name a section's gap under it, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
   // Note that the window's sheets are laid on a phone's root, whose tokens the gap is read in.
   const sheets = layContainersAt({});
-  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
-  document.documentElement.dataset.lukeRoom = SHELL_ROOM.NARROW;
+  document.documentElement.dataset.uiProfile = PROFILE.WEB;
+  document.documentElement.dataset.uiRoom = SHELL_ROOM.NARROW;
   onTestFinished(() => {
     sheets.remove();
-    delete document.documentElement.dataset.lukeProfile;
-    delete document.documentElement.dataset.lukeRoom;
+    delete document.documentElement.dataset.uiProfile;
+    delete document.documentElement.dataset.uiRoom;
   });
   const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const head = page.querySelector<HTMLElement>(".automation-head");
   assert.ok(head, "the phone's head stands");
-  const header = page.querySelector<HTMLElement>(".luke-detail-page-header");
+  const header = page.querySelector<HTMLElement>(".ui-detail-page-header");
   assert.ok(header, "the page's header stands");
   assert.equal(
     wayBackGap(head, header),
-    pixelsOf(header, "var(--luke-section-gap)"),
+    pixelsOf(header, "var(--ui-section-gap)"),
     "the name stands a section's gap under the way back",
   );
   assert.deepEqual(
@@ -3613,7 +3606,7 @@ test("on a phone an automation's page is headed by the way back to the list, its
   assert.match(menu?.textContent ?? "", /Saved/, "the draft's standing heads the menu");
   for (const offered of ["Save", "Run now", "Runs", "Copy link", "Delete"]) {
     assert.ok(
-      [...(menu?.querySelectorAll(".luke-menu-item-label") ?? [])].some(
+      [...(menu?.querySelectorAll(".ui-menu-item-label") ?? [])].some(
         (each) => each.textContent === offered,
       ),
       `the ⋯ offers ${offered}`,
@@ -3631,14 +3624,14 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("luke-anchored-popover"))
+    if (this.classList.contains("ui-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
   act(() => button("Choose a model").click());
   await settle();
 
-  const menu = page.querySelector(".luke-searchable-menu") ?? assert.fail("the model menu opens");
+  const menu = page.querySelector(".ui-searchable-menu") ?? assert.fail("the model menu opens");
   assert.equal(
     menu.querySelector("[role=alert]")?.textContent,
     "The models could not be read.Retry",

@@ -13,7 +13,7 @@
  * alone: the editor bundle reads the same words.
  */
 
-import type { TaskSkillSource } from "@luke/features/task-wire";
+import type { TaskSkillSource } from "@repo/features/task-wire";
 
 /** A skill as the composer offers it: its name, what it is for, where it comes from, and, for one of the repository's, its `SKILL.md`, named from the repository's root. */
 export interface SkillOption {

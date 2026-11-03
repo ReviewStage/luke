@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { archiveAgent, createAgent } from "@luke/database/models/agent-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask, savePlanText } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { messages } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
-import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+} from "@repo/database/testing";
+import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -31,34 +31,34 @@ import {
   type PlanCommentThread,
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
-} from "@luke/features/plan-comment-wire";
-import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
+} from "@repo/features/plan-comment-wire";
+import type { PlanEditRequest } from "@repo/features/plan-edit";
+import { CODER } from "@repo/service/agents/coder-host/bounds";
 import {
   type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "@luke/service/agents/eve-host/eve-sessions";
-import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
-import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
-import { type AfterResponse, keptAfterResponse } from "@luke/service/http/after-response";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import type { WebServices } from "@luke/service/runtime";
-import { planCommentsProcedures } from "@luke/service/tasks/plan-comments-procedures";
-import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
-import { connectAgentApiKeys } from "@luke/service/testing/agent-credentials";
-import { announcingClock, driven } from "@luke/service/testing/clock-driven";
-import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
+} from "@repo/service/agents/eve-host/eve-sessions";
+import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
+import { recordingProductAnalytics, SERVER_EVENT } from "@repo/service/events/server-events";
+import { type AfterResponse, keptAfterResponse } from "@repo/service/http/after-response";
+import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { modelCatalogOf } from "@repo/service/providers/model-catalog";
+import type { WebServices } from "@repo/service/runtime";
+import { planCommentsProcedures } from "@repo/service/tasks/plan-comments-procedures";
+import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
+import { connectAgentApiKeys } from "@repo/service/testing/agent-credentials";
+import { announcingClock, driven } from "@repo/service/testing/clock-driven";
+import { NO_GITHUB } from "@repo/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { scriptedHarnessLayer } from "@luke/service/testing/native-harness-fake";
-import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/service/testing/integration-connect";
+import { scriptedHarnessLayer } from "@repo/service/testing/native-harness-fake";
+import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { sql } from "drizzle-orm";
 import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -175,8 +175,6 @@ const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Laye
     const handle = hostedFetch({
       planComments: planCommentsProcedures({
         resolveUserId,
-        eveOrigin: () => undefined,
-        eve: fakeEve,
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
@@ -196,7 +194,6 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       plans: tasksProcedures({
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
       }),
@@ -284,7 +281,7 @@ const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
 /** A task's mention of the app, as a chip wrote it while a task had one. */
-const lukeLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
+const appLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -604,7 +601,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               commentsPath(taskId),
               teammate,
               {},
-              startBody(`${lukeLink(taskId)} is withdrawing in v1?`),
+              startBody(`${appLink(taskId)} is withdrawing in v1?`),
             ),
           ),
         );
@@ -618,7 +615,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               {
                 action: PLAN_COMMENT_ACTION.REPLY,
                 clientKey: randomUUID(),
-                words: `${lukeLink(taskId)} what do you think?`,
+                words: `${appLink(taskId)} what do you think?`,
               },
             ),
           ),

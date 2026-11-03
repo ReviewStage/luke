@@ -1,5 +1,5 @@
 {
-  "name": "@luke/features",
+  "name": "@repo/features",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -44,8 +44,8 @@
     "./agent-replay": "./src/agent-replay.js",
     "./agent-runtime-models": "./src/agent-runtime-models.js",
     "./agent-tools": "./src/agent-tools.js",
-    "./luke-tools-model": "./src/luke-tools-model.js",
-    "./luke-tools-wire": "./src/luke-tools-wire.js",
+    "./workspace-tools-model": "./src/workspace-tools-model.js",
+    "./workspace-tools-wire": "./src/workspace-tools-wire.js",
     "./agent-failure-words": "./src/agent-failure-words.js",
     "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./agent-status": "./src/agent-status.js",
@@ -174,8 +174,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/runtime": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/runtime": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",

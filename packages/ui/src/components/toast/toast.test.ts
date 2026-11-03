@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -161,7 +161,7 @@ test("a toast with no action takes no press and no hold", () => {
   const toast = view.querySelector("li");
   assert.ok(toast !== null);
   assert.equal(view.querySelectorAll("button").length, 0);
-  assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Offline");
+  assert.equal(toast.querySelector(".ui-toast-detail")?.textContent, "Offline");
 });
 
 test("the stack is a named landmark that says the newest words through the window's announcer", () => {
@@ -217,7 +217,7 @@ test("a toast whose tone turns changes its words in place", () => {
   act(() => root.render(createElement(Toast, { tone: STATUS_TONE.COMPLETE, words: "Saved" })));
 
   assert.equal(container.querySelector("li"), toast, "the same card");
-  assert.equal(container.querySelector(".luke-toast-words")?.textContent, "Saved");
+  assert.equal(container.querySelector(".ui-toast-words")?.textContent, "Saved");
 });
 
 test("a toast dragged sideways past the threshold is sent away, and one let go short of it is not", () => {

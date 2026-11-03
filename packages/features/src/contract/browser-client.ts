@@ -22,7 +22,7 @@
  * service's.
  */
 
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@repo/wire";
 import { type Client, createORPCClient, ORPCError } from "@orpc/client";
 import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi/fetch";

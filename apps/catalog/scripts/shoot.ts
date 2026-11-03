@@ -2,7 +2,7 @@
  * shoot.ts -- shoots every catalog example at both profiles, both themes,
  * wide and at a phone's width, one PNG each, and an index page of them.
  *
- * Run it with `pnpm --filter @luke/catalog shoot` (`--help` lists the flags).
+ * Run it with `pnpm --filter @repo/catalog shoot` (`--help` lists the flags).
  * It builds the catalog and serves the build itself, or opens one already
  * running at `--base`, and drives Chromium over the catalog's own addresses
  * (`?example=&profile=&theme=&width=`, see `src/catalog.tsx`), so what it
@@ -28,7 +28,7 @@ const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const REPOSITORY_ROOT = path.resolve(APP_ROOT, "../..");
 const DEFAULT_OUT = path.join(REPOSITORY_ROOT, "artifacts", "polish", "catalog");
 
-// The catalog's own vocabulary (`@luke/ui`'s PROFILE and THEME), which a plain node script cannot import.
+// The catalog's own vocabulary (`@repo/ui`'s PROFILE and THEME), which a plain node script cannot import.
 const PROFILE = { DESKTOP: "desktop", WEB: "web" } as const;
 const THEME = { DARK: "dark", LIGHT: "light" } as const;
 const PROFILES = [PROFILE.DESKTOP, PROFILE.WEB] as const;
@@ -51,20 +51,20 @@ const RECORDING_WORDS = "Recording a stand-in video";
 /** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
 :root, body {
-  --luke-duration-shape: 0s !important;
-  --luke-duration-exit: 0s !important;
-  --luke-duration-quick: 0s !important;
-  --luke-duration-fast: 0s !important;
-  --luke-duration-hover: 0s !important;
-  --luke-duration-pane: 0s !important;
-  --luke-row-stagger: 0s !important;
-  --luke-late-delay: 0s !important;
-  --luke-hint-delay: 0s !important;
-  --luke-settle-delay: 0s !important;
-  --luke-confirm-delay: 0s !important;
-  --luke-loop-motion: paused !important;
-  --luke-wait-motion: paused !important;
-  --luke-scroll-glide: auto !important;
+  --ui-duration-shape: 0s !important;
+  --ui-duration-exit: 0s !important;
+  --ui-duration-quick: 0s !important;
+  --ui-duration-fast: 0s !important;
+  --ui-duration-hover: 0s !important;
+  --ui-duration-pane: 0s !important;
+  --ui-row-stagger: 0s !important;
+  --ui-late-delay: 0s !important;
+  --ui-hint-delay: 0s !important;
+  --ui-settle-delay: 0s !important;
+  --ui-confirm-delay: 0s !important;
+  --ui-loop-motion: paused !important;
+  --ui-wait-motion: paused !important;
+  --ui-scroll-glide: auto !important;
 }`;
 
 const STILL_MOTION_SCRIPT = `
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   }
   const outDir = path.resolve(values.out);
   const jobs = Math.max(1, Number(values.jobs) || DEFAULT_JOBS);
-  const buildDir = mkdtempSync(path.join(tmpdir(), "luke-catalog-"));
+  const buildDir = mkdtempSync(path.join(tmpdir(), "catalog-"));
   let served: Awaited<ReturnType<typeof serveBuild>> | undefined;
   let browser: PlaywrightBrowser | undefined;
   try {

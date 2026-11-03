@@ -1,6 +1,6 @@
-import releases from "virtual:luke/changelog-releases";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { formatDayHeading } from "@luke/features/time-format";
+import releases from "virtual:site/changelog-releases";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { formatDayHeading } from "@repo/features/time-format";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -19,7 +19,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextLink,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   CHANGELOG_PATH,
   CHANGELOG_VIEW,

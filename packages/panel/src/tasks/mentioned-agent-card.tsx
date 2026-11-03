@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@luke/features/agent-wire";
-import { LINK_PLACE, pullRequestAddressOf } from "@luke/features/link-grammar";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { listedPullRequestOf } from "@luke/ui/pull-request-link";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@repo/features/agent-wire";
+import { LINK_PLACE, pullRequestAddressOf } from "@repo/features/link-grammar";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { listedPullRequestOf } from "@repo/ui/pull-request-link";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

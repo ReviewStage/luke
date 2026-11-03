@@ -1,23 +1,24 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { accountExperimentOn } from "@luke/database/models/account-store";
-import { hostBySecret, hostsOf } from "@luke/database/models/host-store";
-import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
-import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
-import { listTasks } from "@luke/database/models/task-store";
-import { listWorkspaces } from "@luke/database/models/workspace-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { accountExperimentOn } from "@repo/database/models/account-store";
+import { listWorkspaceAgents, readAgentRouting } from "@repo/database/models/agent-store";
+import { hostBySecret, hostsOf } from "@repo/database/models/host-store";
+import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import { listAccountProviderKeyRows } from "@repo/database/models/provider-key-store";
+import { readRunsOnPick } from "@repo/database/models/runs-on-pick";
+import { listTasks } from "@repo/database/models/task-store";
+import { listWorkspaces } from "@repo/database/models/workspace-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   openMigratedPglite,
   sqlClientOverPglite,
   syncListenerOverPglite,
-} from "@luke/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/database/testing";
+import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { INBOX_CURSOR_START } from "@repo/features/inbox-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -90,6 +91,12 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         const caller = yield* hostBySecret(hostSecretHash(HOST_SECRET.secret));
         const pick = yield* readRunsOnPick(DEMO_DEAN.id);
         const ownHosts = yield* accountExperimentOn(DEMO_DEAN.id, EXPERIMENT.BRING_YOUR_OWN_HOST);
+        const agents = yield* listWorkspaceAgents(DEMO_DEAN.id, seeded.workspaceId, { limit: 10 });
+        const payers = yield* Effect.forEach(agents, (agent) =>
+          Effect.map(readAgentRouting(DEMO_DEAN.id, agent.id), (routing) =>
+            Option.getOrUndefined(Option.map(routing, (row) => row.payer)),
+          ),
+        );
         const ring = Result.getOrThrow(parseKeyRing(AGENT_KEY_RING));
         const owner = {
           userId: DEMO_DEAN.id,
@@ -154,6 +161,20 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         });
         // Bring your own host stays off, since with it on the app would enroll the Mac's own account install with the demo's server.
         assert.equal(ownHosts, false);
+        // The seeded agents are Dean's on that host, paid for by his plan, so a follow-up to one runs there.
+        assert.deepEqual(
+          agents.map((agent) => [agent.userId, agent.machine, agent.deviceId]),
+          [
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+          ],
+        );
+        assert.deepEqual(payers, [
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        ]);
       }),
   ),
 );

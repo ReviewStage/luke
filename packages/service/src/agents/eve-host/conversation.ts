@@ -1,4 +1,4 @@
-import type { ConversationTarget } from "@luke/database/models/writer";
+import type { ConversationTarget } from "@repo/database/models/writer";
 import type { Result } from "effect";
 import type { EveHostRefusal } from "./bounds.js";
 
@@ -6,10 +6,10 @@ export {
   claimRuntimeSession,
   conversationReachableBy,
   runtimeSessionReachableBy,
-} from "@luke/database/models/recorded-session";
+} from "@repo/database/models/recorded-session";
 
 /**
- * The conversation an agent's call was admitted to (`../luke-mcp/bearer.ts`
+ * The conversation an agent's call was admitted to (`../workspace-mcp/bearer.ts`
  * admits a runner's bearer to its own): the account it acts for, which
  * gates every read, is metered, and binds the tools, and the conversation's
  * owner, the opener, whose id addresses its rows.
