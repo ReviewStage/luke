@@ -165,17 +165,20 @@ tester.run("async-press-needs-busy", asyncPressNeedsBusyRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "noBusy" }, { messageId: "noBusy" }],
     },
-    // A baselined file holding one more than its count reports the one past it.
-    {
-      code: unbusy(BASELINED_COUNT + 1),
-      filename: BASELINED_FILE,
-      errors: [{ messageId: "noBusy" }],
-    },
-    // A baselined file holding fewer than its count says to lower it.
-    {
-      code: unbusy(BASELINED_COUNT - 1),
-      filename: BASELINED_FILE,
-      errors: [{ messageId: "staleBaseline" }],
-    },
+    // A baselined file holding one more than its count reports the one past it, and one holding fewer says to lower it; none once the baseline is empty.
+    ...(BASELINED_COUNT === 0
+      ? []
+      : [
+          {
+            code: unbusy(BASELINED_COUNT + 1),
+            filename: BASELINED_FILE,
+            errors: [{ messageId: "noBusy" }],
+          },
+          {
+            code: unbusy(BASELINED_COUNT - 1),
+            filename: BASELINED_FILE,
+            errors: [{ messageId: "staleBaseline" }],
+          },
+        ]),
   ],
 });
