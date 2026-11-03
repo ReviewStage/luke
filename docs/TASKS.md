@@ -62,26 +62,28 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 
 ### Task list
 
-- Every named task the account owns, newest started first. Opening a task
-  moves no row, so a new task stands at the head and nothing else moves.
-  The tasks stand in the **Tasks** section, whose head's **View options**
-  (the Inbox's sliders) chooses how they are drawn, remembered for each
-  workspace on this Mac: Group by Repository (the default), Creator (in a
-  shared workspace: You first, then each teammate), or None; Order by Last
-  updated (the default), Created, or Name, which orders the groups too; and,
-  in a shared workspace, Created by Anyone (the default), Me, or a teammate,
-  which while it names someone stands as a chip under the head whose ×
-  lifts it, the button wearing a dot. Under Repository, the groups stand
-  under their repositories' headers, the repository's name with its owner on
-  hover (or `owner/name` where two share a name), "No repository" last. A
-  header's chevron folds the group, remembered on this Mac, and a
-  repository's + (shown on hover or focus) opens the new-task page with that
-  repository already chosen. Each row shows the task's name and, muted at its
-  end, the time the order chooses (its last activity, the later of its plan's
-  last save and its agents' last turn, or under Created when it was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
-  minute, the full moment on hover. A row says what its group does not: a
-  teammate's face under a repository's header, its repository's name under a
-  creator's, and both in one run.
+- The tasks stand in the **Tasks** section, the work under way: the
+  reader's own tasks, those assigned to them and those no one is on that
+  they created, to do and in progress alone, newest updated first
+  (`@repo/ui/task-list-model`). Opening a task moves no row. The backlog and
+  the settled tasks are left to the Tasks page, which a quiet line under the
+  list opens, saying how many it leaves out. The head's **View options**
+  (the Inbox's sliders) chooses how the list is drawn, remembered for each
+  workspace on this Mac (`desktop/sidebar-task-view.tsx`): Group by
+  Repository (the default) or None, and, in a shared workspace, Assigned to
+  Me (the default), Anyone, or a teammate. The head says whose tasks the list
+  holds, "My tasks", "Everyone's tasks", or a teammate's name, and while it
+  holds anything but the reader's own the button wears a dot. Under
+  Repository, the groups stand under their repositories' headers, the
+  repository's name with its owner on hover (or `owner/name` where two share
+  a name), "No repository" last. A header's chevron folds the group,
+  remembered on this Mac, and a repository's + (shown on hover or focus)
+  opens New task with that repository already chosen. Each row shows the
+  task's name and, muted at its end, its last activity, the later of its
+  plan's last save and its agents' last turn ("now", "5m", "3h", "2d", "3w",
+  then the date), moved on each minute, the full moment on hover. A row
+  wears its assignee's face, but in a list of one teammate's tasks, and its
+  repository's name where the list is not grouped by repository.
 - A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
@@ -111,9 +113,9 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   Move to workspace on that workspace; nothing moves it without that press,
   since a move shares the task with the other workspace's members.
 - An agent an automation started with no task stands among the tasks, not
-  in a group of its own: under its repository, under whoever started it, or
-  in the one run, ordered with the tasks by its last activity, filtered by
-  Created by, and, archived, under Archived tasks. Its row leads with the
+  in a group of its own: under its repository or in the one run, as the
+  reader's where the reader started it, and ordered with the tasks by its
+  last activity. Its row leads with the
   agent's harness mark, as its tab does, giving way to the working mark while
   it works, ends with its automation's clock and its time, and reads in
   semibold while its end is unseen; a press opens the agent's own page, and a
