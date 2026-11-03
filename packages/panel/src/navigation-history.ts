@@ -559,8 +559,9 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: the home page, the Board, a new
- * automation's page.
+ * The address of a place with no link: a new automation's page, and any
+ * place before its workspace is read, the home page a fresh tab rests on
+ * among them, which takes its link's address in place once it is.
  * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
  * so it names no workspace's place.
  */

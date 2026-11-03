@@ -1,7 +1,7 @@
 import { Schema as EffectSchema, Option } from "effect";
 import { isUtcDayKey } from "./admin-wire.js";
 import { HOST_WIRE, hostConnectPath, hostUserCodeOf } from "./host-wire.js";
-import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
+import { inAppScheme, isLinkHome, LINK_ORIGIN, RESERVED_WORKSPACE_SLUGS } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
@@ -20,6 +20,10 @@ import { parsedUrl } from "./parsed-url.js";
  * and a list is plural where a thing is singular, as GitHub's `/pulls` and
  * `/pull/1` are:
  *
+ * - the workspace's Home, its own address with no step after it, and the
+ *   Board, `/tasks`, each read only under a step a workspace can stand
+ *   under: never a page of ours (`RESERVED_WORKSPACE_SLUGS`) or a file,
+ *   so `/about` and `/robots.txt` are no workspace's Home;
  * - a task, `/task/<id>`, and its section, `#<anchor>`, its version,
  *   `/task/<id>/version/<seq>`, and a page an agent wrote for it,
  *   `/task/<id>/page/<pageId>`, the task named by its id or by its number
@@ -115,6 +119,10 @@ import { parsedUrl } from "./parsed-url.js";
  */
 
 export const LINK_PLACE = {
+  /** The workspace's Home, the page with no task open, at the workspace's own address. */
+  HOME: "home",
+  /** The workspace's Board, its tasks by where each stands. */
+  BOARD: "board",
   TASK: "task",
   SECTION: "section",
   /** One comment thread of a task, written as the task's link with the thread in its `comment` query. */
@@ -166,6 +174,7 @@ const THREAD_VIEWS: ReadonlySet<string> = new Set(Object.values(PULL_REQUEST_THR
 const STEP = {
   PLAN: "plan",
   TASK: "task",
+  TASKS: "tasks",
   VERSION: "version",
   PAGE: "page",
   WORK: "work",
@@ -202,6 +211,9 @@ const LINK_BOUNDS = {
 
 /** An id as the service mints one, or as a call's id is spelled: letters, digits, `_`, and `-`. */
 const ID = /^[A-Za-z0-9_-]+$/u;
+
+/** The places a link names by its workspace's step alone, or one step after it, which a page of ours or a file could otherwise be read as. */
+const WORKSPACE_PLACES: ReadonlySet<string> = new Set([LINK_PLACE.HOME, LINK_PLACE.BOARD]);
 
 /** A page of Settings as its link spells it: lower case, words joined by hyphens. */
 const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
@@ -334,6 +346,8 @@ const idSchema = EffectSchema.String.check(
 const wholeSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
 const linkPlaceSchema = EffectSchema.Union([
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.HOME) }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.BOARD) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.TASK), planId: idSchema }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SECTION),
@@ -565,6 +579,10 @@ function placeFields(steps: readonly string[]) {
     return id === undefined ? undefined : taskFields(id, rest);
   }
   switch (step) {
+    case undefined:
+      return { kind: LINK_PLACE.HOME };
+    case STEP.TASKS:
+      return id === undefined ? { kind: LINK_PLACE.BOARD } : undefined;
     case STEP.AGENT:
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
@@ -618,6 +636,11 @@ function adminFields(step: string | undefined, rest: readonly string[]) {
     : undefined;
 }
 
+/** Whether a link's first step is one a workspace can stand under: an id's or a slug's spelling, and no page of ours whatever its case. */
+function workspaceStep(workspace: string): boolean {
+  return ID.test(workspace) && !RESERVED_WORKSPACE_SLUGS.has(workspace.toLowerCase());
+}
+
 /** A task's link, or a section's by its fragment, an empty one the task's own; the anchor read in lower case. */
 function taskLink(taskId: string, hash: string): LinkPlace | undefined {
   if (hash === "" || hash === "#") {
@@ -630,6 +653,10 @@ function taskLink(taskId: string, hash: string): LinkPlace | undefined {
 /** The path a place is written at under its workspace, each id percent-encoded. */
 function placePath(place: LinkPlace): readonly string[] {
   switch (place.kind) {
+    case LINK_PLACE.HOME:
+      return [];
+    case LINK_PLACE.BOARD:
+      return [STEP.TASKS];
     case LINK_PLACE.TASK:
     case LINK_PLACE.SECTION:
     case LINK_PLACE.COMMENT:
@@ -742,7 +769,10 @@ export function readLink(target: string): ReadLink | undefined {
       : taskOwn
         ? taskLink(taskId, url.hash)
         : Option.getOrUndefined(readPlace(placeFields(placeSteps)));
-  return place === undefined ? undefined : { workspace, place };
+  if (place === undefined) return undefined;
+  // Note that the workspace's own address, and its Board's, are a page of ours or a file's but for the workspace's step.
+  if (WORKSPACE_PLACES.has(place.kind) && !workspaceStep(workspace)) return undefined;
+  return { workspace, place };
 }
 
 /** The number a place names its task by in its link's workspace, `42` from `/task/42`, which the service finds the task by; nothing for a place naming its task by its id, or no task. */

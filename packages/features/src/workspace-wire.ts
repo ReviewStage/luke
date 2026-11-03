@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { RESERVED_WORKSPACE_SLUGS } from "./link-home.js";
 import {
   PICTURE_TYPE,
   type Picture,
@@ -88,79 +89,8 @@ export const ASSIGNABLE_ROLE = {
   MEMBER: WORKSPACE_ROLE.MEMBER,
 } as const;
 
-/**
- * The first steps of our home's paths (`link-home.ts`) that are our own,
- * now or likely soon, which no workspace's slug may be: every page the web
- * app serves under its own name (the root `vercel.json`,
- * `apps/web/vite.config.ts`), the path PostHog's traffic is passed on from
- * (`POSTHOG_PROXY.PATH`), and the words a later page is likeliest to want.
- */
-export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
-  "404",
-  "about",
-  "accept-invitation",
-  "account",
-  "admin",
-  "agents",
-  "api",
-  "app",
-  "assets",
-  "auth",
-  "billing",
-  "blog",
-  "board",
-  "changelog",
-  "cli",
-  "connect",
-  "connect-github",
-  "consent",
-  "dashboard",
-  "desktop-session",
-  "docs",
-  "download",
-  "downloads",
-  "eve",
-  "feed",
-  "github-installed",
-  "help",
-  "home",
-  "inbox",
-  "install",
-  "integration-connected",
-  "integrations",
-  "invite",
-  "join",
-  "k7x2",
-  "legal",
-  "login",
-  "logout",
-  "mac",
-  "mcp",
-  "new",
-  "notifications",
-  "oauth",
-  "open",
-  "page-in-mac-app",
-  "pages",
-  "plan",
-  "plans",
-  "pricing",
-  "privacy",
-  "search",
-  "security",
-  "settings",
-  "sign-in",
-  "sign-out",
-  "sign-up",
-  "status",
-  "support",
-  "task",
-  "tasks",
-  "team",
-  "teams",
-  "terms",
-  "workspaces",
-]);
+// Note that the set stands in `link-home.ts`, which imports nothing, so the link grammar reads it without a cycle through here.
+export { RESERVED_WORKSPACE_SLUGS };
 
 export const WORKSPACE_BOUNDS = {
   /** The most characters a workspace's name may spell, after its ends are trimmed. */

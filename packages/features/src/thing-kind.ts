@@ -64,6 +64,9 @@ export const THING_KIND = {
   /** A page of an integration's, a Linear issue say, or of a well-known site. */
   LINK: MENTION_KIND.LINK,
   MESSAGE: LINK_PLACE.MESSAGE,
+  HOME: LINK_PLACE.HOME,
+  /** The workspace's Board, which the sidebar names Tasks. */
+  BOARD: LINK_PLACE.BOARD,
   INBOX: LINK_PLACE.INBOX,
   INBOX_ITEM: LINK_PLACE.INBOX_ITEM,
   CHANNEL: MENTION_KIND.CHANNEL,
@@ -235,6 +238,8 @@ export const THING_NAME: ThingNames = {
     live: false,
     held: (message, known) => byAgent("Message from", message.agentId, known),
   },
+  [THING_KIND.HOME]: NO_LIVE_NAME,
+  [THING_KIND.BOARD]: NO_LIVE_NAME,
   [THING_KIND.INBOX]: NO_LIVE_NAME,
   [THING_KIND.INBOX_ITEM]: { live: true, held: (item, known) => known.inboxItems.get(item.itemId) },
   // Note that a channel's chip wears its glyph, a `#`, so its name is said without one, as the sidebar lists it.
@@ -286,6 +291,8 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.ISSUE]: "issue",
   [THING_KIND.LINK]: "link",
   [THING_KIND.MESSAGE]: "message",
+  [THING_KIND.HOME]: "Home",
+  [THING_KIND.BOARD]: "tasks",
   [THING_KIND.INBOX]: "Inbox",
   [THING_KIND.INBOX_ITEM]: `Inbox ${TERM.INBOX_ITEM.one}`,
   [THING_KIND.CHANNEL]: "channel",
@@ -346,6 +353,8 @@ const PLACE_THING: { readonly [K in LinkPlaceKind]: (place: PlaceOf<K>) => Thing
   [LINK_PLACE.CHANGES]: asThing,
   [LINK_PLACE.PULL_REQUEST_THREAD]: asThing,
   [LINK_PLACE.MESSAGE]: asThing,
+  [LINK_PLACE.HOME]: asThing,
+  [LINK_PLACE.BOARD]: asThing,
   [LINK_PLACE.INBOX]: asThing,
   [LINK_PLACE.INBOX_ITEM]: asThing,
   [LINK_PLACE.CHANNEL]: (place) => ({ kind: THING_KIND.CHANNEL, channelId: place.channelId }),

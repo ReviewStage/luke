@@ -258,10 +258,15 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("a link to any place in Vespin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
+test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
   for (const path of [
     "/app",
     "/app/",
+    "/acme",
+    "/acme/",
+    "/personal-u_1",
+    "/application",
+    "/acme/tasks",
     "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
     "/personal-u_1/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/",
     "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01",
@@ -329,12 +334,30 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     "/sign-in.html",
     "/favicon.svg",
     "/app/marks/codex-16.png",
+    "/robots.txt",
     "/acme/plans/x",
     "/acme/issue/i1",
-    "/acme",
-    "/application",
   ]) {
     assert.equal(servedFile(path), undefined, path);
+  }
+});
+
+test("no page of Vespin's own, by any first step a workspace's slug may not take, nor a file of the site's, is served the web app as a workspace's Home", () => {
+  // `/app` is the app's own path, which serves it by a rule of its own.
+  const reserved = [...RESERVED_WORKSPACE_SLUGS].filter((step) => step !== "app");
+  for (const step of reserved) {
+    for (const path of [`/${step}`, `/${step}/`, `/${step}.html`]) {
+      assert.notEqual(servedFile(path), "/app.html", path);
+    }
+  }
+  for (const path of [
+    "/robots.txt",
+    "/favicon.ico",
+    "/sitemap.xml",
+    "/manifest.webmanifest",
+    "/@vite",
+  ]) {
+    assert.notEqual(servedFile(path), "/app.html", path);
   }
 });
 

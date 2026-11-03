@@ -81,7 +81,7 @@ test("an address that names no place opens nothing", () => {
     ["/acme/plans/x", ""],
     ["/acme/agent/Fix%20billing", ""],
     [`/acme/plan/${TASK_ID}/files`, ""],
-    ["/acme", ""],
+    ["/about", ""],
     [`/acme/plan/${TASK_ID}/more`, ""],
     [`/acme/plan/${TASK_ID}`, "#a%20b"],
   ] as const) {
