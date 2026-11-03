@@ -11,4 +11,28 @@
   .luke-checkbox[data-disabled="true"] {
     color: var(--luke-color-text-muted);
   }
+
+  /* A box beside words is pressed anywhere on its row, the words too, and
+     on a coarse pointer the row takes the press a finger's target tall at
+     least, centred on it, while it draws at its own size, as a box alone
+     does (`checkbox.tsx`). Note that the press stands behind the row's
+     words, under the row's own stacking, so a press of their own among
+     them, such as the Inbox's addressee, stays theirs. */
+  @media (pointer: coarse) {
+    .luke-checkbox[data-words="true"] {
+      position: relative;
+      isolation: isolate;
+    }
+
+    .luke-checkbox[data-words="true"]::before {
+      position: absolute;
+      z-index: -1;
+      top: 50%;
+      left: 0;
+      width: max(100%, var(--luke-touch-target));
+      height: max(100%, var(--luke-touch-target));
+      transform: translateY(-50%);
+      content: "";
+    }
+  }
 }

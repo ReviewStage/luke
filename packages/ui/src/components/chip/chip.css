@@ -4,6 +4,26 @@
    the fades and cuts its words give way by. */
 
 @layer components {
+  /* A compact chip a finger presses takes the press a finger's target
+     across at least, centred on it, while it draws at its own size, as a
+     compact button does (`../button/button.css`). A removable chip is a box
+     of two presses, its words and its ×, so it keeps each its own. */
+  @media (pointer: coarse) {
+    :is(button, a).luke-chip[data-size="compact"] {
+      position: relative;
+    }
+
+    :is(button, a).luke-chip[data-size="compact"]::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--luke-touch-target));
+      height: max(100%, var(--luke-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+
   /* A chip's words fade out over their last few pixels only while they are
      measured cut short, as a browser's tab ends a long title, so short words
      end on their last letter. Words cut in their middle fade the end of

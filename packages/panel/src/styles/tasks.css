@@ -2341,6 +2341,26 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container: published-row / inline-size;
 }
 
+/* As narrow as a phone's, on a phone: where it stands is drawn nowhere, so
+   the title has the room, and still read to assistive tech, since the row
+   hides its mark from it; the mark's colour, the hint's card, and the Pull
+   request tab still show it. Note that the narrow room scopes it, because a
+   desktop's side panel draws the card as narrow and has the room for it. */
+/* off-scale: 420px, a phone's widest card */
+@container published-row (width < 420px) {
+  :where(:root)[data-luke-room="narrow"] .agent-published-state {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* Too narrow for the checks' word: it goes, and the mark's words for a
    reader who cannot see it and the Pull request tab still say they failed. */
 @container published-row (width < 360px) {

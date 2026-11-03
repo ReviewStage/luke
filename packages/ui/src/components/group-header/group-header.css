@@ -58,4 +58,13 @@
       opacity: 1;
     }
   }
+
+  /* Under a finger each compact action is as wide as a finger's target,
+     its glyph centred in it, so two side by side each take a whole press
+     rather than splitting the room their presses overlap in (`button.css`). */
+  @media (pointer: coarse) {
+    .luke-group-header-actions .luke-button[data-size="compact"][data-icon-only="true"] {
+      min-width: var(--luke-touch-target);
+    }
+  }
 }
