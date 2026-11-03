@@ -41,8 +41,11 @@ demo_free_port() {
 # one without asking, named for its Preview (`luke_preview_instance`).
 # `--demo` launches the `demo` instance signed in as Dean on the acme demo
 # world, against a hosted service run on this Mac for as long as the app is
-# open (see "The demo" below); it takes none of the three flags above. Every
-# other argument is forwarded to Electron.
+# open (see "The demo" below); it takes none of the three flags above. Dean's
+# agents run on the Claude credential this shell already holds,
+# `CLAUDE_CODE_OAUTH_TOKEN` or else `ANTHROPIC_API_KEY`, so there is nothing
+# to set; with neither, they do not run. Every other argument is forwarded
+# to Electron.
 replace_running_app=true
 use_preview=false
 use_demo=false
@@ -156,11 +159,26 @@ if [[ -d $demo_profile ]]; then
     find "$demo_profile" -mindepth 1 -maxdepth 1 ! -name "$DEMO_KEPT_FOLDER" -exec rm -rf -- {} +
 fi
 
-demo_claude_token=${LUKE_DEMO_CLAUDE_TOKEN:-}
-demo_anthropic_api_key=${LUKE_DEMO_ANTHROPIC_API_KEY:-}
+# Dean's Claude credential is the one this shell already holds for Claude
+# Code: its setup token, or else an Anthropic API key. The seed alone is
+# handed it, under the name it reads for that kind (apps/web/server/demo-seed.ts),
+# and a value of those names inherited from the shell is dropped first, so
+# the credential comes from these two alone. Only where it came from is said.
 unset LUKE_DEMO_CLAUDE_TOKEN LUKE_DEMO_ANTHROPIC_API_KEY
-if [[ -z $demo_claude_token && -z $demo_anthropic_api_key ]]; then
-    printf 'demo: neither LUKE_DEMO_CLAUDE_TOKEN nor LUKE_DEMO_ANTHROPIC_API_KEY is set, so Dean has no Claude credential and agents will not run; set one to run them\n' >&2
+demo_claude_token=
+demo_anthropic_api_key=
+demo_credential_source=
+if [[ -n ${CLAUDE_CODE_OAUTH_TOKEN:-} ]]; then
+    demo_claude_token=$CLAUDE_CODE_OAUTH_TOKEN
+    demo_credential_source=CLAUDE_CODE_OAUTH_TOKEN
+elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then
+    demo_anthropic_api_key=$ANTHROPIC_API_KEY
+    demo_credential_source=ANTHROPIC_API_KEY
+fi
+if [[ -n $demo_credential_source ]]; then
+    printf "demo: Dean's agents get the Claude credential in %s\n" "$demo_credential_source" >&2
+else
+    printf 'demo: neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set, so Dean has no Claude credential and agents will not run; set one to run them\n' >&2
 fi
 demo_auth_secret=$(demo_random_key)
 demo_key_ring="1:$(demo_random_key)"
