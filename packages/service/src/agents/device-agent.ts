@@ -195,15 +195,16 @@ function refusedTurn(
 
 /**
  * The turn a launch's message waits on, queued where its runner never
- * opened one, for the settle after it to end: where no stop was queued
- * after the launch, which the service itself ended, and the conversation
- * holds no turn queued since the launch was written. Note that a native
- * turn is queued by its harness's first event
- * (`native-events/runner-events-app.ts`), so a runner that never started
- * leaves its message awaiting a turn nothing will queue, and the agent
- * reading as running until that line's grace.
+ * opened one, for the settle after it to end, whether its Mac settled the
+ * launch or the lease sweep took it from a Mac gone quiet
+ * (`../maintenance/device-lease-sweep.ts`): where no stop was queued after
+ * the launch, which the service itself ended, and the conversation holds no
+ * turn queued since the launch was written. Note that a native turn is
+ * queued by its harness's first event (`native-events/runner-events-app.ts`),
+ * so a runner that never started leaves its message awaiting a turn nothing
+ * will queue, and the agent reading as running until that line's grace.
  */
-const queuedUnopenedTurn = (
+export const queuedUnopenedTurn = (
   writer: Pick<StoreWriter, "enqueueTurn">,
   userId: string,
   conversationId: string,
