@@ -617,12 +617,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           ofAnswer(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, "sk-short"))),
           invalid,
         );
-        assert.deepEqual(
-          ofAnswer(
-            yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, "sk-proj with spaces in the key")),
-          ),
-          invalid,
-        );
         assert.deepEqual(ofAnswer(yield* ask(remove(owner, "google"))), invalid);
         assert.deepEqual(
           ofAnswer(yield* ask(request(undefined))),
@@ -721,7 +715,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
   );
 
   it.effect(
-    "a setup-token is kept beside an Anthropic API key and an API key beside a setup-token, each removed by its own kind, and one spelled as no setup-token or saved for OpenAI keeps nothing",
+    "a setup-token is kept beside an Anthropic API key and an API key beside a setup-token, each removed by its own kind, one pasted as the terminal wraps it is kept whole, and one spelled as no setup-token or saved for OpenAI keeps nothing",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
@@ -749,6 +743,16 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const forOpenAi = keysOf(
           yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.OPENAI, SETUP_TOKEN)),
         );
+        // Note that `claude setup-token` wraps its token at the terminal's width, so a copy carries a line break and indent.
+        const wrapped = keysOf(
+          yield* ask(
+            saveToken(
+              other,
+              PROVIDER_KEY_PROVIDER.ANTHROPIC,
+              `${SETUP_TOKEN.slice(0, 30)}\n  ${SETUP_TOKEN.slice(30)}`,
+            ),
+          ),
+        );
 
         const keyHints = (answer: typeof tokenBesideKey) =>
           answer.keys.map(({ provider, hint }) => [provider, hint]);
@@ -774,6 +778,8 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         assert.deepEqual(apiKeyAsToken.subscriptions, keyRemoved.subscriptions);
         assert.deepEqual(forOpenAi.rejected, PROVIDER_KEY_REJECTION.WRONG_PROVIDER);
         assert.equal(forOpenAi.subscriptions, undefined);
+        assert.equal(wrapped.rejected, undefined);
+        assert.deepEqual(tokenHints(wrapped), anthropicToken);
         assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
       }),
   );
