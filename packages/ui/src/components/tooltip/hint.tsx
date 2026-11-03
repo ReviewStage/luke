@@ -8,7 +8,7 @@
  * shown at once for as long as the pointer keeps moving between controls,
  * the way a menu bar stays open across its titles. Pressing, any key,
  * Escape among them, scrolling, the pointer leaving, and the window losing
- * the keyboard all take it down. It hangs below its control and turns above it where the window ends,
+ * the keyboard all take it down; a modifier held alone does not. It hangs below its control and turns above it where the window ends,
  * so it never covers what it names.
  *
  * A control with more to say than a pill holds hangs a card in its place:
@@ -144,6 +144,22 @@ const HINT_REST = Duration.millis(MOTION_DELAY_MS.HINT);
 const CARD_LINGER = Duration.millis(MOTION_DELAY_MS.SETTLE);
 
 /**
+ * The keys that only modify another, as `KeyboardEvent.key` names them.
+ * Note that one pressed alone leaves a hint standing, because it presses
+ * nothing: it begins a chord, and a chord the system keeps, as macOS's ⌃⇧⌘4
+ * screenshot keeps its 4, reaches the window as its modifiers alone.
+ */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set([
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "Meta",
+  "Shift",
+]);
+
+/**
  * What a press may land on that is a control of its own, every pressable
  * role among them: a tap works it rather than showing its hint, so its hint
  * shows on a long press instead, and inside a control hanging a card it
@@ -252,20 +268,23 @@ function letGoRest(): void {
 
 /**
  * Hears, while a wait runs, the window's movements that take a hint down
- * once it stands, so they call off a hint still waiting the same way: a key,
- * a scroll anywhere but on a standing card, which is a card being read, and
- * the window losing the keyboard. Answers the way to stop hearing them.
+ * once it stands, so they call off a hint still waiting the same way: a key
+ * other than a modifier held alone, a scroll anywhere but on a standing card,
+ * which is a card being read, and the window losing the keyboard. Answers the way to stop hearing them.
  */
 function hearRestEnders(stop: () => void): () => void {
+  const key = (event: KeyboardEvent) => {
+    if (!MODIFIER_KEYS.has(event.key)) stop();
+  };
   const scrolled = (event: Event) => {
     const { target } = event;
     if (!(target instanceof Node && standing.some((each) => each.holds(target)))) stop();
   };
-  window.addEventListener("keydown", stop, true);
+  window.addEventListener("keydown", key, true);
   window.addEventListener("scroll", scrolled, true);
   window.addEventListener("blur", stop);
   return () => {
-    window.removeEventListener("keydown", stop, true);
+    window.removeEventListener("keydown", key, true);
     window.removeEventListener("scroll", scrolled, true);
     window.removeEventListener("blur", stop);
   };
@@ -761,7 +780,8 @@ export function Tooltip({
 
   // While a pill stands, the window's own movements take it down. A key is
   // a press too, Escape among them, and the key is still the control's or
-  // the window's: the pill is no layer of its own to take one. Only a card
+  // the window's: the pill is no layer of its own to take one, bar a
+  // modifier held alone, which presses nothing yet. Only a card
   // the pointer is on lets a key other than Escape pass, since that key is
   // most likely the copy of what was selected on it, and a list scrolling
   // within a standing card, this one or one stacked over it, leaves it
@@ -770,6 +790,7 @@ export function Tooltip({
   useEffect(() => {
     if (!up) return;
     const key = (event: KeyboardEvent) => {
+      if (MODIFIER_KEYS.has(event.key)) return;
       if (event.key === "Escape" || !overCard.current) hide();
     };
     // Note that a card stacked over this one is portaled apart from it, so a scroll on any standing card is read as the cards being read.
