@@ -146,8 +146,9 @@ reached an agent shows in its transcript as the comment it was.
 
 An owner or admin connects Vespin's Slack bot once for the workspace in
 Settings › Workspace. Then a thread that waits on you arrives as a Slack DM,
-which updates once it is answered and carries a button for each of a
-decision's options, and @Vespin in a channel, or a DM to the bot, starts an
+which updates once it is answered, carries a button for each of a
+decision's options, and gathers the agent's later posts on that thread as
+replies, and @Vespin in a channel, or a DM to the bot, starts an
 agent on what you wrote, in the repository you name, the channel's, or the
 workspace's default, posting each finished turn back in the Slack thread. An
 automation can send each run's result to you on Slack, and Slack
@@ -161,7 +162,9 @@ notifications in Settings › Workspace turns your DMs off.
 [#6438](https://github.com/ReviewStage/vespin/pull/6438),
 [#6442](https://github.com/ReviewStage/vespin/pull/6442),
 [#6443](https://github.com/ReviewStage/vespin/pull/6443),
-[#6446](https://github.com/ReviewStage/vespin/pull/6446))
+[#6446](https://github.com/ReviewStage/vespin/pull/6446),
+[#6463](https://github.com/ReviewStage/vespin/pull/6463),
+[#6469](https://github.com/ReviewStage/vespin/pull/6469))
 
 ### Improvements
 
@@ -281,6 +284,9 @@ notifications in Settings › Workspace turns your DMs off.
   [#6251](https://github.com/ReviewStage/vespin/pull/6251),
   [#6256](https://github.com/ReviewStage/vespin/pull/6256),
   [#6275](https://github.com/ReviewStage/vespin/pull/6275))
+- On a phone, the Pull request tab's header folds away with the scroll and
+  snaps open or shut, rather than vanishing in one frame
+  ([#6459](https://github.com/ReviewStage/vespin/pull/6459))
 - The workspace's Sentry row in Settings › Workspace says it carries alerts to
   automations, with Disconnect in its ⋯
   ([#6335](https://github.com/ReviewStage/vespin/pull/6335),
@@ -349,6 +355,9 @@ notifications in Settings › Workspace turns your DMs off.
   [#6412](https://github.com/ReviewStage/vespin/pull/6412))
 - Fixed a link in an automation run's Inbox item taking you away from the item
   ([#6379](https://github.com/ReviewStage/vespin/pull/6379))
+- Fixed an agent's words reaching Slack with their Markdown showing raw, and
+  a press on a Slack button sometimes answered as failed
+  ([#6463](https://github.com/ReviewStage/vespin/pull/6463))
 - Fixed disconnecting an integration's only account not saying what goes
   ([#6179](https://github.com/ReviewStage/vespin/pull/6179))
 
