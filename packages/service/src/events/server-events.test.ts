@@ -105,7 +105,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("server events", (it) => {
   it.effect(
-    "posts the event under the account's id, its workspace's group, its own properties, the deployment, and no location",
+    "posts the event under the account's id and person, its workspace's group, its own properties, the deployment, and no location",
     () => {
       // The layer reads the deployment's name as it is built, so it is named before.
       vi.stubEnv(DEPLOYMENT_VARIABLE, "preview");
@@ -137,6 +137,7 @@ it.layer(getTestDB())("server events", (it) => {
                     has_task: true,
                     agent_kind: "coder",
                     $groups: { workspace: "workspace-1" },
+                    $set: { name: "Test User", email: `${userId}@app.test` },
                     $geoip_disable: true,
                     platform: "server",
                     environment: "preview",
