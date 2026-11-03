@@ -49,8 +49,6 @@ const DECLARED_TABLES = [
   "attachment",
   "automation",
   "automation_run",
-  "channel",
-  "channel_look",
   "conversations",
   "device",
   "device_agent_line",
