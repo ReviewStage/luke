@@ -32,7 +32,9 @@ import { Picker, PickerRow } from "./picker-row.js";
  * Under the Slack bot's row once it is connected, and to an owner or admin
  * alone, since the channel list is theirs: a Default repository picker,
  * then one row per channel the bot is in, inset under the bot's words as
- * GitHub's accounts are under GitHub's, each with its own repository picker
+ * GitHub's accounts are under GitHub's, named as Slack's sidebar names it,
+ * its mark (a hash, or a lock for a private channel) saying its kind and
+ * its name bare, each with its own repository picker
  * (the workspace's default where it names none) and a Remove that asks
  * first, since the bot leaves the channel for everyone in it; and last, an
  * Add to a channel picker over the public channels the bot is not in, its
@@ -53,7 +55,6 @@ const WORDS = {
   NONE: "None",
   WORKSPACE_DEFAULT: "Workspace default",
   REPOSITORY_SEARCH: "Search repositories",
-  CHANNEL_DETAIL_PRIVATE: "Private channel",
   ADD_LABEL: "Add to a channel",
   ADD_DETAIL: `Public channels. For a private channel, run /invite @${PRODUCT_NAME} in it.`,
   ADD_VALUE: "Choose a channel",
@@ -70,9 +71,14 @@ type RepositoryRows =
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/** A channel as its row names it. */
+/** A channel as a sentence names it, as Slack writes one. */
 function channelName(channel: SlackBotChannel): string {
   return `#${channel.name}`;
+}
+
+/** A channel's mark, which says its kind so its name need not: Slack's hash for a public one, a lock for a private one. */
+function ChannelMark({ channel }: { channel: SlackBotChannel }): React.JSX.Element {
+  return channel.private ? <GLYPH.PRIVATE_CHANNEL /> : <GLYPH.CHANNEL />;
 }
 
 /** The repositories the workspace reaches, read as a picker opens, so one that failed is asked for again. */
@@ -196,11 +202,10 @@ function ChannelRow({
         indent={SETTINGS_ROW_INDENT.MARK}
         leading={
           <SettingsRowMark>
-            <GLYPH.CHANNEL />
+            <ChannelMark channel={channel} />
           </SettingsRowMark>
         }
-        label={name}
-        description={channel.private ? WORDS.CHANNEL_DETAIL_PRIVATE : undefined}
+        label={channel.name}
         error={refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL)}
       >
         {(control) => (
@@ -282,8 +287,8 @@ function AddChannelRow({
       valueLabel={WORDS.ADD_VALUE}
       rows={addable.map((channel) => ({
         id: channel.id,
-        label: channelName(channel),
-        icon: <GLYPH.CHANNEL />,
+        label: channel.name,
+        icon: <ChannelMark channel={channel} />,
       }))}
       placeholder={WORDS.CHANNEL_SEARCH}
       noMatch={noMatchWords(TERM.CHANNEL)}
