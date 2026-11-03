@@ -463,6 +463,7 @@ const READS = {
   people: new Map([
     [PERSON_ID, { userId: PERSON_ID, name: "Dana Reyes", role: WORKSPACE_ROLE.ADMIN }],
   ]),
+  tasks: new Map(),
 };
 
 test("a page of the plan the words mention is handed by its title, id, and version, with how to read it and how to revise it, and never its HTML", () => {
@@ -496,6 +497,7 @@ test("an agent of the workspace on another task or on none is handed with its ta
     pages: new Map(),
     agents: new Map([[OTHER_AGENT_ID, standing]]),
     people: new Map(),
+    tasks: new Map(),
   });
 
   const another = mentionedContext(`See ${agent("Store")}.`, TASK, reads(onAnother));
@@ -522,6 +524,7 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
       pages: new Map(),
       agents: new Map([[OTHER_AGENT_ID, standing]]),
       people: new Map(),
+      tasks: new Map(),
     }) ?? "";
 
   assert.match(

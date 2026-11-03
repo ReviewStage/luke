@@ -31,6 +31,7 @@ import {
   type SchemeLink,
   schemeLinkOf,
   taskNumberOf,
+  withTaskId,
 } from "./link-grammar.js";
 import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
@@ -1262,6 +1263,68 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
   return found.filter((link) => !insideCode(text, link.start));
 }
 
+/** A task a link names by its number in a workspace, `/<workspace>/task/42`, by the workspace's step as the link spells it. */
+interface NumberedTask {
+  readonly workspace: string;
+  readonly number: number;
+}
+
+/** The id of the task a link names by its number, as a reader found it; none where it found none. */
+export type NumberedTaskIdOf = (task: NumberedTask) => string | undefined;
+
+/** How `handedMentionsIn` reads the words: how many mentions at most, and how a task a link names by its number is found by its id. */
+interface HandedMentionsOptions {
+  readonly limit?: number | undefined;
+  readonly taskIdOf?: NumberedTaskIdOf | undefined;
+}
+
+/** The task a link names by its number, `/<workspace>/task/42`; none for any other. */
+function numberedTaskOf(target: string): NumberedTask | undefined {
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  return read === undefined || number === undefined
+    ? undefined
+    : { workspace: read.workspace, number };
+}
+
+/**
+ * The mention a link naming its task by its number names, read as the
+ * link naming the task by the id `taskIdOf` found does: the task's, a
+ * section's, or a page's; none where it found no task.
+ */
+function numberedMention(
+  target: string,
+  repository: string | null,
+  taskIdOf: NumberedTaskIdOf,
+): Mention | undefined {
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return undefined;
+  const taskId = taskIdOf({ workspace: read.workspace, number });
+  if (taskId === undefined) return undefined;
+  return decodeMention(linkOf(withTaskId(read.place, taskId), read.workspace), repository);
+}
+
+/**
+ * Every task the words name by its number, by a mention link or an address
+ * written bare, outside code, each once, at most as many as a message's
+ * mentions are handed: what a reader finds by its id before it reads the
+ * words' mentions (`handedMentionsIn`'s `taskIdOf`).
+ */
+export function numberedTasksIn(text: string): readonly NumberedTask[] {
+  const found: NumberedTask[] = [];
+  for (const link of [...mentionLinksIn(text), ...bareLinksIn(text)]) {
+    if (found.length === MENTION_BOUNDS.MAX_MENTIONS) break;
+    const task = numberedTaskOf(link.target);
+    if (task === undefined) continue;
+    const seen = found.some(
+      (each) => each.workspace === task.workspace && each.number === task.number,
+    );
+    if (!seen) found.push(task);
+  }
+  return found;
+}
+
 /**
  * Every mention an agent is handed of the words, in order, standing outside
  * code: each `@` link whose target names a mention (`mentionsIn`), and each
@@ -1269,12 +1332,13 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
  * a page's, an agent's, or a person's, as the window draws either as its chip. A bare
  * address of any other kind, a file's GitHub page or a Linear issue's, is
  * the words' own, and is handed nothing. At most `limit` are read, across
- * both forms; any past them stay words.
+ * both forms; any past them stay words. A link naming its task by its
+ * number is handed as the task's mention where `taskIdOf` finds the task.
  */
 export function handedMentionsIn(
   text: string,
   repository: string | null,
-  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+  { limit = MENTION_BOUNDS.MAX_MENTIONS, taskIdOf }: HandedMentionsOptions = {},
 ): readonly MentionInWords[] {
   const written = [...mentionLinksIn(text), ...bareLinksIn(text)].sort(
     (first, second) => first.start - second.start,
@@ -1282,7 +1346,9 @@ export function handedMentionsIn(
   const found: MentionInWords[] = [];
   for (const link of written) {
     if (found.length === limit) break;
-    const mention = decodeMention(link.target, repository);
+    const mention =
+      decodeMention(link.target, repository) ??
+      (taskIdOf === undefined ? undefined : numberedMention(link.target, repository, taskIdOf));
     if (mention === undefined) continue;
     if (isMentionLabel(link.label) || OWN_KINDS.has(mention.kind)) found.push({ ...link, mention });
   }
@@ -1322,7 +1388,7 @@ export function withoutMemberLinks(text: string): string {
   let out = "";
   let at = 0;
   // Note that every link is read, past the cap a message's mentions are handed under, so none is left to be handed.
-  for (const found of handedMentionsIn(text, null, text.length)) {
+  for (const found of handedMentionsIn(text, null, { limit: text.length })) {
     if (!namesMember(found.mention)) continue;
     const name = linkMention(found.label, found.target, null)?.name ?? found.label;
     out += `${text.slice(at, found.start)}@${name}`;

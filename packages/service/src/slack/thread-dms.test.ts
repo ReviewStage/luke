@@ -97,7 +97,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
       );
       yield* dmThreadPost({ organizationId, item: followUp, asked: false, wasOpen });
 
-      const link = `https://vespin.dev/${slug}/agent/${agent.agentId}/inbox/${item.id}`;
+      const link = `https://vespin.dev/${slug}/inbox/${item.id}`;
       const posted = calls.filter((call) => call.method === "chat.postMessage");
       assert.equal(posted.length, 1);
       assert.equal(posted[0]?.args.channel, `U-${email}`);

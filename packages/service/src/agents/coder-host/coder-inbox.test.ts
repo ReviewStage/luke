@@ -189,13 +189,9 @@ const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string 
     return item;
   });
 
-/** The mention an agent writes a thread of its own as, under the agent whichever task it works on, its link spelled out as the window reads one. */
-function mentionOf(
-  agent: { readonly workspaceId: string; readonly agentId: string },
-  title: string,
-  itemId: string,
-): string {
-  return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/agent/${agent.agentId}/inbox/${itemId})`;
+/** The mention an agent writes a thread of its own as, by its id alone under its workspace, its link spelled out as the window reads one. */
+function mentionOf(agent: { readonly workspaceId: string }, title: string, itemId: string): string {
+  return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/inbox/${itemId})`;
 }
 
 /** The message whose ask the thread holds open. */

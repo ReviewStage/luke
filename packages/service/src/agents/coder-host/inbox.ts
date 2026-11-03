@@ -540,17 +540,19 @@ function inboxOf(
   );
 }
 
-/** What the agent's items stand on, as their links name it: its task, or the agent itself where it works on none. */
+/** What the agent's items stand on, whose workspace their links are written under: its task, or the agent itself where it works on none. */
 function inboxOwner(agent: InboxAgent): PageOwner {
   return agent.taskId === null
     ? { kind: PAGE_OWNER.AGENT, agentId: agent.agentId }
     : { kind: PAGE_OWNER.TASK, taskId: agent.taskId };
 }
 
-/** An item's mention under the workspace step given, by its link under its agent, whichever task that works on. */
-function itemMention(agent: InboxAgent, step: string, item: InboxItem): string {
-  const place = { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id } as const;
-  return mentionMarkdownLink(item.title, linkOf(place, step));
+/** An item's mention under the workspace step given, by its id alone, whose agent and task a reader asks the service for. */
+function itemMention(step: string, item: InboxItem): string {
+  return mentionMarkdownLink(
+    item.title,
+    linkOf({ kind: LINK_PLACE.INBOX_ITEM, itemId: item.id }, step),
+  );
 }
 
 /** The agent's inbox as the call answers it, each thread by the mention the agent writes it as. */
@@ -561,7 +563,7 @@ function accepted(agent: InboxAgent): Effect.Effect<InboxToolResult, never, Data
     (items, step) => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       inbox: inboxOf(items, (item) =>
-        Option.isNone(step) ? undefined : itemMention(agent, step.value, item),
+        Option.isNone(step) ? undefined : itemMention(step.value, item),
       ),
     }),
   ).pipe(

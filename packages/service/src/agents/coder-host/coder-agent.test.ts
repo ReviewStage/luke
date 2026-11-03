@@ -12,11 +12,14 @@ import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { Schema } from "effect";
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./inbox.js";
-import { CODER_HARNESS, coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions, type OwnTask } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/** The link of the task an agent on one works on, as its instructions are handed it. */
-const TASK_ADDRESS = "https://vespin.dev/acme/task/pl_1";
+/** The task an agent on one works on, its link and its id, as its instructions are handed them. */
+const TASK_ADDRESS = {
+  link: "https://vespin.dev/acme/task/42",
+  id: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
+} as const;
 
 test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered", () => {
   // The tools Claude Code owns in place of ours, as eve's instructions name ours.
@@ -276,7 +279,7 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
 });
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
-  const TASK_LINK = "`https://vespin.dev/<workspace>/task/<id>` link, or an older";
+  const TASK_LINK = "`https://vespin.dev/<workspace>/task/<number>` link, or one by the task's id";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
@@ -312,8 +315,8 @@ test("an agent on a task starts the agents that help with it on its own task, an
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
   const UPDATING = "## Updating the plan";
   const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
-  const told = (brief: AgentBrief, taskLink: string | null) => {
-    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+  const told = (brief: AgentBrief, task: OwnTask | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, task);
     return [
       words.includes(UPDATING),
       words.includes(CODER_TOOL.EDIT_PLAN),
@@ -346,8 +349,8 @@ test("an agent on a task with no repository names what it decided in its message
 
 test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {
   const STATUS = "## Your task's status";
-  const told = (brief: AgentBrief, taskLink: string | null) => {
-    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+  const told = (brief: AgentBrief, task: OwnTask | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, task);
     const at = words.indexOf(STATUS);
     if (at === -1) return [false, false, false, false, false];
     const section = words.slice(at, words.indexOf("\n\n## ", at + STATUS.length));
@@ -371,8 +374,8 @@ test("an agent asked for a plan, a proposal, or research opens no pull request o
   const NO_DOCUMENT = "never commit the write-up as a document";
   const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
-  const told = (brief: AgentBrief, taskLink: string | null) => {
-    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+  const told = (brief: AgentBrief, task: OwnTask | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, task);
     assert.ok(words.includes(NO_DOCUMENT), brief);
     return [words.includes(PLAN), words.includes(PAGE)];
   };
@@ -390,8 +393,8 @@ test("the thread post tool tells the session never to ask for a credential or a 
 test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, and an agent another coding agent started may message that agent before its report", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(AGENT_BRIEF)) {
-    for (const taskLink of [TASK_ADDRESS, null]) {
-      const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split("## Threads")[1];
+    for (const task of [TASK_ADDRESS, null]) {
+      const inbox = coderInstructions("Acme/Relay", brief, true, task).split("## Threads")[1];
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
@@ -502,8 +505,11 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
   }
 });
 
-/** The task link the golden's on-task prompts were composed with. */
-const TASK_LINK = "https://vespin.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+/** The task the golden's on-task prompts were composed with: its link, by its number, and its id. */
+const TASK_LINK = {
+  link: "https://vespin.dev/acme/task/42",
+  id: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
+} as const;
 
 /** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
 const CODER_PATH = fileURLToPath(

@@ -74,6 +74,7 @@ const TASK: TaskSummary = {
   createdAt: AT,
   updatedAt: AT,
   repository: "acme/relay",
+  number: 42,
   agents: {
     total: 1,
     working: 1,
@@ -98,6 +99,7 @@ const STATE: AppStateSnapshot = (() => {
     ...snapshot,
     tasks: {
       ...IDLE_TASKS_VIEW,
+      workspaces: [ACME],
       tasks: [TASK],
       tasklessAgents: [
         {
@@ -190,10 +192,13 @@ function chips(container: HTMLElement): [string | undefined, string | null][] {
   ]);
 }
 
-test("a bare link to a place the window knows is called by its name, the task's title, the agent's, the page's, the item's, the member's", async () => {
+test("a bare link to a place the window knows is called by its name, the task's title, the agent's, the page's, the item's, the member's, a task named by its number drawn as the chip its id draws", async () => {
   const container = await drawn(
     [
       `${HOME}/plan/${TASK_ID}`,
+      `${HOME}/task/42`,
+      `${HOME}/task/42/page/${PAGE}`,
+      `${HOME}/inbox/${ITEM}`,
       `${HOME}/plan/${TASK_ID}/agent/${AGENT}`,
       `${HOME}/plan/${TASK_ID}/page/${PAGE}`,
       `${HOME}/plan/${TASK_ID}/inbox/${ITEM}`,
@@ -207,6 +212,9 @@ test("a bare link to a place the window knows is called by its name, the task's 
 
   assert.deepEqual(chips(container), [
     ["plan", "Teammate invitations"],
+    ["plan", "Teammate invitations"],
+    ["page", "Unfurl matrix"],
+    ["place", "Keep expired links?"],
     ["agent", "Expire old invitations"],
     ["page", "Unfurl matrix"],
     ["place", "Keep expired links?"],

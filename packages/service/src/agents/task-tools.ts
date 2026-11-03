@@ -3,7 +3,6 @@ import { recordRevision } from "@repo/database/models/plan-revisions";
 import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { AGENT_KIND } from "@repo/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
-import { MENTION_KIND } from "@repo/features/mention-link";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PLAN_ACTOR,
@@ -51,7 +50,7 @@ import { calledId } from "./called-id.js";
 import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
-import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
+import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
 
 /**
  * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
@@ -104,7 +103,7 @@ export const READ_TASK_REFUSAL = {
 const READ_TASK_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task to read, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+    `The task to read, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   ),
 });
 
@@ -159,7 +158,7 @@ export function runReadTask(
           repository: task.repository ?? null,
           startedBy: task.createdBy?.name ?? null,
           isYourTask: task.id === callerTask(call.caller),
-          mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+          mention: writtenTaskMention(task, task.name, step),
           brief: brief ?? null,
           ...blocks,
         },
@@ -417,11 +416,7 @@ export function runCreateTask(
           ...taskStandingOf(task, naming),
           name: task.name,
           repository: task.repository ?? null,
-          mention: writtenMention(
-            { kind: MENTION_KIND.TASK, taskId: task.id },
-            task.name,
-            naming.step,
-          ),
+          mention: writtenTaskMention(task, task.name, naming.step),
         },
       });
       // The call run again finds the task it made, and makes no second.

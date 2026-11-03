@@ -757,6 +757,18 @@ export function withTaskId(place: LinkPlace, taskId: string): LinkPlace {
   return "planId" in place ? { ...place, planId: taskId } : place;
 }
 
+/**
+ * The step a task's links name it by: its number in its workspace, which
+ * reads well and every reader finds by the slug (`taskNumberOf`), or its id
+ * where no number is known, as from a service before tasks had one.
+ */
+export function taskLinkStep(task: {
+  readonly id: string;
+  readonly number?: number | undefined;
+}): string {
+  return task.number === undefined ? task.id : String(task.number);
+}
+
 /** The places of the account's own, which no workspace holds, so their links name none. */
 export const ACCOUNT_PLACE = {
   /** A box's pending pairing, by the code it shows, which the member approves or denies. */

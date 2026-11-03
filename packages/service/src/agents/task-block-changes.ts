@@ -5,12 +5,11 @@ import {
   type TaskBlockPair,
 } from "@repo/database/models/task-block-store";
 import { readTaskHeader } from "@repo/database/models/task-store";
-import { MENTION_KIND } from "@repo/features/mention-link";
 import { describeWire } from "@repo/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { wireUuidSchema } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { writtenMention } from "./written-mentions.js";
+import { writtenTaskMention } from "./written-mentions.js";
 
 /**
  * task-block-changes.ts -- the blocks `update_task` adds and takes away, and the blocks `read_task` and its answer name.
@@ -198,11 +197,11 @@ const readingsOf = (userId: string, taskIds: readonly string[], step: string) =>
       Effect.map(readTaskHeader(userId, taskId), (header) =>
         Option.map(
           header,
-          ({ name, status }): TaskBlockReading => ({
+          ({ name, status, number }): TaskBlockReading => ({
             id: taskId,
             name,
             status,
-            mention: writtenMention({ kind: MENTION_KIND.TASK, taskId }, name, step),
+            mention: writtenTaskMention({ id: taskId, number }, name, step),
           }),
         ),
       ),

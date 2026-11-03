@@ -1,6 +1,8 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readAgent } from "@repo/database/models/agent-store";
+import { readTaskHeader } from "@repo/database/models/task-store";
 import { workspaceOf } from "@repo/database/models/workspace-store";
+import { LINK_PLACE, linkOf, mentionMarkdownLink, taskLinkStep } from "@repo/features/link-grammar";
 import { MENTION_KIND, type Mention, mentionMarkdown } from "@repo/features/mention-link";
 import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
 import { Effect, Option } from "effect";
@@ -17,7 +19,10 @@ import type { StoreFailure } from "../http/store-failure.js";
  * mention whole, so the agent copies it rather than spelling an address.
  * The workspace is written by the slug its member reads it under, or by
  * its id where the member reads it no longer, as the desktop writes its
- * own links: a slug is never trusted, and the id alone finds the thing.
+ * own links: a slug is never trusted, and the id alone finds the thing. A
+ * task, and a page on one, is written by its number in the workspace
+ * (`taskLinkStep`), which a reader finds by the slug and the window draws
+ * as the task's chip once it finds the task among its own.
  */
 
 /** The step a workspace's links are written under: its slug as the member reads it, or its id. */
@@ -75,11 +80,50 @@ export const pageStepOf = (
   );
 };
 
-/** A page's mention, under what it stands on: its task, or the coding agent on no task that showed it. */
-export function pageMention(owner: PageOwner, pageId: string): Mention {
-  return owner.kind === PAGE_OWNER.TASK
-    ? { kind: MENTION_KIND.PAGE, taskId: owner.taskId, pageId }
-    : { kind: MENTION_KIND.PAGE, agentId: owner.agentId, pageId };
+/**
+ * A page's mention as an agent writes it, its title as its name: under its
+ * task, by the task's number (`taskLinkStep`), or under the coding agent on
+ * no task that showed it; nothing where the member reads neither.
+ */
+export const writtenPageMention = (
+  userId: string,
+  owner: PageOwner,
+  pageId: string,
+  title: string,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> => {
+  if (owner.kind === PAGE_OWNER.AGENT) {
+    return Effect.map(
+      pageStepOf(userId, owner),
+      Option.map((step) =>
+        writtenMention({ kind: MENTION_KIND.PAGE, agentId: owner.agentId, pageId }, title, step),
+      ),
+    );
+  }
+  return Effect.flatMap(readTaskHeader(userId, owner.taskId), (header) =>
+    Option.match(header, {
+      onNone: () => Effect.succeed(Option.none<string>()),
+      onSome: ({ workspaceId, number }) =>
+        Effect.map(workspaceStepOf(userId, workspaceId), (step) => {
+          const planId = taskLinkStep({ id: owner.taskId, number });
+          const link = linkOf({ kind: LINK_PLACE.PAGE, planId, pageId }, step);
+          return Option.some(mentionMarkdownLink(title, link));
+        }),
+    }),
+  );
+};
+
+/** A task as its link names it: its id, and its number in its workspace where one is known. */
+interface LinkedTask {
+  readonly id: string;
+  readonly number?: number | undefined;
+}
+
+/** A task's mention as an agent writes it, named and by its link under the workspace's step, which names it by its number (`taskLinkStep`). */
+export function writtenTaskMention(task: LinkedTask, name: string, workspace: string): string {
+  return mentionMarkdownLink(
+    name,
+    linkOf({ kind: LINK_PLACE.TASK, planId: taskLinkStep(task) }, workspace),
+  );
 }
 
 /** The mention as an agent writes it, named and under the workspace's step; a thing of ours names no repository. */

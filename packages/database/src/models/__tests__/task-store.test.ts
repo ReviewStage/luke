@@ -456,6 +456,8 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
           assigneeId: null,
+          // The workspace's first task.
+          number: 1,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -479,6 +481,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           parentTaskId: null,
           mode: whole.task.mode,
           assigneeId: whole.task.assignee?.userId ?? null,
+          number: whole.task.number,
         });
       }),
   );
