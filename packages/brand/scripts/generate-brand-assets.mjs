@@ -83,13 +83,14 @@ const svgOpen = (w, h) => svgOpenAt(0, 0, w, h);
 const markAt = (x, y, side, ink, path = MARK.PATH) =>
   `<g transform="translate(${fmt(x)} ${fmt(y)}) scale(${fmt(side / 100)})"><path d="${path}" fill="${ink}"/></g>`;
 
-// The lockup in one ink, in the word's own units, and its ink box.
-function lockup(ink) {
+// The lockup in one ink, or with the mark in its own, in the word's own
+// units, and its ink box.
+function lockup(ink, markInk = ink) {
   const disc = WORDMARK.CAP_HEIGHT * LOCKUP.DISC;
   const gap = disc * LOCKUP.GAP;
   const top = -WORDMARK.CAP_HEIGHT / 2 - disc / 2;
   const body =
-    markAt(0, top, disc, ink) +
+    markAt(0, top, disc, markInk) +
     `<path transform="translate(${fmt(disc + gap)} 0)" d="${WORDMARK.PATH}" fill="${ink}"/>`;
   const box = {
     left: 0,
@@ -100,13 +101,14 @@ function lockup(ink) {
   return { body, box };
 }
 
-// The stacked lockup in one ink, in the word's own units, and its ink box.
-function stackedLockup(ink) {
+// The stacked lockup in one ink, or with the mark in its own, in the word's
+// own units, and its ink box.
+function stackedLockup(ink, markInk = ink) {
   const { CAP_HEIGHT, INK } = WORDMARK;
   const disc = CAP_HEIGHT * STACKED.DISC;
   const top = INK.TOP - CAP_HEIGHT * STACKED.GAP - disc;
   const left = (INK.LEFT + INK.RIGHT) / 2 - disc / 2;
-  const body = markAt(left, top, disc, ink) + `<path d="${WORDMARK.PATH}" fill="${ink}"/>`;
+  const body = markAt(left, top, disc, markInk) + `<path d="${WORDMARK.PATH}" fill="${ink}"/>`;
   return { body, box: { left: INK.LEFT, right: INK.RIGHT, top, bottom: INK.BOTTOM } };
 }
 
@@ -143,9 +145,22 @@ function emit(relPath, svg, title) {
   written.push(relPath);
 }
 
-// Wordmark and logos, per mode, on a transparent ground: the wordmark is the
-// name alone, for where the mark already stands nearby; the logo is the
-// lockup, for headers and docs, and its stacked cut for a square-ish space.
+// Wordmark and logos on a transparent ground: the wordmark is the name
+// alone, for where the mark already stands nearby; the logo is the lockup,
+// for headers and docs, and its stacked cut for a square-ish space. Each in
+// every one-ink set: each mode's ink, and pure black and pure white for a
+// partner, a printer, or a sponsor's wall that asks for exactly those. The
+// logos come in colour as well: the mark in each mode's copper beside the
+// name in that mode's ink.
+const ONE_INKS = { ...INKS, black: "#000000", white: "#ffffff" };
+const COLOUR_INKS = {
+  light: { word: INKS.light, mark: BRAND.LIGHT.ACCENT },
+  dark: { word: INKS.dark, mark: BRAND.DARK.ACCENT },
+};
+const LOGO_CUTS = [
+  ["logo", lockup],
+  ["logo-stacked", stackedLockup],
+];
 const PAD = 6;
 const padded = (box) =>
   svgOpenAt(
@@ -154,19 +169,22 @@ const padded = (box) =>
     box.right - box.left + 2 * PAD,
     box.bottom - box.top + 2 * PAD,
   );
-for (const [mode, ink] of Object.entries(INKS)) {
+for (const [name, ink] of Object.entries(ONE_INKS)) {
   const { INK } = WORDMARK;
   emit(
-    `wordmark/wordmark-${mode}.svg`,
+    `wordmark/wordmark-${name}.svg`,
     `${padded({ left: INK.LEFT, right: INK.RIGHT, top: INK.TOP, bottom: INK.BOTTOM })}<path d="${WORDMARK.PATH}" fill="${ink}"/></svg>`,
     PRODUCT_NAME,
   );
-  for (const [name, cut] of [
-    ["logo", lockup],
-    ["logo-stacked", stackedLockup],
-  ]) {
+  for (const [cutName, cut] of LOGO_CUTS) {
     const { body, box } = cut(ink);
-    emit(`logo/${name}-${mode}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
+    emit(`logo/${cutName}-${name}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
+  }
+}
+for (const [mode, { word, mark }] of Object.entries(COLOUR_INKS)) {
+  for (const [cutName, cut] of LOGO_CUTS) {
+    const { body, box } = cut(word, mark);
+    emit(`logo/${cutName}-colour-${mode}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
   }
 }
 
@@ -231,14 +249,19 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
 }
 
 // Mark: the disc alone on transparency with a twelfth of air on each side,
-// in each mode's ink, and in pure black, the one-ink glyph a partner surface
-// tints for its own theme, such as an integration's icon on Sentry, which
-// takes no colour but black. The disc on a tile is the avatar, below.
+// in each mode's ink, in pure white, and in pure black, the one-ink glyph a
+// partner surface tints for its own theme, such as an integration's icon on
+// Sentry, which takes no colour but black. The disc on a tile is the avatar,
+// below.
 const SQUARE = { side: 120, disc: 100 };
 {
   const at = (SQUARE.side - SQUARE.disc) / 2;
   const open = svgOpen(SQUARE.side, SQUARE.side);
-  for (const [name, ink] of [...Object.entries(INKS), ["monochrome", "#000000"]]) {
+  for (const [name, ink] of [
+    ...Object.entries(INKS),
+    ["white", "#ffffff"],
+    ["monochrome", "#000000"],
+  ]) {
     emit(`mark/mark-${name}.svg`, `${open}${markAt(at, at, SQUARE.disc, ink)}</svg>`, PRODUCT_NAME);
   }
 }
@@ -280,20 +303,25 @@ emit(
 );
 
 // Banners: the lockup centred on a flat ground, for a profile's or a page's
-// cover (LinkedIn's 1584 by 396, X's 1500 by 500, a slide or a call's
-// background at 16:9), drawn at twice the size each asks for so it stays
-// sharp on a dense screen. The lockup spans FILL of the width, leaving the
-// lower left clear where LinkedIn sets the profile photo over it. Three
-// grounds: each mode's, and the light icon's copper tile under white.
+// cover, drawn at least twice the size each asks for so it stays sharp on a
+// dense screen: LinkedIn's profile background (1584 by 396), X's header
+// (1500 by 500), a slide or a call's background at 16:9, LinkedIn's company
+// page cover (4200 by 700, as LinkedIn asks for it), and a 9:2 strip for a
+// sidebar's logo slot, such as Bookface's company card, which the lockup all
+// but fills. The lockup spans FILL of the width, leaving the lower left clear
+// on the covers where LinkedIn sets the photo or the page's logo over it.
+// Three grounds: each mode's, and the light icon's copper tile under white.
 const BANNER_GROUNDS = {
   dark: { ground: BRAND.DARK.GROUND, ink: INKS.dark },
   light: { ground: BRAND.LIGHT.GROUND, ink: INKS.light },
   copper: { ground: TILES.light.tile, ink: TILES.light.ink },
 };
 const BANNERS = {
-  "4x1": { WIDTH: 3168, HEIGHT: 792, FILL: 0.36 },
-  "3x1": { WIDTH: 3000, HEIGHT: 1000, FILL: 0.4 },
-  "16x9": { WIDTH: 3840, HEIGHT: 2160, FILL: 0.44 },
+  "4x1": { WIDTH: 3168, HEIGHT: 792, FILL: 0.5 },
+  "3x1": { WIDTH: 3000, HEIGHT: 1000, FILL: 0.54 },
+  "6x1": { WIDTH: 4200, HEIGHT: 700, FILL: 0.42 },
+  "9x2": { WIDTH: 1800, HEIGHT: 400, FILL: 0.82 },
+  "16x9": { WIDTH: 3840, HEIGHT: 2160, FILL: 0.56 },
 };
 for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
   for (const [name, { ground, ink }] of Object.entries(BANNER_GROUNDS)) {
