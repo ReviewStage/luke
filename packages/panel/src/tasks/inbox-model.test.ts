@@ -64,6 +64,7 @@ import {
   openItems,
   sentStamp,
   shownTicks,
+  stepParts,
   taskHolder,
   waitsOnReader,
   withChoice,
@@ -965,6 +966,17 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     { text: "x", attachments: [] },
     "a pick on a settled ask is no answer",
   );
+});
+
+test("a step's fenced command stands apart from its words with its lines kept, so a command continued over lines copies whole", () => {
+  const step =
+    "On your Mac, store the profile:\n\n```sh\nxcrun notarytool store-credentials vespin \\\n  --team-id ABCD1234\n```\n\nThen reload the window.";
+  assert.deepEqual(stepParts(step), {
+    say: "On your Mac, store the profile:\n\nThen reload the window.",
+    fences: [
+      { code: "xcrun notarytool store-credentials vespin \\\n  --team-id ABCD1234", lang: "sh" },
+    ],
+  });
 });
 
 test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn't do it still sends only those ticked by hand", () => {
