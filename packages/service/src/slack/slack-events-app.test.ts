@@ -16,7 +16,7 @@ import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
-import { INBOX_ASK, INBOX_ASK_STATUS } from "@repo/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
@@ -51,7 +51,8 @@ import { dmThreadPost } from "./thread-dms.js";
  * link, and starts nothing for a Slack user who is no member; a message in
  * the thread of an archived agent brings it back and hands it the message,
  * and one in the thread of an agent whose session ended continues it in a
- * new agent the thread moves to.
+ * new agent the thread moves to; and a member's reply under the DM of an
+ * inbox thread is posted on that thread as theirs and starts no agent.
  *
  * Synthetic accounts, workspaces, tokens, and Slack ids throughout.
  */
@@ -66,8 +67,8 @@ interface SlackCall {
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed. */
-function fakeSlack(calls: SlackCall[]): SlackWebApi {
+/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at the timestamp given. */
+function fakeSlack(calls: SlackCall[], postedTs = "1700000000.000100"): SlackWebApi {
   return (method, args) => {
     calls.push({ method, args });
     switch (method) {
@@ -83,7 +84,7 @@ function fakeSlack(calls: SlackCall[]): SlackWebApi {
       case "chat.getPermalink":
         return Effect.succeed({ ok: true, permalink: "https://team.slack.com/archives/C0001/p1" });
       case "chat.postMessage":
-        return Effect.succeed({ ok: true, channel: "D0001", ts: "1700000000.000100" });
+        return Effect.succeed({ ok: true, channel: "D0001", ts: postedTs });
       default:
         return Effect.succeed({ ok: true });
     }
@@ -265,6 +266,34 @@ function threadMention(slackUserId: string, eventId: string, threadTs: string): 
       ts: "1700000003.000400",
       thread_ts: threadTs,
       channel: "C0001",
+    },
+  };
+  return new Request(new URL(EVENTS, ORIGIN), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${CONNECT_TOKEN}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Slack's direct message to the bot by the Slack user given, in the thread of the DM given, as Connect forwards it. */
+function dmReply(
+  slackUserId: string,
+  eventId: string,
+  dm: { channel: string; ts: string },
+): Request {
+  const payload = {
+    type: "event_callback",
+    team_id: "T0001",
+    event_id: eventId,
+    authorizations: [{ user_id: "UBOT" }],
+    event: {
+      type: "message",
+      channel_type: "im",
+      user: slackUserId,
+      text: "A week, but let admins extend it",
+      ts: "1700000005.000600",
+      thread_ts: dm.ts,
+      channel: dm.channel,
     },
   };
   return new Request(new URL(EVENTS, ORIGIN), {
@@ -508,6 +537,49 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.deepEqual(
           calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
           [{ channel: "C0001", timestamp: "1700000003.000400", name: "eyes" }],
+        );
+      });
+    },
+  );
+
+  it.effect(
+    "a reply under a thread's DM is posted on that thread as the member it went to, tells the agent, reacts with 👀, and starts no agent",
+    () => {
+      const calls: SlackCall[] = [];
+      // Note that the DM's timestamp is this test's own, because the store is shared with the press above.
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls, "1700000004.000500")));
+      return Effect.gen(function* () {
+        const { owner, item } = yield* openAskedMember(bot);
+        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const slackUserId = posted?.args.channel ?? "";
+        const opened = HARNESS.heard.filter((heard) => heard.call === "open").length;
+
+        const replied = yield* answer(
+          bot,
+          dmReply(slackUserId, `Ev${randomUUID()}`, { channel: "D0001", ts: "1700000004.000500" }),
+        );
+
+        assert.equal(replied.status, HOSTED_HTTP_STATUS.OK);
+        const thread = Option.getOrThrow(yield* readInboxItem(owner, item.id)).item.thread ?? [];
+        assert.deepEqual(
+          thread
+            .filter((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER)
+            .map((m) => m.text),
+          ["A week, but let admins extend it"],
+        );
+        assert.equal(thread.find((message) => message.ask)?.ask?.status, INBOX_ASK_STATUS.OPEN);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "send", account: owner });
+        assert.equal(HARNESS.heard.filter((heard) => heard.call === "open").length, opened);
+        assert.deepEqual(
+          yield* (yield* Database)
+            .select({ agentId: slackAgentThread.agentId })
+            .from(slackAgentThread)
+            .where(eq(slackAgentThread.threadTs, "1700000004.000500")),
+          [],
+        );
+        assert.deepEqual(
+          calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
+          [{ channel: "D0001", timestamp: "1700000005.000600", name: "eyes" }],
         );
       });
     },
