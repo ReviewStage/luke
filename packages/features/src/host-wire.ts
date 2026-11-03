@@ -41,7 +41,7 @@ export const HOST_WIRE = {
   VERSION_HEADER: "luke-host-version",
   /** The install script's path on the service's own origin, which the web service rewrites onto `INSTALL_SCRIPT_ROUTE`. */
   INSTALL_SCRIPT_PATH: "/install.sh",
-  /** The route that answers the install script, with the release and the origin it was asked on written in (`@luke/service/agents/host-install-script-app`). */
+  /** The route that answers the install script, with the release and the origin it was asked on written in (`@repo/service/agents/host-install-script-app`). */
   INSTALL_SCRIPT_ROUTE: "/api/hosts/install-script",
   /** What every poll secret begins with: the bearer a pairing box polls on, which names its pairing and nothing else. */
   POLL_SECRET_PREFIX: "lkp_",

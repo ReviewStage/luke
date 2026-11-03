@@ -1,29 +1,29 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import type { Failure } from "@luke/features/failure-remedy";
-import type { IntegrationProviderParams } from "@luke/features/integration-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { Failure } from "@repo/features/failure-remedy";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeysAnswer,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { SettingsLink } from "@luke/settings/settings-views";
+} from "@repo/features/repository-reach-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

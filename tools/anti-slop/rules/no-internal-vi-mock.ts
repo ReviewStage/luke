@@ -8,9 +8,9 @@ const MOCKING_MEMBERS: ReadonlySet<string> = new Set(["mock", "doMock"]);
 
 /**
  * A module of this repository: a relative or absolute path, a package
- * `imports` alias (`#main/…`), or a workspace package (`@luke/…`).
+ * `imports` alias (`#main/…`), or a workspace package (`@repo/…`).
  */
-const INTERNAL_MODULE = /^(?:\.{1,2}\/|\/|#|@luke\/)/u;
+const INTERNAL_MODULE = /^(?:\.{1,2}\/|\/|#|@repo\/)/u;
 
 /** The module a mock names: a specifier, or the `import("…")` vitest also takes. */
 function mockedModule(argument: ESTree.Node | undefined): string | undefined {

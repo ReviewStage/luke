@@ -10,7 +10,7 @@ import type {
   ChannelThreadsParams,
   ChannelThreadsView,
   ChannelUnarchiveParams,
-} from "@luke/features/channel-view";
+} from "@repo/features/channel-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { CHANNEL_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";

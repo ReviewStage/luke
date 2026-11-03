@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
 import {
   archiveChannel,
   createChannel,
   ensureGeneralChannel,
   listChannelLooks,
-} from "@luke/database/models/channel-store";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/database/models/channel-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import type { WireBoundaryInput } from "@repo/wire";
 import { type Context, Effect, Option, Result } from "effect";
 import {
   recordingProductAnalytics,

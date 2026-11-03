@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { createTask, readTask } from "@luke/database/models/task-store";
-import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { user } from "@luke/database/schemas/auth";
-import { planRevision } from "@luke/database/schemas/plan-revision";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { PLAN_REVISION } from "@repo/database/models/plan-revisions";
+import { createTask, readTask } from "@repo/database/models/task-store";
+import { personalWorkspaceOf } from "@repo/database/models/workspace-store";
+import { user } from "@repo/database/schemas/auth";
+import { planRevision } from "@repo/database/schemas/plan-revision";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
+} from "@repo/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@repo/features/plan-edit";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
+} from "@repo/features/repository-reach-wire";
 import {
   PLAN_ACTOR,
   planRevisionAnswerSchema,
@@ -35,24 +35,24 @@ import {
   taskFileAnswerSchema,
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
-} from "@luke/features/task-wire";
-import { messagesProcedures } from "@luke/service/agents/messages-procedures";
-import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
+} from "@repo/features/task-wire";
+import { messagesProcedures } from "@repo/service/agents/messages-procedures";
+import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
 import {
   requestUserId,
   type SessionEndpoint,
   type UserInfoEndpoint,
-} from "@luke/service/auth/bearer";
-import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
-import { LINK_OUTCOME } from "@luke/service/github/github-installations";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import type { WebServices } from "@luke/service/runtime";
-import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
-import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
-import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
+} from "@repo/service/auth/bearer";
+import { recordingProductAnalytics, SERVER_EVENT } from "@repo/service/events/server-events";
+import { LINK_OUTCOME } from "@repo/service/github/github-installations";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { modelCatalogOf } from "@repo/service/providers/model-catalog";
+import type { WebServices } from "@repo/service/runtime";
+import { PLAN_SAVE_STATUS, saveNotes } from "@repo/service/tasks/plan-notes";
+import { taskFilesProcedures } from "@repo/service/tasks/task-files-procedures";
+import { tasksApp } from "@repo/service/tasks/tasks-app";
+import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -63,18 +63,18 @@ import {
   NO_GITHUB,
   openGithubUser,
   type SentToGitHub,
-} from "@luke/service/testing/github-app-fake";
-import { integrationConnectOver } from "@luke/service/testing/integration-connect";
+} from "@repo/service/testing/github-app-fake";
+import { integrationConnectOver } from "@repo/service/testing/integration-connect";
 import {
   INVITATIONS_TEXT,
   makeDocumentTask,
   makeSavedDocumentTask,
-} from "@luke/service/testing/plan-documents";
-import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
-import { added } from "@luke/service/testing/task-contents";
-import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/service/testing/plan-documents";
+import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
+import { added } from "@repo/service/testing/task-contents";
+import { EXPERIMENT } from "@repo/settings";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq, sql } from "drizzle-orm";
 import {
   Clock,

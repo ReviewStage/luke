@@ -1,6 +1,6 @@
-import { LINK_PLACE, type LinkPlace, linkOf, readLink } from "@luke/features/link-grammar";
-import { stayingOnWeb } from "@luke/features/link-open";
-import { GLYPH } from "@luke/ui/icons";
+import { LINK_PLACE, type LinkPlace, linkOf, readLink } from "@repo/features/link-grammar";
+import { stayingOnWeb } from "@repo/features/link-open";
+import { GLYPH } from "@repo/ui/icons";
 import { appPlatform } from "./app-platform.js";
 import type { MenuAction } from "./desktop/action-menu.js";
 

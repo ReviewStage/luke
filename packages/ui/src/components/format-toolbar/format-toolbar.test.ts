@@ -5,7 +5,7 @@ import {
   WRITING_MARK,
   type WritingBlock,
   type WritingMark,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";

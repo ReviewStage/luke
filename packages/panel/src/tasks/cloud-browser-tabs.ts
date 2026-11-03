@@ -2,7 +2,7 @@
  * cloud-browser-tabs.ts -- the Browser tabs open in coding agents' cloud browsers, as the side panel lists them: one agent's on its page, or a task's agents' on the task's, read from the service while open, then followed live.
  *
  * The service keeps every tab of every agent's browser
- * (`@luke/features/agent-browser-tab-wire`), so the panel lists them on any
+ * (`@repo/features/agent-browser-tab-wire`), so the panel lists them on any
  * client and after a relaunch. What the panel lists them for is its holder
  * (`BrowserTabsPlace`): the agent an agent's page shows, on a task or on
  * none, or the task a task's panel stands beside, every one of its agents'
@@ -31,8 +31,8 @@ import {
   type AgentBrowserTab,
   type BrowserTabsPlace,
   browserTabsPlaceId,
-} from "@luke/features/agent-browser-tab-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-browser-tab-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Duration, Effect, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

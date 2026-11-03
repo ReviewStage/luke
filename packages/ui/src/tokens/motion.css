@@ -1,6 +1,6 @@
 /* motion.css -- reduced motion, answered at the motion tokens.
 
-   The durations themselves are `@luke/brand`'s, generated into
+   The durations themselves are `@repo/brand`'s, generated into
    `motion-tokens.css` under their `--ui-*` names. Reduced motion zeroes
    them here rather than component by component, keeping hover feedback's
    70ms (a colour settling is not motion) and `--ui-late-delay`, a wait that

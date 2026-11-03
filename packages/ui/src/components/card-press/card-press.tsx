@@ -1,4 +1,4 @@
-import { SELECTION_WORDS } from "@luke/features/words";
+import { SELECTION_WORDS } from "@repo/features/words";
 import {
   type ButtonHTMLAttributes,
   type KeyboardEvent,

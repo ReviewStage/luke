@@ -1,4 +1,4 @@
-import type { CodeRef } from "@luke/features/task-wire";
+import type { CodeRef } from "@repo/features/task-wire";
 import {
   HoverCard,
   HoverCardHead,
@@ -6,7 +6,7 @@ import {
   INLINE_REF_LOOK,
   INLINE_REF_NAME,
   InlineRef,
-} from "@luke/ui";
+} from "@repo/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -46,7 +46,7 @@ export function fileLook(path: string): FileLook {
 
 /**
  * A file's card, its tab's and every place naming it, drawn from the parts
- * every hover card is (`@luke/ui`'s `HoverCard`): the file's type icon and its
+ * every hover card is (`@repo/ui`'s `HoverCard`): the file's type icon and its
  * whole path, its repository under the path where the place names one, and
  * under them where the file is read, where the place says, as a mention's
  * lines and commit (`thing-card.tsx`).

@@ -7,10 +7,10 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

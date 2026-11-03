@@ -1,5 +1,5 @@
-import { backToWords } from "@luke/features/words";
-import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
+import { backToWords } from "@repo/features/words";
+import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import { useMemo } from "react";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";

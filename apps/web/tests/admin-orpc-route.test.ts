@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
-import { type AdminProcedureSeams, adminProcedures } from "@luke/service/admin/admin-procedures";
-import { buildAdminUserList } from "@luke/service/admin/admin-users";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import type { WebServices } from "@luke/service/runtime";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import type { AdminViewer } from "@repo/service/admin/admin-access";
+import { type AdminProcedureSeams, adminProcedures } from "@repo/service/admin/admin-procedures";
+import { buildAdminUserList } from "@repo/service/admin/admin-users";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import type { WebServices } from "@repo/service/runtime";
 import { Context, Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

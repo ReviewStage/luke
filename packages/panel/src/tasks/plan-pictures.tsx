@@ -1,12 +1,12 @@
-import type { FileChip } from "@luke/features/attachment-model";
+import type { FileChip } from "@repo/features/attachment-model";
 import {
   planAttachmentIdsIn,
   planAttachmentOf,
   taskPicturesIn,
-} from "@luke/features/plan-attachment-link";
-import { planSections } from "@luke/features/plan-document";
-import { ACT_KIND } from "@luke/host/acts";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/features/plan-attachment-link";
+import { planSections } from "@repo/features/plan-document";
+import { ACT_KIND } from "@repo/host/acts";
+import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
 import { ImageIcon } from "lucide-react";
 import {
   createContext,
@@ -29,7 +29,7 @@ import { useOpenLink } from "./use-open-link.js";
  * plan-pictures.tsx -- a plan's pictures where its words are drawn: each read through the host as the plan's, drawn in its own block, and opened over the window walking the plan's pictures in reading order.
  *
  * A plan's text names a picture by its address
- * (`@luke/features/plan-attachment-link`), so the place showing the plan, its
+ * (`@repo/features/plan-attachment-link`), so the place showing the plan, its
  * page or one of its versions, stands `PlanPictures` around its words, and
  * every `MarkdownMessage` under it draws a picture through the drawer
  * `usePlanPictureDrawer` hands. A press on a picture opens the window's file

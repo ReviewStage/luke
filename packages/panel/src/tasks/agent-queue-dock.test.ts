@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { QueuedMessage } from "@luke/features/agent-queue-wire";
-import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import type { QueuedMessage } from "@repo/features/agent-queue-wire";
+import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

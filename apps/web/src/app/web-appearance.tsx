@@ -7,7 +7,7 @@
  * It arrives on the panel's state, so a change made in Settings, or in
  * another tab of this origin, is worn as it lands. The site's palette keeps
  * a theme for dark and one for light and none that follows the machine
- * (`@luke/ui`'s `palettes.css`), so the root wears System resolved, and wears
+ * (`@repo/ui`'s `palettes.css`), so the root wears System resolved, and wears
  * it again each time the machine's appearance flips.
  *
  * The choice is also written where `public/app-theme.js` reads it as the page
@@ -15,9 +15,9 @@
  * dark from its first frame rather than light until the state is read.
  */
 
-import { APP_SETTINGS_VIEW, useAppSlice } from "@luke/panel/use-app-state";
-import type { Theme } from "@luke/ui";
-import { wearTheme } from "@luke/ui/appearance";
+import { APP_SETTINGS_VIEW, useAppSlice } from "@repo/panel/use-app-state";
+import type { Theme } from "@repo/ui";
+import { wearTheme } from "@repo/ui/appearance";
 import { useLayoutEffect } from "react";
 import { THEME_KEY, tintChrome } from "../theme-chrome";
 

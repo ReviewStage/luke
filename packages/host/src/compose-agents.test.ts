@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
   ARCHIVE_DRAWN,
   INBOX_SCOPE_KIND,
   TRANSCRIPT_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
@@ -19,11 +19,11 @@ import {
   CHECK_SUMMARY,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { FAILURE_FACT, GATE_CLOSED_BY } from "@luke/features/failure-facts";
-import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
-import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
+} from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
+import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
+import { GITHUB_TOKEN_REJECTION } from "@repo/features/github-token-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
@@ -31,35 +31,35 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   FAILED_RUN_WINDOW_MILLIS,
   LIVE_SIGNED_OUT,
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
-} from "@luke/features/live-wire";
-import type { MemorySummary } from "@luke/features/memory-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/live-wire";
+import type { MemorySummary } from "@repo/features/memory-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@luke/features/provider-key-wire";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
+} from "@repo/features/pull-request-write-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethod,
-} from "@luke/gateway";
-import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/gateway";
+import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";

@@ -1,6 +1,6 @@
-import type { ReviewThread } from "@luke/features/agent-wire";
-import type { PullRequestThreadView } from "@luke/features/link-grammar";
-import { LANDED_ANIMATION } from "@luke/ui/landed";
+import type { ReviewThread } from "@repo/features/agent-wire";
+import type { PullRequestThreadView } from "@repo/features/link-grammar";
+import { LANDED_ANIMATION } from "@repo/ui/landed";
 import {
   type AnimationEvent,
   createContext,
@@ -24,7 +24,7 @@ import { focusSeek } from "../focus-seek.js";
  * on (`ThreadLandingProvider`): the card opens itself, a minimized one's
  * chip with it, waits until it stands in sight, the view having scrolled it
  * there, takes the focus without scrolling again, and is lit once, as every
- * place landed on is (`@luke/ui/landed`). The light's end is told back,
+ * place landed on is (`@repo/ui/landed`). The light's end is told back,
  * which lets go of the lines the view lit for it.
  */
 

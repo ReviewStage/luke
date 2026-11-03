@@ -1,4 +1,4 @@
-import { DIALOG_SIZE, Dialog, type DialogHandle } from "@luke/ui";
+import { DIALOG_SIZE, Dialog, type DialogHandle } from "@repo/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
@@ -114,7 +114,7 @@ function NewTaskCard({
   );
 }
 
-/** The card over the window while New task is asked, in `@luke/ui`'s shared `Dialog`, and through its fade as it goes; nothing otherwise. */
+/** The card over the window while New task is asked, in `@repo/ui`'s shared `Dialog`, and through its fade as it goes; nothing otherwise. */
 export function NewTaskDialog({
   newTask,
 }: {

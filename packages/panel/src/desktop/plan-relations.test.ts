@@ -7,9 +7,9 @@ import {
   type TaskBlockRelation,
   type TaskRelationChangeRequest,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/task-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

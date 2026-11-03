@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { WireValue } from "@luke/wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import type { WireValue } from "@repo/wire";
 import { RPCSerializer } from "@orpc/client";
 import { describe, test } from "vitest";
 import {

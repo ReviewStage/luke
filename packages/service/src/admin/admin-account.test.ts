@@ -1,27 +1,27 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { agentTable, type StoredPullRequest } from "@luke/database/schemas/agent";
-import { session, user } from "@luke/database/schemas/auth";
-import { automation, automationRun } from "@luke/database/schemas/automation";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { integrationConnection } from "@luke/database/schemas/integration";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { accountPreference } from "@luke/database/schemas/preferences";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import { agentTable, type StoredPullRequest } from "@repo/database/schemas/agent";
+import { session, user } from "@repo/database/schemas/auth";
+import { automation, automationRun } from "@repo/database/schemas/automation";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { integrationConnection } from "@repo/database/schemas/integration";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { accountPreference } from "@repo/database/schemas/preferences";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@repo/database/testing";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
-} from "@luke/features/admin-account-wire";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+} from "@repo/features/admin-account-wire";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import {
   AGENT_FAILURE,
   AGENT_STATUS,
@@ -29,7 +29,7 @@ import {
   CONTEXT_WINDOW,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -37,15 +37,15 @@ import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   FAST_ACCESS,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+} from "@repo/features/provider-key-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { Effect } from "effect";
 import { DAY_MS, TURN_FAILURE } from "../core.js";
 import { buildAdminAccountSupport } from "./admin-account.js";

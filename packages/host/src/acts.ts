@@ -1,6 +1,6 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
-import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
+import { formerMemberSchema, workspaceMemberSchema } from "@repo/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
 import { PORT_ACT_KIND } from "./contract/kinds.js";
 

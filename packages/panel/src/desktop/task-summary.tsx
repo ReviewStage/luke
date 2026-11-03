@@ -1,4 +1,4 @@
-import { AGENT_BOUNDS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_BOUNDS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -25,10 +25,10 @@ import {
   Stack,
   Tooltip,
   usePressAway,
-} from "@luke/ui";
-import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
-import { sameTab } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { openThread, usePlanCommentsControl } from "@repo/ui/plan-comments";
+import { sameTab } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Schema } from "effect";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import {
@@ -121,7 +121,7 @@ const KEPT = {
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (`@luke/ui`'s `--ui-page-measure`, 720, and
+ * insets either side (`@repo/ui`'s `--ui-page-measure`, 720, and
  * `--ui-page-inset`, 40) beside the column's own `--summary-width`, 240, so
  * making room for it never reads the document under its measure. Note that
  * the column is measured whole, the summary included, and the side panel

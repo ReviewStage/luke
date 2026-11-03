@@ -1,7 +1,7 @@
-import { INBOX_MESSAGE_AUTHOR, type InboxMessage } from "@luke/features/inbox-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { type CommentAuthor, ErrorState } from "@luke/ui";
+import { INBOX_MESSAGE_AUTHOR, type InboxMessage } from "@repo/features/inbox-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { type CommentAuthor, ErrorState } from "@repo/ui";
 import { type ReactNode, useEffect, useMemo } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import { unreadShown } from "../failure-report.js";

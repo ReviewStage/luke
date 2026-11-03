@@ -7,7 +7,7 @@ import { Label } from "./label.js";
  *
  * The parts are shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add field` reads as a small diff. The local
- * changes: only the parts a `@luke/ui` component draws are kept (`Field`,
+ * changes: only the parts a `@repo/ui` component draws are kept (`Field`,
  * `FieldLabel`, `FieldDescription`, `FieldError`); a field is one
  * orientation, its parts one under another, so `Field` takes no
  * `orientation` and draws no `role="group"`, which an unnamed field would
@@ -19,7 +19,7 @@ import { Label } from "./label.js";
  * ink, dropping into its line as it arrives, fading out where its caller
  * holds it leaving (`data-leaving`), and, while empty, standing out of the
  * flow, so it gives back the gap before it in whatever stack holds it.
- * None of shadcn's ring utilities (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s
+ * None of shadcn's ring utilities (`anti-slop/no-shadcn-focus-ring`). `@repo/ui`'s
  * `FormField` (`components/form-field`) is what an app draws, and its
  * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
  */

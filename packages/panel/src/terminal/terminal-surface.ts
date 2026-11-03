@@ -1,4 +1,4 @@
-import { onDrawnThemeChange } from "@luke/ui/appearance";
+import { onDrawnThemeChange } from "@repo/ui/appearance";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";

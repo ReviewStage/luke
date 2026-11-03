@@ -11,8 +11,8 @@
  * read afresh at every ask, never kept here.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { INTEGRATION_STATUS, type IntegrationStatus } from "@luke/features/integration-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { INTEGRATION_STATUS, type IntegrationStatus } from "@repo/features/integration-wire";
 import { Clock, Effect, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {

@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { type FakeResponder, fakeHttpClientLayer } from "@luke/wire/testing";
+import { type FakeResponder, fakeHttpClientLayer } from "@repo/wire/testing";
 import { Deferred, Exit } from "effect";
 import type { RunnerEvent } from "../protocol.js";
 

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, matchesGlob, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
-import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
-import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
-import { temporaryDirectory } from "@luke/runtime/testing";
-import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
+import { PAGE_SANDBOX_ORIGIN } from "@repo/features/page-frame";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { RESERVED_WORKSPACE_SLUGS } from "@repo/features/workspace-wire";
+import { temporaryDirectory } from "@repo/runtime/testing";
+import { PAGE_LINK_ROUTE } from "@repo/service/pages/page-links";
 import { test } from "vitest";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
 import {
@@ -427,13 +427,13 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);
     assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], path);
-    // An agent's page is framed from the sandbox's own site (`@luke/features/page-frame`), and no other.
+    // An agent's page is framed from the sandbox's own site (`@repo/features/page-frame`), and no other.
     assert.deepEqual(directives.get("frame-src"), ["'self'", PAGE_SANDBOX_ORIGIN], path);
     // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
     // The tab reaches the processor for session replay through its own origin
-    // (`@luke/features/posthog-proxy`), and Sentry's ingest in the organization's region,
+    // (`@repo/features/posthog-proxy`), and Sentry's ingest in the organization's region,
     // and no other address.
     assert.deepEqual(
       directives.get("connect-src"),
@@ -613,7 +613,7 @@ test("the site's pages run scripts from this origin alone, connect to it alone, 
     const directives = directivesOf(answer.headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], address);
     // The analytics client (`src/analytics.ts`) loads its configuration and its recorder,
-    // and posts what it counts, through this origin (`@luke/features/posthog-proxy`).
+    // and posts what it counts, through this origin (`@repo/features/posthog-proxy`).
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("style-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
@@ -630,9 +630,9 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
     );
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
-    // A chart's colours are an inline sheet `@luke/ui`'s chart writes (`ChartStyle`).
+    // A chart's colours are an inline sheet `@repo/ui`'s chart writes (`ChartStyle`).
     assert.deepEqual(directives.get("style-src"), ["'self'", "'unsafe-inline'"], address);
-    // An account's picture is its provider's (`@luke/features/account-picture`).
+    // An account's picture is its provider's (`@repo/features/account-picture`).
     assert.deepEqual(
       directives.get("img-src"),
       [

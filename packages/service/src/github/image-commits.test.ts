@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@luke/features/agent-wire";
+import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@repo/features/agent-wire";
 import { Effect, Option, Redacted } from "effect";
 import { githubReaching, type SentToGitHub } from "../testing/github-app-fake.js";
 import { imageCommits } from "./pull-requests.js";

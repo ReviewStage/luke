@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

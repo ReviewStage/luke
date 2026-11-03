@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { IntegrationTool } from "@luke/features/integration-health";
-import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@luke/features/integration-sign-in";
+import type { IntegrationTool } from "@repo/features/integration-health";
+import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationStatusesView,
   type IntegrationToolsView,
-} from "@luke/features/integration-view";
+} from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -19,13 +19,13 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import type { SettingsLink } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { SettingsPage, timeRuntime } from "@luke/ui";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload } from "@repo/host/contract";
+import type { SettingsLink } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { SettingsPage, timeRuntime } from "@repo/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

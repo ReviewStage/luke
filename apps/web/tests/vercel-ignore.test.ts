@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { type TestContext, test } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -38,20 +38,20 @@ const PREVIEW = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feat/branch" } 
 const WORKSPACE: Readonly<Record<string, unknown>> = {
   "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n  - "packages/*"\n\ncatalog:\n  effect: 4.0.4\n',
   "vercel.json": { services: { web: { root: "apps/web" }, dev: { root: "apps/dev" } } },
-  "apps/web/package.json": { name: "@luke/web", dependencies: { "@luke/service": "workspace:*" } },
-  "apps/dev/package.json": { name: "@luke/coder", dependencies: { effect: "catalog:" } },
+  "apps/web/package.json": { name: "@repo/web", dependencies: { "@repo/service": "workspace:*" } },
+  "apps/dev/package.json": { name: "@repo/coder", dependencies: { effect: "catalog:" } },
   "apps/desktop/package.json": {
-    name: "@luke/desktop",
-    dependencies: { "@luke/host": "workspace:*" },
+    name: "@repo/desktop",
+    dependencies: { "@repo/host": "workspace:*" },
   },
   "packages/service/package.json": {
-    name: "@luke/service",
-    devDependencies: { "@luke/wire": "workspace:^" },
+    name: "@repo/service",
+    devDependencies: { "@repo/wire": "workspace:^" },
   },
-  "packages/wire/package.json": { name: "@luke/wire" },
+  "packages/wire/package.json": { name: "@repo/wire" },
   "packages/host/package.json": {
-    name: "@luke/host",
-    dependencies: { "@luke/wire": "workspace:*" },
+    name: "@repo/host",
+    dependencies: { "@repo/wire": "workspace:*" },
   },
 };
 
@@ -212,7 +212,7 @@ test("a service that comes to reach a package is built when that package changes
   commit(
     root,
     "apps/dev/package.json",
-    `${JSON.stringify({ name: "@luke/coder", dependencies: { "@luke/host": "workspace:*" } })}\n`,
+    `${JSON.stringify({ name: "@repo/coder", dependencies: { "@repo/host": "workspace:*" } })}\n`,
   );
   const deployed = git(root, "rev-parse", "HEAD");
   commit(root, "packages/host/src/index.ts");

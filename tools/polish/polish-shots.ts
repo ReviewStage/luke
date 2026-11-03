@@ -81,7 +81,7 @@ const TARGET = { ...CLIENT, CATALOG: "catalog" } as const;
 type Target = (typeof TARGET)[keyof typeof TARGET];
 const TARGETS: readonly Target[] = Object.values(TARGET);
 
-// `@luke/ui`'s THEME, less `system`, which a plain node script cannot import.
+// `@repo/ui`'s THEME, less `system`, which a plain node script cannot import.
 const THEME = { LIGHT: "light", DARK: "dark" } as const;
 type Theme = (typeof THEME)[keyof typeof THEME];
 const THEMES: readonly Theme[] = Object.values(THEME);

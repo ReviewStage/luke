@@ -2,7 +2,7 @@ import {
   REPOSITORY_PIN_BOUNDS,
   type RepositoryPin,
   type RepositoryPinsWritten,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

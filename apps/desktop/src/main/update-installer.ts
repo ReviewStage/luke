@@ -2,7 +2,7 @@ import {
   UPDATE_ENDPOINT,
   type UpdaterEngine,
   type UpdaterEngineEvents,
-} from "@luke/host/update-service";
+} from "@repo/host/update-service";
 import { autoUpdater, type UpdateCheckResult } from "electron-updater";
 
 /** electron-updater emits progress per chunk; the broadcast needs far less. */

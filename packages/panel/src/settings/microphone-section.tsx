@@ -2,9 +2,9 @@ import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
-} from "@luke/settings";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import type { MicrophoneControl } from "@luke/settings/settings-controls";
+} from "@repo/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
+import type { MicrophoneControl } from "@repo/settings/settings-controls";
 import {
   BUTTON_VARIANT,
   Button,
@@ -16,8 +16,8 @@ import {
   SettingsRow,
   SettingsSection,
   Tooltip,
-} from "@luke/ui";
-import { microphoneAccessRow } from "@luke/ui/microphone-access";
+} from "@repo/ui";
+import { microphoneAccessRow } from "@repo/ui/microphone-access";
 import { useBusyPress } from "./busy-press.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
@@ -51,7 +51,7 @@ function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): Rea
  * answer can be changed. Under it stand the microphone's own settings, the
  * schema's rows of This Mac's microphone section (`SchemaSettingRows`).
  *
- * Each line is `@luke/ui`'s `SettingsRow`; the System Settings door is the
+ * Each line is `@repo/ui`'s `SettingsRow`; the System Settings door is the
  * quiet `IconButton`, and Allow the outline `Button`.
  */
 export function MicrophoneSection({

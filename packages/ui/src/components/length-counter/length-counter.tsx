@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import { useState } from "react";
 import { useDisclosure } from "../../use-disclosure.js";
 

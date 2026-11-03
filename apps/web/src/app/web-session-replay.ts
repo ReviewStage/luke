@@ -1,5 +1,5 @@
 /**
- * web-session-replay.ts -- the web app's answer to session replay: the masked recording `@luke/panel/session-replay` runs, filed under the site's project from the production deployment alone, with an address that names nothing of the tab's, and stood down in every tab when one deletes the account.
+ * web-session-replay.ts -- the web app's answer to session replay: the masked recording `@repo/panel/session-replay` runs, filed under the site's project from the production deployment alone, with an address that names nothing of the tab's, and stood down in every tab when one deletes the account.
  *
  * What is recorded, and what is masked, is the shared controller's
  * (`packages/panel/src/session-replay.ts`), the same the desktop's panel
@@ -17,11 +17,11 @@
  * own, until that tab sees a sign-in after the sign-out that follows.
  */
 
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import type { BundleImporter } from "@luke/panel/bundle-loader";
-import { type ApplySessionReplay, sessionReplay } from "@luke/panel/session-replay";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import type { BundleImporter } from "@repo/panel/bundle-loader";
+import { type ApplySessionReplay, sessionReplay } from "@repo/panel/session-replay";
 import { PANEL_PATH } from "./web-address";
 import { webDeployment } from "./web-sentry";
 

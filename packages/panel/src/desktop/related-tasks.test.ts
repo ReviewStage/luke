@@ -5,10 +5,10 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

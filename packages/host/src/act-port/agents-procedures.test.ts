@@ -19,14 +19,14 @@ import {
   type AgentTranscriptKey,
   type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+} from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/pull-request-write-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import { AGENT_ACT_KIND, type PortActKind } from "../contract/index.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";

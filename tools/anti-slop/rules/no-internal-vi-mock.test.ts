@@ -38,7 +38,7 @@ tester.run("no-internal-vi-mock", noInternalViMockRule, {
       errors: [{ messageId: "internalMock" }],
     },
     {
-      code: 'vi.doMock("@luke/wire");',
+      code: 'vi.doMock("@repo/wire");',
       filename: TEST_FILE,
       errors: [{ messageId: "internalMock" }],
     },

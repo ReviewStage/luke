@@ -8,7 +8,7 @@ export const LUCIDE_GUARD_RULE = "anti-slop/no-lucide-outside-door";
 
 /**
  * The files that may import `lucide-react`: the icon door and what stands
- * behind it. Everything else imports an icon from `@luke/ui/icons`.
+ * behind it. Everything else imports an icon from `@repo/ui/icons`.
  */
 const DOOR_DIRECTORY = "packages/ui/src/icons/";
 

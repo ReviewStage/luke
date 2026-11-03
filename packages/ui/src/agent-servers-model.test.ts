@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { CONNECTION_HEALTH, connectionHealth } from "@luke/features/integration-health";
+import { CONNECTION_HEALTH, connectionHealth } from "@repo/features/integration-health";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
-} from "@luke/features/integration-view";
+} from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
   integrationProviderFromWire,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { test } from "vitest";
 import {
   SERVER_ROW,

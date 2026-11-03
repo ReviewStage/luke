@@ -2,46 +2,46 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+} from "@repo/features/link-grammar";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
   PLAN_ACTOR,
   TASK_CREATE_RELATION_KIND,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksView,
-} from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { timeRuntime } from "@luke/ui";
-import { memoryHistory } from "@luke/ui/history-adapter";
-import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { timeRuntime } from "@repo/ui";
+import { memoryHistory } from "@repo/ui/history-adapter";
+import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";

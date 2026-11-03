@@ -2,7 +2,7 @@
  * github-app.ts -- our GitHub App as the server speaks for it: its own JWT, the installations a workspace connected, and the tokens it mints there.
  *
  * A workspace's repositories are the repositories of the installations of
- * the App connected to it (`@luke/service/github/github-installations`), one
+ * the App connected to it (`@repo/service/github/github-installations`), one
  * per GitHub account: nobody's own GitHub sign-in is asked what it reaches,
  * and a repository is reached through the workspace's installation on its
  * owner, or, below, on a member's own token. The App speaks
@@ -80,25 +80,25 @@
  */
 
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
   type GitHubAccountType,
   type GitHubInstallationStatus,
-} from "@luke/database/github-installation-vocabulary";
-import { InstantColumnSchema } from "@luke/database/models/columns";
+} from "@repo/database/github-installation-vocabulary";
+import { InstantColumnSchema } from "@repo/database/models/columns";
 import {
   noteGitHubRepository,
   type RepositorySighting,
-} from "@luke/database/models/github-repositories";
-import { account } from "@luke/database/schemas/auth";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+} from "@repo/database/models/github-repositories";
+import { account } from "@repo/database/schemas/auth";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import {
   GITHUB_SSO_URL_PATTERN,
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
+} from "@repo/features/repository-reach-wire";
 import { generateRandomString, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
@@ -1603,7 +1603,7 @@ function githubAppService(
    * which the client follows, on a token minted for the installation that
    * reads no repository it was not given; any other failure is GitHub's
    * and fails the reach. Every name the store keeps of it is relabeled to
-   * its name now (`@luke/database/models/github-repositories`).
+   * its name now (`@repo/database/models/github-repositories`).
    */
   const movedOnInstallation = (reached: GitHubInstallation, fullName: string) =>
     Effect.gen(function* () {

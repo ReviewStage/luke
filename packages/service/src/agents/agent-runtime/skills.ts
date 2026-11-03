@@ -29,17 +29,17 @@
  * and offers none of that source's skills rather than failing the start.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { accountExperimentOn } from "@luke/database/models/account-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { accountExperimentOn } from "@repo/database/models/account-store";
 import {
   type InstalledSkillWithFiles,
   sessionInstalledSkills,
-} from "@luke/database/models/installed-skill-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
-import { readSkillFile } from "@luke/features/skill-file";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/database/models/installed-skill-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { INSTALLED_SKILL_MAIN_FILE } from "@repo/features/installed-skill-wire";
+import { readSkillFile } from "@repo/features/skill-file";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineSkill, type SkillDefinition } from "eve/skills";

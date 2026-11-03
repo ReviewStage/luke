@@ -1,32 +1,32 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/integration-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_SKILL_SOURCE,
   TASK_TREE_ENTRY,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
-} from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/settings/settings-views";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";

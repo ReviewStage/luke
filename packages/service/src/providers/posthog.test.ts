@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { forgetPosthogPersonEffect, type PosthogForgetOptions } from "./posthog.js";

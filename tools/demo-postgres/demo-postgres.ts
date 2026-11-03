@@ -3,7 +3,7 @@
  *
  *   node tools/demo-postgres/demo-postgres.ts --url-file <path>
  *
- * Once the database is migrated (`pnpm --filter @luke/web db:migrate`) and
+ * Once the database is migrated (`pnpm --filter @repo/web db:migrate`) and
  * seeded (`auth:seed`), its URL is written to `<path>`, readable by its
  * owner alone, in one rename, so the file holds the whole URL from the
  * moment it exists. The port and the temp folder are printed, and nothing
@@ -57,9 +57,9 @@ const urlFile = Effect.try({
 /** Runs one of the web app's scripts against the database at `url`. */
 function webScript(script: (typeof WEB_SCRIPTS)[number], url: Redacted.Redacted<string>) {
   return completed(
-    `pnpm --filter @luke/web ${script}`,
+    `pnpm --filter @repo/web ${script}`,
     "pnpm",
-    ["--dir", REPOSITORY_ROOT, "--filter", "@luke/web", script],
+    ["--dir", REPOSITORY_ROOT, "--filter", "@repo/web", script],
     { DATABASE_URL: Redacted.value(url), DATABASE_URL_UNPOOLED: Redacted.value(url) },
   );
 }

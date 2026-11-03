@@ -6,7 +6,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
+} from "@repo/wire";
 
 /**
  * A parser at the process boundary, carrying the type it admits so a table of

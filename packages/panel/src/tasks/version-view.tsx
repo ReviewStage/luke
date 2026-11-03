@@ -1,6 +1,6 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { dayAndTimeText, momentText } from "@luke/features/time-format";
-import { readFailedWords } from "@luke/features/words";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { dayAndTimeText, momentText } from "@repo/features/time-format";
+import { readFailedWords } from "@repo/features/words";
 import {
   BUTTON_VARIANT,
   Button,
@@ -15,10 +15,10 @@ import {
   STATUS_TONE,
   Toolbar,
   Tooltip,
-} from "@luke/ui";
-import { RotateCcwIcon } from "@luke/ui/icons";
-import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { RotateCcwIcon } from "@repo/ui/icons";
+import { MARKDOWN_CLASS, markdownClass } from "@repo/ui/markdown-class";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useRef, useState } from "react";
 import type { Kept } from "../act.js";
 import type { MenuEntry } from "../desktop/action-menu.js";

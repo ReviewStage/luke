@@ -2,8 +2,8 @@ import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
-} from "@luke/settings";
-import { SettingsSection } from "@luke/ui";
+} from "@repo/settings";
+import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 

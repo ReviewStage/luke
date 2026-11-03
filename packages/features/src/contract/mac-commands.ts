@@ -10,7 +10,7 @@
  * handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {

@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { decodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
+import type { AdminUserList, AdminUserListRow } from "@repo/features/admin-answer-wire";
 import {
   ADMIN_READ,
   ADMIN_REFUSED,
   ADMIN_UNANSWERED,
   type AdminReadAnswer,
-} from "@luke/features/admin-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/admin-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import type { WireBoundaryInput } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

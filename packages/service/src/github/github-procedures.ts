@@ -75,31 +75,31 @@
  * read a query or a body.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   claimGitHubConnectIntent,
   githubConnection,
   openGitHubConnectIntent,
-} from "@luke/database/models/github-connection-store";
+} from "@repo/database/models/github-connection-store";
 import {
   isWorkspaceMember,
   personalWorkspaceOf,
   workspaceOf,
-} from "@luke/database/models/workspace-store";
+} from "@repo/database/models/workspace-store";
 import {
   addWorkspaceTokenRepository,
   listWorkspaceTokenRepositories,
   removeWorkspaceTokenRepository,
   type WorkspaceTokenRepositoryRow,
   workspaceTokenRepositoryAdder,
-} from "@luke/database/models/workspace-token-repository-store";
-import type { GitHubIssueSummary } from "@luke/features";
-import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
+} from "@repo/database/models/workspace-token-repository-store";
+import type { GitHubIssueSummary } from "@repo/features";
+import { GITHUB_CONNECT_PAGE } from "@repo/features/github-connection-wire";
 import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepositoriesAnswer,
-} from "@luke/features/github-repositories-wire";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/features/github-repositories-wire";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import { DateTime, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubRepository } from "../core.js";

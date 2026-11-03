@@ -1,6 +1,6 @@
-import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
+import type { AgentStatus, AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import {
   IconButton,
   type MenuRow,
@@ -16,8 +16,8 @@ import {
   type StatusTone,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import {
   createContext,
   useCallback,
@@ -533,7 +533,7 @@ export function AddTabSkeleton(): React.JSX.Element {
 /**
  * The "+" after a strip's last tab, and the menu it drops: the shared
  * searchable one, as the repository and model pickers drop, over the rows
- * its column lists. It hangs under the "+" in `@luke/ui`'s anchored
+ * its column lists. It hangs under the "+" in `@repo/ui`'s anchored
  * popover, from the "+"'s left edge, or from its right where what is seen
  * of the window ends before the menu would, or pushed back inside where
  * neither edge keeps it there, as a phone's row leaves a "+" mid-way along

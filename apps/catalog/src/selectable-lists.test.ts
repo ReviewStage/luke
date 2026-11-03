@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { selectableListBehaviour } from "@luke/ui/testing/selectable-list";
+import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
@@ -9,7 +9,7 @@ import { SELECTION_EXAMPLE } from "./examples/selection.js";
 /**
  * selectable-lists.test.ts -- the catalog's two selectable lists, the `List`
  * of rows and the cards of the app's own in a `SelectionRegion`, are chosen
- * as every selectable list is (`@luke/ui/testing/selectable-list`), the
+ * as every selectable list is (`@repo/ui/testing/selectable-list`), the
  * example's opening choice of two rows let go before each test.
  */
 

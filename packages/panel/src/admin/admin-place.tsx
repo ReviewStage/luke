@@ -11,7 +11,7 @@
  * the sidebar's row is only how an admin gets here.
  */
 
-import { ADMIN_METRICS_WINDOW_DEFAULT, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { ADMIN_METRICS_WINDOW_DEFAULT, type AdminMetricsWindow } from "@repo/features/admin-wire";
 import { useState } from "react";
 import { AppAdminDoors } from "./app-admin-doors.js";
 import { ADMINS_HIDDEN } from "./prefs.js";

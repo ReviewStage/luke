@@ -21,22 +21,22 @@
  * browser lands on the integrations landing page with Sentry and one word.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   INSTALLATION_LINK,
   linkIntegrationInstallation,
   spendIntegrationInstallIntent,
-} from "@luke/database/models/integration-installation-store";
-import { workspaceOf } from "@luke/database/models/workspace-store";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+} from "@repo/database/models/integration-installation-store";
+import { workspaceOf } from "@repo/database/models/workspace-store";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_PROVIDER,
   type IntegrationLandingStatus,
   integrationLandingPath,
-} from "@luke/features/integration-wire";
-import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/features/integration-wire";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
   HttpClient,

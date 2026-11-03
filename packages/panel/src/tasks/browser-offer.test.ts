@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_MACHINE, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import type { Task, TaskSummary } from "@luke/features/task-wire";
-import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AGENT_MACHINE, AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { Task, TaskSummary } from "@repo/features/task-wire";
+import { BROWSER_TAB_OPEN_FAILURE } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

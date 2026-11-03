@@ -1,5 +1,5 @@
-import type { AgentChangedFile } from "@luke/features/agent-wire";
-import { formatCount } from "@luke/features/number-format";
+import type { AgentChangedFile } from "@repo/features/agent-wire";
+import { formatCount } from "@repo/features/number-format";
 import {
   type Chapter,
   chapterHunks,
@@ -7,11 +7,11 @@ import {
   chapterPatches,
   type LineRef,
   threadInChapter,
-} from "@luke/features/pull-request-chapters";
-import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings/shortcuts";
+} from "@repo/features/pull-request-chapters";
+import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@repo/features/pull-request-chapters-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@repo/settings/shortcuts";
 import {
   Button,
   CHIP_LOOK,
@@ -72,8 +72,8 @@ import {
   Time,
   Tooltip,
   VisuallyHidden,
-} from "@luke/ui";
-import { CheckIcon, GLYPH, RotateCwIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { CheckIcon, GLYPH, RotateCwIcon } from "@repo/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";

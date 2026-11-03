@@ -8,8 +8,8 @@ import {
   type SealOwner,
   sealGitHubToken,
   sealProviderKey,
-} from "@luke/database/models/provider-key-seal";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+} from "@repo/database/models/provider-key-seal";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 import { test } from "vitest";
 

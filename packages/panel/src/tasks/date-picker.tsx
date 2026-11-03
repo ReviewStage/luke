@@ -8,8 +8,8 @@ import {
   dateToday,
   dateWall,
   readerZone,
-} from "@luke/features/date-mention";
-import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
+} from "@repo/features/date-mention";
+import { encodeMention, MENTION_KIND, type MentionPlace } from "@repo/features/mention-link";
 import {
   ALIGN,
   BUTTON_VARIANT,
@@ -35,8 +35,8 @@ import {
   TEXT_FIELD_TYPE,
   TextField,
   useMinute,
-} from "@luke/ui";
-import { inputProblem } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { inputProblem } from "@repo/ui/reported-failure";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -57,17 +57,17 @@ import { SwitchRow } from "../settings/switch-row.js";
  * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
  * Enter or leaving the field takes it, and beside each, while Include
  * time is on, the end's time. Each end stands under its name, Start or End,
- * as a form's field does (`@luke/ui`'s `FormField`), and words that name no
+ * as a form's field does (`@repo/ui`'s `FormField`), and words that name no
  * date are kept, the field marked, with a line under it saying what to
  * write, so the field says so in words and not by its shake alone, which
  * reduced motion holds still. Under the fields stand the month the date's
- * start falls in (`@luke/ui`'s `Calendar`); End date, after which the next
+ * start falls in (`@repo/ui`'s `Calendar`); End date, after which the next
  * pick sets the range's end; Include time; while it is on, Time zone, the
  * zone the times are read in; and Clear.
  *
  * Time zone opens on the reader's own zone, and its field turns the card to
  * a page of every zone the runtime knows, searched as the window's other
- * long lists are (`@luke/ui`'s `SearchableMenu`), hung from the same place
+ * long lists are (`@repo/ui`'s `SearchableMenu`), hung from the same place
  * the card was, so focus never leaves the picker. A zone picked, or
  * Escape, turns back to the card, focus on the field. A zone picked keeps
  * the times as written, as Notion's does: 3:00 PM stays 3:00 PM, now in
@@ -86,7 +86,7 @@ import { SwitchRow } from "../settings/switch-row.js";
  * The picker stands in the room the `@` list stands in, over the editor
  * rather than inside it, so a box that scrolls its words cuts none of it,
  * and the editor reads none of its keys. It hangs from its chip or its `@`
- * word as the `@` list does (`@luke/ui`'s `RectFloat`), at the popover's
+ * word as the `@` list does (`@repo/ui`'s `RectFloat`), at the popover's
  * narrow width, following the chip as its words scroll. Nothing of the date rides on an
  * attribute: the recording masks words and not attributes
  * (`mention-chip.tsx`'s header), so every date is said in a text node or a

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationCreateParams,
   type AutomationListView,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -19,26 +19,26 @@ import {
   type AutomationRunSummary,
   type AutomationSummary,
   type AutomationWorkspaceRun,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+} from "@repo/features/integration-wire";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
   TRIGGER_PROVIDER,
-} from "@luke/features/trigger-catalog";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActResult } from "@luke/host/contract";
-import type { Experiment } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { PROFILE } from "@luke/ui";
+} from "@repo/features/trigger-catalog";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActResult } from "@repo/host/contract";
+import type { Experiment } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { PROFILE } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -225,7 +225,7 @@ function pushStanding(): void {
 
 /**
  * What stands pushed to every page following a workspace's list, as the host
- * draws a write on it before the write answers (`@luke/host`'s
+ * draws a write on it before the write answers (`@repo/host`'s
  * `automation-collections.ts`).
  */
 function drawWrite(): void {

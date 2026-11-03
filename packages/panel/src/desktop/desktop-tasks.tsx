@@ -1,14 +1,14 @@
-import type { AgentStatus } from "@luke/features/agent-wire";
-import type { MentionLines } from "@luke/features/mention-link";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { AgentStatus } from "@repo/features/agent-wire";
+import type { MentionLines } from "@repo/features/mention-link";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type {
   TaskBlockRequest,
   TaskCreateRelationKind,
   TaskStanding,
-} from "@luke/features/task-wire";
-import { readingWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { readingWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -24,12 +24,12 @@ import {
   TOOLBAR_LOOK,
   Toolbar,
   useMinute,
-} from "@luke/ui";
-import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
-import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/ui";
+import { openThread, PlanCommentsProvider, usePlanComments } from "@repo/ui/plan-comments";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
+import { agentOfTab, followedAgent, sameTab } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";

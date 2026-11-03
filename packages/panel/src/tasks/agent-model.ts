@@ -1,14 +1,14 @@
-import { agentFailureWords, ranDirectlyWords } from "@luke/features/agent-failure-words";
-import { recordedVideosOf } from "@luke/features/agent-pictures-model";
-import { harnessNameOf } from "@luke/features/agent-runtime-models";
+import { agentFailureWords, ranDirectlyWords } from "@repo/features/agent-failure-words";
+import { recordedVideosOf } from "@repo/features/agent-pictures-model";
+import { harnessNameOf } from "@repo/features/agent-runtime-models";
 import {
   AGENT_TOOL,
   CLAUDE_CODE_TOOL,
   CONNECTION_TOOL,
   EVE_TOOL,
   RETIRED_TOOL,
-} from "@luke/features/agent-tools";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
+} from "@repo/features/agent-tools";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
 import {
   AGENT_ARCHIVER,
   AGENT_DELEGATE_TOOL,
@@ -41,40 +41,40 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
   type RefusedDevice,
-} from "@luke/features/agent-wire";
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+} from "@repo/features/agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
   type FailureReason,
   remedyLabel,
-} from "@luke/features/failure-remedy";
-import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+} from "@repo/features/failure-remedy";
+import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@repo/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@luke/features/models-wire";
-import { formatCompact, formatUsd } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/models-wire";
+import { formatCompact, formatUsd } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
-import { type PlanEditor, TASK_MODE, type TaskMode } from "@luke/features/task-wire";
-import { dayAndTimeText } from "@luke/features/time-format";
+} from "@repo/features/repository-reach-wire";
+import { type PlanEditor, TASK_MODE, type TaskMode } from "@repo/features/task-wire";
+import { dayAndTimeText } from "@repo/features/time-format";
 import {
   ROW_PART,
   type RowReading,
   TURN_ROW,
   type TurnRow,
   turnRows,
-} from "@luke/features/turn-rows";
-import { andList, readFailedWords } from "@luke/features/words";
-import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
-import { STATUS_TONE, type StatusTone } from "@luke/ui";
+} from "@repo/features/turn-rows";
+import { andList, readFailedWords } from "@repo/features/words";
+import type { FormerMember, WorkspaceMember } from "@repo/features/workspace-wire";
+import { STATUS_TONE, type StatusTone } from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -84,8 +84,8 @@ import {
   githubLoginActor,
   personActor,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
-import { MESSAGE_BLOCK, messageText } from "@luke/ui/reply-quote";
+} from "@repo/ui/actor-model";
+import { MESSAGE_BLOCK, messageText } from "@repo/ui/reply-quote";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
@@ -105,8 +105,8 @@ import {
   USER_MESSAGE_METADATA,
   type UserMessageMetadata,
   type WireValue,
-} from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { devicePlatformOf } from "../device-platform.js";
@@ -1184,7 +1184,7 @@ export function pilotTarget(
 /**
  * A model, and an agent, as a tab or a menu names it, shared with the main
  * process's notifications so neither is ever named two ways
- * (`@luke/features/model-label`).
+ * (`@repo/features/model-label`).
  */
 export { agentName, modelLabel };
 

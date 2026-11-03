@@ -1,12 +1,12 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type { TasklessAgent } from "@luke/features/agent-wire";
+import type { TasklessAgent } from "@repo/features/agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
   type Task,
   type TaskAgentsSummary,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Option, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

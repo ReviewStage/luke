@@ -2,7 +2,7 @@
  * zoom-images.tsx -- a picture zoomed and moved about as Preview's is: a press zooms it in and back, a pinch or a Control-scroll zooms it about the pointer, the buttons step it, and zoomed it is dragged or scrolled about its frame.
  */
 
-import { Button, Inline, Stack, useImageZoom, ZoomImage } from "@luke/ui";
+import { Button, Inline, Stack, useImageZoom, ZoomImage } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

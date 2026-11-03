@@ -1,7 +1,7 @@
 // experiment-write.ts -- an experiment turned on or off: written to the service, which holds the choice, one write at a time, then kept here as the service answered it.
-import type { Experiment } from "@luke/settings";
-import type { SettingsUpdateResult } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import type { Experiment } from "@repo/settings";
+import type { SettingsUpdateResult } from "@repo/settings/wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect, Semaphore } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import type { AccountPreferencesClient } from "./account-preferences-client.js";

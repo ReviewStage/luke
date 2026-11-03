@@ -12,8 +12,8 @@ import {
   gatewayHost,
   NodeRegistry,
   nodeSnapshotToWire,
-} from "@luke/gateway";
-import type { WireValue } from "@luke/wire";
+} from "@repo/gateway";
+import type { WireValue } from "@repo/wire";
 import { HOST_OPERATOR_CLIENT_ID } from "./node-capabilities.js";
 
 export interface GatewayServiceDependencies {

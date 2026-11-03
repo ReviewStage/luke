@@ -1,4 +1,4 @@
-import { LEGACY_APP_WORD, literalsReadingLegacy } from "@luke/wire";
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 

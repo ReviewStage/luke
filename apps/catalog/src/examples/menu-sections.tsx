@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   GLYPH_INK,
   GlyphSlot,
@@ -10,8 +10,8 @@ import {
   PROVIDER_MARK_SIZE,
   ProductMark,
   ProviderMark,
-} from "@luke/ui";
-import { ICON_SIZE } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ICON_SIZE } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

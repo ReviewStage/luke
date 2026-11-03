@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
-import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+} from "@repo/features/plan-comment-wire";
+import type { PlanEditRequest } from "@repo/features/plan-edit";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";

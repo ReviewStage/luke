@@ -1,4 +1,4 @@
-import { noMatchWords, TERM } from "@luke/features/words";
+import { noMatchWords, TERM } from "@repo/features/words";
 import { Command } from "cmdk";
 import { memo, type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../cn.js";

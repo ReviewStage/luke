@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import { LINK_PLATFORM } from "@luke/features/link-open";
+import { LINK_PLATFORM } from "@repo/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { browserLinkPlatform } from "../src/link-platform";
 

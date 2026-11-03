@@ -1,11 +1,11 @@
-import { type Noun, noMatchWords } from "@luke/features/words";
+import { type Noun, noMatchWords } from "@repo/features/words";
 import {
   SHORTCUT_KEY,
   type ShortcutChord,
   WRITING_SHORTCUTS,
   type WritingAction,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import type { ReactNode, Ref } from "react";
 import { type ComboboxGroup, ComboboxList } from "../combobox/combobox.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";

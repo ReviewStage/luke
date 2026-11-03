@@ -7,11 +7,11 @@ import {
   type Task,
   type TaskStanding,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

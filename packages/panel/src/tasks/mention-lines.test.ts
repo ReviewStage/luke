@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAgentAnswer } from "@luke/features/agent-view";
-import type { TaskFileRequest } from "@luke/features/task-wire";
-import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import type { AgentAgentAnswer } from "@repo/features/agent-view";
+import type { TaskFileRequest } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";

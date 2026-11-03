@@ -13,10 +13,10 @@ import { cn } from "../cn.js";
  * region. It hangs below its control and turns above where the window
  * ends, held a margin inside it, on the window's own layer; the positioner
  * takes the control it hangs from (`anchor`) and a fixed position, because
- * when it shows is `@luke/ui`'s `Tooltip`'s (`components/tooltip/hint.tsx`),
+ * when it shows is `@repo/ui`'s `Tooltip`'s (`components/tooltip/hint.tsx`),
  * not a trigger's. shadcn's arrow, trigger, and provider are left out: the
  * pill always hangs centred on what it names. What an app draws is
- * `@luke/ui`'s `TooltipPill`; this is its inside.
+ * `@repo/ui`'s `TooltipPill`; this is its inside.
  */
 
 /** The gap between a control and its hint, and the hint's least distance from the window's edge, in CSS pixels. */

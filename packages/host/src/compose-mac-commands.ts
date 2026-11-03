@@ -1,9 +1,9 @@
-import type { HostedMacCommandClient } from "@luke/features";
+import type { HostedMacCommandClient } from "@repo/features";
 import {
   type MacCommandsLiveAnswer,
   macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
-} from "@luke/features/live-wire";
+} from "@repo/features/live-wire";
 import {
   isMacShellCommand,
   MAC_COMMAND_KIND,
@@ -13,10 +13,10 @@ import {
   type MacCommandResult,
   type MacShellCommand,
   type MacShellResult,
-} from "@luke/features/mac-command-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@luke/gateway";
-import { MAC_COMMAND_MODE, type MacCommandMode } from "@luke/settings";
+} from "@repo/features/mac-command-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import {
   Clock,
   Config,
@@ -49,7 +49,7 @@ import type { RunMode } from "./run-mode.js";
 /**
  * compose-mac-commands.ts -- runs on this Mac the commands the account's agents queue for it, for as long as an account is signed in and Settings lets agents run commands here, asking the developer first where Settings says to.
  *
- * Settings › This Mac decides (`@luke/settings`'s `MAC_COMMAND_MODE`): Ask
+ * Settings › This Mac decides (`@repo/settings`'s `MAC_COMMAND_MODE`): Ask
  * every time, the default, shows the developer each shell command before
  * it runs; Always allow runs any command of the account's agents without
  * asking; Never is the brake, under which nothing is read. While the gate

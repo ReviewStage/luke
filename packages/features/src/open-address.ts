@@ -16,7 +16,7 @@ import { LINK_ORIGIN } from "./link-home.js";
  * a task), and its fragment are read as those of a link on the home,
  * whatever host served it, a slash after it let go as the route lets it,
  * and written again in the desktop's scheme by the one module that knows a
- * link's form (`@luke/features/link-grammar`). A picture's address,
+ * link's form (`@repo/features/link-grammar`). A picture's address,
  * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of, and a
  * pairing's, `/connect/<code>`, under no workspace, opens its approve. A path
  * that names no place opens nothing.

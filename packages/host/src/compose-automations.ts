@@ -1,4 +1,4 @@
-import type { HostedAutomationClient } from "@luke/features";
+import type { HostedAutomationClient } from "@repo/features";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -15,15 +15,15 @@ import {
   automationIdParamsSchema,
   automationListParamsSchema,
   automationRunParamsSchema,
-} from "@luke/features/automation-view";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+} from "@repo/features/automation-view";
+import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   readParams,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import { Data, Effect, FiberMap, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";

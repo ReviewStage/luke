@@ -8,17 +8,17 @@
  * confirm; nothing a tab shows is.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   handBackBrowserTab,
   noteBrowserTabPage,
   readBrowserTab,
   renewBrowserTabTakeover,
   takeOverBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { readVisibleAgentWorkspace } from "@luke/database/models/agent-store";
-import { standingSessionsNamed } from "@luke/database/models/recorded-session";
-import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+} from "@repo/database/models/agent-browser-tabs";
+import { readVisibleAgentWorkspace } from "@repo/database/models/agent-store";
+import { standingSessionsNamed } from "@repo/database/models/recorded-session";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { Effect, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser.js";

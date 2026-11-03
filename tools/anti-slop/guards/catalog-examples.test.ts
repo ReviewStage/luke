@@ -11,7 +11,7 @@ const BARREL: Readonly<Record<string, string>> = {
   "tip.tsx": "export function Tip() {}\nexport type TipProps = {};",
 };
 
-describe("the catalog's coverage of @luke/ui", () => {
+describe("the catalog's coverage of @repo/ui", () => {
   it("reads a barrel's components through its re-exports, leaving constants, hooks, types, and glyphs", () => {
     const names = exportedValues(
       "index.ts",
@@ -24,7 +24,7 @@ describe("the catalog's coverage of @luke/ui", () => {
   it("counts a component drawn as JSX or handed on as a value, and not one only imported", () => {
     const example = moduleRecord(
       "example.tsx",
-      'import { Button, Card, Chip, type Look } from "@luke/ui";\nconst sections = [Card];\nexport const Render = () => <Button />;',
+      'import { Button, Card, Chip, type Look } from "@repo/ui";\nconst sections = [Card];\nexport const Render = () => <Button />;',
     );
     expect([...drawnFrom(example)].sort()).toEqual(["Button", "Card"]);
   });

@@ -12,9 +12,9 @@ import { cn } from "../cn.js";
  * thumb is named by and a `thumbValueText` it is read as, which shadcn
  * leaves to its caller's `getAriaLabel` and `getAriaValueText`;
  * the one press cursor (`cursor-press`); and none of shadcn's outline or ring
- * utilities, because the window's own focus ring (`@luke/panel`'s
+ * utilities, because the window's own focus ring (`@repo/panel`'s
  * base.css) draws the keyboard's ring and a utility would outrank it
- * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Slider`
+ * (`anti-slop/no-shadcn-focus-ring`). `@repo/ui`'s `Slider`
  * (`components/slider/slider.tsx`) is what an app draws; this is its inside.
  */
 

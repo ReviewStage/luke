@@ -10,12 +10,12 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON } from "@luke/features/failure-remedy";
-import { CALL_KIND } from "@luke/features/turn-rows";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON } from "@repo/features/failure-remedy";
+import { CALL_KIND } from "@repo/features/turn-rows";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, SOMEONE_REASON } from "@repo/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { causeKind } from "@luke/runtime/effect";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { causeKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
 import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";

@@ -6,16 +6,16 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { Agent } from "@luke/database/models/agent-store";
-import { REPLAY_STEP_KIND, type ReplayStep } from "@luke/features/agent-replay";
+import type { Agent } from "@repo/database/models/agent-store";
+import { REPLAY_STEP_KIND, type ReplayStep } from "@repo/features/agent-replay";
 import {
   AGENT_KIND,
   type AgentPullRequest,
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { it } from "vitest";
 import { callEntry, replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";

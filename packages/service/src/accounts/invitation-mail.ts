@@ -25,14 +25,14 @@
  * nothing of the letter, the address least of all, is logged.
  */
 
-import { BRAND_PALETTE } from "@luke/brand";
-import { githubAvatarAt } from "@luke/features/account-picture";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { BRAND_PALETTE } from "@repo/brand";
+import { githubAvatarAt } from "@repo/features/account-picture";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
-} from "@luke/features/workspace-invitation-wire";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/workspace-invitation-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer } from "../core.js";
@@ -55,7 +55,7 @@ const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATIO
 
 /**
  * The email's colours, light and dark: the brand's own, read off the brand
- * table `@luke/brand` generates `@luke/ui`'s palette from, so a change of
+ * table `@repo/brand` generates `@repo/ui`'s palette from, so a change of
  * brand reaches the letter with no second copy to forget. Each is spelled as
  * a plain hex because an email client reads no custom property. The page is
  * the sidebar's ground, the letter's card the overlay, and the button the

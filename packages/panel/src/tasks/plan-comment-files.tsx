@@ -1,6 +1,6 @@
-import type { FileChip } from "@luke/features/attachment-model";
-import type { PlanCommentFile } from "@luke/features/plan-comment-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { FileChip } from "@repo/features/attachment-model";
+import type { PlanCommentFile } from "@repo/features/plan-comment-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { AttachedFileChips } from "./attached-file-chips.js";

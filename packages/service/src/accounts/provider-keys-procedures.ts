@@ -4,7 +4,7 @@
  * `GET /api/account/provider-keys` answers the account's keys as hints and
  * statuses; `PUT` saves one, first asking the provider whether it accepts
  * it (`packages/service/src/providers/provider-key-check.ts`), and keeps it sealed
- * (`@luke/database/models/provider-key-seal`) only where it does; `DELETE` with the
+ * (`@repo/database/models/provider-key-seal`) only where it does; `DELETE` with the
  * provider in the query removes one. Every answer is the keys as they then
  * stand and none carries a key: the one body that holds a key is the
  * `PUT`'s own, it is sealed the moment it is read, and neither it nor what
@@ -48,13 +48,13 @@ import {
   type KeyRing,
   openProviderKey,
   sealProviderKey,
-} from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   removeProviderKey,
   saveProviderKey,
   setProviderKeyForAgents,
-} from "@luke/database/models/provider-key-store";
+} from "@repo/database/models/provider-key-store";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -67,7 +67,7 @@ import {
   planStanding,
   SUBSCRIPTION_KIND_PROVIDER,
   type SubscriptionKeySummary,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { Clock, DateTime, Duration, Effect, Redacted, Result } from "effect";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";

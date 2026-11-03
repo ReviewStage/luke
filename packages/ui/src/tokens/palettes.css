@@ -7,7 +7,7 @@
 
    The brand's own colours (the grounds, the inks, the accent, and the
    status inks tuned against them) are not written here: they are generated
-   into `brand.css` from the brand table in `@luke/brand`'s
+   into `brand.css` from the brand table in `@repo/brand`'s
    `generate-surface-shared.mjs`, so a change of brand, or a second theme, is
    a change of that one table. What stays here is what no brand changes: the
    fills and edges drawn as alphas of the ink, the tints mixed from the

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CALL_KIND } from "@luke/features/turn-rows";
+import { CALL_KIND } from "@repo/features/turn-rows";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

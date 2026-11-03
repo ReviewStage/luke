@@ -17,7 +17,7 @@
  * same, ⌃Tab included, and the window yields them (`surfaceKeepsPress`).
  */
 
-import { surfaceKeepsPress } from "@luke/settings/shortcuts";
+import { surfaceKeepsPress } from "@repo/settings/shortcuts";
 
 /** Where a key press goes. */
 export const TERMINAL_KEY = {

@@ -36,22 +36,22 @@
  * which the agent reads as it reads any tool's answer.
  */
 
-import { readAgentOfConversation } from "@luke/database/models/agent-store";
-import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
-import { WORKSPACE_MCP_SERVER } from "@luke/features/agent-tools";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { integrationConnectionOf } from "@luke/features/integration-wire";
-import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { failureKind } from "@luke/runtime/effect";
+import { readAgentOfConversation } from "@repo/database/models/agent-store";
+import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
+import { WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { integrationConnectionOf } from "@repo/features/integration-wire";
+import { MAC_COMMAND_BOUNDS } from "@repo/features/mac-command-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { failureKind } from "@repo/runtime/effect";
 import {
   EXCESS_KEYS,
   HTTP_METHOD,
   isRecord,
   type UnparsedWireValue,
   type WireRecord,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";

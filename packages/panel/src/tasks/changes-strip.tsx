@@ -2,8 +2,8 @@ import {
   type AgentChangedFile,
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
-} from "@luke/features/agent-wire";
-import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@luke/ui";
+} from "@repo/features/agent-wire";
+import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@repo/ui";
 
 /**
  * changes-strip.tsx -- the thin strip Files changed leaves in its tree's place while the tree is hidden: one mark for each changed file, in the tree's order, the pointer resting on it peeking the tree out over the list.
@@ -12,7 +12,7 @@ import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@luke/
  * change set in sight: each file's mark is coloured by what became of it,
  * as its letter is in the tree, dimmed once the member marked it viewed,
  * and the file stood on, or at the top of the list, stands out. The marks
- * are `@luke/ui`'s strip's bars, which share the strip's height, so a large
+ * are `@repo/ui`'s strip's bars, which share the strip's height, so a large
  * pull request draws them thinner rather than out of sight. The pointer
  * resting on the strip peeks the tree over the list's right edge, as the
  * right edge itself does where the panel is too narrow for the tree beside

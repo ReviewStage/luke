@@ -17,7 +17,7 @@ import {
  * hangs from (`AnchoredPopover`, `RectFloat`: `onPressAway`, which
  * `usePressAway` hears once for the whole window), never a listener of its
  * own. A `pointerdown`, `mousedown`, `touchstart` or `click` listener on the
- * document or the window is refused outside `@luke/ui`, from a baseline of
+ * document or the window is refused outside `@repo/ui`, from a baseline of
  * the files that still hold one (`press-listener-baseline.json`), which only
  * shrinks.
  */
@@ -48,11 +48,11 @@ export const noDocumentPressListenerRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow a press listener on the document or window outside @luke/ui, from a baseline that only shrinks.",
+        "Disallow a press listener on the document or window outside @repo/ui, from a baseline that only shrinks.",
     },
     messages: {
       newListener:
-        "Close a popover, menu or card on a press outside it with `onPressAway` on its `AnchoredPopover` or `RectFloat`, or `usePressAway` from `@luke/ui`, not a `{{event}}` listener on the {{target}}. This file's press listeners are more than the baseline holds.",
+        "Close a popover, menu or card on a press outside it with `onPressAway` on its `AnchoredPopover` or `RectFloat`, or `usePressAway` from `@repo/ui`, not a `{{event}}` listener on the {{target}}. This file's press listeners are more than the baseline holds.",
       staleBaseline:
         "This file holds {{found}} press listener(s) on the document or window, fewer than `tools/anti-slop/press-listener-baseline.json` allows ({{expected}}). Lower its count to {{found}}, or delete the row at 0.",
     },

@@ -18,7 +18,7 @@
  * capabilities are reported beside them as findings that gate nothing.
  */
 
-import type { WireValue } from "@luke/wire";
+import type { WireValue } from "@repo/wire";
 import { PROBE_SANDBOX } from "./pins.js";
 import {
   accountReading,

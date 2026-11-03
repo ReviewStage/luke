@@ -22,9 +22,9 @@
  * agents' own rows, so naming them asks GitHub nothing.
  */
 
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { listAgentsOnPullRequest } from "@luke/database/models/agent-store";
-import { account, member } from "@luke/database/schemas/auth";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { listAgentsOnPullRequest } from "@repo/database/models/agent-store";
+import { account, member } from "@repo/database/schemas/auth";
 import type {
   AgentAuthor,
   AgentChangesPeople,
@@ -34,7 +34,7 @@ import type {
   GitHubPerson,
   PullRequestStackEntry,
   ReactionGroup,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

@@ -98,7 +98,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   owner or admin, Connect, or once connected, one "Manage on GitHub", which
   opens the GitHub page where accounts are added and repositories chosen;
   a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
-  `SettingsLink` (`@luke/settings/settings-views`: a page, a section, a workspace),
+  `SettingsLink` (`@repo/settings/settings-views`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
   lists only the repositories its GitHub reaches (none, read "No repository",
@@ -131,7 +131,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   the sidebar among them, are dragged up and down it to the order the
   developer wants, each drop drawn at once and put back with a toast when
   the service refuses it; a pin not yet dragged stands on top, newest pinned
-  first. The order is fractional indexing (`@luke/features/pin-order`): a
+  first. The order is fractional indexing (`@repo/features/pin-order`): a
   dropped pin takes a key between its new neighbours', so one drop writes one
   pin. A task's or an agent's place is the account's own, beside its pin, and
   follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
@@ -459,7 +459,7 @@ the row says now.
 
 The developer edits the plan whole, in place, with its title
 (`tasks/plan-document-editor.tsx`; the editor is `plan-editor/`,
-its saves `tasks/use-plan-editing.ts` and `@luke/features/plan-edit-model`).
+its saves `tasks/use-plan-editing.ts` and `@repo/features/plan-edit-model`).
 The service lays each save over what others wrote meanwhile
 (`packages/features/src/plan-edit.ts`).
 

@@ -3,8 +3,8 @@
  * at its start, part way, and done, and a bar of its own named by its label.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

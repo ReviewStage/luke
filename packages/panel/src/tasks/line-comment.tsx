@@ -2,8 +2,8 @@ import {
   PULL_REQUEST_ACTION,
   REVIEW_COMMENT_MODE,
   type ReviewCommentMode,
-} from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button, CARD_CORNER, CARD_PADDING, Card } from "@luke/ui";
+} from "@repo/features/pull-request-write-wire";
+import { BUTTON_VARIANT, Button, CARD_CORNER, CARD_PADDING, Card } from "@repo/ui";
 import { useState } from "react";
 import { type CommentLines, commentLinesLabel } from "./changes-model.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";

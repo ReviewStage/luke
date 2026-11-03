@@ -10,7 +10,7 @@ import {
   channelThreadsParamsSchema,
   channelThreadsViewSchema,
   channelUnarchiveParamsSchema,
-} from "@luke/features/channel-view";
+} from "@repo/features/channel-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

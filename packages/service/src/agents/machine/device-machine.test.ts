@@ -7,13 +7,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { RUNNER_LOST_DETAIL } from "@luke/database/models/abandoned-turns";
+import { Database } from "@repo/database/core/query";
+import { RUNNER_LOST_DETAIL } from "@repo/database/models/abandoned-turns";
 import {
   hasRepository,
   latestTurnsOfReached,
   recordAgentRunnerToken,
-} from "@luke/database/models/agent-store";
+} from "@repo/database/models/agent-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
@@ -24,14 +24,14 @@ import {
   settleDeviceAgentLine,
   withdrawDeviceAgentRequest,
   withdrawExpiredDeviceAgentRows,
-} from "@luke/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { deviceAgentLine } from "@luke/database/schemas/device-agent";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@luke/database/testing";
+} from "@repo/database/models/device-agent-store";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { deviceAgentLine } from "@repo/database/schemas/device-agent";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@repo/database/testing";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -39,9 +39,9 @@ import {
   type DeviceLaunchRefusal,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { TURN_FAILURE } from "@luke/features/turn-run";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { TURN_FAILURE } from "@repo/features/turn-run";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";

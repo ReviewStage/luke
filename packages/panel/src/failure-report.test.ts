@@ -6,8 +6,8 @@ import {
   FAILURE_SURFACE,
   type ShownFailureSentry,
   sendShownFailure,
-} from "@luke/features/shown-failure";
-import { ErrorState } from "@luke/ui";
+} from "@repo/features/shown-failure";
+import { ErrorState } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

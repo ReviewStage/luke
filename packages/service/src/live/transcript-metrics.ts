@@ -8,12 +8,12 @@
  * (`observability/sentry.ts`) as each histogram's `.sum`, `.count`, `.min`,
  * and `.max`, which are cumulative for the instance, so a mean is a sum over
  * its count. The bytes a journal rewrite writes are counted where it is
- * written (`@luke/database/models/writer`).
+ * written (`@repo/database/models/writer`).
  *
  * Metrics carry counts, durations, and byte sizes only, never a row, an id,
  * or a txid.
  */
-import type { SealedLiveQueryWire } from "@luke/features/live-wire";
+import type { SealedLiveQueryWire } from "@repo/features/live-wire";
 import { Clock, Effect, Metric } from "effect";
 
 /** Buckets from a kilobyte up to a few megabytes, doubling, which is where a long turn's journal climbs. */

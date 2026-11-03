@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_OPEN } from "@luke/features/link-open";
+import { LINK_OPEN } from "@repo/features/link-open";
 import { test } from "vitest";
 import { AGENT_ENTER } from "./agent-enter.js";
 import {

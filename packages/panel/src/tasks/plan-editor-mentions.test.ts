@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { TASK_TREE_ENTRY, type Task } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";

@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { registerDevice } from "@luke/database/models/device-store";
-import { createTask, listTasks, readTask } from "@luke/database/models/task-store";
+import { Database } from "@repo/database/core/query";
+import { registerDevice } from "@repo/database/models/device-store";
+import { createTask, listTasks, readTask } from "@repo/database/models/task-store";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";

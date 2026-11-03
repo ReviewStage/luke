@@ -14,7 +14,7 @@
  * not stand is, and the new one is added still.
  */
 
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   addTaskBlock,
   lockTasksForBlocks,
@@ -24,19 +24,19 @@ import {
   type TaskBlockPair,
   TaskBlockSelf,
   type TaskBlockWritten,
-} from "@luke/database/models/task-block-store";
+} from "@repo/database/models/task-block-store";
 import {
   readTaskHeader,
   setTaskParent,
   type TaskParentCycle,
   type TaskParentRepositoryDiffers,
   type TaskParentUnreached,
-} from "@luke/database/models/task-store";
+} from "@repo/database/models/task-store";
 import {
   TASK_RELATION_KIND,
   type TaskRelationChangeRequest,
   type TaskRelationKind,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 

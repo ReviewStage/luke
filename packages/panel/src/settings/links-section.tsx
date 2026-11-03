@@ -2,8 +2,8 @@ import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
-} from "@luke/settings";
-import { SettingsSection } from "@luke/ui";
+} from "@repo/settings";
+import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -11,7 +11,7 @@ import type { SettingsWrites } from "./writes.js";
  * links-section.tsx -- where the account's app links open, the Profile page's Links group under who is signed in.
  *
  * The account's own choice, carried to every device and read by the web as
- * a link loads (`@luke/features/link-open`), so it stands on Profile, among
+ * a link loads (`@repo/features/link-open`), so it stands on Profile, among
  * what is the account's, rather than on a page of this Mac's.
  */
 export function LinksSection({

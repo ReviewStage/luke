@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageVersion } from "@luke/features/page-wire";
-import { TASK_CALL_FAILURE, type TasksPageParams } from "@luke/features/tasks-view";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageVersion } from "@repo/features/page-wire";
+import { TASK_CALL_FAILURE, type TasksPageParams } from "@repo/features/tasks-view";
 import { Effect } from "effect";
 import { pageResponse } from "./page-protocol";
 

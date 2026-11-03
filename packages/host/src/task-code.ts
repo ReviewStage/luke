@@ -1,5 +1,5 @@
-import type { CodeToken } from "@luke/features/tasks-view";
-import { catchAllButInterrupt } from "@luke/runtime/effect";
+import type { CodeToken } from "@repo/features/tasks-view";
+import { catchAllButInterrupt } from "@repo/runtime/effect";
 import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 import { plainCodeLines } from "./task-code-remote.js";

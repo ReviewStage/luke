@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DIAGRAM_APPEARANCE, DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
+import { DIAGRAM_APPEARANCE, DIAGRAM_DRAWING } from "@repo/ui/diagram-contract";
 import { afterEach, beforeEach, test } from "vitest";
 import { diagram } from "./index.js";
 

@@ -14,9 +14,9 @@
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
-import { bodyCap, HOSTED_ERRORS } from "@luke/features/contract";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { HTTP_METHOD } from "@luke/wire";
+import { bodyCap, HOSTED_ERRORS } from "@repo/features/contract";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";

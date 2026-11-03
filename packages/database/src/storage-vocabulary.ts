@@ -21,12 +21,12 @@ export const CONVERSATION_RUNTIME = {
 
 export type ConversationRuntime = (typeof CONVERSATION_RUNTIME)[keyof typeof CONVERSATION_RUNTIME];
 
-/** What sent one of the developer's lines to a coding agent, as the wire spells it too, so the host reads a live row's sender by the same words (`@luke/features/agent-wire`). */
+/** What sent one of the developer's lines to a coding agent, as the wire spells it too, so the host reads a live row's sender by the same words (`@repo/features/agent-wire`). */
 export {
   MESSAGE_SENDER,
   type MessageSender,
   messageSenderSchema,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 
 /**
  * What an inbox item's attachment is: a picture the agent posted with an

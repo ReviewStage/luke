@@ -1,6 +1,6 @@
-import { DAY_MS } from "@luke/runtime/vocabulary";
-import { SCHEMA_REFUSAL } from "@luke/wire";
-import { wireRefusal } from "@luke/wire/effect";
+import { DAY_MS } from "@repo/runtime/vocabulary";
+import { SCHEMA_REFUSAL } from "@repo/wire";
+import { wireRefusal } from "@repo/wire/effect";
 import { DateTime, Option, Schema } from "effect";
 import { distanceText } from "./time-format.js";
 

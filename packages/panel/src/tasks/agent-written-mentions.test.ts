@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

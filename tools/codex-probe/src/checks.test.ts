@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { isRecord, isWireString, valueFromJsonText, type WireValue } from "@luke/wire";
+import { isRecord, isWireString, valueFromJsonText, type WireValue } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
   CHECK,

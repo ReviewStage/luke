@@ -1,15 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentSummary } from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { TERMINAL_STATE, type TerminalState } from "@luke/features/terminal-model";
-import { sandboxRead } from "@luke/features/terminal-store";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { TERMINAL_STATE, type TerminalState } from "@repo/features/terminal-model";
+import { sandboxRead } from "@repo/features/terminal-store";
 import {
   SANDBOX_STATE,
   type TerminalSummary,
   type TerminalsAnswer,
-} from "@luke/features/terminal-wire";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
+} from "@repo/features/terminal-wire";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -34,9 +34,9 @@ import {
   SkeletonRegion,
   Tooltip,
   useConfirmDialog,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { ReactNode, RefObject } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";

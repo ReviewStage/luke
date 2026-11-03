@@ -1,8 +1,8 @@
-import { cn, DISCLOSURE_BODY, DisclosureBody, DisclosureScope, useDisclosureFold } from "@luke/ui";
+import { cn, DISCLOSURE_BODY, DisclosureBody, DisclosureScope, useDisclosureFold } from "@repo/ui";
 import type { ComponentProps, ReactNode } from "react";
 
 /**
- * fold.tsx -- the transcript's own skins of `@luke/ui`'s Disclosure: a tool call's line, a reasoning block, a plan card, the to-do dock, each drawing its summary and body in classes of its own.
+ * fold.tsx -- the transcript's own skins of `@repo/ui`'s Disclosure: a tool call's line, a reasoning block, a plan card, the to-do dock, each drawing its summary and body in classes of its own.
  *
  * The state, the motion, and the find's reveal are the package's
  * (`useDisclosureFold`); what is here is only where each part wears its

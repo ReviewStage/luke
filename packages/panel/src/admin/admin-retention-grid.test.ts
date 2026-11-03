@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { AdminMetrics } from "@luke/features/admin-answer-wire";
+import type { AdminMetrics } from "@repo/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

@@ -10,10 +10,10 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/agent-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { Tooltip } from "@luke/ui";
+} from "@repo/features/agent-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -7,10 +7,10 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
   type ReviewState,
-} from "@luke/features/agent-wire";
-import { pullRequestAddressOf } from "@luke/features/link-grammar";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { countWords, TERM } from "@luke/features/words";
+} from "@repo/features/agent-wire";
+import { pullRequestAddressOf } from "@repo/features/link-grammar";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { countWords, TERM } from "@repo/features/words";
 import {
   ALIGN,
   Badge,
@@ -27,7 +27,7 @@ import {
   TIME_LOOK,
   Time,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useEffect } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { PULL_REQUEST_TAB } from "../desktop/pages-on-demand.js";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { CALL_KIND, callLine, callPlace } from "@luke/features/turn-rows";
-import type { WireRecord } from "@luke/wire";
+import { CALL_KIND, callLine, callPlace } from "@repo/features/turn-rows";
+import type { WireRecord } from "@repo/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool.js";
 import {

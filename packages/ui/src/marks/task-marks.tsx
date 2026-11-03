@@ -3,7 +3,7 @@ import {
   TASK_STATUS,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import React from "react";
 import { STATUS_TONE, type StatusTone } from "../status-tone.js";
 

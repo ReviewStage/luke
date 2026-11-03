@@ -1,4 +1,4 @@
-import { CARD_DROP_TARGET, DropSlot } from "@luke/ui";
+import { CARD_DROP_TARGET, DropSlot } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

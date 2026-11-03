@@ -5,7 +5,7 @@ import { Schema as EffectSchema } from "effect";
  *
  * A page is drawn in a frame sandboxed to its scripts alone, under a policy
  * that refuses it a popup and a navigation to anywhere but itself
- * (`@luke/features/page-policy`), so a link out of it, followed in the
+ * (`@repo/features/page-policy`), so a link out of it, followed in the
  * frame, goes nowhere. Every server of a page therefore answers it with one
  * script of our own ahead of the agent's HTML (`withPageScripts`),
  * which takes a press of a link to another site from the page, so the frame

@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import { CHOICE_SELECT, ChoiceList, useFilePicker } from "@luke/ui";
-import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
-import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import { CHOICE_SELECT, ChoiceList, useFilePicker } from "@repo/ui";
+import { writeWithheldSheet } from "@repo/ui/session-replay-marks";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@repo/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,7 +20,7 @@ import { applySessionReplay } from "./session-replay";
  * arrives while they load has to hold. This runs the
  * library's own client and recorder over a page of words, through the
  * module's public door, and reads what the recording would send: the page,
- * the controls `@luke/ui` draws over ids and a picked file, and the sheets
+ * the controls `@repo/ui` draws over ids and a picked file, and the sheets
  * the window adopts.
  */
 
@@ -122,7 +122,7 @@ function drawPage(): void {
     </main>`;
 }
 
-/** What `@luke/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
+/** What `@repo/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
 function Controls(): React.JSX.Element {
   const picker = useFilePicker({ onFiles: () => undefined });
   return createElement(

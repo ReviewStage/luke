@@ -16,8 +16,8 @@ import { TOOLTIP_GAP, TOOLTIP_MARGIN, TOOLTIP_SURFACE } from "./tooltip.js";
  * `ph-no-capture` class. It hangs from its control's start below it, turning
  * above where the window ends, or beside it, on the window's own layer; the
  * positioner takes the control (`anchor`) and a fixed position, because
- * when it shows is `@luke/ui`'s `Tooltip`'s. shadcn's trigger is left out.
- * What an app draws is `@luke/ui`'s `TooltipCard`; this is its inside.
+ * when it shows is `@repo/ui`'s `Tooltip`'s. shadcn's trigger is left out.
+ * What an app draws is `@repo/ui`'s `TooltipCard`; this is its inside.
  */
 
 function HoverCard({ ...props }: PreviewCardPrimitive.Root.Props) {

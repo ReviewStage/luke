@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import type { pageFindAnswerSchema } from "@luke/features/page-find";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@luke/features/page-pick";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import type { pageFindAnswerSchema } from "@repo/features/page-find";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@repo/features/page-pick";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { PlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/features/plan-comment-wire";
+import { type CodeLines, TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

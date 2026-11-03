@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import { fakeActPort } from "@luke/panel/testing/app-bridge";
+import { ACT_KIND } from "@repo/host/acts";
+import { fakeActPort } from "@repo/panel/testing/app-bridge";
 import { test } from "vitest";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 

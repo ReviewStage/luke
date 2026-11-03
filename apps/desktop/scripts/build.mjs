@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
+import { BRAND_ASSETS_DIRECTORY } from "@repo/brand/assets-directory";
 import {
   HIGHLIGHT_WORKER_BUILD,
   LUCIDE_WHOLE,
@@ -11,7 +11,7 @@ import {
   panelStaticDirectories,
   REDIRECTED,
   redirectOf,
-} from "@luke/panel/build-table";
+} from "@repo/panel/build-table";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
@@ -40,7 +40,7 @@ const DOCK_ICON_IMAGES = {
   "icon-dark.png": "icon-dark-512.png",
 };
 
-// The imports the panel's build table (`@luke/panel/build-table`) answers
+// The imports the panel's build table (`@repo/panel/build-table`) answers
 // differently from how they are written: Streamdown's HTML parser and Pierre's
 // diff writer, each redirected to a module of the panel's own. The table says
 // why each is answered as it is; this is esbuild's shape of it.
@@ -55,7 +55,7 @@ const panelRedirects = {
 };
 
 // A dynamic `import("lucide-react")` answered with the module of Lucide's
-// `icons` alone (`@luke/panel/build-table`'s `LUCIDE_WHOLE`). The CommonJS file
+// `icons` alone (`@repo/panel/build-table`'s `LUCIDE_WHOLE`). The CommonJS file
 // is read in a namespace of its own, so the resolver never takes it for the
 // package and keeps answering the named imports with the ES build.
 const LUCIDE_WHOLE_FILE = "lucide-whole-file";
@@ -112,7 +112,7 @@ const sideStylesheetsLinked = {
 };
 
 // The commit the bundle is cut from, which Settings › Updates names
-// (`@luke/host`'s `build-commit.ts`): the short SHA, whether the tree held
+// (`@repo/host`'s `build-commit.ts`): the short SHA, whether the tree held
 // uncommitted changes (a new file the bundle may carry counts too), and the
 // branch unless the head is detached, as a tag's checkout is. A build made
 // where git cannot answer stamps none.
@@ -180,7 +180,7 @@ const WINDOW_ENTRIES = {
 };
 
 // The bundles too large for any window's entry, each reached through a
-// dynamic `import()` of its own entry (`@luke/panel`'s `bundle-loader.ts`), so no
+// dynamic `import()` of its own entry (`@repo/panel`'s `bundle-loader.ts`), so no
 // window parses one before it is needed: the editors (TipTap), a File tab's
 // tree (Pierre's tree), a Terminal tab's screen (xterm.js), a plan's diagrams
 // (Mermaid), a Files changed diff (Pierre's diffs and Shiki), and session
@@ -262,7 +262,7 @@ await Promise.all([
       PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
-      // the run answers to; see `@luke/host`'s app-identity.ts.
+      // the run answers to; see `@repo/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
     sourcemap: "external",

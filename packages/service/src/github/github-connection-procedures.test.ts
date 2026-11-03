@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { OrganizationRefused } from "@luke/database/models/workspace-seams";
-import { account } from "@luke/database/schemas/auth";
-import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
-import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { OrganizationRefused } from "@repo/database/models/workspace-seams";
+import { account } from "@repo/database/schemas/auth";
+import { openMigratedPglite, sqlClientOverPglite } from "@repo/database/testing";
+import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@repo/features/github-connection-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 import { bearer } from "better-auth/plugins";

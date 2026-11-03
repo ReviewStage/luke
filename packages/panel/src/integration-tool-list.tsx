@@ -1,4 +1,4 @@
-import type { IntegrationTool } from "@luke/features/integration-health";
+import type { IntegrationTool } from "@repo/features/integration-health";
 import {
   requiredFirst,
   TOOL_BADGE,
@@ -9,7 +9,7 @@ import {
   toolHintWords,
   toolSummary,
   toolTitle,
-} from "@luke/features/integration-tool-model";
+} from "@repo/features/integration-tool-model";
 import {
   ALIGN,
   BackButton,
@@ -34,7 +34,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
@@ -60,7 +60,7 @@ import { Highlighted } from "./search-field.js";
  * the words a search landed on marked in it, then its parameters, those a
  * call must give first, each its name, its
  * type, what it is, and the values it takes as chips, its default outlined.
- * The badge and the hints are `@luke/ui`'s Badge, the danger tone for what
+ * The badge and the hints are `@repo/ui`'s Badge, the danger tone for what
  * destroys.
  * A page whose server said nothing of its tool says so. The page's body is
  * its one scroller, which the owner may hand the focus to, so the arrows

@@ -1,11 +1,11 @@
-import type { TasklessAgent } from "@luke/features/agent-wire";
-import { agentName } from "@luke/features/model-label";
+import type { TasklessAgent } from "@repo/features/agent-wire";
+import { agentName } from "@repo/features/model-label";
 import {
   TASK_STATUS,
   TASK_STATUS_ORDER,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 
 /**
  * task-list-model.ts -- how the sidebar's task list is grouped and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.

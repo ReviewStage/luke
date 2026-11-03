@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { readInstalledSkill } from "@luke/database/models/installed-skill-store";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH, installedSkillPath } from "@luke/features";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { readInstalledSkill } from "@repo/database/models/installed-skill-store";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@repo/database/testing";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH, installedSkillPath } from "@repo/features";
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   INSTALLED_SKILL_PROBLEM,
@@ -19,11 +19,11 @@ import {
   installedSkillPreviewSchema,
   installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
-} from "@luke/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { SKILL_PASTE_KIND } from "@luke/features/skill-paste";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/installed-skill-route-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { SKILL_PASTE_KIND } from "@repo/features/skill-paste";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";

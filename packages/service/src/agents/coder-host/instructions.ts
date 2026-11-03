@@ -1,8 +1,8 @@
-import { PLAYWRIGHT_PIN, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
-import { CLAUDE_CODE_WORKER, INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
-import { type Agent, agentBriefOf } from "@luke/database/models/agent-store";
-import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { PLAYWRIGHT_PIN, SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
+import { CLAUDE_CODE_WORKER, INSTALLED_SKILLS } from "@repo/agent-runner/protocol";
+import { type Agent, agentBriefOf } from "@repo/database/models/agent-store";
+import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   AGENT_BRIEF,
   AGENT_KIND,
@@ -10,13 +10,13 @@ import {
   AGENT_MESSAGE_LEAD,
   type AgentBrief,
   type AgentKind,
-} from "@luke/features/agent-wire";
-import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
-import { LINK_HOME, LINK_ORIGIN } from "@luke/features/link-home";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/agent-wire";
+import { DEVICE_ISOLATION, type DeviceIsolation } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@repo/features/inbox-wire";
+import { LINK_HOME, LINK_ORIGIN } from "@repo/features/link-home";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { SENDER_LABEL_LEAD } from "../attached-files.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
@@ -436,7 +436,7 @@ ${read}${notes}`,
 /**
  * How the agent names a thing the developer can open: as a mention, the
  * `[@name](target)` the developer's own picks are written as
- * (`@luke/features/mention-link`), which the app draws as the thing's chip in
+ * (`@repo/features/mention-link`), which the app draws as the thing's chip in
  * a message, a thread, and the plan alike, and which
  * a correction of the plan never drops. One example per kind, its targets
  * the codec's own: a file's or a folder's page on GitHub, any other page by

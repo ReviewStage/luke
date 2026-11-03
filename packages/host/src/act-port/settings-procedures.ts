@@ -3,9 +3,9 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type SettingSideEffectId,
-} from "@luke/settings";
-import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/settings";
+import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import type { ORPCError } from "@orpc/server";
 import { Effect, Option } from "effect";
 import { SETTINGS_ACT_KIND } from "../contract/index.js";

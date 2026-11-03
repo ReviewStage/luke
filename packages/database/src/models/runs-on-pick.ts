@@ -10,8 +10,8 @@
  * part was written and a pick is no part of it.
  */
 
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import type { TaskRunsOnRequest } from "@luke/features/task-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import type { TaskRunsOnRequest } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

@@ -9,8 +9,8 @@
  * first service stands — so which service a concern holds cannot depend on the
  * order the merge folded it in.
  */
-import type { GatewayEventKind } from "@luke/gateway";
-import type { WireValue } from "@luke/wire";
+import type { GatewayEventKind } from "@repo/gateway";
+import type { WireValue } from "@repo/wire";
 import { Clock, Config, Context, Deferred, Effect, Layer, Option } from "effect";
 import {
   ACCOUNT_BASE_URL_VARIABLE,
@@ -102,12 +102,12 @@ const kernelEmit = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The service the merge composes, awaited by every concern that reads it. */
 export class HostService extends Context.Service<HostService, LateService<GatewayService>>()(
-  "@luke/host/HostService",
+  "@repo/host/HostService",
 ) {}
 
 /** The seams as one value, for as long as the composers are handed one. */
 export class HostKernelTag extends Context.Service<HostKernelTag, HostKernel>()(
-  "@luke/host/HostKernel",
+  "@repo/host/HostKernel",
 ) {}
 
 /**

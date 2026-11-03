@@ -23,8 +23,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@luke/features";
-import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@repo/features";
+import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -38,10 +38,10 @@ import {
   type DeviceSignedIn,
   deviceAgentLayout,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { HOST_TARGET, hostTarballUrl } from "@luke/features/host-release";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { HOST_TARGET, hostTarballUrl } from "@repo/features/host-release";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";

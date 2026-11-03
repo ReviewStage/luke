@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@repo/features/agent-wire";
 import { useRef } from "react";
 import type { AgentActAnswer } from "../act.js";
 import type { AgentServersControl } from "./agent-servers.js";
@@ -8,7 +8,7 @@ import type { AgentServersControl } from "./agent-servers.js";
  *
  * A switch is sent to the service, which writes the agent's list for its
  * next turn, and the host draws it on the agent's row the moment it is
- * asked (`@luke/host`'s `task-list-collections.ts`), so the switches read
+ * asked (`@repo/host`'s `task-list-collections.ts`), so the switches read
  * the list off the agent. A change the service refused is taken back by
  * the host, and the list says why in a toast (`use-agents.ts`).
  */

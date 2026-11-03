@@ -1,7 +1,7 @@
 /**
  * dictation-procedures.ts -- a clip the developer dictated into a message box, answered with its words.
  *
- * `POST /api/dictation` takes one clip (`@luke/features/dictation-wire`),
+ * `POST /api/dictation` takes one clip (`@repo/features/dictation-wire`),
  * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
  * model on the caller's own OpenAI API key (`../accounts/own-api-key.ts`),
  * never ours, with the words the desktop says it is likely to hold
@@ -11,7 +11,7 @@
  * this request's memory and goes when it ends.
  *
  * What is kept is the meter: one call and the clip's seconds on the
- * account's day (`@luke/database/models/quota`), the seconds OpenAI billed where it says
+ * account's day (`@repo/database/models/quota`), the seconds OpenAI billed where it says
  * and the desktop's own timing otherwise, which the bound above holds to two
  * minutes. A meter the database refused is logged and the text still
  * answered, since the transcription was had and paid for. An account that
@@ -21,11 +21,11 @@
  * key is looked for before the clip is read.
  */
 
-import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
-import { spendDictationMeter } from "@luke/database/models/quota";
-import { base64Bytes } from "@luke/features/agent-wire";
-import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { PROVIDER_KEY_UNREADABLE } from "@repo/database/models/provider-key-seal";
+import { spendDictationMeter } from "@repo/database/models/quota";
+import { base64Bytes } from "@repo/features/agent-wire";
+import { DICTATION_BOUNDS } from "@repo/features/dictation-wire";
+import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, Effect, type Redacted } from "effect";
 import { ownApiKeyOf } from "../accounts/own-api-key.js";

@@ -7,7 +7,7 @@ import {
   type Actor,
   githubLoginActor,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
+} from "@repo/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

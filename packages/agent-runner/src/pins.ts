@@ -1,7 +1,7 @@
 /**
  * pins.ts -- what a coding agent's sandbox pins of Claude Code and Codex: their versions and where the image puts them, read by the image, the sessions, and the protocol generator alike.
  *
- * The image (`@luke/service`'s `agent-runtime/sandbox-image.ts`) installs
+ * The image (`@repo/service`'s `agent-runtime/sandbox-image.ts`) installs
  * exactly these, the sessions (`claude-code-sessions.ts`,
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
@@ -10,7 +10,7 @@
  * What a device fetches or carries of its own, a host's Node, and the
  * Claude Code, Codex, and GitHub CLI every host keeps for its agents to
  * run on the box itself, is an `AgentToolPin` checked by size, digest, and
- * signature where it has one before it is kept (`@luke/host`'s
+ * signature where it has one before it is kept (`@repo/host`'s
  * `localAgentTool`). Erasable syntax alone, so Node runs the generator over
  * it as it stands.
  */
@@ -48,7 +48,7 @@ export const PLAYWRIGHT_PIN = {
 } as const;
 
 /**
- * Our own browser in an agent's sandbox, as its start (`@luke/service`'s
+ * Our own browser in an agent's sandbox, as its start (`@repo/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
  * display Xvfb draws it on. Each is started in a session of its own, so the
  * runner's reader of the sandbox's processes (`processes.ts`) tells the
@@ -109,7 +109,7 @@ export const CODEX_PIN = {
 } as const;
 
 /**
- * A binary a local agent's Mac or host fetches once and keeps (`@luke/host`'s
+ * A binary a local agent's Mac or host fetches once and keeps (`@repo/host`'s
  * `localAgentTool`), checked before anything in it is kept: an archive at a
  * pinned address, its exact size and SHA-256, and what of it is kept. A bump
  * moves every field together, its digest and size read off the release
@@ -152,7 +152,7 @@ export interface AgentToolPin {
 
 /**
  * A tool's builds for a host (`apps/host`), one per architecture it runs on,
- * by Node's `process.arch` names (`@luke/features/device-agent-wire`'s
+ * by Node's `process.arch` names (`@repo/features/device-agent-wire`'s
  * `DEVICE_ARCH`), each decided by its digest.
  */
 export interface LinuxToolPins {

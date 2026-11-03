@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SyncTopic } from "@luke/database/sync/notification";
+import type { SyncTopic } from "@repo/database/sync/notification";
 import { Clock, Duration, Effect, Option } from "effect";
 import { Sync } from "../sync/watch.js";
 

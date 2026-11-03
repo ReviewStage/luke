@@ -1,8 +1,8 @@
-import type { Channel } from "@luke/features/channel-wire";
-import { channelPlace } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import type { Channel } from "@repo/features/channel-wire";
+import { channelPlace } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";

@@ -3,8 +3,8 @@
  *
  * A local agent (`agent.machine` is `mac`) runs its runner on the
  * Mac it is pinned to (`agent.device_id`), which follows the rows the
- * service queues for it (`@luke/database/models/device-agent-store`, the wire
- * in `@luke/features/device-agent-wire`) and answers through its procedures
+ * service queues for it (`@repo/database/models/device-agent-store`, the wire
+ * in `@repo/features/device-agent-wire`) and answers through its procedures
  * (`../device-agents-procedures.ts`). Nothing here reaches the Mac directly:
  * every call is a row, and the Mac's word is a row it settled or answered.
  *
@@ -57,9 +57,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { INPUT_LINE, InputLineSchema } from "@luke/agent-runner/protocol";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readAgent } from "@luke/database/models/agent-store";
+import { INPUT_LINE, InputLineSchema } from "@repo/agent-runner/protocol";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { hasRepository, readAgent } from "@repo/database/models/agent-store";
 import {
   type DeviceAgentPin,
   deviceAgentLineQueuedAfter,
@@ -71,12 +71,12 @@ import {
   queueDeviceAgentLine,
   queueDeviceAgentRequest,
   withdrawDeviceAgentRequest,
-} from "@luke/database/models/device-agent-store";
-import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
-import { hostRemoved } from "@luke/database/models/host-store";
-import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/agent-wire";
+} from "@repo/database/models/device-agent-store";
+import { deviceLayout, devicesSeenSince } from "@repo/database/models/device-store";
+import { hostRemoved } from "@repo/database/models/host-store";
+import { parseKeyRing, sealMacLaunchSecrets } from "@repo/database/models/provider-key-seal";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { AGENT_MACHINE, MAC_PRESENCE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -89,7 +89,7 @@ import {
   deviceAgentLaunchSecretsSchema,
   deviceAgentLayoutIn,
   deviceAgentsFolder,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import {
   Brand,
   Clock,

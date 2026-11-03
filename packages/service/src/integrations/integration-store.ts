@@ -15,17 +15,17 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
-} from "@luke/database/integration-vocabulary";
-import { InstantColumnSchema } from "@luke/database/models/columns";
-import { integrationConnection } from "@luke/database/schemas/integration";
+} from "@repo/database/integration-vocabulary";
+import { InstantColumnSchema } from "@repo/database/models/columns";
+import { integrationConnection } from "@repo/database/schemas/integration";
 import {
   type IntegrationProvider,
   integrationProviderSchema,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

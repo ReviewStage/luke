@@ -6,12 +6,12 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
-import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageLine } from "@repo/features/page-wire";
+import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import type { TaskAgentsSummary, TaskPullRequestLine } from "@luke/features/task-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import type { TaskAgentsSummary, TaskPullRequestLine } from "@repo/features/task-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { it } from "vitest";

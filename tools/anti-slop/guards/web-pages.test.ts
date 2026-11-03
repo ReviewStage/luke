@@ -49,16 +49,16 @@ describe("the site's pages", () => {
     expect(framedPageProblems("<style>body{margin:1px}</style>", policy)).toHaveLength(1);
   });
 
-  it("name a Tailwind entry that compiles the utilities without @luke/ui's theme after them", () => {
-    const entry = '@import "tailwindcss";\n@import "@luke/ui/tailwind/sources.css";\n';
+  it("name a Tailwind entry that compiles the utilities without @repo/ui's theme after them", () => {
+    const entry = '@import "tailwindcss";\n@import "@repo/ui/tailwind/sources.css";\n';
     expect(
-      themeImportProblems("app.css", `${entry}@import "@luke/ui/tailwind/theme.css";`),
+      themeImportProblems("app.css", `${entry}@import "@repo/ui/tailwind/theme.css";`),
     ).toEqual([]);
     expect(themeImportProblems("app.css", entry)).toEqual([
-      'app.css: compiles Tailwind\'s utilities without importing "@luke/ui/tailwind/theme.css" after them',
+      'app.css: compiles Tailwind\'s utilities without importing "@repo/ui/tailwind/theme.css" after them',
     ]);
     expect(
-      themeImportProblems("app.css", `${entry}/* @import "@luke/ui/tailwind/theme.css"; */`),
+      themeImportProblems("app.css", `${entry}/* @import "@repo/ui/tailwind/theme.css"; */`),
     ).toHaveLength(1);
     expect(themeImportProblems("page.css", ".page { margin: 0; }")).toEqual([]);
   });

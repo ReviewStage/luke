@@ -1,21 +1,21 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   type LineSent,
   lineSendersOf,
   listPublishedAgentsById,
-} from "@luke/database/models/agent-store";
-import { keptImageOf } from "@luke/database/models/attached-file-parts";
-import { readConversationPicture } from "@luke/database/models/conversation-pictures";
+} from "@repo/database/models/agent-store";
+import { keptImageOf } from "@repo/database/models/attached-file-parts";
+import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import {
   listMessagesBefore,
   listMessagesPast,
   messageSeqOf,
   type StoredMessageRecord,
-} from "@luke/database/models/message-reads";
-import { readTaskHeader } from "@luke/database/models/task-store";
-import type { StoredStartedFrom } from "@luke/database/schemas/agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/message-reads";
+import { readTaskHeader } from "@repo/database/models/task-store";
+import type { StoredStartedFrom } from "@repo/database/schemas/agent";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
   firstMessageParts,
   REPLAY_SENDER,
@@ -28,8 +28,8 @@ import {
   START_NOTE_HEADING,
   type StartNoteHeading,
   toolStep,
-} from "@luke/features/agent-replay";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
+} from "@repo/features/agent-replay";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_BOUNDS,
@@ -39,13 +39,13 @@ import {
   type AgentStartFrom,
   base64Bytes,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { isVideoType } from "@luke/features/conversation-picture-wire";
-import { mentionMarkdownLink } from "@luke/features/link-grammar";
-import { agentName } from "@luke/features/model-label";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
+} from "@repo/features/agent-wire";
+import { isVideoType } from "@repo/features/conversation-picture-wire";
+import { mentionMarkdownLink } from "@repo/features/link-grammar";
+import { agentName } from "@repo/features/model-label";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@repo/features/turn-rows";
 import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
@@ -74,7 +74,7 @@ import { CURSOR_START } from "./transcript.js";
  *
  * eve opens a session with a user message and keeps no history seeded
  * beside it, so the transcript goes inside the first message, in the format
- * `@luke/features/agent-replay` writes and the desktop reads back. The
+ * `@repo/features/agent-replay` writes and the desktop reads back. The
  * source is read as the account asking, on the plan the Start names and no
  * other, and its transcript under the member who started it, whose
  * conversation it is. A continue replays every step; a fork stops at the

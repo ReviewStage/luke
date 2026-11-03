@@ -4,7 +4,7 @@ import {
   type TerminalUnanswered,
   terminalRelayAddress,
   webSocketOrigin,
-} from "@luke/features";
+} from "@repo/features";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
@@ -18,15 +18,15 @@ import {
   terminalRenameParamsSchema,
   terminalResizeParamsSchema,
   terminalShellParamsSchema,
-} from "@luke/features/terminal-view";
+} from "@repo/features/terminal-view";
 import {
   TERMINAL_RELAY_CLOSE,
   TERMINAL_RELAY_FRAME,
   terminalRelayServiceFrameSchema,
-} from "@luke/features/terminal-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal, readParams } from "@luke/gateway";
-import { unparsedWire, type WireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/terminal-wire";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal, readParams } from "@repo/gateway";
+import { unparsedWire, type WireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import {
   Data,
   Duration,

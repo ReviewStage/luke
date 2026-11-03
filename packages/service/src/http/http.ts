@@ -1,12 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
-import { HTTP_STATUS } from "@luke/wire";
+import { HTTP_STATUS } from "@repo/wire";
 import { Redacted } from "effect";
 import type { HostedApiError } from "../core.js";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
  * and every refusal names its reason from the wire contract in
- * `@luke/features` — the same module the desktop's hosted
+ * `@repo/features` — the same module the desktop's hosted
  * clients validate against, so an error slug cannot drift between the two.
  */
 

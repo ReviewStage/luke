@@ -221,7 +221,7 @@ export const DEVICE_MODEL_MAX_CHARS = 200;
  * Which machine a device runs on, as its host reports it at its own
  * enroll, its pairing's start, and every register: a keyed SHA-256 of the
  * OS's own id for the machine, in lower-case hex, never the id itself
- * (`@luke/host/node`'s `machine-identity.ts`), so every install on one
+ * (`@repo/host/node`'s `machine-identity.ts`), so every install on one
  * machine names the same one and two machines of one name differ; and on a
  * Mac its model as a person reads it ("MacBook Air (M2, 2022)"). Each is
  * absent where the host could not read it, and from a host older than it.

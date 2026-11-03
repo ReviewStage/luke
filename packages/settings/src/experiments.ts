@@ -1,7 +1,7 @@
 // experiments.ts -- the features a developer can turn on before they are finished, and how a choice of them is read.
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { UnparsedWireValue } from "@luke/wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 
 /**

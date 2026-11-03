@@ -17,9 +17,9 @@ import {
   type InboxPerson,
   inboxWaitsOn,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { CatalogModel } from "@luke/features/models-wire";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { CatalogModel } from "@repo/features/models-wire";
 import {
   AttentionMark,
   Badge,
@@ -41,8 +41,8 @@ import {
   Text,
   Time,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleIcon,
@@ -50,7 +50,7 @@ import {
   PenLineIcon,
   SquareCheckIcon,
   SquareIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";

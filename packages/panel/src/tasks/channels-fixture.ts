@@ -10,12 +10,12 @@
  * an account; every name and address here is invented.
  */
 
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW, type AutomationListView } from "@repo/features/automation-view";
+import type { Channel, ChannelThread } from "@repo/features/channel-wire";
+import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -26,18 +26,18 @@ import {
   type InboxItem,
   type InboxMessage,
   threadNeedsReader,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import type { TasksView } from "@luke/features/tasks-view";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import type { TasksView } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppInboxItems,
   type AppInboxTask,
@@ -45,10 +45,10 @@ import {
   type AppInboxTasklessItem,
   type AppStateSnapshot,
   RUN_PROFILE,
-} from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { EXPERIMENT } from "@repo/settings";
 import { longRunPicture } from "./agent-long-run-fixture.js";
 
 const LANDED = Date.now();

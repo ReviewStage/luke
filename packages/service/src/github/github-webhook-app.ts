@@ -1,16 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
-} from "@luke/database/github-installation-vocabulary";
-import { listAgentsOnBranches } from "@luke/database/models/agent-store";
+} from "@repo/database/github-installation-vocabulary";
+import { listAgentsOnBranches } from "@repo/database/models/agent-store";
 import {
   noteGitHubRepository,
   type RepositorySighting,
-} from "@luke/database/models/github-repositories";
-import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/database/models/github-repositories";
+import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,
@@ -60,7 +60,7 @@ import { setInstallationStatus } from "./github-installations.js";
  *
  * Before anything else of a delivery is read, the repository it names is
  * recorded by GitHub's id under the name it carries
- * (`@luke/database/models/github-repositories`), which relabels every stored
+ * (`@repo/database/models/github-repositories`), which relabels every stored
  * name of the repository where GitHub renamed or transferred it since it was
  * last seen, so the agents, tasks, and automations below are found under
  * its name now; a delivery late or redelivered, older by the repository's
@@ -71,7 +71,7 @@ import { setInstallationStatus } from "./github-installations.js";
  *
  * An installation's own deliveries, which GitHub sends every App without
  * its subscribing, move the status of the workspace that stands for it
- * (`@luke/service/github/github-installations`): removed or suspended marks it
+ * (`@repo/service/github/github-installations`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
  * suspended and brought back keeps its members and its tasks. GitHub never
  * redelivers a failed delivery on its own, so a status one missed is mended

@@ -1,4 +1,4 @@
-import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@repo/settings/settings-views";
 import { useCallback, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { landOnSettingsRow } from "./settings-search.js";

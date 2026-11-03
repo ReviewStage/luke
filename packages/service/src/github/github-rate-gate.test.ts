@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { githubRateHold } from "@luke/database/schemas";
-import { getTestDB } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { githubRateHold } from "@repo/database/schemas";
+import { getTestDB } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, Effect, Fiber, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

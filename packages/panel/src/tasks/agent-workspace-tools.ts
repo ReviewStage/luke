@@ -1,8 +1,8 @@
-import type { AgentWorkspaceToolsAnswerView } from "@luke/features/agent-view";
-import { type RunOnMacReason, runOnMacReason } from "@luke/features/workspace-tools-model";
-import type { WorkspaceToolsAnswer } from "@luke/features/workspace-tools-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@luke/settings";
+import type { AgentWorkspaceToolsAnswerView } from "@repo/features/agent-view";
+import { type RunOnMacReason, runOnMacReason } from "@repo/features/workspace-tools-model";
+import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";

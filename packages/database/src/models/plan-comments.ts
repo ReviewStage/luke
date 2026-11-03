@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
-import { type CommentSpan, spanWithin, textChange } from "@luke/features/plan-comment-anchor";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
+import { type CommentSpan, spanWithin, textChange } from "@repo/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -23,8 +23,8 @@ import {
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
   planCommentActorSchema,
-} from "@luke/features/plan-comment-wire";
-import { planSections } from "@luke/features/plan-document";
+} from "@repo/features/plan-comment-wire";
+import { planSections } from "@repo/features/plan-document";
 import { and, asc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";

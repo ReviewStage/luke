@@ -15,11 +15,11 @@
  * way to read the Mac's 24-hour setting, so following the system would only
  * mean following the locale, which is pinned to English. A time a field holds
  * ("14:05") is a value, never a label. The `Time` (`components/time` in
- * `@luke/ui`) draws these and moves them on the minute's or the second's
+ * `@repo/ui`) draws these and moves them on the minute's or the second's
  * tick, so no row arms a timer of its own. Numbers are `number-format.ts`'s.
  */
 
-import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@luke/runtime/vocabulary";
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@repo/runtime/vocabulary";
 
 const WEEK_MS = 7 * DAY_MS;
 const MINUTE_SECONDS = 60;

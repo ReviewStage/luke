@@ -1,5 +1,5 @@
 {
-  "instead": "Hold an overlay's exit through Dialog, ConfirmDialog, PopoverPanel or AnchoredPopover from @luke/ui, which take `open` and fade out on the exit token; a card or popover of its own rides `ui-dialog-*`, `ui-menu-*` and `ui-card-*`.",
+  "instead": "Hold an overlay's exit through Dialog, ConfirmDialog, PopoverPanel or AnchoredPopover from @repo/ui, which take `open` and fade out on the exit token; a card or popover of its own rides `ui-dialog-*`, `ui-menu-*` and `ui-card-*`.",
   "classes": [
     { "class": "ui-sheet-drop", "allow": [] },
     { "class": "ui-scale-in-centered", "allow": [] },

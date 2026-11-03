@@ -2,7 +2,7 @@
  * watch.ts -- what a wait on the database waits through: a watch on topics, woken by Sync or by its own clock.
  *
  * A reader that waits for rows to change opens a watch on the topics those
- * rows notify (`@luke/database/sync/notification`), then reads, then waits on
+ * rows notify (`@repo/database/sync/notification`), then reads, then waits on
  * the watch's `next` before each read after. A watch registers before the
  * first read, so a write that commits while that read runs still wakes the
  * next `next`. Where nothing can wake it (no hub, its listener down, or a
@@ -13,7 +13,7 @@
  * the deployment's does, and the clock where it does not, so a runtime or a
  * test that provides nothing waits on its clock.
  */
-import type { SyncTopic } from "@luke/database/sync/notification";
+import type { SyncTopic } from "@repo/database/sync/notification";
 import { Context, type Duration, Effect, Option, type Scope } from "effect";
 
 /** The topics a watch with none names: it waits its fallback alone. */
@@ -63,6 +63,6 @@ const CLOCK_SYNC: SyncShape = {
 };
 
 /** Sync as one runtime has it: the hub where the runtime provides one, the clock otherwise. */
-export const Sync = Context.Reference<SyncShape>("@luke/service/Sync", {
+export const Sync = Context.Reference<SyncShape>("@repo/service/Sync", {
   defaultValue: () => CLOCK_SYNC,
 });

@@ -1,5 +1,5 @@
-import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

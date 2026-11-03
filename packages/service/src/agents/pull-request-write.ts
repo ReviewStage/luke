@@ -24,13 +24,13 @@
  * kind alone.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { Agent, WithRepository } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { Agent, WithRepository } from "@repo/database/models/agent-store";
 import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestRefusal,
   type PullRequestWriteAnswer,
-} from "@luke/features/pull-request-write-wire";
+} from "@repo/features/pull-request-write-wire";
 import { Effect, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp } from "../github/github-app.js";

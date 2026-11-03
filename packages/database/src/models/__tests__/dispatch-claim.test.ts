@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { sentLineId } from "@luke/wire/host-ids";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Deferred, Duration, Effect, Fiber, Option, Ref, Result } from "effect";
 import { SqlClient } from "effect/sql";

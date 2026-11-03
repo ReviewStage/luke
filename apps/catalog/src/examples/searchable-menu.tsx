@@ -1,5 +1,5 @@
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { readFailedWords, readingWords } from "@luke/features/words";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { readFailedWords, readingWords } from "@repo/features/words";
 import {
   Badge,
   BUTTON_VARIANT,
@@ -20,8 +20,8 @@ import {
   SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   Spinner,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import codexOneX from "../../../../packages/panel/marks/codex-16.png";
 import codexTwoX from "../../../../packages/panel/marks/codex-32.png";

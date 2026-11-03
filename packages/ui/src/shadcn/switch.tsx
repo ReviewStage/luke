@@ -10,10 +10,10 @@ import { ignoredByReplay } from "../session-replay-marks.js";
  * and thumb sizes (a 34 by 20 pill, a 16px thumb), the switch's own inks
  * from the palette rather than `primary`, the track's ink changing on the
  * fade's easing, the thumb on the spring small elements ride, the one press cursor (`cursor-press`), none of shadcn's outline
- * or ring utilities, because the window's own focus ring (`@luke/panel`'s
+ * or ring utilities, because the window's own focus ring (`@repo/panel`'s
  * base.css) draws the keyboard's ring, and a utility would outrank it
  * (`anti-slop/no-shadcn-focus-ring`), and its hidden input kept out of the
- * screen recording (`session-replay-marks.ts`). `@luke/ui`'s `Switch`
+ * screen recording (`session-replay-marks.ts`). `@repo/ui`'s `Switch`
  * (`components/switch/switch.tsx`) is what an app draws; this is its inside.
  * `SWITCH_TRACK` and `SWITCH_THUMB` are exported so the switch's drawing
  * alone, inside a row that is itself the switch, wears the same classes.

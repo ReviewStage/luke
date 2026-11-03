@@ -10,7 +10,7 @@
 import {
   browserLiveAttachParamsSchema,
   browserLiveDetachParamsSchema,
-} from "@luke/features/browser-live-acts";
+} from "@repo/features/browser-live-acts";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { BROWSER_LIVE_ACT_KIND } from "./kinds.js";

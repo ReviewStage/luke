@@ -1,9 +1,9 @@
-import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
-import { ANNOUNCE, InlineEdit, ListRow, OneLine, RowHint, RowHintOptions, Time } from "@luke/ui";
-import { assigneeFace } from "@luke/ui/actor-model";
-import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
+import { TASK_BOUNDS, type TaskSummary } from "@repo/features/task-wire";
+import { ANNOUNCE, InlineEdit, ListRow, OneLine, RowHint, RowHintOptions, Time } from "@repo/ui";
+import { assigneeFace } from "@repo/ui/actor-model";
+import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
+import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
+import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { useCallback, useMemo, useRef } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import { useCoarsePointer } from "../coarse-pointer.js";

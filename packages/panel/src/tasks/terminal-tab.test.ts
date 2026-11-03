@@ -1,27 +1,27 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DURATION_MS } from "@luke/brand";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { MOTION_DURATION_MS } from "@repo/brand";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
   type TerminalPortInbound,
   type TerminalPortOutbound,
   type TerminalRefusal,
-} from "@luke/features/terminal-acts";
-import { shellsAsked } from "@luke/features/terminal-store";
-import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/terminal-acts";
+import { shellsAsked } from "@repo/features/terminal-store";
+import { SANDBOX_STATE, type TerminalsAnswer } from "@repo/features/terminal-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   ACT_ERROR,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
   type TERMINAL_ACT_KIND,
-} from "@luke/host/contract";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { UnparsedWireValue } from "@luke/wire";
+} from "@repo/host/contract";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import type { UnparsedWireValue } from "@repo/wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

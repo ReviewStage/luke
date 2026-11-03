@@ -3,9 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { LINK_OPEN } from "@luke/features/link-open";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { LINK_OPEN } from "@repo/features/link-open";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -22,22 +22,22 @@ import {
   SETTINGS_RESET_SCOPE,
   snapshotAccountPreferences,
   THEME,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   DIFF_FONT,
   DIFF_INDICATORS,
   DIFF_LAYOUT,
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
   type SettingsUpdateResult,
-} from "@luke/settings/wire";
-import { isRecord, unparsedWire } from "@luke/wire";
-import { temporaryDirectory } from "@luke/wire/testing";
+} from "@repo/settings/wire";
+import { isRecord, unparsedWire } from "@repo/wire";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { Context, Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

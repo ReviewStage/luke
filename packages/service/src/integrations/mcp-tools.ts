@@ -37,7 +37,7 @@ import {
   type IntegrationToolAnnotations,
   type IntegrationToolParameter,
   integrationToolAnnotationsSchema,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import {
   isRecord,
   isWireString,
@@ -46,7 +46,7 @@ import {
   WireRecordShapeSchema,
   type WireValue,
   WireValueSchema,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

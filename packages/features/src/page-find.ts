@@ -288,8 +288,8 @@ function doctypeEnd(html: string): number {
 
 /**
  * The page as served: our scripts, the find's, the link's
- * (`@luke/features/page-link`), and a comment's pick
- * (`@luke/features/page-pick`), ahead of the agent's HTML, after its
+ * (`@repo/features/page-link`), and a comment's pick
+ * (`@repo/features/page-pick`), ahead of the agent's HTML, after its
  * doctype, so markup the page leaves open (a `<textarea>` or a comment
  * never closed) cannot swallow them, and a page keeps the standards mode
  * its doctype asks for.

@@ -1,7 +1,7 @@
 /**
  * main.ts -- the host daemon's process: `vespin-host run` follows the machine's local agents for as long as its service runs, `vespin-host connect` pairs the machine with a code a member approves in the app, and `vespin-host version` prints the daemon's version.
  *
- * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
+ * Bundled into one file (`pnpm --filter @repo/host-daemon build`) that the
  * host's release carries at `lib/vespin-host.mjs`, beside the runner's bundle
  * at `lib/agent-runner.mjs` (`host-platform.ts`), and runs on the release's
  * own Node. The same bundle runs on every OS, as `process.platform` says
@@ -22,7 +22,7 @@
  * its own. A box that never connected says
  * so and reads its record again every `UNENROLLED_REST`, rather than
  * exiting for its service to start it over; one that did runs the daemon
- * (`@luke/host/daemon`) until the service is stopped, which stops every
+ * (`@repo/host/daemon`) until the service is stopped, which stops every
  * runner it started with it, or until the service refuses the box's secret, the
  * host removed, when it stops them and exits 0, and its service, starting
  * it again a minute later, finds its record refused and rests, until the
@@ -55,9 +55,9 @@ import {
   NodePath,
   NodeRuntime,
 } from "@effect/platform-node";
-import { HOST_COMMAND, HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { HOST_COMMAND, HOST_WIRE, hostInstallCommand } from "@repo/features/host-wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   connectHostDevice,
   HOST_CONNECT_OUTCOME,
@@ -76,9 +76,9 @@ import {
   hostServiceOf,
   LINUX_HOST,
   readHostDevice,
-} from "@luke/host/daemon";
-import { Environment, reporterLayer } from "@luke/host/effect";
-import { reportToStderr } from "@luke/host/node";
+} from "@repo/host/daemon";
+import { Environment, reporterLayer } from "@repo/host/effect";
+import { reportToStderr } from "@repo/host/node";
 import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

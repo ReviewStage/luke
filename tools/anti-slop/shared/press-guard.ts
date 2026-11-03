@@ -3,7 +3,7 @@ import { matchesGlob } from "node:path";
 import { repositoryPathOf } from "./effect-edges.ts";
 
 /**
- * The design system's guard: outside `@luke/ui`, a lowercase JSX element is
+ * The design system's guard: outside `@repo/ui`, a lowercase JSX element is
  * drawn and never pressed. Root AGENTS.md's "Layout" and `packages/ui`'s
  * AGENTS.md state the rule in prose; this holds it as data, read by the
  * `no-raw-press-outside-ui` rule and by the suppression check beside it.

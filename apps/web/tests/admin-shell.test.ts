@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
-import type { WireValue } from "@luke/wire";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
+import type { WireValue } from "@repo/wire";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

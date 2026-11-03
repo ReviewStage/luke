@@ -1,11 +1,11 @@
-import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
+import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   inboxOfLiveRows,
   LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
-} from "@luke/features/live-wire";
+} from "@repo/features/live-wire";
 import { Data, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import {
   type AppHolderInbox,

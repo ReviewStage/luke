@@ -5,8 +5,8 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

@@ -26,7 +26,7 @@ import type { FileMark } from "./contract.js";
  * row says nothing more.
  *
  * A name cut short fades out at its end, as a cut label does across the
- * window (`@luke/ui`'s OneLine), rather than losing its middle to Pierre's
+ * window (`@repo/ui`'s OneLine), rather than losing its middle to Pierre's
  * ellipsis: Pierre cuts a name in two halves and empties the first before
  * the second, and the sheet empties the second first, cuts it at its end
  * rather than its start, and draws Pierre's marker, which stands only where
@@ -131,7 +131,7 @@ const OPEN_ROW = '[data-type="item"][data-item-selected="true"]';
 
 /**
  * The rules the tree draws by: the open file's row lifted by a hairline and
- * a soft shadow over the ground the host gives it, as `@luke/ui`'s ListRow
+ * a soft shadow over the ground the host gives it, as `@repo/ui`'s ListRow
  * draws a list's open row; a cut name's fade at its end; the window's thin scrollbar, whose colour
  * inherits into Pierre's shadow root and whose width does not, so it is set
  * here on the scroller and on the box Pierre measures that scroller's

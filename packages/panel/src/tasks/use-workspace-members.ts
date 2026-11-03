@@ -1,6 +1,6 @@
-import type { TasksWorkspaceMembersAnswer } from "@luke/features/tasks-view";
-import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { TasksWorkspaceMembersAnswer } from "@repo/features/tasks-view";
+import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";

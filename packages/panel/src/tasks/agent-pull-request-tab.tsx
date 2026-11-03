@@ -1,5 +1,5 @@
-import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
+import { githubAvatarAt, githubAvatarUrl } from "@repo/features/account-picture";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
 import {
   type AgentOverviewChecks,
   type AgentOverviewConversation,
@@ -22,18 +22,18 @@ import {
   REVIEW_STATE,
   type ReactionGroup,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { formatCount } from "@luke/features/number-format";
-import type { FailureSurface } from "@luke/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { workingTime } from "@luke/features/time-format";
-import { INLINE_DIFF } from "@luke/settings/diff-view";
+} from "@repo/features/link-grammar";
+import { formatCount } from "@repo/features/number-format";
+import type { FailureSurface } from "@repo/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { workingTime } from "@repo/features/time-format";
+import { INLINE_DIFF } from "@repo/settings/diff-view";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -104,8 +104,8 @@ import {
   useMenu,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleSlashIcon,
@@ -116,9 +116,9 @@ import {
   ScanSearchIcon,
   TriangleAlertIcon,
   XIcon,
-} from "@luke/ui/icons";
-import { landedMark } from "@luke/ui/landed";
-import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/ui/icons";
+import { landedMark } from "@repo/ui/landed";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
 import {
   type ComponentProps,
   createContext,

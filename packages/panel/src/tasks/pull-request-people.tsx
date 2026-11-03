@@ -3,8 +3,8 @@ import {
   type GitHubPerson,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/agent-wire";
-import { type Actor, githubActor } from "@luke/ui/actor-model";
+} from "@repo/features/agent-wire";
+import { type Actor, githubActor } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleDashedIcon,

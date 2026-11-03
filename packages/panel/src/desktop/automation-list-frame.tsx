@@ -9,7 +9,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useCallback, useRef } from "react";
 
 /**

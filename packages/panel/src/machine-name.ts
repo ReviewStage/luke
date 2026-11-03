@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
-import { ACT_KIND } from "@luke/host/acts";
-import type { ThisMacHostRead } from "@luke/host/contract";
+import { ACT_KIND } from "@repo/host/acts";
+import type { ThisMacHostRead } from "@repo/host/contract";
 import { Duration, Effect, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

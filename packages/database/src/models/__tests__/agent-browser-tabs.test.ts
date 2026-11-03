@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_SHOWN_MAX_CHARS } from "@repo/features/browser-acts";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

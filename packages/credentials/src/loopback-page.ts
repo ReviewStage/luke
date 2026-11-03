@@ -1,4 +1,4 @@
-import { BRAND_PALETTE, GITHUB_PATH, GOOGLE_MARK_LAYERS, MARK_ART } from "@luke/brand";
+import { BRAND_PALETTE, GITHUB_PATH, GOOGLE_MARK_LAYERS, MARK_ART } from "@repo/brand";
 
 /**
  * The page the browser is left on after the OAuth redirect lands on the

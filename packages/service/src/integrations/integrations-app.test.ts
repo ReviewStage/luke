@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LANDING_STATUS,
@@ -14,9 +14,9 @@ import {
   type IntegrationProvider,
   integrationLandingPath,
   integrationStatusesAnswerSchema,
-} from "@luke/features/integration-wire";
-import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer, noNetwork } from "@luke/wire/testing";
+} from "@repo/features/integration-wire";
+import type { WireBoundaryInput } from "@repo/wire";
+import { fakeHttpClientLayer, noNetwork } from "@repo/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

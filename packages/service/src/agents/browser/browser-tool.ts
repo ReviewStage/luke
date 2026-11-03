@@ -4,13 +4,13 @@
  * The app and a coding agent are offered the same tool, and neither's workers,
  * which read and change nothing. A
  * call names one to ten actions of the shared vocabulary
- * (`@luke/features/browser-agent-actions`) and runs them in order on the
+ * (`@repo/features/browser-agent-actions`) and runs them in order on the
  * Chromium in the agent's own sandbox (`agent-browser.ts`,
  * `browser-actions.ts`). Every call is routed to its browser here alone
  * (`browserFor`).
  *
  * The agent's tabs are kept in the service under the conversation whose
- * agent's browser holds them (`@luke/database/models/agent-browser-tabs`):
+ * agent's browser holds them (`@repo/database/models/agent-browser-tabs`):
  * a coding agent's own, the task's for the app. Before a
  * call runs, the action on a tab a member drives is refused, with words that
  * say so, and nothing after it runs, so the agent waits for the tab to be
@@ -25,7 +25,7 @@
  * While it runs, the agent's pointer is written to the tab it points at
  * (`pointBrowserTab`), one write just before each click, type, or wheel
  * turn reaches the page, so a member's window draws it gliding there
- * (`@luke/features/browser-agent-cdp`'s `BrowserCursor`). Where someone is
+ * (`@repo/features/browser-agent-cdp`'s `BrowserCursor`). Where someone is
  * watching, each such input then waits the cursor's beat, so the glide lands
  * with the action. Someone is watching while the agent's sandbox lease
  * stands (`sandbox-terminal-lease.ts`), which the live view moves on while a
@@ -40,13 +40,13 @@
  * conversation (`storedBrowserOutput`); the transcript's copy, the page at
  * its own size and good quality (`BROWSER_KEPT_SCREENSHOT`), is kept beside
  * the transcript the call is written to as `show_image`'s pictures are
- * (`@luke/database/models/conversation-pictures`), deleted with that
+ * (`@repo/database/models/conversation-pictures`), deleted with that
  * conversation, and the step names it by id (`picture`), or says why it was
  * not kept (`omitted`). Nothing a page holds is logged or traced here: a
  * failure to keep the store is logged by its kind alone.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type AgentBrowserTabRow,
   browserTabDriver,
@@ -54,12 +54,12 @@ import {
   listAgentBrowserTabs,
   pointBrowserTab,
   upsertBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { TaskStoreFailure } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
+} from "@repo/database/models/agent-browser-tabs";
+import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
@@ -69,25 +69,25 @@ import {
   type BrowserKeptScreenshot,
   browserAgentActionsSchema,
   cutBrowserText,
-} from "@luke/features/browser-agent-actions";
+} from "@repo/features/browser-agent-actions";
 import {
   type BrowserCursor,
   type BrowserRecorder,
   isRecordingAction,
   runBrowserActions,
-} from "@luke/features/browser-agent-cdp";
-import type { CdpSession, PageTarget } from "@luke/features/browser-cdp";
+} from "@repo/features/browser-agent-cdp";
+import type { CdpSession, PageTarget } from "@repo/features/browser-cdp";
 import {
   CONVERSATION_MEDIA_TYPE,
   CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
   PICTURE_OMISSION,
   type PictureOmission,
-} from "@luke/features/conversation-picture-wire";
-import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
-import { webmDimensions } from "@luke/features/video-signature";
-import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/conversation-picture-wire";
+import { imageDimensions, sniffImageType } from "@repo/features/image-signature";
+import { webmDimensions } from "@repo/features/video-signature";
+import { isRecord, type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";

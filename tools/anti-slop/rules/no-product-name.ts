@@ -76,7 +76,7 @@ export const noProductNameRule = defineRule({
     },
     messages: {
       productName:
-        "Spell the product's name through `PRODUCT_NAME` (`@luke/features/product-name`), or say this without it. A file that cannot import it goes in `tools/anti-slop/product-name-allowed.json` with its reason.",
+        "Spell the product's name through `PRODUCT_NAME` (`@repo/features/product-name`), or say this without it. A file that cannot import it goes in `tools/anti-slop/product-name-allowed.json` with its reason.",
       productNameInComment:
         "Say this comment without the product's name: \"we\", \"our\", \"the app\", or \"the service\". Code it quotes in backticks may spell it.",
     },

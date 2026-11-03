@@ -1,5 +1,5 @@
-import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 

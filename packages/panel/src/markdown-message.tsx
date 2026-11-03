@@ -1,6 +1,6 @@
-import { keySpansIn } from "@luke/features/workspace-key";
-import { SEARCH_MATCH_CLASS } from "@luke/ui";
-import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import { keySpansIn } from "@repo/features/workspace-key";
+import { SEARCH_MATCH_CLASS } from "@repo/ui";
+import { gluedRun, LINK_GLUE } from "@repo/ui/link-glue";
 import {
   MARKDOWN_LOOK,
   Markdown,
@@ -8,9 +8,9 @@ import {
   type MarkdownSteps,
   type MarkdownTaskToggler,
   markdownStep,
-} from "@luke/ui/markdown";
-import { matchRanges } from "@luke/ui/search-tokens";
-import { isWireString } from "@luke/wire";
+} from "@repo/ui/markdown";
+import { matchRanges } from "@repo/ui/search-tokens";
+import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root, RootContent, Text } from "hast";
 import { createContext, memo, type ReactNode, useContext, useMemo } from "react";
 import { PlanDiagram } from "./plan-diagram.js";
@@ -362,7 +362,7 @@ const glueDrawnLinks =
  * naming a mention as the chip that opens what it names before it is ever
  * drawn as a plain one.
  *
- * A heading, a picture, and a quote are the note's own (`@luke/ui/markdown`).
+ * A heading, a picture, and a quote are the note's own (`@repo/ui/markdown`).
  * A fence is its code, and a Mermaid one draws as its diagram only where the
  * place showing the words asks for it (`diagrams`), as a plan's page does.
  */
@@ -571,7 +571,7 @@ function keptUrl(url: string): string {
 
 /**
  * A message's words drawn as the Markdown they were written in, as a note
- * (`@luke/ui/markdown`): inline emphasis, code, strikethrough, and web links
+ * (`@repo/ui/markdown`): inline emphasis, code, strikethrough, and web links
  * inside the paragraph, and the blocks a paragraph cannot hold — headings,
  * lists, quotes, fenced code, tables, rules — composed around it. Raw HTML
  * in the words is text. Every size in the stylesheet is in `em`, so the same

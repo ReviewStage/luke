@@ -1,4 +1,4 @@
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import { type ReactNode, useId } from "react";
 import { inputProblem, type ReportedFailure, type Unreported } from "../../reported-failure.js";
 import {

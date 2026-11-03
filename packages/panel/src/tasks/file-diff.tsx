@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { DIFF_LAYOUT } from "@repo/settings/diff-view";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@repo/ui";
 import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";

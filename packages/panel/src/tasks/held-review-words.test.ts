@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DIFF_SIDE, type PendingReviewComment, type ReviewThread } from "@luke/features/agent-wire";
+import { DIFF_SIDE, type PendingReviewComment, type ReviewThread } from "@repo/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
-} from "@luke/features/pull-request-write-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/pull-request-write-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement } from "react";

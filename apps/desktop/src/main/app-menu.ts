@@ -12,8 +12,8 @@
  * is on.
  */
 
-import { PUSH } from "@luke/host/contract";
-import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
+import { PUSH } from "@repo/host/contract";
+import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@repo/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -26,8 +26,8 @@ import {
   shortcutAccelerator,
   shortcutLabel,
   shortcutShown,
-} from "@luke/settings/shortcuts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+} from "@repo/settings/shortcuts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { windowPushes } from "./window/window-pushes";
 

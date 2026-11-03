@@ -11,14 +11,14 @@
  * here is invented; nothing is read from an account.
  */
 
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationListView,
   type AutomationRunsView,
   type AutomationWorkspaceRunsView,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -32,10 +32,10 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
   GITHUB_TRIGGER_EVENT,
-} from "@luke/features/automation-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
+} from "@repo/features/automation-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "./use-tasks-tab.js";
 
 /** When the fixture stands, from which every instant here is counted: a fixed one, never the clock. */

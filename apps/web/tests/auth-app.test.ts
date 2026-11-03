@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { authApp, type WebRequestHandler } from "@luke/service/auth/auth-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { authApp, type WebRequestHandler } from "@repo/service/auth/auth-app";
+import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";

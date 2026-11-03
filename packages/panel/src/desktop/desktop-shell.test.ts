@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
@@ -14,16 +14,16 @@ import {
   TASKS_ACT_KIND,
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
-} from "@luke/host/contract";
-import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/host/contract";
+import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

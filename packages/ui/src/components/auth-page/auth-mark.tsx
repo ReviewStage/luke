@@ -1,4 +1,4 @@
-import { LANDING_TONE, type LandingTone } from "@luke/features/landing-outcome";
+import { LANDING_TONE, type LandingTone } from "@repo/features/landing-outcome";
 import React from "react";
 import { CheckIcon, CloseIcon } from "../../face/glyphs.js";
 import { ProductMark } from "../../marks/product-mark.js";

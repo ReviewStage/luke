@@ -3,15 +3,15 @@
  *
  * A page a flow the Mac started passes through has nothing but the Mac app to
  * go back to: on a Mac it opens the app through its own scheme, at the app's home
- * (`@luke/features/link-home`), which brings it forward; on any other
+ * (`@repo/features/link-home`), which brings it forward; on any other
  * platform there is no app to open, and the page's words stand alone. A
  * connect's landing offers the web app's tab first (`connect-return.ts`).
  */
 
-import { APP_HOME_LINK } from "@luke/features/link-home";
-import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { AuthAction } from "@luke/ui";
+import { APP_HOME_LINK } from "@repo/features/link-home";
+import { LINK_PLATFORM, type LinkPlatform } from "@repo/features/link-open";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { AuthAction } from "@repo/ui";
 import { browserLinkPlatform } from "./link-platform";
 
 /** The words every way back is offered in. */

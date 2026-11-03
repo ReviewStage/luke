@@ -27,14 +27,14 @@
  * took.
  */
 
-import { isWebAddress } from "@luke/host/acts";
+import { isWebAddress } from "@repo/host/acts";
 import {
   type ActPortClient,
   actContract,
   INTEGRATION_ACT_KIND,
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
-} from "@luke/host/contract";
+} from "@repo/host/contract";
 import {
   CONNECT_BOUND_MS,
   CONNECT_CHANNEL,

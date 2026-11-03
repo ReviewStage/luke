@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
+import { Database } from "@repo/database/core/query";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
 import {
   getTestDB,
   joinWorkspace,
   leaveWorkspace,
   openWorkspace,
   WORKSPACE_ROLE,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import {
   workspaceMembersLiveRowsSchema,
   workspaceMembersOfLiveRows,
-} from "@luke/features/workspace-live";
+} from "@repo/features/workspace-live";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {

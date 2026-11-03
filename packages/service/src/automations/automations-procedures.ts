@@ -3,7 +3,7 @@ import {
   listAutomationRuns,
   listAutomations,
   readAutomation,
-} from "@luke/database/models/automation-store";
+} from "@repo/database/models/automation-store";
 import { Effect, Option } from "effect";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";

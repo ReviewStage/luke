@@ -1,4 +1,4 @@
-import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
+import type { CodeLines, CodeToken } from "@repo/features/tasks-view";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { useUntilFound } from "../../use-until-found.js";

@@ -2,11 +2,11 @@
    ground, insets, and width, its slide away and back, its float over the
    work and its drawer in a narrow room, the title bar's row and the toggle
    that stands in it; and the work column beside it, with the height of the
-   toolbar that heads a page there (`@luke/ui`'s `Toolbar`, which draws
+   toolbar that heads a page there (`@repo/ui`'s `Toolbar`, which draws
    itself) and the room it leaves the title bar's buttons.
 
    What stands in the sidebar, the app's head over the column, the places under
-   it, and the foot under them, is `@luke/ui`'s (`components/sidebar/`),
+   it, and the foot under them, is `@repo/ui`'s (`components/sidebar/`),
    drawn in utilities, and a phone's places bar is drawn in utilities where
    it is written (`mobile-bar.tsx`). What stays here is what utilities say
    badly: the sheet laid on the window's frame and the custom properties it
@@ -17,9 +17,9 @@
    The panel lays it just before desktop.css (index.css), which restages
    these elements for each of the window's own screens. Anything else that
    draws the app's sidebar, the web's admin dashboard among it, imports this
-   sheet alone and draws the same `@luke/ui` parts, so the two read as the
+   sheet alone and draws the same `@repo/ui` parts, so the two read as the
    same product from one set of rules rather than a copy of them. Every
-   value is a `@luke/ui` role or token, or a name below built from them
+   value is a `@repo/ui` role or token, or a name below built from them
    (docs/DESIGN.md).
 
    The panel's sheets read the narrow room off one attribute, the document's
@@ -27,12 +27,12 @@
    portalled out of the shell answers alike. Note that it is written
    `:where(:root)[data-ui-room="narrow"] .desktop-shell`, whose weight is
    that of the `.desktop-shell[data-room]` it replaced, so no rule changes
-   which one wins. The shell's own `data-room` stays for `@luke/ui`'s
+   which one wins. The shell's own `data-room` stays for `@repo/ui`'s
    `Toolbar`, which reads any ancestor of its own. */
 
 :root {
   /* A top row and its hairline, its middle level with the title bar's, which
-     a page's toolbar (`@luke/ui`'s `Toolbar`) stands at. */
+     a page's toolbar (`@repo/ui`'s `Toolbar`) stands at. */
   --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
   --ui-toolbar-height: var(--desktop-bar-height);
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
@@ -541,7 +541,7 @@
   display: none;
 }
 
-/* A finger swiping the drawer in or out (`@luke/ui`'s `use-drawer-swipe.ts`)
+/* A finger swiping the drawer in or out (`@repo/ui`'s `use-drawer-swipe.ts`)
    holds it at the share open the swipe writes on the shell, standing over
    the dimmed window as it does open, with its transition off, so it stays
    under the finger; let go, the mark comes off and it travels the rest of
@@ -640,7 +640,7 @@
   flex-direction: column;
 }
 
-/* A page's toolbar is `@luke/ui`'s `Toolbar`, which draws itself
+/* A page's toolbar is `@repo/ui`'s `Toolbar`, which draws itself
    (toolbar.css) at the bar height set above, the one the side panel's bar
    shares, so the two bars stand one height across the window.
    While the sidebar is folded, or a narrow room's drawer is away, the title

@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -11,11 +11,11 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { Task } from "@luke/features/task-wire";
-import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
-import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/inbox-wire";
+import type { Task } from "@repo/features/task-wire";
+import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
+import { sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

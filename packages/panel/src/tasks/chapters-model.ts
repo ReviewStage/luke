@@ -1,6 +1,6 @@
-import type { AgentChangedFile, ReviewThread } from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL_LABEL } from "@luke/features/chapters-model-choice";
-import { patchHunks } from "@luke/features/diff-hunks";
+import type { AgentChangedFile, ReviewThread } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL_LABEL } from "@repo/features/chapters-model-choice";
+import { patchHunks } from "@repo/features/diff-hunks";
 import {
   CHAPTER_KIND,
   type Chapter,
@@ -9,9 +9,9 @@ import {
   LINE_REF_SIDE,
   type LineRef,
   threadInChapter,
-} from "@luke/features/pull-request-chapters";
-import type { PullRequestChaptersAnswerView } from "@luke/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters";
+import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import type { DiffLineSpan } from "../diff-view/contract.js";
 
 /**

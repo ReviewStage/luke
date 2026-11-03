@@ -28,11 +28,11 @@
  * the app's own files, so only the web's root listens.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { holdsUnkept } from "@luke/panel/composer-drafts";
-import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { showToast } from "@luke/panel/toast";
-import { STATUS_TONE } from "@luke/ui";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { holdsUnkept } from "@repo/panel/composer-drafts";
+import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { showToast } from "@repo/panel/toast";
+import { STATUS_TONE } from "@repo/ui";
 import { Effect, Option } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

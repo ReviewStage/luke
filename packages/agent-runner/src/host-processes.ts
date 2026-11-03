@@ -6,7 +6,7 @@
  * bounding set nor a user marks the agent's processes. They are told apart
  * by where they came from instead: a process descended from the runner, or
  * one in the runner's own process group where the runner leads one, as the
- * host starts it (`@luke/host`'s `compose-local-agents.ts`), so a server
+ * host starts it (`@repo/host`'s `compose-local-agents.ts`), so a server
  * that detached from its shell and was handed to init or `launchd` still
  * counts. The runner itself, the harness it spawned, and the harness's
  * command-sandbox bridge are not the agent's, as in the cloud.

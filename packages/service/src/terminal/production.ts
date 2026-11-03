@@ -10,15 +10,15 @@
  * Vercel did not confirm is logged, since the next one tries again.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readVisibleAgent } from "@luke/database/models/agent-store";
-import { standingSessionsOf } from "@luke/database/models/recorded-session";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { hasRepository, readVisibleAgent } from "@repo/database/models/agent-store";
+import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import {
   claimCredentialRenewal,
   holdSandbox,
   releaseCredentialRenewal,
-} from "@luke/database/models/sandbox-terminal-lease";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/database/models/sandbox-terminal-lease";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { HttpClient } from "effect/http";
 import { controlsAgent } from "../agents/agent-reach.js";

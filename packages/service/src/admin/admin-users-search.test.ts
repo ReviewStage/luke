@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminUsersSource } from "./admin-queries.js";

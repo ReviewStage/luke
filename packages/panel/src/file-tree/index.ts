@@ -34,7 +34,7 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * listed first. The bundle draws rows and no words: where the tree stands,
  * its root being read, not listed and why, drawn, a folder in it cut short,
  * or a search matching nothing, is told to the tab (`onStanding`), which
- * says it with `@luke/ui`'s lines, and its Retry lists the root again
+ * says it with `@repo/ui`'s lines, and its Retry lists the root again
  * (`relist`). Pierre then draws the tree in a shadow root of its own, virtualised, so a
  * folder of thousands of entries draws only the rows in view; the panel's
  * look reaches it through the `--trees-*` properties the host element sets

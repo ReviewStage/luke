@@ -29,10 +29,10 @@
 import {
   AGENT_BROWSER_TAB_OPENER,
   type BrowserTabsPlace,
-} from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
-import { BROWSER_CURSOR_KIND, type BrowserCursorMove } from "@luke/features/browser-agent-actions";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_SHOWN_MAX_CHARS } from "@repo/features/browser-acts";
+import { BROWSER_CURSOR_KIND, type BrowserCursorMove } from "@repo/features/browser-agent-actions";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { and, asc, eq, gt, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -656,7 +656,7 @@ export function handBackBrowserTab(tabId: string, userId: string): BrowserTabEff
  * window follows them, the agent's pointer among them, as they move: each
  * tab `listBrowserTabs` lists the account, under the same rule of who may
  * read it, every column under the key the wire's tab line reads it by
- * (`@luke/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
+ * (`@repo/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
  * and every instant in epoch milliseconds. The account is joined through its
  * membership of the agent's workspace, as Neon's guide authorizes a live
  * read. It reads no clock, as Realtime requires, so a takeover past its

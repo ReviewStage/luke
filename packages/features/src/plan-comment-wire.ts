@@ -1,4 +1,4 @@
-import { LEGACY_APP_WORD, literalsReadingLegacy } from "@luke/wire";
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { agentMessageRequestSchema } from "./agent-wire.js";
 import { pageVersionNumberSchema } from "./page-wire.js";

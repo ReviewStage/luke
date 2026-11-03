@@ -1,12 +1,12 @@
 {
-  "instead": "Draw the way back with BackButton from @luke/ui, or the toolbar's crumbs lead; the back arrow glyph is imported only there. A history step's Back, a chapter's Previous, a row's Move left and a calendar's previous month are not a way back and name their files.",
+  "instead": "Draw the way back with BackButton from @repo/ui, or the toolbar's crumbs lead; the back arrow glyph is imported only there. A history step's Back, a chapter's Previous, a row's Move left and a calendar's previous month are not a way back and name their files.",
   "glyphs": [
     { "glyph": "GLYPH.BACK", "allow": ["packages/ui/src/components/back-button/"] },
     { "glyph": "ArrowLeft", "allow": ["packages/ui/src/components/back-button/"] }
   ],
   "patterns": [
     {
-      "import": "@luke/ui",
+      "import": "@repo/ui",
       "names": ["BackIcon", "ArrowLeftIcon"],
       "allow": [
         "apps/catalog/src/examples/keep-focus.tsx",

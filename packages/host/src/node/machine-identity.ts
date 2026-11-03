@@ -1,7 +1,7 @@
 import childProcess from "node:child_process";
 import { createHmac } from "node:crypto";
 import fs from "node:fs";
-import { DEVICE_MODEL_MAX_CHARS, type DeviceMachine } from "@luke/features/device-agent-wire";
+import { DEVICE_MODEL_MAX_CHARS, type DeviceMachine } from "@repo/features/device-agent-wire";
 
 /**
  * machine-identity.ts -- which machine a host runs on, as it reports it: a keyed hash of the OS's own id for the machine, and on a Mac its model as a person reads it.

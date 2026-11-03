@@ -7,9 +7,9 @@ import {
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+} from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -22,19 +22,19 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { formatCount } from "@luke/features/number-format";
-import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { pasteCutWords } from "@luke/features/words";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { experimentsOn } from "@luke/settings/testing";
-import { DocumentIcon } from "@luke/ui";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { formatCount } from "@repo/features/number-format";
+import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { pasteCutWords } from "@repo/features/words";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { experimentsOn } from "@repo/settings/testing";
+import { DocumentIcon } from "@repo/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

@@ -1,5 +1,5 @@
 /**
- * panel-build.ts -- the panel's build table (`@luke/panel/build-table`) in Vite's shape: the redirects, the trim, the defines, and the static files under `/app/`.
+ * panel-build.ts -- the panel's build table (`@repo/panel/build-table`) in Vite's shape: the redirects, the trim, the defines, and the static files under `/app/`.
  *
  * The desktop wraps the same table in esbuild's plugins (`apps/desktop/scripts/build.mjs`),
  * so the two builds answer the panel's imports alike and neither restates
@@ -16,7 +16,7 @@ import {
   panelDefines,
   panelStaticDirectories,
   redirectOf,
-} from "@luke/panel/build-table";
+} from "@repo/panel/build-table";
 import { build } from "esbuild";
 import type { Plugin } from "vite";
 import { PANEL_ASSET_BASE } from "../src/app/web-address";

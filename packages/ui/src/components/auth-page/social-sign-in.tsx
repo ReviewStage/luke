@@ -2,8 +2,8 @@ import {
   SOCIAL_PROVIDER,
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
-} from "@luke/features/sign-in-provider";
-import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS } from "@luke/features/words";
+} from "@repo/features/sign-in-provider";
+import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS } from "@repo/features/words";
 import type { ReactNode } from "react";
 import type { ReportedFailure, Unreported } from "../../reported-failure.js";
 import { ProviderButton } from "../provider-button/provider-button.js";

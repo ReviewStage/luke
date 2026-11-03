@@ -2,14 +2,14 @@
  * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, what the list says while it is read, and what deleting one asks.
  */
 
-import { AUTOMATION_NEXT, automationNext } from "@luke/features/automation-list-model";
+import { AUTOMATION_NEXT, automationNext } from "@repo/features/automation-list-model";
 import {
   AUTOMATION_SCOPE,
   type AutomationScope,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import { dayAndTimeText, momentText, weekdayAndTimeText } from "@luke/features/time-format";
-import { CONFIRM_LOSS, type DialogQuestion } from "@luke/ui";
+} from "@repo/features/automation-wire";
+import { dayAndTimeText, momentText, weekdayAndTimeText } from "@repo/features/time-format";
+import { CONFIRM_LOSS, type DialogQuestion } from "@repo/ui";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { listPages, readPageVersion, writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+import { Database } from "@repo/database/core/query";
+import { listPages, readPageVersion, writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Effect, Option } from "effect";
 
 /**

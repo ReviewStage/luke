@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
-import type { Channel } from "@luke/features/channel-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@repo/features/agent-wire";
+import type { Channel } from "@repo/features/channel-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -75,7 +75,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The cards' dialog, which the switcher draws in `@luke/ui`'s Dialog. */
+/** The cards' dialog, which the switcher draws in `@repo/ui`'s Dialog. */
 const DIALOG = '[role="dialog"]';
 
 /** What the switcher asked the window to show, in order. */

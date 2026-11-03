@@ -9,7 +9,7 @@ import { cn } from "../cn.js";
  * nav, its list, and its ellipsis are vendored; shadcn's `PaginationLink`,
  * `PaginationPrevious`, and `PaginationNext` are dropped, because they draw
  * through shadcn's `button.tsx`, and a step here is a plain link to its
- * page's address, drawn by `@luke/ui`'s `Pagination`
+ * page's address, drawn by `@repo/ui`'s `Pagination`
  * (`components/pagination/pagination.tsx`) in `PAGINATION_ITEM`'s classes.
  * Its local changes:
  *
@@ -24,7 +24,7 @@ import { cn } from "../cn.js";
  *   than shadcn's centred row.
  * - `PaginationEllipsis` draws the "…" the caller hands it, read as it is,
  *   dimmed (`data-idle`), rather than lucide's glyph hidden beside a
- *   "More pages" for readers, because no icon library rides in `@luke/ui`
+ *   "More pages" for readers, because no icon library rides in `@repo/ui`
  *   and the elision says itself.
  * - `PAGINATION_ITEM` is every item's box: as tall as the caption's line and
  *   its inset either side, and at least as wide, with an edge whether or not

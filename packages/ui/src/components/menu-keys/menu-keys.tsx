@@ -1,4 +1,4 @@
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import { Shortcut } from "../shortcut/shortcut.js";
 
 /**

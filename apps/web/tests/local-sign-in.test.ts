@@ -5,8 +5,8 @@ import {
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
   LOGIN_PAGE,
-} from "@luke/service/auth/auth-policy";
-import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "@luke/service/auth/oauth-clients";
+} from "@repo/service/auth/auth-policy";
+import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "@repo/service/auth/oauth-clients";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { jwt, lastLoginMethod } from "better-auth/plugins";

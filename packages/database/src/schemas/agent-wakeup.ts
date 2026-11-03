@@ -8,7 +8,7 @@ import { agentTable } from "./agent.js";
  * A Claude Code agent waiting on nothing but one-shot wakeups is released:
  * its runner ends the launch so the sandbox stops, and names each wakeup,
  * the instant it comes due and the prompt the CLI would have run then, in
- * its last event (`@luke/agent-runner/protocol`'s `RUNNER_RELEASE`). One row
+ * its last event (`@repo/agent-runner/protocol`'s `RUNNER_RELEASE`). One row
  * per wakeup, which the scheduled sweep delivers to the agent as a message
  * once due and deletes once delivered (`native-wakeup-sweep.ts`). A later
  * release replaces the agent's rows; a Stop deletes them, as a stopped

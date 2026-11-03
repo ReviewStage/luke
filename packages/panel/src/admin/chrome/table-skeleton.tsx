@@ -11,7 +11,7 @@ import {
   JUSTIFY,
   SKELETON_SHAPE,
   Skeleton,
-} from "@luke/ui";
+} from "@repo/ui";
 
 /** A text cell's bone, about a short name's width. */
 const SKELETON_TEXT_WIDTH = "96px";

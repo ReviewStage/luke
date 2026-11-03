@@ -1,17 +1,17 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   AGENT_BOUNDS,
   type AgentStatus,
   type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import { dictationKeywords } from "@luke/features/dictation-keywords";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import type { MentionLines } from "@luke/features/mention-link";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/agent-wire";
+import { dictationKeywords } from "@repo/features/dictation-keywords";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import type { MentionLines } from "@repo/features/mention-link";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -31,10 +31,10 @@ import {
   type ToolbarPlace,
   useMenu,
   useMinute,
-} from "@luke/ui";
-import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { isAgentTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
+import { isAgentTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";

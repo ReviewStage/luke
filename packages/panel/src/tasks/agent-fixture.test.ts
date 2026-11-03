@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
+import { TASK_TREE_ENTRY } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
 import {
   actContract,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
-} from "@luke/host/contract";
+} from "@repo/host/contract";
 import { Effect, Result, Schema } from "effect";
 import { askAct } from "../act.js";
 import { fakeActPort } from "../testing/app-bridge.js";

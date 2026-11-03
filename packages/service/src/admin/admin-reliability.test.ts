@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
+import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
 import { test } from "vitest";
 import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
 

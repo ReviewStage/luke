@@ -11,7 +11,7 @@
  * (`PageFind`). The views themselves are `admin/admin-place.tsx`'s.
  */
 
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { AdminPlace } from "../admin/admin-place.js";
 import { AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
 import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";

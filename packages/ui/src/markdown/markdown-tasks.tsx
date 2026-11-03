@@ -2,7 +2,7 @@
  * markdown-tasks.tsx -- a note's task items a reader can tick, and any words' a reader cannot: each item's checkbox named by its item's words and placed by its marker's offset, drawn as the shared `Checkbox` in the bullet's gutter.
  */
 
-import { isWireString } from "@luke/wire";
+import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root } from "hast";
 import { useState } from "react";
 import type { Components } from "streamdown";

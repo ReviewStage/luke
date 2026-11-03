@@ -13,7 +13,7 @@
  * `Throwaway:`).
  */
 
-import type { PageLine } from "@luke/features/page-wire";
+import type { PageLine } from "@repo/features/page-wire";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

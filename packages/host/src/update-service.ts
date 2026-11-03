@@ -1,11 +1,11 @@
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { scheduleOnce } from "@luke/runtime/effect";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { scheduleOnce } from "@repo/runtime/effect";
 import {
   UPDATE_STATUS,
   type UpdateProgress,
   type UpdateSnapshot,
   type UpdateStatus,
-} from "@luke/settings/update";
+} from "@repo/settings/update";
 import { type Context, Duration, Effect, type Fiber, Schedule, Scope } from "effect";
 
 /**

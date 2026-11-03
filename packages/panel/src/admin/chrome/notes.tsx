@@ -1,7 +1,7 @@
-import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
-import { formatCount } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { TEXT_TONE, Text } from "@luke/ui";
+import { RETENTION_BASIS, type RetentionBasis } from "@repo/features/admin-overview-vocabulary";
+import { formatCount } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TEXT_TONE, Text } from "@repo/ui";
 
 /** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {

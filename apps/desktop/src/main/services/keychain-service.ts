@@ -1,5 +1,5 @@
-import type { SecretCipher } from "@luke/host";
-import type { EffectDesktopService } from "@luke/host/desktop-service";
+import type { SecretCipher } from "@repo/host";
+import type { EffectDesktopService } from "@repo/host/desktop-service";
 import { Effect } from "effect";
 import { safeStorage } from "electron";
 

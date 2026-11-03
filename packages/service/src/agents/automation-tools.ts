@@ -1,14 +1,14 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { INTEGRATION_INSTALLATION_STATUS } from "@luke/database/integration-vocabulary";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { INTEGRATION_INSTALLATION_STATUS } from "@repo/database/integration-vocabulary";
 import {
   AUTOMATION_ACCESS,
   listAutomationRuns,
   listAutomations,
   readAutomation,
-} from "@luke/database/models/automation-store";
-import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
-import { disabledServersSchema } from "@luke/features/agent-wire";
-import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
+} from "@repo/database/models/automation-store";
+import { workspaceIntegrationInstallations } from "@repo/database/models/integration-installation-store";
+import { disabledServersSchema } from "@repo/features/agent-wire";
+import { readSchedule, SCHEDULE_REFUSAL } from "@repo/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
@@ -28,13 +28,13 @@ import {
   githubTriggerSchema,
   scheduleTriggerSchema,
   sentryTriggerSchema,
-} from "@luke/features/automation-wire";
-import { integrationConnectionOf } from "@luke/features/integration-wire";
-import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import { isRecord } from "@luke/wire";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/features/automation-wire";
+import { integrationConnectionOf } from "@repo/features/integration-wire";
+import { type ModelChoice, modelChoiceSchema } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import { isRecord } from "@repo/wire";
+import { describeWire } from "@repo/wire/effect";
 import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

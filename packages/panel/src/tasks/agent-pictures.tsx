@@ -3,18 +3,18 @@ import {
   recordedVideosOf,
   type ShownPicture,
   shownPicturesOf,
-} from "@luke/features/agent-pictures-model";
+} from "@repo/features/agent-pictures-model";
 import {
   AGENT_ATTACHMENT_TYPE,
   type AgentAttachment,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import type { FileChip } from "@luke/features/attachment-model";
-import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
-import { formatBytes } from "@luke/features/number-format";
-import { ACT_KIND } from "@luke/host/acts";
-import { isVideoDataUrl, PICTURE_SET_SHOWN, PictureSet, PictureSetTile } from "@luke/ui";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/features/agent-wire";
+import type { FileChip } from "@repo/features/attachment-model";
+import { isVideoType, type KeptPicture } from "@repo/features/conversation-picture-wire";
+import { formatBytes } from "@repo/features/number-format";
+import { ACT_KIND } from "@repo/host/acts";
+import { isVideoDataUrl, PICTURE_SET_SHOWN, PictureSet, PictureSetTile } from "@repo/ui";
+import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
 import {
   createContext,
   type ReactNode,
@@ -40,12 +40,12 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, the pictures an integration's call answered, under the call's row, and an image a line handed it, over the line.
  *
  * Each picture is read once through the window's picture cache
- * (`@luke/ui/picture-cache`), under the agent, or under the worker whose
+ * (`@repo/ui/picture-cache`), under the agent, or under the worker whose
  * transcript names it, and drawn as a plan's picture is
  * (`../picture-block.tsx`): its own block while one, a quiet box while its
  * bytes are read, its words where it is gone. Several, whether the agent
  * showed them or an integration's call answered them under the call's row,
- * open or closed, are one set of tiles (`@luke/ui`'s `PictureSet`): a few
+ * open or closed, are one set of tiles (`@repo/ui`'s `PictureSet`): a few
  * the agent showed in one row at their own shapes, more, and a call's
  * however few, as thumbnails that wrap, six drawn and
  * the rest read all the same for the viewer; a picture the call answered
@@ -56,7 +56,7 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * the agent recorded, shown as a picture or answered by its browser's
  * `stop_recording`, plays where it stands instead, its own block above the
  * call's pictures, with the player's own controls, Full screen among them
- * (`@luke/ui`'s `VideoPlayer`); its Expand opens the same viewer over the
+ * (`@repo/ui`'s `VideoPlayer`); its Expand opens the same viewer over the
  * call's videos and pictures, which plays it there. An image a line handed
  * the agent, which its row names by the picture it was kept as rather than
  * carrying its bytes, is read the same way and drawn among the line's files

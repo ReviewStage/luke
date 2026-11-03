@@ -18,9 +18,9 @@
  * this line rather than by the window's room, which is narrower.
  */
 
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { TOOLBAR_LOOK } from "@luke/ui";
-import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { TOOLBAR_LOOK } from "@repo/ui";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";

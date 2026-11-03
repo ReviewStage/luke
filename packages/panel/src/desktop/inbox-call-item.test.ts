@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -14,11 +14,11 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { LinkPlace, ReadLink } from "@luke/features/link-grammar";
-import type { Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import type { LinkPlace, ReadLink } from "@repo/features/link-grammar";
+import type { Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -10,7 +10,7 @@ import {
   TerminalIcon,
   Text,
   UnassignedAvatar,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

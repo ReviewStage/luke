@@ -1,7 +1,7 @@
 /**
  * sidebar.tsx -- the admin dashboard's shell: the app's sidebar beside the open view, its toggle in the title bar's row, and the account at its foot.
  *
- * The shell is the app's own (`@luke/panel`'s `shell.css`, which the panel
+ * The shell is the app's own (`@repo/panel`'s `shell.css`, which the panel
  * lays for its window): the same two columns, the sidebar's ground, insets,
  * and width, the app's head over its rows, and the toggle standing at the
  * column's top-left whichever way the sidebar is. Hiding the sidebar slides
@@ -15,14 +15,14 @@
  * name, raising its menu above it, whose one act is Sign out, which acts on the press.
  */
 
-import { VERB } from "@luke/features/words";
-import "@luke/panel/styles/shell.css";
-import { AccountAvatar, type ViewerAccount } from "@luke/panel/admin/chrome/page-header";
-import { ADMIN_PLACES } from "@luke/panel/admin/chrome/places";
-import { type AdminTab, plainLeftClick, tabHref } from "@luke/panel/admin/routing";
-import { ProductIdentity } from "@luke/panel/desktop/product-identity";
-import { SHELL_ROOM } from "@luke/panel/shell-room";
-import { useStageRoom } from "@luke/panel/stage-room";
+import { VERB } from "@repo/features/words";
+import "@repo/panel/styles/shell.css";
+import { AccountAvatar, type ViewerAccount } from "@repo/panel/admin/chrome/page-header";
+import { ADMIN_PLACES } from "@repo/panel/admin/chrome/places";
+import { type AdminTab, plainLeftClick, tabHref } from "@repo/panel/admin/routing";
+import { ProductIdentity } from "@repo/panel/desktop/product-identity";
+import { SHELL_ROOM } from "@repo/panel/shell-room";
+import { useStageRoom } from "@repo/panel/stage-room";
 import {
   AVATAR_SIZE,
   FailureNote,
@@ -40,9 +40,9 @@ import {
   TEXT_TONE,
   Text,
   useMenu,
-} from "@luke/ui";
-import { accountLabel } from "@luke/ui/account-initials";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { accountLabel } from "@repo/ui/account-initials";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 

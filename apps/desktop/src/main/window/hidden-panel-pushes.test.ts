@@ -1,10 +1,10 @@
 /** hidden-panel-pushes.test.ts -- what a panel no one can see is pushed, as its window hides and shows. */
 
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { RunMode } from "@luke/host";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { initialAppState } from "@luke/host/client";
-import { PUSH, type PushEvent } from "@luke/host/contract";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { RunMode } from "@repo/host";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { initialAppState } from "@repo/host/client";
+import { PUSH, type PushEvent } from "@repo/host/contract";
 import type { WebContents } from "electron";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";

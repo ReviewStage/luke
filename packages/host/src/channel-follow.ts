@@ -2,9 +2,9 @@ import {
   type WorkspaceChannels,
   type WorkspaceChannelsLiveAnswer,
   workspaceChannelsLiveRowsSchema,
-} from "@luke/features/channel-live";
-import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+} from "@repo/features/channel-live";
+import { CHANNEL_CALL_FAILURE } from "@repo/features/channel-view";
+import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { Effect, type Scope } from "effect";
 import {
   type AppHostRead,

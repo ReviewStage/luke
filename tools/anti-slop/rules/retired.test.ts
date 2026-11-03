@@ -31,11 +31,11 @@ tester.run("retired (example.json)", retiredRule, {
   valid: [
     // The owner keeps what it owns.
     { code: '<div className="retired-example" />', filename: OWNER },
-    { code: 'import { RetiredExampleIcon } from "@luke/ui/icons";', filename: OWNER },
+    { code: 'import { RetiredExampleIcon } from "@repo/ui/icons";', filename: OWNER },
     { code: 'import { x } from "retired-example";', filename: OWNER },
     // Other classes, glyphs, props and modules, and a class only sharing a start with a retired one.
     {
-      code: 'import { BotIcon, GLYPH } from "@luke/ui/icons"; <div className="retired-examples x" data-a={GLYPH.TASK} retired={1} />;',
+      code: 'import { BotIcon, GLYPH } from "@repo/ui/icons"; <div className="retired-examples x" data-a={GLYPH.TASK} retired={1} />;',
       filename: PANEL,
     },
     { code: 'import { x } from "retired-example-not";', filename: PANEL },
@@ -87,28 +87,28 @@ tester.run("retired (example.json)", retiredRule, {
     },
     // A glyph by any of Lucide's aliases, through the door or a namespace of it, and a concept off the registry.
     {
-      code: 'import { LucideRetiredExample, RetiredExampleIcon as Mine } from "@luke/ui/icons";',
+      code: 'import { LucideRetiredExample, RetiredExampleIcon as Mine } from "@repo/ui/icons";',
       filename: PANEL,
       errors: [{ messageId: "retired" }, { messageId: "retired" }],
     },
     {
-      code: 'import * as icons from "@luke/ui/icons"; const A = icons.RetiredExample;',
+      code: 'import * as icons from "@repo/ui/icons"; const A = icons.RetiredExample;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
     {
-      code: 'import { GLYPH as G } from "@luke/ui/icons"; const a = G.RETIRED_EXAMPLE;',
+      code: 'import { GLYPH as G } from "@repo/ui/icons"; const a = G.RETIRED_EXAMPLE;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
     // Drawn as a JSX member, once however many tags the element spells.
     {
-      code: 'import { GLYPH as G } from "@luke/ui/icons"; <G.RETIRED_EXAMPLE></G.RETIRED_EXAMPLE>;',
+      code: 'import { GLYPH as G } from "@repo/ui/icons"; <G.RETIRED_EXAMPLE></G.RETIRED_EXAMPLE>;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
     {
-      code: 'import * as icons from "@luke/ui/icons"; <icons.RetiredExampleIcon />;',
+      code: 'import * as icons from "@repo/ui/icons"; <icons.RetiredExampleIcon />;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
@@ -196,24 +196,24 @@ const moreButton = retiredRuleFor(
 
 tester.run("retired (more-button.json)", moreButton, {
   valid: [
-    { code: 'import { GLYPH } from "@luke/ui/icons"; <GLYPH.MORE />;', filename: MORE_BUTTON },
-    { code: 'import { BarItem, EllipsisIcon } from "@luke/ui";', filename: MENU_BAR },
-    { code: 'import { MoreButton, PlusIcon } from "@luke/ui";', filename: PANEL },
-    { code: 'import { GLYPH } from "@luke/ui/icons"; <GLYPH.TASK />;', filename: PANEL },
+    { code: 'import { GLYPH } from "@repo/ui/icons"; <GLYPH.MORE />;', filename: MORE_BUTTON },
+    { code: 'import { BarItem, EllipsisIcon } from "@repo/ui";', filename: MENU_BAR },
+    { code: 'import { MoreButton, PlusIcon } from "@repo/ui";', filename: PANEL },
+    { code: 'import { GLYPH } from "@repo/ui/icons"; <GLYPH.TASK />;', filename: PANEL },
   ],
   invalid: [
     {
-      code: 'import { GLYPH } from "@luke/ui/icons"; <IconButton icon={<GLYPH.MORE />} label="Actions" />;',
+      code: 'import { GLYPH } from "@repo/ui/icons"; <IconButton icon={<GLYPH.MORE />} label="Actions" />;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
     {
-      code: 'import { EllipsisIcon } from "@luke/ui"; <IconButton icon={<EllipsisIcon />} label="Actions" />;',
+      code: 'import { EllipsisIcon } from "@repo/ui"; <IconButton icon={<EllipsisIcon />} label="Actions" />;',
       filename: PANEL,
       errors: [{ messageId: "retired" }],
     },
     {
-      code: 'import { Ellipsis, MoreHorizontalIcon } from "@luke/ui/icons";',
+      code: 'import { Ellipsis, MoreHorizontalIcon } from "@repo/ui/icons";',
       filename: PANEL,
       errors: [{ messageId: "retired" }, { messageId: "retired" }],
     },

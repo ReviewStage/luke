@@ -2,14 +2,14 @@ import {
   type GitHubPerson,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { issueAddressOf, pullRequestAddressOf } from "@luke/features/link-grammar";
-import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
-import type { TasksView } from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import type { GitHubPullRequestSummary, IssueState } from "@repo/features/github-repositories-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
+import { MENTION_KIND, type Mention } from "@repo/features/mention-link";
+import type { TasksView } from "@repo/features/tasks-view";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";

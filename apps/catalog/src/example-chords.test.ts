@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_SHORTCUTS, shortcutAccelerator, shortcutGlyphs } from "@luke/settings/shortcuts";
+import { APP_SHORTCUTS, shortcutAccelerator, shortcutGlyphs } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -10,7 +10,7 @@ import { EXAMPLES } from "./examples.js";
 /**
  * example-chords.test.ts -- a chord an example prints is one the window has:
  * the menu's and the settings-row examples read theirs from the shortcut
- * table (`@luke/settings/shortcuts`), so an example can never show a key the
+ * table (`@repo/settings/shortcuts`), so an example can never show a key the
  * app does not answer, as ⌘R for Rename once did.
  */
 

@@ -1,11 +1,11 @@
-import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/link-grammar";
-import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { isGitHubAddress, isOpenableAddress } from "@luke/host/acts";
+import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@repo/features/link-grammar";
+import { decodeMention, MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
 import {
   listedPullRequestOf,
   pullRequestAgentOf,
   repositoryPullRequestOf,
-} from "@luke/ui/pull-request-link";
+} from "@repo/ui/pull-request-link";
 import {
   createContext,
   createElement,
@@ -22,7 +22,7 @@ import { useSteadyDoor } from "../steady-door.js";
  * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
  *
  * An app link, the address of a task, a section, an agent, an Inbox item,
- * or any other place in the app (`@luke/features/link-grammar`), opens in the
+ * or any other place in the app (`@repo/features/link-grammar`), opens in the
  * window, on that place, never the browser, as Linear's and Slack's own
  * links open in their apps; one written before the link was settled
  * (`luke://plan/<id>`) still opens its task. The window's opener for a

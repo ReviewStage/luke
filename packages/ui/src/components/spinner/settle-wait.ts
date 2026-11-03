@@ -12,7 +12,7 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useState } from "react";

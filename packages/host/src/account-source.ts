@@ -6,8 +6,8 @@
  * session over what the host built and reads everything of the account
  * through it, so nothing else in the host knows which source it stands on.
  */
-import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AccountToken, CallCredential } from "@luke/features";
+import type { AccountProvider, AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AccountToken, CallCredential } from "@repo/features";
 import type { Effect, Scope, Stream } from "effect";
 import type { RunMode } from "./run-mode.js";
 import type { SecretCipher, SettingsStore } from "./settings-store.js";

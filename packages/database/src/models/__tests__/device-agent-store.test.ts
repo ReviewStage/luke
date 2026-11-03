@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -11,8 +11,8 @@ import {
   type DeviceAgentAnswer,
   type DeviceLaunchStep,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

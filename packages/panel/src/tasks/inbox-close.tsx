@@ -1,8 +1,8 @@
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@luke/features/inbox-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { countWords, TERM } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@repo/features/inbox-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { countWords, TERM } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -10,9 +10,9 @@ import {
   nextRowOrHead,
   STATUS_TONE,
   useConfirmDialog,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
 import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
@@ -29,7 +29,7 @@ import { cardTitle } from "./tool-call-model.js";
  * A close goes to the service as an act, under a key kept for the item at
  * the revision it was pressed on, so a press again after a lost reply is
  * the same close. The host draws it into every read the window draws the
- * moment it is confirmed (`@luke/host`'s `inbox-collections.ts`), so the
+ * moment it is confirmed (`@repo/host`'s `inbox-collections.ts`), so the
  * item leaves what needs the developer at once. A close taken lets go of
  * the item's draft, wherever its task stands; one the service did not take
  * lands on the item as the service answered it, the agent's newer word or

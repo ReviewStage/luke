@@ -6,7 +6,7 @@
    `--ui-prose-tint`, which a surface whose ink is not the page's own, a
    sent bubble's, mixes from its own colour.
 
-   Below them, a note's Markdown (`.ui-markdown`, `@luke/ui/markdown`):
+   Below them, a note's Markdown (`.ui-markdown`, `@repo/ui/markdown`):
    the plan, its versions, a comment, a file's note, and the caption. */
 
 @layer components {
@@ -366,7 +366,7 @@
   }
 }
 
-/* A quote (`@luke/ui/quote-face`), drawn alike in a transcript, a sent
+/* A quote (`@repo/ui/quote-face`), drawn alike in a transcript, a sent
    bubble, an Inbox item, the plan, and the plan's editor, as a thread or a
    document draws one: flush with the words around it, set off by a thin
    rule and a short step of room after it, in the quiet ink at the same size

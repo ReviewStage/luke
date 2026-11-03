@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { SqlClient } from "effect/sql";

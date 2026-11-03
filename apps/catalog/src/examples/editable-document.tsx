@@ -12,8 +12,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { markdownClass } from "@luke/ui/markdown-class";
+} from "@repo/ui";
+import { markdownClass } from "@repo/ui/markdown-class";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

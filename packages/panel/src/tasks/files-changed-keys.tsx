@@ -3,7 +3,7 @@ import {
   FILES_CHANGED_SHORTCUT_GROUPS,
   FILES_CHANGED_SHORTCUTS,
   filesChangedKeyFor,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   Button,
   DIALOG_SIZE,
@@ -14,16 +14,16 @@ import {
   SettingsRow,
   SettingsSection,
   Shortcut,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useRef } from "react";
 
 /**
  * files-changed-keys.tsx -- the sheet `?` opens inside Files changed: every one of the view's keys under its group, as stage-cli's sheet lists its own.
  *
  * The keys are read from the table the view's handler matches a press
- * against (`@luke/settings/shortcuts`'s Files changed table), so the sheet
+ * against (`@repo/settings/shortcuts`'s Files changed table), so the sheet
  * lists exactly the keys that answer. Each group is drawn as the Keyboard
- * shortcuts page draws one, `@luke/ui`'s `SettingsSection` with a list row
+ * shortcuts page draws one, `@repo/ui`'s `SettingsSection` with a list row
  * for each key and its chord drawn as every chord is (`Shortcut`), so a key
  * reads the same on the sheet and on the page.
  *

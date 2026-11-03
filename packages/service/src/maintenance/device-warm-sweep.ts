@@ -6,7 +6,7 @@
  * its IDLE lands where that window is zero (`runnerIdled`). A retire that
  * failed there is logged and not retried, and a runner past a window that is
  * not zero is retired by nothing else, so it would end itself at its own idle
- * cap (`@luke/agent-runner`'s `RUNNER_WARM.IDLE_CAP_MS`), where a message its
+ * cap (`@repo/agent-runner`'s `RUNNER_WARM.IDLE_CAP_MS`), where a message its
  * host writes in that instant is lost. This sweep retires it first: it reads
  * every account's local agents whose newest launch is still open, on a device
  * that beat within its lease (a lapsed one's launches are the lease sweep's,
@@ -29,13 +29,13 @@
  * runner's exit (`MAC_MACHINE.EXIT_WAIT`).
  */
 
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   type DeviceAgentWarmLaunch,
   warmDeviceAgentLaunches,
-} from "@luke/database/models/device-agent-store";
-import { AGENT_MACHINE, DEVICE_LEASE } from "@luke/features/agent-wire";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/device-agent-store";
+import { AGENT_MACHINE, DEVICE_LEASE } from "@repo/features/agent-wire";
+import { failureKind } from "@repo/runtime/effect";
 import { Duration, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { agentLogIds } from "../agents/coder-host/agent-log.js";

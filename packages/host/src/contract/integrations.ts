@@ -6,7 +6,7 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@luke/features/integration-view";
+} from "@repo/features/integration-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { INTEGRATION_ACT_KIND } from "./kinds.js";

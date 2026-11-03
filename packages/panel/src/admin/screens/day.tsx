@@ -1,15 +1,15 @@
-import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
-import { ADMIN_READ } from "@luke/features/admin-wire";
-import { formatCount } from "@luke/features/number-format";
-import { formatDayHeading } from "@luke/features/time-format";
-import { readFailedWords } from "@luke/features/words";
+import type { AdminDayAccount, AdminDayDetail } from "@repo/features/admin-answer-wire";
+import { ADMIN_READ } from "@repo/features/admin-wire";
+import { formatCount } from "@repo/features/number-format";
+import { formatDayHeading } from "@repo/features/time-format";
+import { readFailedWords } from "@repo/features/words";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
-} from "@luke/ui";
-import { partialDayKey } from "@luke/ui/daily-series";
+} from "@repo/ui";
+import { partialDayKey } from "@repo/ui/daily-series";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

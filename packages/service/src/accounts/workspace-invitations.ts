@@ -2,10 +2,10 @@ import {
   type LiveStatement,
   liveSelection,
   liveStatementOf,
-} from "@luke/database/core/live-statement";
-import { queryBuilder } from "@luke/database/core/query";
-import { invitation, member } from "@luke/database/schemas/auth";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/database/core/live-statement";
+import { queryBuilder } from "@repo/database/core/query";
+import { invitation, member } from "@repo/database/schemas/auth";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { and, eq, exists, sql } from "drizzle-orm";
 import type { Option } from "effect";
 

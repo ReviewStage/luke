@@ -1,7 +1,7 @@
-import { WRITING_BLOCK, WRITING_SHORTCUTS } from "@luke/settings/shortcuts";
-import { linkMarkAttributes } from "@luke/ui/link-face";
-import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
-import { QUOTE_CLASS } from "@luke/ui/quote-face";
+import { WRITING_BLOCK, WRITING_SHORTCUTS } from "@repo/settings/shortcuts";
+import { linkMarkAttributes } from "@repo/ui/link-face";
+import { MARKDOWN_CLASS } from "@repo/ui/markdown-class";
+import { QUOTE_CLASS } from "@repo/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import { TaskItem, TaskList } from "@tiptap/extension-list";

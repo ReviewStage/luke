@@ -6,7 +6,7 @@
  */
 export const SKELETON_GUARD_RULE = "anti-slop/skeleton-through-components";
 
-/** `@luke/ui`'s loading blocks, which only a skeleton draws. */
+/** `@repo/ui`'s loading blocks, which only a skeleton draws. */
 export const SKELETON_BLOCKS: ReadonlySet<string> = new Set(["Skeleton", "SkeletonRegion"]);
 
 /** Whether a component, by its name, is a skeleton: `Skeleton` itself or one named `…Skeleton`. */

@@ -3,8 +3,8 @@ import {
   type AccountProvider,
   type AccountSnapshot,
   isAccountProvider,
-} from "@luke/credentials/snapshot";
-import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@luke/settings/wire";
+} from "@repo/credentials/snapshot";
+import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@repo/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -14,8 +14,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
-} from "@luke/wire";
-import { declareReader } from "@luke/wire/effect";
+} from "@repo/wire";
+import { declareReader } from "@repo/wire/effect";
 import { Data, Effect, Result, Schema, Semaphore, type Types } from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
@@ -23,9 +23,9 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
 
-export type { StoredAccount } from "@luke/credentials";
+export type { StoredAccount } from "@repo/credentials";
 
-import type { StoredAccount } from "@luke/credentials";
+import type { StoredAccount } from "@repo/credentials";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -39,7 +39,7 @@ import {
   experimentChoicesFrom,
   NO_EXPERIMENTS,
   type StoredAppSettings,
-} from "@luke/settings";
+} from "@repo/settings";
 
 const SETTINGS_FILE_VERSION = 2;
 

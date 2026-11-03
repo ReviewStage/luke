@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import type { AdminMetrics } from "@luke/features/admin-answer-wire";
-import { AccountScreen } from "@luke/panel/admin/screens/account";
-import { CostScreen } from "@luke/panel/admin/screens/cost";
-import { DashboardScreen } from "@luke/panel/admin/screens/dashboard";
-import { DayScreen } from "@luke/panel/admin/screens/day";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
-import type { AdminRead } from "@luke/panel/admin/use-admin-read";
+import type { AdminMetrics } from "@repo/features/admin-answer-wire";
+import { AccountScreen } from "@repo/panel/admin/screens/account";
+import { CostScreen } from "@repo/panel/admin/screens/cost";
+import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
+import { DayScreen } from "@repo/panel/admin/screens/day";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
+import type { AdminRead } from "@repo/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";

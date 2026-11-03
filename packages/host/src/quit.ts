@@ -9,7 +9,7 @@
  * see that from the next statement it resumes on.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 
 /** Where the process stands: nothing asked for, a teardown under way, or one finished. */
 export const QUIT_STAGE = {

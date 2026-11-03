@@ -1,7 +1,7 @@
-import { CODEX_ERROR_INFO, codexErrorKind } from "@luke/agent-runner/protocol";
-import { CODEX_TOOL, WORKSPACE_MCP_SERVER_NAMES } from "@luke/features/agent-tools";
-import { redactCredentials } from "@luke/features/credential-redaction";
-import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
+import { CODEX_ERROR_INFO, codexErrorKind } from "@repo/agent-runner/protocol";
+import { CODEX_TOOL, WORKSPACE_MCP_SERVER_NAMES } from "@repo/features/agent-tools";
+import { redactCredentials } from "@repo/features/credential-redaction";
+import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@repo/wire";
 import { Option, Predicate, Schema } from "effect";
 import { storedServerCall } from "../../integrations/connection-tools.js";
 import {
@@ -22,7 +22,7 @@ import {
  * codex-moments.ts -- Codex's app-server notifications, as its runner posts them, read as the moments of a native run.
  *
  * Each notification the pinned `codex app-server` sends (the runner's
- * `CodexNotification`, `@luke/agent-runner/protocol`) and each of the
+ * `CodexNotification`, `@repo/agent-runner/protocol`) and each of the
  * runner's own (`runner-moments.ts`) is read here for what the transcript
  * keeps. Codex names no model call, so its items stand in: an agent message
  * is a step, its deltas drafting the step's words and its completion

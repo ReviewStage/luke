@@ -42,14 +42,14 @@
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
-import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { type Agent, readAgent } from "@repo/database/models/agent-store";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import {
   nextSessionSandboxes,
   sessionSandboxDeferred,
   sessionSandboxDeleted,
-} from "@luke/database/models/session-sandbox-cleanup";
+} from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { discardedOrLogged } from "./device-discard.js";

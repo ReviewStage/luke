@@ -1,5 +1,5 @@
-import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { playheadText } from "@luke/features/time-format";
+import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
+import { playheadText } from "@repo/features/time-format";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import {
@@ -51,7 +51,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * the screen recording, as it keeps a picture (`ph-no-capture`).
  *
  * It is drawn in Tailwind utilities over the theme, its inline frame a
- * `Card` (shadcn/ui's) and its controls `@luke/ui`'s own; shadcn/ui has no
+ * `Card` (shadcn/ui's) and its controls `@repo/ui`'s own; shadcn/ui has no
  * player.
  */
 

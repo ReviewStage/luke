@@ -3,12 +3,12 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@luke/host/app-state";
-import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
-import { PUSH_METHOD } from "@luke/host/contract";
-import { memoryHistory } from "@luke/ui/history-adapter";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@repo/host/app-state";
+import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
+import { PUSH_METHOD } from "@repo/host/contract";
+import { memoryHistory } from "@repo/ui/history-adapter";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

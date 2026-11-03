@@ -1,4 +1,4 @@
-import { formatDayTick } from "@luke/features/time-format";
+import { formatDayTick } from "@repo/features/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "../admin-format.js";
 import { partialDayKey } from "../daily-series.js";

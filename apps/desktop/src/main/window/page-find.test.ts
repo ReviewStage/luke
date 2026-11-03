@@ -7,15 +7,15 @@ import {
   PAGE_FIND_TYPE,
   type PageFindAsk,
   pageFindAnswerSchema,
-} from "@luke/features/page-find";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_LINK_TYPE, pageLinkPressSchema } from "@luke/features/page-link";
+} from "@repo/features/page-find";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_LINK_TYPE, pageLinkPressSchema } from "@repo/features/page-link";
 import {
   PAGE_PICK_ACT,
   PAGE_PICK_TYPE,
   type PagePickAsk,
   pagePickAnswerSchema,
-} from "@luke/features/page-pick";
+} from "@repo/features/page-pick";
 import { Effect, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { pageResponse } from "./page-protocol";

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
-import type { SkillOption } from "@luke/ui/skill-mention";
-import { MESSAGE_ROLE } from "@luke/wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
+import type { SkillOption } from "@repo/ui/skill-mention";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

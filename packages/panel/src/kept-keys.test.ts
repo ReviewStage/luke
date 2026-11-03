@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";

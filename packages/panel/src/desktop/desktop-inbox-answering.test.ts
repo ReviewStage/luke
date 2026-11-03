@@ -5,7 +5,7 @@ import {
   AGENT_CALL_FAILURE,
   type AgentInboxAnsweredView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -16,9 +16,9 @@ import {
   type InboxItem,
   type InboxMessage,
   inboxReadAskSchema,
-} from "@luke/features/inbox-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/inbox-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect, Schema } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";

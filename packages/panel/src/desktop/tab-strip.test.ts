@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,13 +12,13 @@ import { restOn } from "../testing/hint-rest.js";
 import { MenuTab, TabStrip } from "./tab-strip.js";
 
 /**
- * tab-strip.test.ts -- the window's strip, `@luke/ui`'s Tabs with the
+ * tab-strip.test.ts -- the window's strip, `@repo/ui`'s Tabs with the
  * window's hints and menus: a tab other than the chosen one names itself in
  * its hint; its menu moves it a place either way, under a finger's long press
  * and a mouse's right-click alike, leaving the strip's row holding its tabs
  * alone while it stands; and ⇧⌘→ moves the focused tab a place along. The plan's column and the side panel
  * draw this one strip, so this holds for both. The strip's own keys, drag,
- * and scroll are `@luke/ui`'s (`components/tabs/tabs.test.ts`). Synthetic
+ * and scroll are `@repo/ui`'s (`components/tabs/tabs.test.ts`). Synthetic
  * throughout.
  */
 

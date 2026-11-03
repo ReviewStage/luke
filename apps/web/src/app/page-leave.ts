@@ -18,7 +18,7 @@
  * question rather than past it, a Leave answered for a page's work among them.
  */
 
-import type { AppPlatform } from "@luke/panel/app-platform";
+import type { AppPlatform } from "@repo/panel/app-platform";
 
 /** The ask the panel stands while a page holds unsaved work. */
 type LeaveAsk = Parameters<NonNullable<AppPlatform["unsavedWork"]>>[0];

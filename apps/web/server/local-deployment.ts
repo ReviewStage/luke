@@ -20,7 +20,7 @@
 
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Route } from "@luke/service/route";
+import type { Route } from "@repo/service/route";
 import { dispatchRoutes, ORPC_ROUTE_KEY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import {

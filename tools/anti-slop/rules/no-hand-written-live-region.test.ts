@@ -27,7 +27,7 @@ function panel(code: string): { code: string; filename: string } {
 
 tester.run("no-hand-written-live-region", noHandWrittenLiveRegionRule, {
   valid: [
-    // `@luke/ui` draws the visible blocks and the announcer, which keep their roles.
+    // `@repo/ui` draws the visible blocks and the announcer, which keep their roles.
     { code: 'function A() { return <p role="alert">Words</p>; }', filename: UI_FILE },
     { code: 'function A() { return <div aria-live="polite" />; }', filename: UI_FILE },
     // Other roles are no live region.

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { IntegrationTool } from "@luke/features/integration-health";
-import { SIGN_IN } from "@luke/features/integration-sign-in";
+import type { IntegrationTool } from "@repo/features/integration-health";
+import { SIGN_IN } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -11,8 +11,8 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
   type IntegrationToolsProblemReason,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, startTask } from "@repo/database/testing";
 import { type Context, Effect, Option } from "effect";
 import {
   recordingProductAnalytics,

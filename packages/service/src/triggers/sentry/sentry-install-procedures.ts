@@ -22,17 +22,17 @@
  * resource.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { INTEGRATION_INSTALLATION_STATUS } from "@luke/database/integration-vocabulary";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { INTEGRATION_INSTALLATION_STATUS } from "@repo/database/integration-vocabulary";
 import {
   markIntegrationInstallationDeleted,
   openIntegrationInstallIntent,
   workspaceIntegrationInstallations,
-} from "@luke/database/models/integration-installation-store";
-import { type Workspace, workspaceOf } from "@luke/database/models/workspace-store";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/database/models/integration-installation-store";
+import { type Workspace, workspaceOf } from "@repo/database/models/workspace-store";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import { Effect, Option, Result } from "effect";
 import {
   HOSTED_REFUSAL,

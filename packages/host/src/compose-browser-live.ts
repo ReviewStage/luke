@@ -2,7 +2,7 @@
  * compose-browser-live.ts -- a cloud Browser tab's live view, on the window's behalf: each view a panel attached held open on the service's live relay under the account's credential, its text frames carried each way.
  *
  * The desktop's panel draws the view and decides when to open it again
- * (`@luke/panel`'s `cloud-browser-live.ts`); this only carries the socket,
+ * (`@repo/panel`'s `cloud-browser-live.ts`); this only carries the socket,
  * because the bearer is the host's and never the page's. An attached view
  * is a connection main named, held here on one fiber until the panel lets
  * it go or the socket closes: the fiber opens the relay socket
@@ -18,14 +18,14 @@
  * beside the terminals (`compose-terminals.ts`), whose socket it opens with.
  */
 
-import { webSocketOrigin } from "@luke/features";
+import { webSocketOrigin } from "@repo/features";
 import {
   BROWSER_LIVE_ABNORMAL_CLOSE,
   browserLiveConnectionParamsSchema,
   browserLiveConnectParamsSchema,
   browserLivePath,
   browserLiveSendParamsSchema,
-} from "@luke/features/browser-live-acts";
+} from "@repo/features/browser-live-acts";
 import {
   carried,
   GATEWAY_EVENT,
@@ -33,7 +33,7 @@ import {
   type GatewayMethodHandler,
   RefusedRefusal,
   readParams,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import { Effect, FiberMap, Stream } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";

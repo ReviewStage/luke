@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
 import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { afterEach, test, vi } from "vitest";

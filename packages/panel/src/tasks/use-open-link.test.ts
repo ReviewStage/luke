@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import type { TaskSummary } from "@repo/features/task-wire";
 import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

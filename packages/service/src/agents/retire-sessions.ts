@@ -1,9 +1,9 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   type StandingSession,
   standingSessionsNamed,
-} from "@luke/database/models/recorded-session";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import { Duration, Effect, Option, Ref, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { routedSessions } from "./coder-host/runtime-sessions.js";

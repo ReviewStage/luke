@@ -17,7 +17,7 @@ import { cn } from "../cn.js";
  *   every glyph stands on one baseline. None of `pointer-events-none` or
  *   `select-none`, which the window never set on a chord.
  * - `KbdGroup` is the chord: shadcn's `inline-flex items-center` with the
- *   gap and type `@luke/ui`'s `Shortcut` gives it
+ *   gap and type `@repo/ui`'s `Shortcut` gives it
  *   (`components/shortcut/shortcut.tsx`), which is what an app draws; this
  *   is its inside.
  */

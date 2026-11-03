@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -13,7 +13,7 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentStartRequest,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

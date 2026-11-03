@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { randomInt } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/database/github-installation-vocabulary";
-import { listWorkspaces, workspaceOf } from "@luke/database/models/workspace-store";
-import { member } from "@luke/database/schemas/auth";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
+} from "@repo/database/github-installation-vocabulary";
+import { listWorkspaces, workspaceOf } from "@repo/database/models/workspace-store";
+import { member } from "@repo/database/schemas/auth";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@repo/database/testing";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

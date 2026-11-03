@@ -2,7 +2,7 @@
  * relay-credential.ts -- a service relay's socket opened under the account's call credential, as the terminals and a cloud Browser tab's live view open theirs: the desktop's bearer as the handshake's header, or nothing of the host's own where the credential is a page's cookie, which the browser carries itself.
  */
 
-import { type CallCredential, resolvedCredential } from "@luke/features";
+import { type CallCredential, resolvedCredential } from "@repo/features";
 import { Effect, type Scope } from "effect";
 import type { OpenTerminalSocket, TerminalSocketOpening } from "./compose-terminals.js";
 

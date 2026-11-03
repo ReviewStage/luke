@@ -1,4 +1,4 @@
-import { Announcer, surfaceAttributes } from "@luke/ui";
+import { Announcer, surfaceAttributes } from "@repo/ui";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Catalog, readView } from "./catalog";

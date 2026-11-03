@@ -1,5 +1,5 @@
-import { WRITING_BLOCK, WRITING_INSERT, WRITING_MARK } from "@luke/settings/shortcuts";
-import { GAP, Inline, TEXT_VARIANT, Text, WritingGlyph } from "@luke/ui";
+import { WRITING_BLOCK, WRITING_INSERT, WRITING_MARK } from "@repo/settings/shortcuts";
+import { GAP, Inline, TEXT_VARIANT, Text, WritingGlyph } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

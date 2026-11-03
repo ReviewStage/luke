@@ -16,7 +16,7 @@ import {
   installedSkillUpdatedViewSchema,
   installedSkillUpdateParamsSchema,
   installedSkillViewSchema,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { INSTALLED_SKILL_ACT_KIND } from "./kinds.js";
@@ -26,7 +26,7 @@ import { INSTALLED_SKILL_ACT_KIND } from "./kinds.js";
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
  * page's value into what crosses the port, the convention the hosted contract
- * keeps (`@luke/features/contract`).
+ * keeps (`@repo/features/contract`).
  */
 export const installedSkillActsContract = {
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_LIST]: actProcedure(

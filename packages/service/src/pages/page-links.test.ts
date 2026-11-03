@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
-import { PAGE_OWNER } from "@luke/features/page-wire";
-import { REDACTED, scrubbedUrl } from "@luke/features/sentry-addresses";
+import { PAGE_SANDBOX_ORIGIN } from "@repo/features/page-frame";
+import { PAGE_OWNER } from "@repo/features/page-wire";
+import { REDACTED, scrubbedUrl } from "@repo/features/sentry-addresses";
 import { Effect, Logger, Redacted } from "effect";
 import { afterEach, vi } from "vitest";
 import {

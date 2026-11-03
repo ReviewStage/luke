@@ -1,4 +1,4 @@
-import type { AgentPullRequest } from "@luke/features/agent-wire";
+import type { AgentPullRequest } from "@repo/features/agent-wire";
 import { createContext, useContext } from "react";
 import type { AgentsControl } from "./use-agents.js";
 

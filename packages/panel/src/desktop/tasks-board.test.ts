@@ -8,18 +8,18 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@luke/ui";
+} from "@repo/features/task-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@repo/ui";
 import {
   COMPLETED_WINDOW,
   DEFAULT_BOARD_DISPLAY,
   NO_TASKS_FILTER,
   TASKS_GROUPING,
   type TasksDisplay,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { readTaskBlocks } from "@luke/database/models/task-block-store";
-import { createTask, listTasks, readTaskHeader } from "@luke/database/models/task-store";
-import { fakeWorkspaceSeams, getTestDB, openWorkspace } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { Database } from "@repo/database/core/query";
+import { readTaskBlocks } from "@repo/database/models/task-block-store";
+import { createTask, listTasks, readTaskHeader } from "@repo/database/models/task-store";
+import { fakeWorkspaceSeams, getTestDB, openWorkspace } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   TASK_CREATE_RELATION_KIND,
   type TaskCreateRelation,
   type TaskCreateRequest,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";

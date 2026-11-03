@@ -1,7 +1,7 @@
-import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "@luke/ui";
+import type { TasksWorkspacePhotoAnswer } from "@repo/features/tasks-view";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "@repo/ui";
 import { useEffect, useReducer } from "react";
 import { useAct } from "../act.js";
 
@@ -22,7 +22,7 @@ import { useAct } from "../act.js";
  * know it by, and two workspaces of one name still read apart more often than
  * not. The letter is the tile's own text, the name's first character as a
  * reader sees it, an emoji's whole, because text is what session replay masks
- * (`session-replay.ts`), as it masks an image's address. It is an `@luke/ui` Avatar tile. The tile is hidden
+ * (`session-replay.ts`), as it masks an image's address. It is an `@repo/ui` Avatar tile. The tile is hidden
  * from a screen reader, since the row beside it already says the name.
  */
 

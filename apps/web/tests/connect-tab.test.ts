@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { ACT_KIND } from "@luke/host/acts";
-import type { ActPortClient } from "@luke/host/contract";
+import { ACT_KIND } from "@repo/host/acts";
+import type { ActPortClient } from "@repo/host/contract";
 import { afterEach, expect, test } from "vitest";
 import { type ConnectBrowser, type ConnectTab, connectTabs } from "../src/app/connect-tab";
 import { pageLeave } from "../src/app/page-leave";

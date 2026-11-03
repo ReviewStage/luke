@@ -1,13 +1,13 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { sectionAnchors } from "@luke/features/mention-link";
-import { planSections } from "@luke/features/plan-document";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { PlanRevisionLine } from "@luke/features/task-wire";
-import { readFailedWords, readingWords } from "@luke/features/words";
-import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { sectionAnchors } from "@repo/features/mention-link";
+import { planSections } from "@repo/features/plan-document";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { PlanRevisionLine } from "@repo/features/task-wire";
+import { readFailedWords, readingWords } from "@repo/features/words";
+import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BACK_BUTTON_LOOK,
   BackButton,
@@ -40,10 +40,10 @@ import {
   Toolbar,
   Tooltip,
   useMinute,
-} from "@luke/ui";
-import { type Actor, actorName } from "@luke/ui/actor-model";
-import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@luke/ui/icons";
-import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
+} from "@repo/ui";
+import { type Actor, actorName } from "@repo/ui/actor-model";
+import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@repo/ui/icons";
+import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";

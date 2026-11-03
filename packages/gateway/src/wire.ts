@@ -4,8 +4,8 @@
  * parameter that is not the shape its method takes, read a method's
  * parameters by its schema, and read one event kind under a guard.
  */
-import { unparsedWire, type WireRecord, type WireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { unparsedWire, type WireRecord, type WireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result, type Schema } from "effect";
 import type { GatewayClient } from "./host.js";
 import { type GatewayEventKind, InvalidParamsRefusal } from "./protocol.js";

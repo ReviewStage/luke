@@ -1,7 +1,7 @@
-import type { AgentOverviewPullRequest } from "@luke/features/agent-wire";
-import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
+import type { AgentOverviewPullRequest } from "@repo/features/agent-wire";
+import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@repo/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   ANNOUNCE,
   Button,
@@ -11,8 +11,8 @@ import {
   EDITABLE_BLOCK_KIND,
   EditableBlock,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { confirmFailure } from "../failure-report.js";

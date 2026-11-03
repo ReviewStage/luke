@@ -6,7 +6,7 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-} from "@luke/credentials/snapshot";
+} from "@repo/credentials/snapshot";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

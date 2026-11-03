@@ -2,8 +2,8 @@ import {
   CONNECTION_HEALTH,
   type ConnectionHealth,
   type IntegrationTool,
-} from "@luke/features/integration-health";
-import { SIGN_IN, type SignIn, signInLine } from "@luke/features/integration-sign-in";
+} from "@repo/features/integration-health";
+import { SIGN_IN, type SignIn, signInLine } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -12,8 +12,8 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
   integrationAccountNames,
-} from "@luke/features/integration-wire";
-import { INTEGRATION_LABEL, readFailedWords } from "@luke/features/words";
+} from "@repo/features/integration-wire";
+import { INTEGRATION_LABEL, readFailedWords } from "@repo/features/words";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
@@ -32,12 +32,12 @@ import { searchTokens } from "./search-tokens.js";
  * opens the list of them. A server not
  * connected offers to connect it, there and then; one whose sign-in expired,
  * or connected but whose server refused it or answered an error of its own
- * (`@luke/features/integration-health`), offers to reconnect, the latter with the
+ * (`@repo/features/integration-health`), offers to reconnect, the latter with the
  * server's reason beside its name; one whose server could not be reached
  * keeps its switch, with that said beside its name; one whose sign-in the
  * window waits on offers to reopen or cancel it, and one whose sign-in
  * failed or never finished says so and offers to try again, as Settings
- * does (`@luke/features/integration-sign-in`); one this
+ * does (`@repo/features/integration-sign-in`); one this
  * deployment does not offer the account is not drawn at all, as the agent is never
  * handed it. No other row says where it stands in words: the switch, the
  * count, and the buttons are what say it. A read of the connections that

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_PAYER, type AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
+import { AGENT_PAYER, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

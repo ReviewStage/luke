@@ -3,19 +3,19 @@
  *
  * Run by CI for each Linux architecture and for an Apple silicon Mac
  * (`.github/workflows/release-host.yml`) once both bundles are built
- * (`pnpm --filter @luke/host-daemon build`,
- * `pnpm --filter @luke/agent-runner build`):
+ * (`pnpm --filter @repo/host-daemon build`,
+ * `pnpm --filter @repo/agent-runner build`):
  *
  *   tsx scripts/package.ts --arch x64
  *   tsx scripts/package.ts --os darwin --arch arm64
  *
- * Node is fetched as its pin names it (`@luke/agent-runner/pins`'
+ * Node is fetched as its pin names it (`@repo/agent-runner/pins`'
  * `NODE_LINUX_PINS`, `NODE_MAC_PIN`), refused unless it arrived at its
  * pinned size and digest, and only its pinned members are kept. Claude Code and Codex are
  * not carried: the daemon fetches each at its pin on the box
- * (`@luke/host/daemon`). The release is laid out and packed as
+ * (`@repo/host/daemon`). The release is laid out and packed as
  * `release-layout.ts` says. It lands in `dist/release/`, named as the release
- * names it (`@luke/features/host-release`), with a `.sha256` beside it in
+ * names it (`@repo/features/host-release`), with a `.sha256` beside it in
  * `sha256sum`'s own format, which the install script's digest is read off.
  */
 
@@ -32,9 +32,9 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@luke/agent-runner/pins";
-import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballName } from "@luke/features/host-release";
+import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@repo/agent-runner/pins";
+import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@repo/features/device-agent-wire";
+import { HOST_TARGET, type HostTarget, hostTarballName } from "@repo/features/host-release";
 import {
   packedRelease,
   type ReleaseSources,

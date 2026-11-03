@@ -2,7 +2,7 @@ import {
   type TaskRecordLiveAnswer,
   type TaskRecordLiveRows,
   taskRecordLiveRowsSchema,
-} from "@luke/features/live-wire";
+} from "@repo/features/live-wire";
 import { type Effect, Stream } from "effect";
 import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
 

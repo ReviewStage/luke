@@ -6,7 +6,7 @@
  * worth asserting without one.
  */
 
-import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
+import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
 
 /**

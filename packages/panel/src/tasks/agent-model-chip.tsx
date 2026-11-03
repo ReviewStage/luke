@@ -1,6 +1,6 @@
-import { runtimeModelRule, runtimeModels } from "@luke/features/agent-runtime-models";
-import { AGENT_PAYER, type AgentPayer, type AgentUsage } from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
+import { runtimeModelRule, runtimeModels } from "@repo/features/agent-runtime-models";
+import { AGENT_PAYER, type AgentPayer, type AgentUsage } from "@repo/features/agent-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
 import {
   CHIP_LOOK,
   Chip,
@@ -11,8 +11,8 @@ import {
   TEXT_LINK_LOOK,
   TextLink,
   Tooltip,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
 import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
@@ -25,7 +25,7 @@ import { useOpenLink } from "./use-open-link.js";
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
  * Drawn along the composer card's foot as the window's toolbar chip
- * (`@luke/ui`'s `Chip`), the task toolbar's repository chip's look, with no
+ * (`@repo/ui`'s `Chip`), the task toolbar's repository chip's look, with no
  * border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on and the standard context window's size where the
@@ -33,7 +33,7 @@ import { useOpenLink } from "./use-open-link.js";
  * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
  * from its trailing edge, since the chip stands at the foot's right
- * (`@luke/ui`'s `SearchableMenu`), the
+ * (`@repo/ui`'s `SearchableMenu`), the
  * agent's choice checked; what the menu chooses is the agent's model,
  * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
@@ -108,7 +108,7 @@ export function AgentModelChip({
   usage: AgentUsage | undefined;
   /** Who pays for the agent, as its transcript's last page said, before a turn settled too; nothing where it said none. */
   payer?: AgentPayer | undefined;
-  /** The chip's look: the agent box's toolbar chip, or a form row's field (`@luke/ui`'s `Chip`). */
+  /** The chip's look: the agent box's toolbar chip, or a form row's field (`@repo/ui`'s `Chip`). */
   look?: ChipLook;
   /** How wide the chip stands; its words' own width where none is named. */
   width?: ChipWidth | undefined;

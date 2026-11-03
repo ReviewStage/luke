@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@repo/database/core/migrator";
+import { conversations, messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   countRowsWhere,
   deleteUser,
@@ -9,8 +9,8 @@ import {
   insertMessage,
   insertTurn,
   openHostedStoreTestDatabase,
-} from "@luke/database/testing";
-import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/database/testing";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";

@@ -3,15 +3,15 @@ import {
   type CodexConfig,
   type ContentBlock,
   INPUT_LINE,
-} from "@luke/agent-runner/protocol";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/agent-runner/protocol";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Option, Schema } from "effect";
 
 /**
  * local-agent-first-lines.ts -- a local agent's first lines as its device hands them to the runner: what the device tells the agent of the machine its turn starts on, ahead of the launch's first message, and the harness's session let go of where the device holds none of it to resume.
  *
  * A device's launch carries the runner's first lines in its secrets, the
- * config and then the first message (`@luke/agent-runner/protocol`), which
+ * config and then the first message (`@repo/agent-runner/protocol`), which
  * the device writes to the runner's stdin. What only the device knows, that
  * the agent's folder was cleared since its last turn, it says here, as a
  * text block ahead of that message's own, so both harnesses read it as the

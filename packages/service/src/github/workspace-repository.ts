@@ -8,7 +8,7 @@
  * still decides whether an agent may start on it. A workspace with no
  * installation reaches no repository at all.
  *
- * A refusal says why (`@luke/features/repository-reach-wire`), and where
+ * A refusal says why (`@repo/features/repository-reach-wire`), and where
  * the owner's installation stands for another workspace the task's owner is
  * in, it names that workspace, since an installation stands for one
  * workspace alone and moving the task there is the one thing that reaches the
@@ -22,15 +22,15 @@
  * falls back to anyone's token, and an automation acts as no member.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   readAgent,
   readVisibleAgentWorkspace,
-} from "@luke/database/models/agent-store";
-import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+} from "@repo/database/models/agent-store";
+import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

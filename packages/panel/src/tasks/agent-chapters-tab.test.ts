@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@luke/brand";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@repo/brand";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentChangedFile,
@@ -17,27 +17,27 @@ import {
   PULL_REQUEST_STATE,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
   type Chapter,
   LINE_REF_SIDE,
-} from "@luke/features/pull-request-chapters";
-import type { PullRequestChaptersAnswerView } from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters";
+import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersState,
-} from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
-} from "@luke/features/pull-request-write-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/pull-request-write-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";

@@ -13,12 +13,12 @@ import { cn } from "../cn.js";
  * because what it holds sets itself; it has no `size` prop, no type or ink
  * of its own, and no ring, since its edge is a border in the hairline ink,
  * which a dragged row's ring recolours; and its ground, corner, and inset
- * are the ones `@luke/ui`'s `Card` (`components/card/`) picks for each look,
+ * are the ones `@repo/ui`'s `Card` (`components/card/`) picks for each look,
  * corner, and padding, rather than `bg-card`, `rounded-xl`, and a spacing
  * of its own. Its `CardHeader`, `CardTitle`, `CardDescription`,
  * `CardAction`, `CardContent`, and `CardFooter` are dropped, because
  * nothing draws them: a card's content is its caller's, and its one head is
- * `@luke/ui`'s `CardHead`.
+ * `@repo/ui`'s `CardHead`.
  */
 
 /** The elements a card may be made as. */

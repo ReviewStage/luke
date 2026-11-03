@@ -1,12 +1,12 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
+import { drawnDark, onDrawnThemeChange } from "@repo/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-} from "@luke/ui/diagram-contract";
+} from "@repo/ui/diagram-contract";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useReducer, useSyncExternalStore } from "react";

@@ -6,7 +6,7 @@ import { parseSync } from "oxc-parser";
 /**
  * module-graph.ts -- a module's imports and exports as its text states them, read without running it.
  *
- * The guards that follow a graph (`@luke/ui`'s barrel, the catalog's
+ * The guards that follow a graph (`@repo/ui`'s barrel, the catalog's
  * examples, the panel's launch bundle) read it with oxc's module record, so a
  * stylesheet import or a module that touches the DOM as it loads costs them
  * nothing, and a type-only edge is told apart from one a bundler follows.

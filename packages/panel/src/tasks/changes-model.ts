@@ -6,7 +6,7 @@ import {
   type DiffSide,
   PATCH_OMITTED,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   DIFF_ROW,
   type DiffHunk,
@@ -15,9 +15,9 @@ import {
   HUNK_COUNTS,
   LOCKFILE_NAMES,
   patchHunks,
-} from "@luke/features/diff-hunks";
-import { pullRequestAddressOf } from "@luke/features/link-grammar";
-import { isSecretFile } from "@luke/features/task-wire";
+} from "@repo/features/diff-hunks";
+import { pullRequestAddressOf } from "@repo/features/link-grammar";
+import { isSecretFile } from "@repo/features/task-wire";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -66,7 +66,7 @@ import {
  * the thread is on down to its last, counted where the thread was made
  * rather than where it stands now, since a later push moves the one and not
  * the other. The hunk's lines are read as every patch here is
- * (`patchHunks`, from `@luke/features/diff-hunks`), counted by the header,
+ * (`patchHunks`, from `@repo/features/diff-hunks`), counted by the header,
  * so a removed line whose own text starts with dashes is still one removed
  * line; the rows kept are written again as a patch of their own, its header
  * counting them, with the thread's own lines selected.

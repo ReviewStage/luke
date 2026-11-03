@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readVisibleAgent } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readVisibleAgent } from "@repo/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,10 +13,10 @@ import {
   readAutomation,
   recordAutomationRun,
   updateAutomationCommitted,
-} from "@luke/database/models/automation-store";
-import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
+} from "@repo/database/models/automation-store";
+import { isWorkspaceMember, personalWorkspaceOf } from "@repo/database/models/workspace-store";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { nextScheduledRun, readSchedule } from "@repo/features/automation-schedule";
 import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
@@ -31,7 +31,7 @@ import {
   type AutomationTrigger,
   type automationChangeRequestSchema,
   type automationCreateRequestSchema,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";

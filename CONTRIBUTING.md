@@ -90,9 +90,9 @@ loads the new build only when it opens or reloads a window.
 
 ```
 apps/
-  catalog/        every shared @luke/ui component on synthetic data, built and never deployed
+  catalog/        every shared @repo/ui component on synthetic data, built and never deployed
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
-  host/           @luke/host-daemon, the `vespin-host` daemon that runs on a user's own machine; released as host-v* tags
+  host/           @repo/host-daemon, the `vespin-host` daemon that runs on a user's own machine; released as host-v* tags
   web/            the site, the web app, the Vercel function routes (server/routes/), and the deployment shell
 packages/
   agent-runner/   the runner in a coding agent's sandbox: Claude Code or Codex, messages in and out

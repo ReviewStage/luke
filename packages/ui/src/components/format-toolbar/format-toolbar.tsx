@@ -7,7 +7,7 @@ import {
   type WritingBlock,
   type WritingMark,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { Fragment, type ReactNode, type Ref, useMemo } from "react";
 import { ChevronDownIcon } from "../../face/glyphs.js";
 import { CommentAddIcon } from "../../icons/lucide-glyphs.js";

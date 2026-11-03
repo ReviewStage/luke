@@ -2,7 +2,7 @@ import {
   MAC_COMMAND_KIND,
   type MacCommandKind,
   type MacCommandResult,
-} from "@luke/features/mac-command-wire";
+} from "@repo/features/mac-command-wire";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

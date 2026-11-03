@@ -6,12 +6,12 @@
 // the head runs before the first frame, and a file rather than inline,
 // because the page's policy runs no inline script. System, and no choice
 // kept, follow the machine, as the setting's default does. The grounds are
-// the site palette's own (`@luke/ui`'s `palettes.css`), which a test holds
+// the site palette's own (`@repo/ui`'s `palettes.css`), which a test holds
 // this file to.
 //
 // It reads too whether the tab last read someone signed in here
 // (`src/app/first-frame-hint.tsx`), and how the shell last drew its sidebar,
-// which the panel keeps in this same storage (`@luke/panel`'s
+// which the panel keeps in this same storage (`@repo/panel`'s
 // `sidebar-collapse.ts`): pinned, and how wide, so the frame app.html draws
 // before the panel stands it the same. A browser signed out, or one that
 // never signed in, draws no sidebar in the frame, since the sign-in gate

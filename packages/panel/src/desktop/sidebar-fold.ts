@@ -1,4 +1,4 @@
-import { type DisclosureControl, NAV_COUNT_SHOWN, type NavCount } from "@luke/ui";
+import { type DisclosureControl, NAV_COUNT_SHOWN, type NavCount } from "@repo/ui";
 
 /**
  * sidebar-fold.ts -- how the sidebar's heads hand `GroupHeader` the fold and the count they keep.

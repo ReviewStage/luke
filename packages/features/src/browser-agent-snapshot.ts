@@ -12,8 +12,8 @@
  * saying the rest was left out.
  */
 
-import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Result, Schema } from "effect";
 import { BROWSER_AGENT_LIMITS, browserRefOf, cutBrowserText } from "./browser-agent-actions.js";
 

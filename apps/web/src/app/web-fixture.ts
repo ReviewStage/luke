@@ -11,7 +11,7 @@
  * production, ignores it as the deployment does.
  */
 
-import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
+import { RUN_PROFILE, type RunProfile } from "@repo/host/app-state";
 
 /** The query parameter that names the profile. */
 const FIXTURE_PARAMETER = "fixture";

@@ -35,11 +35,11 @@ import { ChevronRightIcon } from "../face/glyphs.js";
  *   a hint stands before it and an unchecked setting keeps its room; a
  *   submenu's trigger ends in the menu's chevron slot. A separator is a
  *   rule (`<hr>`), as the menu's always was.
- * - The parts `@luke/ui`'s `Menu` draws nothing with (trigger, group,
+ * - The parts `@repo/ui`'s `Menu` draws nothing with (trigger, group,
  *   label, radio group and item, shortcut, and the bare portal) are left
  *   out, because nothing would call them.
  *
- * `@luke/ui`'s `Menu` (`components/menu/menu.tsx`) is what an app draws;
+ * `@repo/ui`'s `Menu` (`components/menu/menu.tsx`) is what an app draws;
  * this is its inside.
  */
 

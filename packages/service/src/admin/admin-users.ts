@@ -1,9 +1,9 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminSignIn,
   AdminUserList,
   AdminUserListRow,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
@@ -11,7 +11,7 @@ import {
   adminMetricsScope,
   adminMetricsWindow,
   adminUsersSearch,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import { dayStart } from "./admin-metrics.js";

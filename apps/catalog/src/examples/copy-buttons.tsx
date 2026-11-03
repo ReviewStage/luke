@@ -1,5 +1,5 @@
-import { BUTTON_SIZE, COPY_LOOK, CopyButton, GAP, Inline } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { BUTTON_SIZE, COPY_LOOK, CopyButton, GAP, Inline } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

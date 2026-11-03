@@ -2,35 +2,35 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@luke/features/agent-view";
+import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequest,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+} from "@repo/features/integration-wire";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import {
   encodeMention,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
   mentionMarkdown,
-} from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+} from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

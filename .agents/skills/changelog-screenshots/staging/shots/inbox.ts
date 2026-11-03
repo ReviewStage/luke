@@ -16,8 +16,8 @@
  * `CODING_AGENTS_INBOX_ATTACHMENT` (`expired-invite-picture.ts`).
  */
 
-import type { CodeToken } from "@luke/features/tasks-view";
-import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+import type { CodeToken } from "@repo/features/tasks-view";
+import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -31,9 +31,9 @@ import {
   type InboxAnswer,
   type InboxItem,
   type InboxMessage,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { ACT_KIND } from "@repo/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { ago } from "./clock";

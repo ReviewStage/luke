@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { Context, Effect } from "effect";
 import type { AppStateDelivery } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";

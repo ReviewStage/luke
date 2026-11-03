@@ -11,12 +11,12 @@
  * is not listed.
  */
 
-import type { AdminIntegration } from "@luke/features/admin-answer-wire";
+import type { AdminIntegration } from "@repo/features/admin-answer-wire";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 
 /** The providers the deployment reads from its own environment, in the order the list draws them. */
 const ADMIN_INTEGRATION = {

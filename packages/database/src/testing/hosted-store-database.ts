@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { atInstant } from "@luke/wire/testing";
+import { atInstant } from "@repo/wire/testing";
 import { Effect, type Layer, ManagedRuntime } from "effect";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
@@ -17,7 +17,7 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
  * `runWebMigrations` the production runner applies; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied. Each opening
  * is a database of its own on either dialect: a fresh PGlite, or a clone of
- * the migrated Postgres that `close` drops (`@luke/database/testing`), so a
+ * the migrated Postgres that `close` drops (`@repo/database/testing`), so a
  * statement one file forgets to scope reaches no other file's rows.
  */
 /**

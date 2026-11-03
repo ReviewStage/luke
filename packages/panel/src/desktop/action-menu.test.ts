@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PaneBar } from "@luke/ui";
+import { PaneBar } from "@repo/ui";
 import { CopyIcon } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,7 +15,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
  * and closes it again, a right-click that hangs the same menu at the
  * pointer, or under the row where the menu key asked with no point of its
  * own, and a row's acts in groups ruled apart. How the menu itself behaves
- * is `@luke/ui`'s `Menu`'s, tested beside it.
+ * is `@repo/ui`'s `Menu`'s, tested beside it.
  */
 
 const roots: Root[] = [];

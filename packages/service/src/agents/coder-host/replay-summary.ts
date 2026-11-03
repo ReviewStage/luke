@@ -1,6 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   newestStepsWithin,
   REPLAY_SENDER,
@@ -8,15 +8,15 @@ import {
   type ReplaySummary,
   stepsBytes,
   summaryBytes,
-} from "@luke/features/agent-replay";
+} from "@repo/features/agent-replay";
 import {
   AGENT_ATTACHMENT_TYPE,
   type AgentAttachment,
   base64Bytes,
-} from "@luke/features/agent-wire";
-import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/features/agent-wire";
+import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { failureKind } from "@repo/runtime/effect";
 import { generateText, type LanguageModel } from "ai";
 import { Duration, Effect, Option, Redacted } from "effect";
 import { HostedEnvironment } from "../../environment.js";

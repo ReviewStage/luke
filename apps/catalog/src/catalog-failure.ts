@@ -2,8 +2,8 @@
  * catalog-failure.ts -- the failure every catalog example of a failure drawn in place stands on: reported nowhere, its details a fixed block like the one the panel builds, copied to the browser's own clipboard.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { ReportedFailure } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { ReportedFailure } from "@repo/ui/reported-failure";
 
 /** What a failure's Copy details puts on the clipboard, as the panel builds it from the failure's report. */
 const FAILURE_DETAILS = [

@@ -18,7 +18,7 @@
  * written as the handler returns them, the bytes the old group wrote.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import type { ErrorMapItem } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";

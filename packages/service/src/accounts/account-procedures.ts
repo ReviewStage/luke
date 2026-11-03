@@ -16,7 +16,7 @@
  * agents' default model, effort, and context window, which Settings alone
  * writes and which reads, until it does, as the fallback a Start naming no
  * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
- * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
+ * runs on, one of a fixed set (`@repo/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
  * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
@@ -36,28 +36,28 @@
  * The provider keys are `provider-keys-procedures.ts`'s.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
   AccountSeamEffect,
-} from "@luke/database/models/account-store";
-import type { StandingSession } from "@luke/database/models/recorded-session";
-import type { TaskStoreFailure } from "@luke/database/models/task-store";
-import { contextWindowSchema } from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@luke/features/chapters-model-choice";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/account-store";
+import type { StandingSession } from "@repo/database/models/recorded-session";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import { contextWindowSchema } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@repo/features/chapters-model-choice";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
+import { failureKind } from "@repo/runtime/effect";
 import {
   accountPreferencesFromWire,
   accountPreferencesParts,
   experimentChoicesFrom,
   NO_EXPERIMENTS,
   ownPreferenceFromWire,
-} from "@luke/settings";
-import type { UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/settings";
+import type { UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";

@@ -3,7 +3,7 @@
  *
  * A page imports `virtual:site/changelog-releases` or
  * `virtual:site/privacy-policy` and is handed values, every release's and
- * section's HTML among them, so the renderer (`@luke/ui/markdown`) runs in
+ * section's HTML among them, so the renderer (`@repo/ui/markdown`) runs in
  * the build and never in a visitor's tab. The drawing module is TypeScript
  * that reaches the shared packages' sources, so it is loaded through a Vite
  * server of its own, which runs it as the SSR build runs the pages, and

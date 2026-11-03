@@ -16,7 +16,7 @@
  * own `answer` says first, which may be nothing at all.
  */
 
-import type { CdpEvent, PageTarget } from "@luke/features/browser-cdp";
+import type { CdpEvent, PageTarget } from "@repo/features/browser-cdp";
 import { type Cause, Effect, Layer, Queue, Redacted, Ref, Schema, Stream } from "effect";
 import {
   AgentBrowser,

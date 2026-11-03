@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { memoryHistory } from "@luke/ui/history-adapter";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { memoryHistory } from "@repo/ui/history-adapter";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

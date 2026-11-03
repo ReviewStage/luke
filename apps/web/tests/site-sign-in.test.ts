@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
-import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
+import { desktopSessionPageUrl } from "@repo/features/desktop-session-wire";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
 import { act } from "react";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 

@@ -7,7 +7,7 @@ import {
   DIFF_LAYOUT,
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import type { DiffLook, FileViewHandle, FileViewProps } from "./contract.js";
 import { diffView } from "./index.js";

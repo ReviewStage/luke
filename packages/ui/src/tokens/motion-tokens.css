@@ -2,8 +2,8 @@
    the tables in that script and re-run it.
 
    The motion every surface reads: brand's springs, durations, and
-   delays under @luke/ui's names, so every app that imports
-   @luke/ui/tokens.css moves them alike. motion.css answers reduced motion. */
+   delays under @repo/ui's names, so every app that imports
+   @repo/ui/tokens.css moves them alike. motion.css answers reduced motion. */
 
 :root {
   --ui-spring: linear(

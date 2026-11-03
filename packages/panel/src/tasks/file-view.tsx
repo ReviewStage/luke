@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -21,7 +21,7 @@ import {
   Text,
   Tooltip,
   useResizeEdge,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   type ComponentProps,
   Fragment,

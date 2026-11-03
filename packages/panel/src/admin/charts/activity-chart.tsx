@@ -8,11 +8,11 @@
  * apart by the heading alone, and the tooltip carries each day's exact counts.
  */
 
-import type { AdminOverview } from "@luke/features/admin-answer-wire";
-import { ACTIVITY_FEATURE, type ActivityFeature } from "@luke/features/admin-overview-vocabulary";
-import type { ChartConfig } from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
-import { seriesHasNoData } from "@luke/ui/daily-series";
+import type { AdminOverview } from "@repo/features/admin-answer-wire";
+import { ACTIVITY_FEATURE, type ActivityFeature } from "@repo/features/admin-overview-vocabulary";
+import type { ChartConfig } from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
+import { seriesHasNoData } from "@repo/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import {
   ChartEmpty,

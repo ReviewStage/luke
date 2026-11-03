@@ -3,10 +3,10 @@ import {
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
   githubInstallStatusFromWire,
-} from "@luke/features";
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { GITHUB_INSTALL_OUTCOME, LANDING_TONE, landingWords } from "@luke/features/landing-outcome";
-import { AuthMark, AuthPage, MARK_PROVIDER } from "@luke/ui";
+} from "@repo/features";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { GITHUB_INSTALL_OUTCOME, LANDING_TONE, landingWords } from "@repo/features/landing-outcome";
+import { AuthMark, AuthPage, MARK_PROVIDER } from "@repo/ui";
 import { useState } from "react";
 import { startSiteAnalytics } from "./analytics";
 import { landingDescription, useConnectReturn } from "./connect-return";
@@ -17,7 +17,7 @@ import { mountPrerenderedPage } from "./mount-page";
  * Where GitHub leaves a developer once our GitHub App is installed, by
  * way of the service's Setup URL route, which confirmed the installation and
  * put one word of status on this page's address. Every string is fixed by
- * the build, worded once for every landing (`@luke/features/landing-outcome`):
+ * the build, worded once for every landing (`@repo/features/landing-outcome`):
  * the status chooses an outcome, and nothing the address carried is drawn.
  * The way back is the Open link (`connect-return.ts`).
  */

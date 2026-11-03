@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { AutomationRunsLiveAnswer, AutomationsLiveRows } from "@luke/features/automation-live";
+import type { AutomationRunsLiveAnswer, AutomationsLiveRows } from "@repo/features/automation-live";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   automationViewSchema,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -16,18 +16,18 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+} from "@repo/features/automation-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethod,
-} from "@luke/gateway";
-import { unparsedWire, type WireRecord, type WireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/gateway";
+import { unparsedWire, type WireRecord, type WireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";

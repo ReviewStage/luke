@@ -1,6 +1,6 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { RunMode } from "@luke/host";
-import type { EventPushName, PushPayload } from "@luke/host/contract";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { RunMode } from "@repo/host";
+import type { EventPushName, PushPayload } from "@repo/host/contract";
 import {
   app,
   BrowserWindow,

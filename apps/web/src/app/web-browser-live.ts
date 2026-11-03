@@ -9,8 +9,8 @@
  * abnormally, which the panel reads as a drop.
  */
 
-import { browserLivePath } from "@luke/features/browser-live-acts";
-import type { OpenBrowserLive } from "@luke/panel/app-platform";
+import { browserLivePath } from "@repo/features/browser-live-acts";
+import type { OpenBrowserLive } from "@repo/panel/app-platform";
 
 /** The most text frames a socket holds while it opens; past it the newest are let go. */
 const HELD_WHILE_OPENING = 32;

@@ -5,12 +5,12 @@
  * the choice to this browser's storage as it wears it (`app/web-appearance.tsx`),
  * and a change made in another tab of this origin arrives here as a `storage`
  * event. Under System, or with no choice kept, the machine's appearance is
- * worn, and worn again each time it flips (`@luke/ui/appearance`'s `wearTheme`).
+ * worn, and worn again each time it flips (`@repo/ui/appearance`'s `wearTheme`).
  * `public/app-theme.js` does the same before the first frame.
  */
 
-import { THEME, type Theme } from "@luke/ui";
-import { wearTheme } from "@luke/ui/appearance";
+import { THEME, type Theme } from "@repo/ui";
+import { wearTheme } from "@repo/ui/appearance";
 import { THEME_KEY, tintChrome } from "../theme-chrome";
 
 /** The theme the browser keeps for the app, a missing, refused, or unknown one following the machine. */

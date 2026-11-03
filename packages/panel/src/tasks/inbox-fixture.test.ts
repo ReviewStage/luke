@@ -2,21 +2,21 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
   INBOX_STATUS,
   type InboxItem,
   inboxItemSchema,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@luke/host/app-state";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { personPage } from "@luke/ui/person-page-model";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@repo/host/app-state";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { personPage } from "@repo/ui/person-page-model";
 import { Effect, Result, Schema } from "effect";
 import { afterEach } from "vitest";
 import { rendererRegistry } from "../renderer-runtime.js";

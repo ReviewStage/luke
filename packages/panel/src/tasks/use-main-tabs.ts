@@ -11,7 +11,7 @@ import {
   type ViewedAt,
   viewedLast,
   withoutViewedAt,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 

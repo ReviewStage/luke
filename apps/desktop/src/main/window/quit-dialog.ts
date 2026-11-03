@@ -2,7 +2,7 @@
  * quit-dialog.ts -- the sheet a way out of the app asks with while something would be lost: leave, or stay.
  */
 
-import { LEAVE_ANSWER, type LeaveQuestion } from "@luke/host/quit";
+import { LEAVE_ANSWER, type LeaveQuestion } from "@repo/host/quit";
 import { app, type BrowserWindow, dialog, type MessageBoxOptions } from "electron";
 
 /**

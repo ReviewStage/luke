@@ -11,7 +11,7 @@
  * the window's memory alone, kept for as long as the window stands.
  */
 
-import { type StripTab, tabKey } from "@luke/ui/tab-strip-model";
+import { type StripTab, tabKey } from "@repo/ui/tab-strip-model";
 import { useEffect } from "react";
 import type { TabLook } from "./strip-tabs.js";
 

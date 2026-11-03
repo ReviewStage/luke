@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { type MemoriesAnswer, memoriesAnswerSchema } from "@luke/features/memory-wire";
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { type MemoriesAnswer, memoriesAnswerSchema } from "@repo/features/memory-wire";
+import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";

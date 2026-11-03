@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import {

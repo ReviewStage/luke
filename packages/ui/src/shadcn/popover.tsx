@@ -11,8 +11,8 @@ import { cn } from "../cn.js";
  * lays itself out; it hangs on the window's own layer, over a dialog's card
  * where its control stands in one (`layer`), because the card clips what
  * stands inside it; and the positioner takes the control (`anchor`), since
- * the control is `@luke/ui`'s own button. shadcn's trigger, header, title,
- * and description are left out. What an app draws is `@luke/ui`'s
+ * the control is `@repo/ui`'s own button. shadcn's trigger, header, title,
+ * and description are left out. What an app draws is `@repo/ui`'s
  * `PopoverIconButton`; this is its inside.
  */
 

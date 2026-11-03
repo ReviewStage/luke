@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { it } from "@effect/vitest";
-import { type FakeResponder, fakeHttpClientLayer } from "@luke/wire/testing";
+import { type FakeResponder, fakeHttpClientLayer } from "@repo/wire/testing";
 import {
   Cause,
   Clock,

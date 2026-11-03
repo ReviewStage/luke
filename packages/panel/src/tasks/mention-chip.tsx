@@ -4,7 +4,7 @@ import {
   dateDistance,
   dateWhole,
   readerZone,
-} from "@luke/features/date-mention";
+} from "@repo/features/date-mention";
 import {
   issueAddressOf,
   LINK_PLACE,
@@ -12,7 +12,7 @@ import {
   MENTION_SIGIL,
   pullRequestAddressOf,
   readLink,
-} from "@luke/features/link-grammar";
+} from "@repo/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
@@ -27,10 +27,10 @@ import {
   pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
-import { planSections } from "@luke/features/plan-document";
-import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+} from "@repo/features/mention-link";
+import { type KnownNames, placeChipLook } from "@repo/features/place-chip-model";
+import { planSections } from "@repo/features/plan-document";
+import { UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import {
   THING_KIND,
   THING_WORD,
@@ -38,8 +38,8 @@ import {
   thingOfMention,
   thingOfPlace,
   thingWordHeard,
-} from "@luke/features/thing-kind";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+} from "@repo/features/thing-kind";
+import { isGitHubAddress, isWebAddress } from "@repo/host/acts";
 import {
   HoverCard,
   HoverCardHead,
@@ -50,10 +50,10 @@ import {
   TEXT_LINK_LOOK,
   TextLink,
   useMinute,
-} from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
-import { CalendarIcon } from "@luke/ui/icons";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
+import { CalendarIcon } from "@repo/ui/icons";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
@@ -78,7 +78,7 @@ import { useWordsDates } from "./words-dates.js";
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, or a link where that leaves the app, hanging a card that says what that is, struck through where what it names is gone.
  *
  * A mention is written into markdown as a link whose target names it
- * (`@luke/features/mention-link`'s `linkMention`), a developer's with a
+ * (`@repo/features/mention-link`'s `linkMention`), a developer's with a
  * label starting with `@`, and wherever words are drawn, the link is drawn
  * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
@@ -120,9 +120,9 @@ import { useWordsDates } from "./words-dates.js";
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
  * link to any other place in the app, an Inbox item, an
- * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
+ * automation, an agent's message (`@repo/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
- * knows it (`@luke/features/place-chip-model`): the words it was labelled
+ * knows it (`@repo/features/place-chip-model`): the words it was labelled
  * with, else the place's own name, else its kind. A plan, a section, a
  * page, an agent, a person, or an Inbox item is called by its name now
  * wherever the window holds it, whatever words its link was written with:
@@ -138,7 +138,7 @@ import { useWordsDates } from "./words-dates.js";
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
  * A date is said from where the reader stands rather than by the words it
- * was written with (`@luke/features/date-mention`): Today, Tomorrow,
+ * was written with (`@repo/features/date-mention`): Today, Tomorrow,
  * Friday 3:00 PM, in the reader's own zone, said again as the minute turns
  * (`useMinute`), and its card says it in full and how far off it is. A day
  * has no page, so in words that take no change it opens nothing; in an

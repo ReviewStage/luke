@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { archiveAgent, createAgent, readAgent } from "@luke/database/models/agent-store";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { createTask } from "@luke/database/models/task-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, createAgent, readAgent } from "@repo/database/models/agent-store";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { lapsedSandboxLeases, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { createTask } from "@repo/database/models/task-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
   type TerminalSummary,
-} from "@luke/features/terminal-wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/features/terminal-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {

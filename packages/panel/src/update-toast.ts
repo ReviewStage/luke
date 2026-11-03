@@ -9,9 +9,9 @@
  * window drawn again while main still reports it says nothing twice.
  */
 
-import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
-import { STATUS_TONE } from "@luke/ui";
+import { ACT_KIND } from "@repo/host/acts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
+import { STATUS_TONE } from "@repo/ui";
 import { Option, Schema } from "effect";
 import { useEffect } from "react";
 import { useAct } from "./act.js";

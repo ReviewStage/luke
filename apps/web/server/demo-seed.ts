@@ -1,22 +1,22 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { sqlClientOverUrl } from "@luke/database/core/sql-client";
-import { PROVIDER_KEY_KIND } from "@luke/features/provider-key-wire";
-import { writeHostDevice } from "@luke/host/daemon";
-import { demoDatabaseUrl } from "@luke/service/demo/demo-database";
+import { sqlClientOverUrl } from "@repo/database/core/sql-client";
+import { PROVIDER_KEY_KIND } from "@repo/features/provider-key-wire";
+import { writeHostDevice } from "@repo/host/daemon";
+import { demoDatabaseUrl } from "@repo/service/demo/demo-database";
 import {
   DEMO_HOST,
   type DemoCredential,
   demoAuth,
   demoHostSecret,
   seedDemoWorld,
-} from "@luke/service/demo/demo-seed";
+} from "@repo/service/demo/demo-seed";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Effect, Option, Redacted, Result } from "effect";
 import { Pool } from "pg";
 
 /**
- * demo-seed.ts -- `pnpm --filter @luke/web demo:seed`: the demo's acme world written into the freshly migrated Postgres on loopback that `DATABASE_URL` names.
+ * demo-seed.ts -- `pnpm --filter @repo/web demo:seed`: the demo's acme world written into the freshly migrated Postgres on loopback that `DATABASE_URL` names.
  *
  * `run.sh --demo` calls it once per run, after `db:migrate` and `auth:seed`
  * against the same database. It reads:

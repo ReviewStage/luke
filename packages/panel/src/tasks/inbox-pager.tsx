@@ -1,5 +1,5 @@
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { PAGER_AXIS, Pager } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
+import { PAGER_AXIS, Pager } from "@repo/ui";
 import { useAppCommand } from "../app-commands.js";
 import { type InboxListed, type InboxListView, inboxEnds, inboxSteps } from "./inbox-model.js";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

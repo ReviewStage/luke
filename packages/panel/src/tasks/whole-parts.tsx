@@ -1,6 +1,6 @@
-import type { AgentPartView } from "@luke/features/agent-view";
-import { ACT_KIND } from "@luke/host/acts";
-import type { WireValue } from "@luke/wire";
+import type { AgentPartView } from "@repo/features/agent-view";
+import { ACT_KIND } from "@repo/host/acts";
+import type { WireValue } from "@repo/wire";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import type { AgentPartCut } from "./agent-model.js";

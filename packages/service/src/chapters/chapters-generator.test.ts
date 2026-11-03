@@ -2,22 +2,22 @@ import { once } from "node:events";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "@effect/vitest";
-import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
+import { PULL_REQUEST_CHAPTERS_FAILURE } from "@repo/database/pull-request-chapters-vocabulary";
 import {
   type AgentChangedFile,
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
   PATCH_OMITTED,
-} from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
   type Chapter,
   LINE_REF_SIDE,
-} from "@luke/features/pull-request-chapters";
-import { settleJsonSchemaGolden } from "@luke/wire/testing";
+} from "@repo/features/pull-request-chapters";
+import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { APICallError, generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Fiber, Redacted } from "effect";

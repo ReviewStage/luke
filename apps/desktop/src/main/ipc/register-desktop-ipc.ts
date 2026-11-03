@@ -3,17 +3,17 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
-import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import { BROWSER_LIVE_PORT_CHANNEL } from "@repo/features/browser-live-acts";
+import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
 import {
   browserLiveProcedures,
   createActPortHandler,
   type PlatformActProcedures,
   terminalProcedures,
-} from "@luke/host/act-port";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { LEAVE } from "@luke/host/quit";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/host/act-port";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { LEAVE } from "@repo/host/quit";
+import type { WireBoundaryInput } from "@repo/wire";
 import {
   BrowserWindow,
   clipboard,

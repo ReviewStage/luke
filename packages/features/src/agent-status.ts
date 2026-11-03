@@ -1,4 +1,4 @@
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS } from "@repo/wire";
 import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
 
 /**

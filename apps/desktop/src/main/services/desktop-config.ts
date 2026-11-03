@@ -1,6 +1,6 @@
-import type { AppLinkInbox } from "@luke/features/app-links";
-import type { RunMode } from "@luke/host";
-import type { BuildCommit } from "@luke/settings/update";
+import type { AppLinkInbox } from "@repo/features/app-links";
+import type { RunMode } from "@repo/host";
+import type { BuildCommit } from "@repo/settings/update";
 import type { MenuBarChange } from "../app-menu";
 
 /**
@@ -60,6 +60,6 @@ export interface DesktopConfig {
    * a gated feature's items stand. Called with nothing, it draws what it holds.
    */
   readonly showMenuBar: (change?: MenuBarChange) => void;
-  /** The links of ours the system hands the app, heard from before the launch (`@luke/features/app-links`). */
+  /** The links of ours the system hands the app, heard from before the launch (`@repo/features/app-links`). */
   readonly appLinks: AppLinkInbox;
 }

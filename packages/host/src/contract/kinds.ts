@@ -400,7 +400,7 @@ export const TASKS_ACT_KIND = {
 } as const;
 
 /**
- * A cloud Browser tab's live view (`@luke/features/browser-live-acts`): one
+ * A cloud Browser tab's live view (`@repo/features/browser-live-acts`): one
  * view attached for the asking panel, its socket opened by the host under
  * the account's bearer, and detached. What the page shows travels on the
  * port an attach posts to that panel, never on an act.

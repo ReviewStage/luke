@@ -1,7 +1,7 @@
 /**
  * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
  *
- * The host is the desktop's own (`@luke/host`), assembled with one platform
+ * The host is the desktop's own (`@repo/host`), assembled with one platform
  * concern, an agent's terminals: each shell's relay socket is opened from
  * the page on its own origin under the session cookie
  * (`web-terminal-socket.ts`), and its port is posted to the panel in the
@@ -22,11 +22,11 @@
  * anywhere else.
  */
 
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import { feedbackDelivery } from "@luke/features/feedback";
-import type { LinkPlatform } from "@luke/features/link-open";
-import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { runModeFor } from "@luke/host";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { feedbackDelivery } from "@repo/features/feedback";
+import type { LinkPlatform } from "@repo/features/link-open";
+import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
+import { runModeFor } from "@repo/host";
 import {
   type ActPortDependencies,
   type AgentProceduresDependencies,
@@ -37,10 +37,10 @@ import {
   type TerminalPortSeam,
   terminalProcedures,
   WindowPushes,
-} from "@luke/host/act-port";
-import { AgentNoticeDoors } from "@luke/host/agent-notices";
-import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
-import type { AppBridge } from "@luke/host/bridge";
+} from "@repo/host/act-port";
+import { AgentNoticeDoors } from "@repo/host/agent-notices";
+import { RUN_PROFILE, type RunProfile } from "@repo/host/app-state";
+import type { AppBridge } from "@repo/host/bridge";
 import {
   AppStateStore,
   createInProcessBridge,
@@ -50,8 +50,8 @@ import {
   linkNetworkWatch,
   linkSessionReload,
   type OperatorClient,
-} from "@luke/host/client";
-import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
+} from "@repo/host/client";
+import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@repo/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -73,11 +73,11 @@ import {
   ShutdownSignal,
   StateRoot,
   TerminalSocket,
-} from "@luke/host/effect";
-import { effectServiceLayer } from "@luke/host/service-layer";
-import { highlightSnippet } from "@luke/host/task-code";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { SETTING_SIDE_EFFECT } from "@luke/settings";
+} from "@repo/host/effect";
+import { effectServiceLayer } from "@repo/host/service-layer";
+import { highlightSnippet } from "@repo/host/task-code";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { SETTING_SIDE_EFFECT } from "@repo/settings";
 import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { version as appVersion } from "../../package.json";
@@ -106,14 +106,14 @@ type WebSender = Window;
 /** What the tab's root reads of the host once it stands: the bridge and the act port the panel acts through, and what its platform answers. */
 export interface WebHost {
   readonly bridge: AppBridge;
-  /** The panel's end of its act port, for the acts that ride oRPC (`@luke/host/contract`). */
+  /** The panel's end of its act port, for the acts that ride oRPC (`@repo/host/contract`). */
   readonly actPort: MessagePort;
   /** What the panel's client of its act port is installed through: a workspace connect's press opens its tab. */
   readonly actPortClient: (client: ActPortClient) => ActPortClient;
   readonly platform: AppPlatform;
 }
 
-export class WebHostTag extends Context.Service<WebHostTag, WebHost>()("@luke/web/WebHost") {}
+export class WebHostTag extends Context.Service<WebHostTag, WebHost>()("@repo/web/WebHost") {}
 
 /** What the tab hands the composition. */
 export interface WebHostOptions {
@@ -131,7 +131,7 @@ interface ComposedWeb extends WebHost {
 }
 
 class ComposedWebTag extends Context.Service<ComposedWebTag, ComposedWeb>()(
-  "@luke/web/ComposedWeb",
+  "@repo/web/ComposedWeb",
 ) {}
 
 /**
@@ -232,7 +232,7 @@ const noticeDoors = Effect.acquireRelease(Effect.sync(webNoticeDoors), (doors) =
  * How the host in this tab hands a shell's port to the panel beside it: a
  * channel in the page, its far end posted to this window under the
  * terminal's channel and the ticket naming the shell, as the desktop's
- * preload posts one (`@luke/panel`'s `terminal-port.ts` reads it). The page
+ * preload posts one (`@repo/panel`'s `terminal-port.ts` reads it). The page
  * goes only with the tab, and the host with it, so no port outlives it.
  */
 const pageTerminalPorts: TerminalPortSeam<WebSender> = {

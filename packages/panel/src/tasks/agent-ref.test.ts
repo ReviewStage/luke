@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { test } from "vitest";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import type { Route } from "@luke/service/route";
+import type { Route } from "@repo/service/route";
 import { test } from "vitest";
 import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers";
 import { DISPATCH_QUERY, dispatchRoutes, ORPC_ROUTE_KEY } from "../server/function-dispatch";

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { AdminActivityDay } from "@luke/features/admin-answer-wire";
-import { ACTIVITY_FEATURE } from "@luke/features/admin-overview-vocabulary";
-import { ActivityChart } from "@luke/panel/admin/charts/activity-chart";
+import type { AdminActivityDay } from "@repo/features/admin-answer-wire";
+import { ACTIVITY_FEATURE } from "@repo/features/admin-overview-vocabulary";
+import { ActivityChart } from "@repo/panel/admin/charts/activity-chart";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

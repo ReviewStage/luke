@@ -85,13 +85,13 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   APP_SHORTCUTS,
   type KeyedCommand,
   type ShortcutChord,
   shortcutAria,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
@@ -983,7 +983,7 @@ export const RowHint: ListRowHint = ({ label, row, children }) => {
 };
 
 /**
- * The hint over words held to one line (`@luke/ui`'s `OneLine`): the pill
+ * The hint over words held to one line (`@repo/ui`'s `OneLine`): the pill
  * reading them whole while the line cuts them short, and none while it
  * draws them whole, since a line drawn whole says nothing twice. The words
  * ride the pill rather than a `title`, which session replay would carry

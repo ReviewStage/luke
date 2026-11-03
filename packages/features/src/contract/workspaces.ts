@@ -8,7 +8,7 @@
  * A workspace's photo, served as its bytes, stays on its own route.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";

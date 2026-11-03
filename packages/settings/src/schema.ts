@@ -1,7 +1,7 @@
-import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { UnparsedWireValue } from "@luke/wire";
-import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
+import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@repo/features/link-open";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { UnparsedWireValue } from "@repo/wire";
+import { APP_SETTING_ID, isAppSettingId } from "@repo/wire/app-settings";
 import { Schema } from "effect";
 import {
   AGENT_ENTER,
@@ -183,7 +183,7 @@ export const APP_SETTING_SCHEMA = {
   }),
   /*
    * Where an app link opened in a browser goes: it stays on the web, or the
-   * web hands it to the Mac app (`@luke/features/link-open`). The account's,
+   * web hands it to the Mac app (`@repo/features/link-open`). The account's,
    * so the web reads it on a signed-in load; it rides the preferences
    * snapshot as a part of its own rather than the shared one, so a build
    * that predates it neither refuses the snapshot nor clears the choice.

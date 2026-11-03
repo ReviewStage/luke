@@ -3,7 +3,7 @@
  *
  * The list's two parts are collections of their own (`live-collection.ts`)
  * of the rows as the service answers them. The list is built from them as
- * the held read built it (`@luke/features/task-list-live`), at the host's
+ * the held read built it (`@repo/features/task-list-live`), at the host's
  * own instant, because an agent's status moves with the clock alone and a
  * live query reads no clock. So it is built again each time either moves,
  * and at the nearest instant the clock alone moves it (`taskListGraceEdge`):
@@ -20,7 +20,7 @@
  * stands in the list before the follow carries it.
  */
 
-import type { AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@repo/features/agent-wire";
 import {
   agentPullRequestsOfLiveRows,
   type TaskListLiveRows,
@@ -29,13 +29,13 @@ import {
   taskListGraceEdge,
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
-} from "@luke/features/task-list-live";
+} from "@repo/features/task-list-live";
 import type {
   ListedPullRequest,
   TaskAgentPin,
   TaskListAnswer,
   TaskPullRequests,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Effect, type Scope } from "effect";
 import {
   answeredCollection,

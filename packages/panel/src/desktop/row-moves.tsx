@@ -1,5 +1,5 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon } from "@luke/ui";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon } from "@repo/ui";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { useAppCommand } from "../app-commands.js";

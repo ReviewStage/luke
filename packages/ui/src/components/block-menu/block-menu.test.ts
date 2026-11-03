@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { SHORTCUT_KEY, WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
+import { SHORTCUT_KEY, WRITING_BLOCK, WRITING_INSERT } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";

@@ -9,7 +9,7 @@ import { attributeName, intrinsicTagOf } from "../shared/jsx.ts";
  * The form's owner checks what it holds on submit and says what is wrong in
  * the field's `ErrorLine` (`FormField`'s `error`). `Stack` and `Inline` as a
  * form, and `ComposerFrame` as one, set it themselves; this rule holds every
- * form written as JSX, `@luke/ui`'s own included.
+ * form written as JSX, `@repo/ui`'s own included.
  */
 export const noBrowserFormValidationRule = defineRule({
   meta: {

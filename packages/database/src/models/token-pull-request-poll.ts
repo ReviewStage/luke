@@ -13,8 +13,8 @@
  * agent's pull request, so a new one is polled afresh.
  */
 
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

@@ -1,4 +1,4 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
@@ -8,7 +8,7 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   Badge,
   CHIP_LOOK,
@@ -23,8 +23,8 @@ import {
   TaskStatusMark,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { actorName, creatorActor } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { actorName, creatorActor } from "@repo/ui/actor-model";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";

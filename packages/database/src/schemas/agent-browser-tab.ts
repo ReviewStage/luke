@@ -1,5 +1,5 @@
-import type { AgentBrowserTabOpener } from "@luke/features/agent-browser-tab-wire";
-import type { BrowserCursorKind } from "@luke/features/browser-agent-actions";
+import type { AgentBrowserTabOpener } from "@repo/features/agent-browser-tab-wire";
+import type { BrowserCursorKind } from "@repo/features/browser-agent-actions";
 import {
   doublePrecision,
   index,

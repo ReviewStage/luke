@@ -16,7 +16,7 @@ import type {
   InstalledSkillUpdatedView,
   InstalledSkillUpdateParams,
   InstalledSkillView,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import { Effect } from "effect";
 import { INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";

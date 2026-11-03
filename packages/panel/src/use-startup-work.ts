@@ -1,5 +1,5 @@
-import type { AppState } from "@luke/host/app-state";
-import { sessionReplayBootstrap } from "@luke/host/app-state";
+import type { AppState } from "@repo/host/app-state";
+import { sessionReplayBootstrap } from "@repo/host/app-state";
 import { useCallback, useEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { usePrefetchEditorBundle } from "./bundle-loader.js";

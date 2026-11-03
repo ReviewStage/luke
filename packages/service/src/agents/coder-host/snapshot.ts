@@ -32,14 +32,14 @@
  */
 
 import { createHash } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, hasRepository, readAgentByKey } from "@luke/database/models/agent-store";
-import { latestTurnsOfReached } from "@luke/database/models/message-reads";
-import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { redactCredentials } from "@luke/features/credential-redaction";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { TURN_STATUS } from "@luke/wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type Agent, hasRepository, readAgentByKey } from "@repo/database/models/agent-store";
+import { latestTurnsOfReached } from "@repo/database/models/message-reads";
+import { standingSessionsOf } from "@repo/database/models/recorded-session";
+import { holdSandbox, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { redactCredentials } from "@repo/features/credential-redaction";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { TURN_STATUS } from "@repo/wire";
 import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";

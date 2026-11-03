@@ -26,9 +26,9 @@ import {
   HOST_TARGET,
   type HostTarget,
   hostTarballUrl,
-} from "@luke/features/host-release";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/host-release";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";

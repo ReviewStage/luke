@@ -3,9 +3,9 @@
  *
  * A Claude Code agent that waited on one-shot wakeups alone was released:
  * its runner ended the launch, so its sandbox stopped, and named each wakeup
- * with the instant it comes due (`@luke/agent-runner/protocol`'s
+ * with the instant it comes due (`@repo/agent-runner/protocol`'s
  * `RUNNER_RELEASE`), which the events route kept
- * (`@luke/database/models/agent-wakeups`). Once a wakeup is due, the
+ * (`@repo/database/models/agent-wakeups`). Once a wakeup is due, the
  * sweep hands its prompt to the agent as a message sent by the agent itself,
  * since the words are its own, the one way a message reaches an agent
  * (`steerAgent`), which relaunches the CLI on the session it resumes, as the
@@ -19,15 +19,15 @@
  * times, under the same key, so a send that did land is told once. Each call is bounded so the sweep's minute holds.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
 import {
   agentWakeupStands,
   type ClaimedAgentWakeup,
   claimDueAgentWakeups,
   deleteAgentWakeup,
-} from "@luke/database/models/agent-wakeups";
-import { APP_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
+} from "@repo/database/models/agent-wakeups";
+import { APP_LINE_METADATA, storeWriter } from "@repo/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { agentLineSender, steerAgent } from "../agents/coder-host/steer.js";

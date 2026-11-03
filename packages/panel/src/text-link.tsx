@@ -1,5 +1,5 @@
-import { TextLink as SharedTextLink, TEXT_LINK_LOOK, Tooltip } from "@luke/ui";
-import { linkFace } from "@luke/ui/link-face";
+import { TextLink as SharedTextLink, TEXT_LINK_LOOK, Tooltip } from "@repo/ui";
+import { linkFace } from "@repo/ui/link-face";
 import type { ReactNode } from "react";
 import { opensAsLink } from "./tasks/use-open-link.js";
 
@@ -12,10 +12,10 @@ import { opensAsLink } from "./tasks/use-open-link.js";
  * through this one element, a transcript's (`tasks/transcript-blocks.tsx`)
  * and a plan's (`markdown-message.tsx`), and the plan's editor gives its
  * link mark the same classes, so a link reads alike wherever it is written.
- * Where words are their own address (`@luke/ui/link-face`), they say it as
+ * Where words are their own address (`@repo/ui/link-face`), they say it as
  * a reader names a page. Note that it wears no ↗, because every link that
  * is no chip leaves the window, so the arrow would say nothing the
- * underline does not. What it looks like is `@luke/ui`'s underlined
+ * underline does not. What it looks like is `@repo/ui`'s underlined
  * TextLink; what is the window's own is here: the face, the hint, and the
  * press that opens the address through the app rather than the page.
  *

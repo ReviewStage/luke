@@ -9,9 +9,9 @@
  * sign-in picture here too.
  */
 
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { pinnedPictureUrl } from "@repo/features/account-picture";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@repo/features/dictation-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";

@@ -17,31 +17,31 @@
  * admin pages split theirs, so the folding is tested without a database.
  */
 
-import type { GitHubInstallationStatus } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import type { AgentLatestTurn } from "@luke/database/models/agent-store";
+import type { GitHubInstallationStatus } from "@repo/database/github-installation-vocabulary";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import type { AgentLatestTurn } from "@repo/database/models/agent-store";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
   type AdminPullRequest,
-} from "@luke/features/admin-account-wire";
+} from "@repo/features/admin-account-wire";
 import type {
   AdminAccountAgent,
   AdminAccountConnection,
   AdminAccountFailure,
   AdminAccountProviderKey,
   AdminAccountSupport,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   AGENT_STATUS,
   type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
-import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { EXPERIMENTS, type ExperimentChoices } from "@luke/settings";
+} from "@repo/features/agent-wire";
+import type { AutomationRunReason } from "@repo/features/automation-wire";
+import { PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { EXPERIMENTS, type ExperimentChoices } from "@repo/settings";
 import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 import { lastSeenInstant } from "./admin-users.js";
 

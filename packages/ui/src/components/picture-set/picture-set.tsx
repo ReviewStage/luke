@@ -1,4 +1,4 @@
-import { countWords } from "@luke/features/words";
+import { countWords } from "@repo/features/words";
 import { Children, createContext, isValidElement, type ReactNode, useContext } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ImageOffIcon } from "../../icons/icons.js";

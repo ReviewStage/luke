@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { archiveAgent, readAgent } from "@luke/database/models/agent-store";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, readAgent } from "@repo/database/models/agent-store";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
 import {
   openInboxItem,
   openTaskAgent,
   openWorkspace,
   unmigratedPgliteSqlClient,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

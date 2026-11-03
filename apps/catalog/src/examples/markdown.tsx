@@ -1,4 +1,4 @@
-import { MARKDOWN_LOOK, Markdown } from "@luke/ui/markdown";
+import { MARKDOWN_LOOK, Markdown } from "@repo/ui/markdown";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

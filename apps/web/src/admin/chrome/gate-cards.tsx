@@ -1,7 +1,7 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
-import { AuthPage, BUTTON_VARIANT, Button, ProductMark, SocialSignInCard } from "@luke/ui";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
+import { AuthPage, BUTTON_VARIANT, Button, ProductMark, SocialSignInCard } from "@repo/ui";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 

@@ -2,7 +2,7 @@
  * shoot.ts -- shoots every catalog example at both profiles, both themes,
  * wide and at a phone's width, one PNG each, and an index page of them.
  *
- * Run it with `pnpm --filter @luke/catalog shoot` (`--help` lists the flags).
+ * Run it with `pnpm --filter @repo/catalog shoot` (`--help` lists the flags).
  * It builds the catalog and serves the build itself, or opens one already
  * running at `--base`, and drives Chromium over the catalog's own addresses
  * (`?example=&profile=&theme=&width=`, see `src/catalog.tsx`), so what it
@@ -28,7 +28,7 @@ const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const REPOSITORY_ROOT = path.resolve(APP_ROOT, "../..");
 const DEFAULT_OUT = path.join(REPOSITORY_ROOT, "artifacts", "polish", "catalog");
 
-// The catalog's own vocabulary (`@luke/ui`'s PROFILE and THEME), which a plain node script cannot import.
+// The catalog's own vocabulary (`@repo/ui`'s PROFILE and THEME), which a plain node script cannot import.
 const PROFILE = { DESKTOP: "desktop", WEB: "web" } as const;
 const THEME = { DARK: "dark", LIGHT: "light" } as const;
 const PROFILES = [PROFILE.DESKTOP, PROFILE.WEB] as const;

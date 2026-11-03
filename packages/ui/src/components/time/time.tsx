@@ -5,7 +5,7 @@ import {
   provenanceText,
   sinceText,
   workingTime,
-} from "@luke/features/time-format";
+} from "@repo/features/time-format";
 import { Tooltip } from "../tooltip/hint.js";
 import { useMinute, useSecond } from "./time-clock.js";
 

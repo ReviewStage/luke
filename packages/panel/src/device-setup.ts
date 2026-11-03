@@ -1,4 +1,4 @@
-import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
+import { DEVICE_SETUP, type DeviceSetup } from "@repo/features/device-agent-wire";
 
 /**
  * device-setup.ts -- what a device still setting itself up is called, getting ready or couldn't set up, which a task's Runs on says of a device that takes no agent yet.

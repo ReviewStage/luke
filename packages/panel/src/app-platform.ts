@@ -14,14 +14,14 @@
  * a render, at the moment they call, and never at module load.
  */
 
-import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/features/analytics";
-import type { FramedPage } from "@luke/features/page-frame";
+import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@repo/features/analytics";
+import type { FramedPage } from "@repo/features/page-frame";
 import {
   type AppCommand,
   COMMAND_KEY,
   type CommandKey,
   installCommandKey,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import type { SessionReplayWord } from "./session-replay.js";
 import type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
 
@@ -61,7 +61,7 @@ export interface AppPlatform {
   assetBase(): string;
   /**
    * The key a chord's Command is pressed with, which every chord matched and
-   * drawn reads (`@luke/settings/shortcuts`): Ctrl in a browser on Windows or
+   * drawn reads (`@repo/settings/shortcuts`): Ctrl in a browser on Windows or
    * Linux. A shell on a Mac, the Mac app always, leaves this out, for ⌘.
    */
   commandKey?: CommandKey;

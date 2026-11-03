@@ -1,4 +1,4 @@
-import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { createContext, useContext } from "react";
 import { appPlatform } from "./app-platform.js";
 import { useMemberDirectory } from "./member-directory.js";

@@ -7,16 +7,16 @@ import {
   type InstalledSkillPreview,
   type InstalledSkillSummary,
   SKILL_AUDIT_RISK,
-} from "@luke/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-route-wire";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import {
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
-} from "@luke/features/installed-skill-wire";
-import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/installed-skill-wire";
+import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { STATUS_TONE } from "@repo/ui";
 import { test } from "vitest";
 import {
   ADD_SKILL_SCREEN,

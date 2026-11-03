@@ -26,7 +26,7 @@
  * fails both.
  */
 
-import { describeWire } from "@luke/wire/effect";
+import { describeWire } from "@repo/wire/effect";
 import { Schema } from "effect";
 import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "./agent-wire.js";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_RUNTIME,
@@ -9,9 +9,9 @@ import {
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/agent-wire";
+import { MESSAGE_ROLE } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

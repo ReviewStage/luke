@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE } from "@luke/panel/panel-spans";
+import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE } from "@repo/panel/panel-spans";
 import { getClient } from "@sentry/electron/renderer";
 import { act, createElement } from "react";
 import { afterEach, test, vi } from "vitest";

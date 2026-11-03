@@ -1,12 +1,12 @@
-import base from "@luke/panel/styles/base.css?raw";
-import desktop from "@luke/panel/styles/desktop.css?raw";
-import entry from "@luke/panel/styles/index.css?raw";
-import settings from "@luke/panel/styles/settings.css?raw";
-import shell from "@luke/panel/styles/shell.css?raw";
-import tasks from "@luke/panel/styles/tasks.css?raw";
-import utilities from "@luke/panel/testing/tailwind.css?inline";
-import ui from "@luke/ui/styles.css?inline";
-import tokens from "@luke/ui/tokens.css?inline";
+import base from "@repo/panel/styles/base.css?raw";
+import desktop from "@repo/panel/styles/desktop.css?raw";
+import entry from "@repo/panel/styles/index.css?raw";
+import settings from "@repo/panel/styles/settings.css?raw";
+import shell from "@repo/panel/styles/shell.css?raw";
+import tasks from "@repo/panel/styles/tasks.css?raw";
+import utilities from "@repo/panel/testing/tailwind.css?inline";
+import ui from "@repo/ui/styles.css?inline";
+import tokens from "@repo/ui/tokens.css?inline";
 
 /**
  * container-width.ts -- the panel's stylesheets as containers of given widths, on a given kind of device, read them, for jsdom, which lays nothing out and answers no container, media, or layer rule.
@@ -28,10 +28,10 @@ import tokens from "@luke/ui/tokens.css?inline";
  * (hover, a fine pointer) where it does not. Every other media query is left for jsdom to
  * drop.
  *
- * The shared tokens (`@luke/ui/tokens.css`) are laid first, so a root
+ * The shared tokens (`@repo/ui/tokens.css`) are laid first, so a root
  * wearing a profile and a density reads its roles, and a query that rules
  * a coarse pointer out (`not all and (pointer: coarse)`) is resolved as its
- * opposite. The shared components' sheet (`@luke/ui/styles.css`) is laid
+ * opposite. The shared components' sheet (`@repo/ui/styles.css`) is laid
  * where the panel's `index.css` imports it, and each `@layer` block's rules, which
  * jsdom would drop, are laid ahead of every unlayered rule, layer by layer
  * in the order the layers first appear, as the cascade orders them. Note
@@ -48,10 +48,10 @@ const UTILITIES = "tailwind.css";
 
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
-  "@luke/ui/tokens.css": tokens,
+  "@repo/ui/tokens.css": tokens,
   "./settings.css": settings,
   "./base.css": base,
-  "@luke/ui/styles.css": ui,
+  "@repo/ui/styles.css": ui,
   "./tasks.css": tasks,
   "./shell.css": shell,
   "./desktop.css": desktop,

@@ -20,8 +20,8 @@
  */
 
 import type { IncomingHttpHeaders } from "node:http";
-import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
-import { readEither } from "@luke/wire/effect";
+import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
+import { readEither } from "@repo/wire/effect";
 import { type Cause, Effect, Option, Result, Schema, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {

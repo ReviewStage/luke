@@ -7,15 +7,15 @@
  * window, and the tasks it holds, as they were.
  */
 
-import { ACT_KIND } from "@luke/host/acts";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   MicrophoneControl,
   NotificationsControl,
   UpdateControl,
-} from "@luke/settings/settings-controls";
-import type { SettingsView } from "@luke/settings/settings-views";
-import { fixtureUpdate } from "@luke/settings/update-row";
-import type { ActionResult } from "@luke/wire";
+} from "@repo/settings/settings-controls";
+import type { SettingsView } from "@repo/settings/settings-views";
+import { fixtureUpdate } from "@repo/settings/update-row";
+import type { ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
 import { useAct } from "./act.js";

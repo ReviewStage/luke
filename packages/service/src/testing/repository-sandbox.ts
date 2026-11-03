@@ -11,7 +11,7 @@
  * table. Nothing here runs a shell. Synthetic throughout.
  */
 
-import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
+import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import type { RepositorySandbox } from "../agents/repository-shell.js";

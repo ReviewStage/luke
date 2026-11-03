@@ -1,6 +1,6 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { type TerminalAction, type TerminalBar, terminalLook } from "@repo/features/terminal-model";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   ANNOUNCE,
   ERROR_STATE_PLACEMENT,
@@ -12,7 +12,7 @@ import {
   Shortcut,
   TEXT_BUTTON_TONE,
   TextButton,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";

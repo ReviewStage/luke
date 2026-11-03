@@ -1,4 +1,4 @@
-import { countWords, TERM } from "@luke/features/words";
+import { countWords, TERM } from "@repo/features/words";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { cn } from "../../cn.js";

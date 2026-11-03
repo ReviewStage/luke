@@ -4,8 +4,8 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
-import { emitJsonSchema, readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { emitJsonSchema, readEither } from "@repo/wire/effect";
 import { jsonSchema, type Tool, tool } from "ai";
 import { Result, type Schema } from "effect";
 

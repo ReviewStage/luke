@@ -4,7 +4,7 @@ import {
   type ProviderKeyKind,
   type ProviderKeyProvider,
   type ProviderKeyStatus,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { boolean, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

@@ -6,15 +6,15 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
   type RecordProductEvent,
-} from "@luke/features/analytics";
-import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
+} from "@repo/features/analytics";
+import type { FeedbackResult, FeedbackSubmission } from "@repo/features/feedback";
+import { actPortFor, type PlatformActProcedures } from "@repo/host/act-port";
+import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@repo/host/contract";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
-} from "@luke/settings/microphone";
+} from "@repo/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -23,7 +23,7 @@ import type { PanelManager } from "../window/panel-manager";
 
 /**
  * Which microphone answers a count can be built from. A total `Record` like
- * the bridges in `@luke/settings`, so a sixth status does not build until
+ * the bridges in `@repo/settings`, so a sixth status does not build until
  * someone has said whether the ask decided it — the three that map to nothing
  * are the point rather than an oversight.
  */

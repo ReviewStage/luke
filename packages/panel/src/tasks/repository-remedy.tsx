@@ -1,5 +1,5 @@
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { agentKeyLink, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import { agentKeyLink, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { createContext, useContext } from "react";
 import { useOpenSettings } from "../open-settings.js";
 

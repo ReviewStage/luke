@@ -1,21 +1,21 @@
-import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { remedyLabel } from "@luke/features/failure-remedy";
+import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { remedyLabel } from "@repo/features/failure-remedy";
 import {
   agentFallbackChoice,
   type CatalogModel,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@luke/features/models-wire";
+} from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@luke/features/provider-key-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+} from "@repo/features/provider-key-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
@@ -31,9 +31,9 @@ import {
   TEXT_LINK_LOOK,
   TextButton,
   TextLink,
-} from "@luke/ui";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { useSettingWrite } from "@repo/ui/use-setting-write";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
@@ -110,7 +110,7 @@ import { SwitchRow } from "./switch-row.js";
  * refusal is said in a toast as the switch flips back. With no account signed in
  * there is no default to show, and the page says so.
  *
- * The group is `@luke/ui`'s `SettingsSection`, and Effort and Context each
+ * The group is `@repo/ui`'s `SettingsSection`, and Effort and Context each
  * its `SettingsRow` holding the shared `ChoiceBar`, segmented.
  */
 

@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { HostedEnvironment } from "../environment.js";

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fixedBearer } from "@luke/features";
-import { LINK_OPEN } from "@luke/features/link-open";
-import { EXPERIMENT } from "@luke/settings";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fixedBearer } from "@repo/features";
+import { LINK_OPEN } from "@repo/features/link-open";
+import { EXPERIMENT } from "@repo/settings";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 

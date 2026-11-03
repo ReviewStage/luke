@@ -1,7 +1,7 @@
 /**
  * channels-procedures.ts -- a workspace's channels: read them, open or archived, make, edit, archive, or unarchive one, stamp the reader's look at one, read a page of one's threads, and move a thread into one.
  *
- * The channels resource of the hosted oRPC router (`@luke/features/contract`'s
+ * The channels resource of the hosted oRPC router (`@repo/features/contract`'s
  * `channels.ts`). Any member of a workspace reads and writes its channels,
  * but never renames or archives its #general (`channel-store.ts`), and every
  * write on a channel answers the workspace's channels as they then stand,
@@ -28,9 +28,9 @@ import {
   openChannels,
   stampChannelLook,
   unarchiveChannel,
-} from "@luke/database/models/channel-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
-import type { ArchivedChannel, Channel, ChannelsAnswer } from "@luke/features/channel-wire";
+} from "@repo/database/models/channel-store";
+import { isWorkspaceMember } from "@repo/database/models/workspace-store";
+import type { ArchivedChannel, Channel, ChannelsAnswer } from "@repo/features/channel-wire";
 import { DateTime, Effect, Option, Result } from "effect";
 import {
   recordServerEvent,

@@ -1,5 +1,5 @@
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { ComposeIcon, SearchIcon } from "../../face/glyphs.js";
 import {
@@ -62,7 +62,7 @@ import { prefersStill } from "./landing-paint.js";
 /**
  * landing-scenes.tsx -- the landing's moving screens: the app's own components, composed as the panel composes them, stepping through a short story each.
  *
- * Every scene is drawn from `@luke/ui`'s parts in the panel's own
+ * Every scene is drawn from `@repo/ui`'s parts in the panel's own
  * arrangement (the desktop's sidebar, the Inbox's list and thread, an
  * agent's log, an automation's runs), so what the landing shows is what the
  * app draws. None is pressed: each plays its story on a clock that runs

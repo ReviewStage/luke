@@ -1,4 +1,4 @@
-import { Comment, type CommentAuthor, cn } from "@luke/ui";
+import { Comment, type CommentAuthor, cn } from "@repo/ui";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 
 /**

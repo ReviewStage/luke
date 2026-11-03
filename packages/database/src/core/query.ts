@@ -23,7 +23,7 @@ import type { SqlError } from "effect/sql/SqlError";
 export type DatabaseShape = PgEffectDatabase<EffectPgQueryEffectHKT, EffectPgQueryResultHKT>;
 
 export class Database extends Context.Service<Database, DatabaseShape>()(
-  "@luke/database/Database",
+  "@repo/database/Database",
 ) {}
 
 /**

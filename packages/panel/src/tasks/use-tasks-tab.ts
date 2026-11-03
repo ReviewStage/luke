@@ -1,28 +1,28 @@
-import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
   type AgentDefaultAnswer,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
   type AgentAttachment,
   type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import { dictationKeywords } from "@luke/features/dictation-keywords";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import type { InboxItemPlace } from "@luke/features/inbox-attachment-link";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
-import type { PageLine } from "@luke/features/page-wire";
-import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { planMarkdown } from "@luke/features/plan-markdown";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
+} from "@repo/features/agent-wire";
+import { dictationKeywords } from "@repo/features/dictation-keywords";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import type { GitHubConnection } from "@repo/features/github-connection-wire";
+import type { InboxItemPlace } from "@repo/features/inbox-attachment-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
+import type { PageLine } from "@repo/features/page-wire";
+import type { PlanEditRequest } from "@repo/features/plan-edit";
+import { planMarkdown } from "@repo/features/plan-markdown";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
   type CodeRef,
   type ListedPullRequest,
@@ -42,7 +42,7 @@ import {
   type TaskStatus,
   type TaskSummary,
   UNTITLED_TASK_NAME,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   type ParentCallFailure,
   type RelationCallFailure,
@@ -52,19 +52,19 @@ import {
   TASKS_READ,
   type TasksEditAnswer,
   type TasksView,
-} from "@luke/features/tasks-view";
-import { managesWorkspace } from "@luke/features/workspace-role";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/tasks-view";
+import { managesWorkspace } from "@repo/features/workspace-role";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppInboxAgentHolding,
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
-} from "@luke/host/app-state";
-import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/host/app-state";
+import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { STATUS_TONE } from "@repo/ui";
 import {
   isAgentTab,
   isChangesTab,
@@ -78,8 +78,8 @@ import {
   pullRequestLabelOf,
   type StripTab,
   sameTab,
-} from "@luke/ui/tab-strip-model";
-import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
+} from "@repo/ui/tab-strip-model";
+import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@repo/ui/task-sections-model";
 import {
   AGENT_PIN_FAILED_NOTES,
   DOCUMENT_REGION,
@@ -107,9 +107,9 @@ import {
   tasksPage,
   undoStillDue,
   workspaceReaches,
-} from "@luke/ui/tasks-model";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/tasks-model";
+import { useStateWithRef } from "@repo/ui/use-state-with-ref";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -231,7 +231,7 @@ import { sayRestored } from "./version-view.js";
  * or on a draft holding the words with why where the agent was refused.
  * Main is told which agent's tab is shown, so an agent that ends while the
  * developer is looking at it is not marked unseen, and the agents main says
- * ended unseen read in semibold until their tab is shown (`@luke/host/agent-notices`). The open plan's history is the
+ * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open plan's history is the
  * tab's as well (`use-plan-history.ts`): its version history, opened from
  * the task's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the
@@ -1288,7 +1288,7 @@ export function useTasksTab(input: {
   const accountSignedIn = input.signedIn;
   // A name, pin, status, priority, or assignee given here, a task's or an
   // agent's pin, and a pin's new place, are drawn by main the moment they
-  // are asked (`@luke/host`'s `task-list-collections.ts`), so the view
+  // are asked (`@repo/host`'s `task-list-collections.ts`), so the view
   // already carries them. A name being typed is drawn over the view, held
   // here rather than read back from main, so every surface naming the task
   // follows the typing at once.
@@ -1950,7 +1950,7 @@ export function useTasksTab(input: {
   markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
   // nowhere. Main draws a pin at once and puts the group back where the
-  // service refused it (`@luke/host`'s `sidebar-collections.ts`); a pin says
+  // service refused it (`@repo/host`'s `sidebar-collections.ts`); a pin says
   // nothing once it lands, since the group it moves is in sight, and a
   // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
@@ -2099,7 +2099,7 @@ export function useTasksTab(input: {
   // A drag's or a menu's changes to the sections go to main as one ask,
   // which draws them at once and writes them in order after every ask
   // before them, putting them back where the service refused one
-  // (`@luke/host`'s `sidebar-collections.ts`). A fixture's sections are
+  // (`@repo/host`'s `sidebar-collections.ts`). A fixture's sections are
   // changed nowhere, as its repositories are pinned nowhere.
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
     const [first, ...rest] = writes;

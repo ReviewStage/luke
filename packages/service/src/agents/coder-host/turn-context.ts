@@ -19,9 +19,9 @@
  */
 
 import { createHash } from "node:crypto";
-import type { StoredTask } from "@luke/database/models/task-store";
-import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import type { PlanRevisionLine } from "@luke/features/task-wire";
+import type { StoredTask } from "@repo/database/models/task-store";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import type { PlanRevisionLine } from "@repo/features/task-wire";
 import { Schema } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 

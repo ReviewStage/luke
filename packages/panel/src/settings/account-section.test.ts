@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { accountActor } from "@luke/ui/actor-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { accountActor } from "@repo/ui/actor-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";

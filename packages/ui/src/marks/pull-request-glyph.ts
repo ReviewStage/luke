@@ -8,7 +8,7 @@
  * (`pullRequestMarkState`).
  */
 
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/agent-wire";
+import { PULL_REQUEST_STATE, type PullRequestState } from "@repo/features/agent-wire";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,

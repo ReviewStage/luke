@@ -2,8 +2,8 @@
  * task-sections-model.ts -- the sidebar's sections, their order, the tasks and agents each holds, and the writes a drag or a menu asks of them.
  *
  * Every function is pure over the account's sections as the host draws them
- * (`@luke/features/task-section-wire`), a write the service has not yet
- * answered among them (`@luke/features/task-section-writes`), so a drop
+ * (`@repo/features/task-section-wire`), a write the service has not yet
+ * answered among them (`@repo/features/task-section-writes`), so a drop
  * lands where it was let go before the service's word comes back. The
  * sections stand in the order dragged, a
  * section never dragged on top, newest made first, as Pinned's pins do
@@ -17,14 +17,14 @@ import {
   type PinPlace,
   pinPositionsForInsert,
   pinPositionsForMove,
-} from "@luke/features/pin-order";
+} from "@repo/features/pin-order";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSectionEntry,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import {
   allEntries,
   entryFor,
@@ -33,7 +33,7 @@ import {
   memberOf,
   type SectionEntry,
   type SectionMember,
-} from "@luke/features/task-section-writes";
+} from "@repo/features/task-section-writes";
 
 /** What a refused change to the sections says, the drag or the menu that asked having gone. */
 export const SECTION_WRITE_FAILED_NOTE = "Your sections could not be changed. Try again.";

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
+import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@repo/features/automation-wire";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -12,7 +12,7 @@ import {
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@luke/features/turn-run";
+} from "@repo/features/turn-run";
 import {
   type AgentMessageMetadata,
   type AppLineMetadata,
@@ -36,8 +36,8 @@ import {
   type TypedAskMetadata,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
-} from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -45,7 +45,7 @@ import {
   type StoredToolPart,
   type StoredUIMessage,
   TOOL_PART_STATE,
-} from "@luke/wire/ui-messages";
+} from "@repo/wire/ui-messages";
 import {
   asSchema,
   type ReasoningUIPart,

@@ -6,13 +6,13 @@ import {
   type IntegrationProvider,
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import {
   INTEGRATION_LANDING_OUTCOME,
   LANDING_TONE,
   landingWords,
-} from "@luke/features/landing-outcome";
-import { AuthMark, AuthPage } from "@luke/ui";
+} from "@repo/features/landing-outcome";
+import { AuthMark, AuthPage } from "@repo/ui";
 import { useState } from "react";
 import { startSiteAnalytics } from "./analytics";
 import { landingDescription, useConnectReturn } from "./connect-return";
@@ -24,7 +24,7 @@ import { mountPrerenderedPage } from "./mount-page";
  * the app's settings, settles, by way of the service's callback route, which
  * settled it with Vercel Connect and put the provider and one word of status
  * on this page's address. It is drawn as GitHub's landing is, from the same
- * words (`@luke/features/landing-outcome`): the address chooses among them,
+ * words (`@repo/features/landing-outcome`): the address chooses among them,
  * and nothing it carried is drawn. The way back is the Open link
  * (`connect-return.ts`).
  */

@@ -65,7 +65,7 @@
 
 import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
 import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui/react/toggle-group";
-import { keepIdentity } from "@luke/wire";
+import { keepIdentity } from "@repo/wire";
 import {
   type ButtonHTMLAttributes,
   type ComponentType,

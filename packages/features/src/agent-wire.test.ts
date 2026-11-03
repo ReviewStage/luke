@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { test } from "vitest";
 import {
   type AgentTranscriptMessage,

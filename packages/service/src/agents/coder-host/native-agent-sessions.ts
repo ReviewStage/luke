@@ -15,9 +15,9 @@
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
 
-import { type Agent, hasRepository } from "@luke/database/models/agent-store";
-import { readNativeSequence } from "@luke/database/models/native-projection-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { type Agent, hasRepository } from "@repo/database/models/agent-store";
+import { readNativeSequence } from "@repo/database/models/native-projection-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { Effect, Layer, Option } from "effect";
 import { deploymentOrigin } from "../../deployment-origin.js";
 import { logStoreFailure } from "../../http/store-failure.js";

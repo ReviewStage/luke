@@ -1,6 +1,6 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 

@@ -1,4 +1,4 @@
-import { COMPOSER_ELEMENT, ComposerFrame, cn } from "@luke/ui";
+import { COMPOSER_ELEMENT, ComposerFrame, cn } from "@repo/ui";
 import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
 
 /**
@@ -10,7 +10,7 @@ import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
  * its field holds the caret (base.css), and nothing drawn behind it, so no
  * shadow darkens the page or the transcript around the card. The field
  * sizes itself to its words from one line to about eight and scrolls past
- * that, and under it stands the box's foot (`@luke/ui`'s `ComposerFoot`),
+ * that, and under it stands the box's foot (`@repo/ui`'s `ComposerFoot`),
  * which draws the tools, the files and the round submit. The agent tab's
  * message box and the Inbox's draw this one card, so a change here is the
  * look of both. The registry's attachments, speech button, selects, hover
@@ -25,7 +25,7 @@ import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
  * (`../tasks/composer-field.tsx`), whose Enter submits through the one
  * door (`submitPromptInput`).
  *
- * The card is `@luke/ui`'s `ComposerFrame`, its edge brightened while files
+ * The card is `@repo/ui`'s `ComposerFrame`, its edge brightened while files
  * are dragged over it; `.prompt-input*` (tasks.css) lays out what it holds,
  * and an owner's class beside them places the card in its surface.
  */

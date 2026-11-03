@@ -14,14 +14,14 @@
  * calls, never at module load.
  */
 
-import type { AppBridge, PushListeners } from "@luke/host/bridge";
+import type { AppBridge, PushListeners } from "@repo/host/bridge";
 import {
   type ActPortClient,
   PUSH_GUARD,
   PUSH_METHOD,
   type PushEvent,
   type PushName,
-} from "@luke/host/contract";
+} from "@repo/host/contract";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 

@@ -47,7 +47,7 @@ import {
 } from "./workspace-procedures.js";
 
 /**
- * index.ts -- the act port's server: every procedure of `@luke/host/contract`, served over a window's `MessagePort`.
+ * index.ts -- the act port's server: every procedure of `@repo/host/contract`, served over a window's `MessagePort`.
  *
  * The bridge upgrades each window's port with the handler built here, in
  * `apps/desktop/src/main/bridge-host.ts` alone, and hands every call the

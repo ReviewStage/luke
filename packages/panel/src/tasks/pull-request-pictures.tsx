@@ -1,10 +1,10 @@
-import type { FileChip } from "@luke/features/attachment-model";
-import { githubImageOf } from "@luke/features/github-image";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ProviderMark, SKELETON_SHAPE, Skeleton } from "@luke/ui";
-import { linksToPicture } from "@luke/ui/github-html";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
+import type { FileChip } from "@repo/features/attachment-model";
+import { githubImageOf } from "@repo/features/github-image";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ProviderMark, SKELETON_SHAPE, Skeleton } from "@repo/ui";
+import { linksToPicture } from "@repo/ui/github-html";
+import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
 import {
   createContext,
   type ReactNode,
@@ -28,13 +28,13 @@ import { useOpenLink } from "./use-open-link.js";
  * GitHub's rendering (`body_html`) names each picture by an address the
  * window may not read itself, so each is read once through the service on
  * the App's token as the agent's (`githubImageOf`) and kept in the window's
- * picture cache (`@luke/ui/picture-cache`). A picture standing alone is
+ * picture cache (`@repo/ui/picture-cache`). A picture standing alone is
  * drawn as a plan's picture is (`../picture-block.tsx`), its press
  * (Enlarge) opening the window's file viewer (`attachment-viewer.tsx`)
  * over the description or comment it stands in, walking that entry's
  * pictures, with Open on GitHub, to the address GitHub linked it to, beside the
  * viewer's own Download. GitHub
- * wraps every picture in a link to itself, which `@luke/ui/github-html`
+ * wraps every picture in a link to itself, which `@repo/ui/github-html`
  * lets go of, so the press is the picture's own. A picture inside a link
  * the words keep, a bot's badge to its page, stands inline as GitHub drew
  * it and its press follows the link. The viewer shows the `data:` URL each
@@ -76,7 +76,7 @@ export function useGitHubImageRead(): (owner: string, address: string) => Promis
 
 /**
  * The link a picture stands alone in, as GitHub wraps every picture it
- * renders: the one `@luke/ui/github-html` lets go of where it leads to the
+ * renders: the one `@repo/ui/github-html` lets go of where it leads to the
  * picture or to GitHub's own image addresses. None where the picture
  * stands in no link, or shares its link with anything else.
  */

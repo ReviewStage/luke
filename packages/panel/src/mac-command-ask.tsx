@@ -1,7 +1,7 @@
-import { ACT_KIND } from "@luke/host/acts";
-import type { MacCommandAsk } from "@luke/host/app-state";
-import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@luke/host/contract";
-import { CommandAsk } from "@luke/ui";
+import { ACT_KIND } from "@repo/host/acts";
+import type { MacCommandAsk } from "@repo/host/app-state";
+import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@repo/host/contract";
+import { CommandAsk } from "@repo/ui";
 import { useAct } from "./act.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useHeldThroughExit } from "./use-held-through-exit.js";
@@ -11,7 +11,7 @@ import { useHeldThroughExit } from "./use-held-through-exit.js";
  *
  * Main holds each command it claimed under This Mac's Ask every
  * time until the developer answers or the command's own timeout passes
- * (`@luke/host`'s `compose-mac-commands.ts`), and the document carries the
+ * (`@repo/host`'s `compose-mac-commands.ts`), and the document carries the
  * asks waiting. The earliest is drawn, and the next takes its place as it
  * goes; the answer goes back by the ask's id, and the card goes as main
  * drops the ask, so one answered elsewhere or timed out leaves no card

@@ -1,4 +1,4 @@
-import { SHOW_LESS_WORDS, showMoreWords } from "@luke/features/words";
+import { SHOW_LESS_WORDS, showMoreWords } from "@repo/features/words";
 import type { BusyProps } from "../button/button.js";
 import { LINE_BUTTON_LOOK, LineButton } from "../line-button/line-button.js";
 import { BusyLabel } from "../spinner/spinner.js";

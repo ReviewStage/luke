@@ -16,15 +16,15 @@
  * the workspace. Nesting has no bound.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   readTaskHeader,
   TaskParentRepositoryDiffers,
   TaskParentUnreached,
   type TaskRunsOnWrite,
   type TaskStoreFailure,
-} from "@luke/database/models/task-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/task-store";
+import { isWorkspaceMember } from "@repo/database/models/workspace-store";
 import { Effect, Option } from "effect";
 
 /** The parent a child is made under, and what the child takes from it. */

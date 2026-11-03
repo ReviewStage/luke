@@ -12,8 +12,8 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import { recordFromJsonLine, type WireRecord } from "@luke/wire";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { recordFromJsonLine, type WireRecord } from "@repo/wire";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { afterEach, describe, expect, it } from "vitest";
 
 const DRIVER = new URL("../src/sandbox/driver.mjs", import.meta.url);

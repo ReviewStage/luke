@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

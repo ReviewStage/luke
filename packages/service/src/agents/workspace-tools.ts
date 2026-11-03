@@ -16,11 +16,11 @@
  * transcript shows that line.
  */
 
-import type { Agent } from "@luke/database/models/agent-store";
-import { firstForeignLine } from "@luke/database/models/mac-command-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@luke/features/workspace-tools-wire";
+import type { Agent } from "@repo/database/models/agent-store";
+import { firstForeignLine } from "@repo/database/models/mac-command-store";
+import type { TaskStoreEffect } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@repo/features/workspace-tools-wire";
 import { Effect, Option } from "effect";
 import { offeredCoderTools } from "./coder-host/tool-set.js";
 import { macListening } from "./mac-command.js";

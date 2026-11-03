@@ -35,7 +35,7 @@ tester.run("no-browser-form-validation", noBrowserFormValidationRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "browserChecked" }],
     },
-    // `@luke/ui` is held too, and turning it back off is no escape.
+    // `@repo/ui` is held too, and turning it back off is no escape.
     {
       code: "function A() { return <form noValidate={false} />; }",
       filename: UI_FILE,

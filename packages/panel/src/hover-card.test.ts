@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

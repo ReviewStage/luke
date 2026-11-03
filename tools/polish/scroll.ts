@@ -28,7 +28,7 @@ export function scrollScript(role: string, by: number): string {
 /**
  * A page expression that holds every scroll fade at the depth it rests at
  * for the scroll it stands at. A fade's depth is eased by a scroll timeline
- * (`@luke/ui`'s scroll-area.css), which Playwright's `animations:
+ * (`@repo/ui`'s scroll-area.css), which Playwright's `animations:
  * "disabled"` finishes, dropping the end fade from every box whatever its
  * scroll. Note that the depths are read live and written as important inline
  * lengths, because an important declaration outranks an animation, so the

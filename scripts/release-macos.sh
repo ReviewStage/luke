@@ -32,4 +32,4 @@ fi
 "$SCRIPT_DIRECTORY/check.sh"
 
 cd "$APP_REPO_ROOT"
-pnpm --filter @luke/desktop release "$@"
+pnpm --filter @repo/desktop release "$@"

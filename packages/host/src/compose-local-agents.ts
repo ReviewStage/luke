@@ -4,13 +4,13 @@ import type {
   DeviceAgentDevice,
   DeviceAgentUpdate,
   HostedDeviceAgentClient,
-} from "@luke/features";
-import { DEVICE_BEAT } from "@luke/features/agent-wire";
+} from "@repo/features";
+import { DEVICE_BEAT } from "@repo/features/agent-wire";
 import {
   CHECKOUT_IDENTITY_SCRIPT,
   type CheckoutIdentity,
   checkoutIdentityEnv,
-} from "@luke/features/checkout-identity";
+} from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_FOLDER,
   DEVICE_AGENT_LINE_KIND,
@@ -32,8 +32,8 @@ import {
   deviceAgentLayout,
   deviceAgentStdinPayloadSchema,
   deviceAgentsFolder,
-} from "@luke/features/device-agent-wire";
-import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
+} from "@repo/features/device-agent-wire";
+import { GITHUB_TOKEN_REFRESH } from "@repo/features/host-wire";
 import {
   Clock,
   Config,
@@ -90,7 +90,7 @@ import type { RunMode } from "./run-mode.js";
  * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each straight on the box in a folder of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while the service refuses the device, `daemon/host-standing.ts`).
  *
  * The service writes a local agent's work as rows under this device's id
- * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
+ * (`@repo/features/device-agent-wire`, `contract/device-agents.ts`): lines
  * for its runner and requests from its tools. A Mac's id is minted once per
  * account and kept in the host's state; a host is handed the one it enrolled
  * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
@@ -121,7 +121,7 @@ import type { RunMode } from "./run-mode.js";
  * repository under its folder (`deviceAgentLayout`) where it has none,
  * through the platform's script, sets in it who the agent's commits are by
  * where the line says, as a cloud checkout sets it
- * (`@luke/features/checkout-identity`), and gh's credential helper, and
+ * (`@repo/features/checkout-identity`), and gh's credential helper, and
  * starts the runner (`LocalAgentPlatformSeam.launch`), with the claim's
  * secrets in its environment and nowhere else, never a file, an argument,
  * or a log, and its first lines on its stdin; its line is settled with the

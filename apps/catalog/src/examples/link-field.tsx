@@ -1,4 +1,4 @@
-import { GAP, LinkField, Stack } from "@luke/ui";
+import { GAP, LinkField, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

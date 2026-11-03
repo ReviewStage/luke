@@ -1,8 +1,8 @@
 /**
  * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
  */
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AgentAccountInboxAnswerView } from "@luke/features/agent-view";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AgentAccountInboxAnswerView } from "@repo/features/agent-view";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,

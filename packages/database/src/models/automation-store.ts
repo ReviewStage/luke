@@ -21,10 +21,10 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
   type GitHubTriggerEvent,
-} from "@luke/features/automation-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/automation-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import type { SentryTriggerEvent, TriggerProvider } from "@repo/features/trigger-catalog";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import {
   and,
   asc,

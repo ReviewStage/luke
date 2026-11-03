@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
+import { CHANNEL_CALL_FAILURE } from "@repo/features/channel-view";
 import { Effect } from "effect";
 import {
   type ActPortClient,

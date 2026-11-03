@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { WORKSPACE_CALL_FAILURE } from "@repo/features";
+import type { TasksWorkspacePhotoAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

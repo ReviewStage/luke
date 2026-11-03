@@ -17,8 +17,8 @@
  * reaches it and a reader hears it.
  */
 
-import { COPY_LOOK, CopyButton } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { COPY_LOOK, CopyButton } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { copyThroughShell } from "../copy-feedback.js";
 
 /** A head's name as GitHub writes it: its branch, after its fork's account where it stands on a fork. */

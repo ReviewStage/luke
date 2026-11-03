@@ -1,9 +1,9 @@
-import { RUNNER_ENV, RUNNER_PLACE } from "@luke/agent-runner/protocol";
+import { RUNNER_ENV, RUNNER_PLACE } from "@repo/agent-runner/protocol";
 import {
   DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   type DeviceArch,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js";
 import { agentOnBox } from "../local-agent-box.js";
 import { localAgentClis } from "../local-agent-setup.js";

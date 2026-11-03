@@ -1,5 +1,5 @@
-import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@repo/ui";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";

@@ -1,12 +1,12 @@
 // agent-credentials.ts -- an account's own API keys saved for both providers, so a suite's agents start and take messages.
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey } from "@repo/database/models/provider-key-store";
 import {
   type FastAccess,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 
 /**

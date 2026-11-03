@@ -1,4 +1,4 @@
-import { DIFF_SETTING_GROUPS, type DiffSettingSection, SETTING_SECTION } from "@luke/settings";
+import { DIFF_SETTING_GROUPS, type DiffSettingSection, SETTING_SECTION } from "@repo/settings";
 import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
@@ -12,8 +12,8 @@ import {
   DIFF_THEMES,
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
-} from "@luke/settings/diff-view";
-import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@luke/settings/shortcuts";
+} from "@repo/settings/diff-view";
+import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
@@ -30,8 +30,8 @@ import {
   SettingsSection,
   Shortcut,
   Tooltip,
-} from "@luke/ui";
-import { drawnDark } from "@luke/ui/appearance";
+} from "@repo/ui";
+import { drawnDark } from "@repo/ui/appearance";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { MenuAction } from "../desktop/action-menu.js";

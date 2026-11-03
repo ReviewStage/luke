@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

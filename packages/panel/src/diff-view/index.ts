@@ -1,7 +1,7 @@
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { onDrawnThemeChange } from "@luke/ui/appearance";
-import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@luke/ui/landed";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { DIFF_LAYOUT } from "@repo/settings/diff-view";
+import { onDrawnThemeChange } from "@repo/ui/appearance";
+import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@repo/ui/landed";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -70,7 +70,7 @@ import { wholeOf } from "./whole-diff.js";
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
  * drawn. Shiki colours the code in the theme chosen for each appearance,
- * the File tab's two GitHub themes (`@luke/host`'s `task-code.ts`) until
+ * the File tab's two GitHub themes (`@repo/host`'s `task-code.ts`) until
  * another is, each taken as the system's appearance changes, and runs its
  * grammars on its JavaScript engine, since the panel's policy admits no
  * WebAssembly.
@@ -401,7 +401,7 @@ const LOOK_CSS = `
 `;
 
 /**
- * Lines lit a moment: the file's element is landed on (`@luke/ui/landed`),
+ * Lines lit a moment: the file's element is landed on (`@repo/ui/landed`),
  * whose light, `--ui-landed`, falls from 1 to 0 on the element and is
  * inherited inside, since no keyframes of the document's reach a shadow
  * root, and Pierre's lit rows stand that far between their lit ground and
@@ -516,7 +516,7 @@ function highlightWorkerText(): string | undefined {
 let kept: Highlighting | undefined;
 
 /**
- * How a list's files are highlighted (`@luke/panel/diff-view/highlight-pool`),
+ * How a list's files are highlighted (`@repo/panel/diff-view/highlight-pool`),
  * started the first time a list is drawn and kept for the window's life,
  * since a next list would only load the same grammars and themes again:
  * each worker started from the text the build carried, as a `blob:`.

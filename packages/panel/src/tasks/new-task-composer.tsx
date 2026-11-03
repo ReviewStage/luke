@@ -1,20 +1,20 @@
-import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import type { MacOffer, ModelChoice } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import type { MacOffer, ModelChoice } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
   type TaskCreateRelation,
   type TaskCreateRelationKind,
   type TaskMode,
-} from "@luke/features/task-wire";
-import { TERM } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { TERM } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@repo/settings/shortcuts";
 import {
   CHIP_WIDTH,
   CHOICE_BAR_LOOK,
@@ -27,8 +27,8 @@ import {
   TEXT_VARIANT,
   Text,
   VisuallyHidden,
-} from "@luke/ui";
-import { workspaceReaches } from "@luke/ui/tasks-model";
+} from "@repo/ui";
+import { workspaceReaches } from "@repo/ui/tasks-model";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";

@@ -32,7 +32,7 @@
  * a bound it is handed, as a positional argument.
  */
 
-import { PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
+import { PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 import { SANDBOX_BROWSER } from "./sandbox-browser.js";

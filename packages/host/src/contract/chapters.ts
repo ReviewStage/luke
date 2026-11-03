@@ -4,7 +4,7 @@ import {
   pullRequestChaptersAnswerViewSchema,
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { CHAPTERS_ACT_KIND } from "./kinds.js";
@@ -14,7 +14,7 @@ import { CHAPTERS_ACT_KIND } from "./kinds.js";
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
  * row's value into what crosses the port, the convention the hosted contract
- * keeps (`@luke/features/contract`).
+ * keeps (`@repo/features/contract`).
  */
 export const chaptersActsContract = {
   [CHAPTERS_ACT_KIND.CHAPTERS_READ]: actProcedure(

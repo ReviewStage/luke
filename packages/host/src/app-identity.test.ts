@@ -4,7 +4,7 @@ import { mkdirSync, symlinkSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
 import { AD_HOC_APP_NAME, resolveAppName, resolveInstance } from "./app-identity.js";
 

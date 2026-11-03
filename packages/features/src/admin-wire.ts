@@ -9,7 +9,7 @@
  * answers themselves are `admin-answer-wire.ts`'s.
  */
 
-import { HTTP_STATUS } from "@luke/wire";
+import { HTTP_STATUS } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 
 /**

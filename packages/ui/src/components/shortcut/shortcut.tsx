@@ -4,7 +4,7 @@ import {
   type ShortcutChord,
   shortcutAccelerator,
   shortcutGlyphs,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { cn } from "../../cn.js";
 import { Kbd, KbdGroup } from "../../shadcn/kbd.js";
 

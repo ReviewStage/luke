@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

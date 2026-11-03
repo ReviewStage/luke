@@ -60,11 +60,11 @@
  * member watching after the agent's turn ended is never cut off by it.
  */
 
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
-import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@luke/features/browser-acts";
-import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { browserTabDriver } from "@repo/database/models/agent-browser-tabs";
+import type { BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@repo/features/browser-acts";
+import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@repo/features/browser-cdp";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -79,8 +79,8 @@ import {
   type BrowserLiveCloseReason,
   type BrowserLiveServerMessage,
   browserLiveClientMessageSchema,
-} from "@luke/features/browser-live-wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/browser-live-wire";
+import { readEither } from "@repo/wire/effect";
 import {
   type Cause,
   Clock,

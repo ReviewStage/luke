@@ -29,12 +29,12 @@ rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. Easings are tokens too, never `ease` or `ease-out`: a fade, a
 hover settle and a press ride `--ui-motion-exit`, a pane and a fold `--ui-motion-pane`,
 and a travel the spring. A script that plays motion reads the same tokens through `tokenTiming`
-(`@luke/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
+(`@repo/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle) whose
 `animation-play-state` answers `--ui-loop-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token.
-A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
+A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@repo/ui`'s `hint.tsx`)
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
 over its own length, a toast's countdown bar draining over the hold its
 host hands it (`--ui-toast-hold`), takes that hold rather than a token,
@@ -97,7 +97,7 @@ one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
 Review holds this contract: the generated brand art and motion tokens match
-their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
+their generators in `@repo/brand` (`pnpm --filter @repo/brand check` reports
 drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
@@ -125,7 +125,7 @@ and 200% as well as at a phone's width (`desktop/shell-room.test.ts`).
 ## Shared tokens and components
 
 The tokens a control is drawn with, and every control any app draws,
-are `@luke/ui`'s (`packages/ui/src/tokens/`, `packages/ui/src/components/`),
+are `@repo/ui`'s (`packages/ui/src/tokens/`, `packages/ui/src/components/`),
 so the window and the site draw one control at two densities rather than two
 controls, and a control only one app draws lives there too. A root, and every overlay it portals into the body, carries two
 attributes (`surfaceAttributes` in `surface.ts`): `data-ui-profile`,
@@ -136,7 +136,7 @@ steers the Mac's appearance to the setting, and the web's wears the setting
 resolved, following the machine under System (`apps/web/src/app/web-appearance.tsx`).
 A sheet picks a colour of its own by `light-dark()`, which the theme decides
 through `color-scheme`, never by `prefers-color-scheme`, and script asks
-`@luke/ui/appearance`.
+`@repo/ui/appearance`.
 
 The tokens come in three layers. The base scale (`scale.css`) names a value
 by what it is, so `--ui-space-16` is sixteen pixels in either app. A role
@@ -161,7 +161,7 @@ synthetic data, which is where a new one is first seen.
 
 ## Readability and access
 
-Semantic colours are named once, in `@luke/ui`'s palette, and the window's own
+Semantic colours are named once, in `@repo/ui`'s palette, and the window's own
 (whose voice is live, the code's and the terminal's inks, a file icon's, the
 sidebar's and a well's grounds) in `base.css` and `desktop.css`; component
 sheets consume the token rather than inventing another error red, overlay
@@ -207,7 +207,7 @@ it. Repeated structural widths, heights, gaps, radii, colors, and motion belong
 to semantic or generated tokens; a repeated literal is evidence that the
 vocabulary is missing a name.
 
-Spacing in the desktop window comes from one scale, `@luke/ui`'s, read in the
+Spacing in the desktop window comes from one scale, `@repo/ui`'s, read in the
 window's stylesheets as `--ui-space-2` through `--ui-space-48`, and the
 names built from it in `shell.css`'s and `desktop.css`'s `:root`. Every column holds its
 rows `--column-inset` from its edges, every row holds its glyph or words
@@ -222,7 +222,7 @@ anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 
-The window's buttons are `@luke/ui`'s Button and IconButton
+The window's buttons are `@repo/ui`'s Button and IconButton
 (`packages/ui/src/components/button/`); `desktop.css` keeps one of its own,
 `.toolbar-button`, for the file tree's Retry, a button the tree's own DOM
 builds. A glyph alone is an IconButton: a `--ui-control-height` square with a `--ui-control-icon` glyph in
@@ -238,7 +238,7 @@ beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--ui-button-ground` and fills over that rather than over
 what passes. What is not one of these is a row or a tab and says why where it
 is drawn, such as a tab's ×, which brightens without a fill. A chip, which names a value or a thing rather than an act, is
-`@luke/ui`'s Chip.
+`@repo/ui`'s Chip.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws

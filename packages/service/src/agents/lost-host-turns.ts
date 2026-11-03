@@ -2,14 +2,14 @@
  * lost-host-turns.ts -- the turns a removed host's agents had running, settled lost, since no runner there can end them.
  *
  * A host is removed by Settings' Remove, or folded into the account's new
- * host on the same Mac (`@luke/database/models/host-store`). Either way its
+ * host on the same Mac (`@repo/database/models/host-store`). Either way its
  * secret is refused from now on, so no runner there can end the turns its
  * agents had running, and without this they would read as running until
  * `TURN_ABANDON`.
  */
 
-import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import { storeWriter } from "@luke/database/models/writer";
+import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
+import { storeWriter } from "@repo/database/models/writer";
 import { Clock, Effect } from "effect";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 

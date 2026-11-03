@@ -1,5 +1,5 @@
 /**
- * site-markdown.tsx -- the site's two Markdown documents drawn as HTML when it is built: CHANGELOG.md read as releases and PRIVACY.md as a policy, both by `@luke/ui/markdown`, the renderer every Markdown in the app is drawn with.
+ * site-markdown.tsx -- the site's two Markdown documents drawn as HTML when it is built: CHANGELOG.md read as releases and PRIVACY.md as a policy, both by `@repo/ui/markdown`, the renderer every Markdown in the app is drawn with.
  *
  * Only the build reads this module (`scripts/site-markdown.ts`, which hands
  * a page what it answers as a module of finished values), so the pages
@@ -14,8 +14,8 @@ import {
   MARKDOWN_LOOK,
   Markdown,
   type MarkdownComponents,
-} from "@luke/ui/markdown";
-import { markdownTree } from "@luke/ui/markdown-words";
+} from "@repo/ui/markdown";
+import { markdownTree } from "@repo/ui/markdown-words";
 import type { Heading, Nodes, PhrasingContent, RootContent } from "mdast";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Release, ReleaseImage } from "./changelog-releases";

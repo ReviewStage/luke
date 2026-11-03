@@ -1,8 +1,8 @@
-import type { AgentStatus, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
-import type { ChannelThreadAgent } from "@luke/features/channel-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { CatalogModel } from "@luke/features/models-wire";
-import type { TaskAgentLine } from "@luke/features/task-wire";
+import type { AgentStatus, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import type { ChannelThreadAgent } from "@repo/features/channel-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { CatalogModel } from "@repo/features/models-wire";
+import type { TaskAgentLine } from "@repo/features/task-wire";
 import {
   HoverCard,
   HoverCardHead,
@@ -10,9 +10,9 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   Tooltip,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import type { HeldTranscripts } from "../desktop/strip-tabs.js";
 import { useMemberDirectory } from "../member-directory.js";

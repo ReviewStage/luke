@@ -1,4 +1,4 @@
-import type { ModelUsage } from "@luke/runtime/vocabulary";
+import type { ModelUsage } from "@repo/runtime/vocabulary";
 
 /**
  * A developer ask as the turn run owns it from acceptance to its end. The record

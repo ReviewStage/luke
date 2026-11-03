@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -2,10 +2,10 @@
  * app-state.ts -- what a test of a surface gated by an experiment or a platform capability, or one that names the signed-in account or draws a call, stands on: main's document as the bridge hands it, with the account's experiments, the platform's capabilities, its identity, and its call as given.
  */
 
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { PAGE_OWNER, type PageLine, type PagePlace } from "@luke/features/page-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   type AppHolderInboxes,
   type AppHostRead,
@@ -18,15 +18,15 @@ import {
   NO_PAGES,
   NO_WORKSPACE_CHANNELS,
   UNREAD,
-} from "@luke/host/app-state";
-import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
-import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import type { AppSettingsView } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/host/app-state";
+import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
+import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import type { AppSettingsView } from "@repo/settings/wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import {
   fakeActPort,
   fakeActPortCalls,

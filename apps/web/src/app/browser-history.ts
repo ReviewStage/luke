@@ -5,7 +5,7 @@
  * `history.pushState` or `history.replaceState` at the step's address, its
  * state saved beside the entry's index as `{state, idx}`. The entries are
  * also held here, by that index, so the panel reads every step's state
- * without the browser travelling to it, as `@luke/ui/history-adapter`
+ * without the browser travelling to it, as `@repo/ui/history-adapter`
  * promises. A `popstate` is the browser moving by itself: the index it lands
  * on stands, and every listener hears it, so the panel goes there
  * (`navigation-history.ts`). A move of the panel's own stands at once, as the
@@ -34,7 +34,7 @@ import {
   type HistoryAdapter,
   type HistoryEntry,
   type HistorySnapshot,
-} from "@luke/ui/history-adapter";
+} from "@repo/ui/history-adapter";
 import { Schema } from "effect";
 import { addressHere, PANEL_PATH } from "./web-address";
 

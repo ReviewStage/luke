@@ -1,4 +1,4 @@
-import { PAGER_AXIS, PAGER_COUNT, Pager, PaneBar } from "@luke/ui";
+import { PAGER_AXIS, PAGER_COUNT, Pager, PaneBar } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

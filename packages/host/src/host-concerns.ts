@@ -15,8 +15,8 @@ import {
   type GatewayMethodHandler,
   type GatewayMethodTable,
   RefusedRefusal,
-} from "@luke/gateway";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+} from "@repo/gateway";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { Effect } from "effect";
 import type { Composer } from "./composer.js";
 

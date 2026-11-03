@@ -1,6 +1,6 @@
-import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@luke/features/agent-view";
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@repo/features/agent-view";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -20,8 +20,8 @@ import {
   useConfirmDialog,
   useRowMenu,
   withContextMenu,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";

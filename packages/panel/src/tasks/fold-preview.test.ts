@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CALL_KIND, type CallKind } from "@luke/features/turn-rows";
-import { DisclosureFind } from "@luke/ui";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { CALL_KIND, type CallKind } from "@repo/features/turn-rows";
+import { DisclosureFind } from "@repo/ui";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";

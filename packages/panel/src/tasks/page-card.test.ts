@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

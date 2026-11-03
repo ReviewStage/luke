@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
 import { TerminalIcon } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

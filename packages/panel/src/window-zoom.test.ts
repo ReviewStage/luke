@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@luke/settings";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@repo/settings";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

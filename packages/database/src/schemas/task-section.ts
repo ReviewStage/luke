@@ -1,4 +1,4 @@
-import type { TaskSectionIcon } from "@luke/features/task-section-wire";
+import type { TaskSectionIcon } from "@repo/features/task-section-wire";
 import { index, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
@@ -27,9 +27,9 @@ export const taskSection = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    // One emoji, or one Lucide glyph by name in a color of the palette or none (`@luke/features/task-section-wire`); null for none.
+    // One emoji, or one Lucide glyph by name in a color of the palette or none (`@repo/features/task-section-wire`); null for none.
     icon: jsonb("icon").$type<TaskSectionIcon>(),
-    // Where it stands among the account's sections once dragged, a fractional index (`@luke/features/pin-order`); null stands it by `createdAt`.
+    // Where it stands among the account's sections once dragged, a fractional index (`@repo/features/pin-order`); null stands it by `createdAt`.
     position: text("position"),
     createdAt: timestamptz("created_at").notNull(),
   },

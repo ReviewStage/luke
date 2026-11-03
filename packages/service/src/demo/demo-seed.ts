@@ -1,17 +1,17 @@
 import type { DB } from "@better-auth/drizzle-adapter";
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import { type Agent, createAgent } from "@luke/database/models/agent-store";
-import { createChannel } from "@luke/database/models/channel-store";
-import { enrollOwnDevice } from "@luke/database/models/host-store";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { type Agent, createAgent } from "@repo/database/models/agent-store";
+import { createChannel } from "@repo/database/models/channel-store";
+import { enrollOwnDevice } from "@repo/database/models/host-store";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   startPlanCommentThread,
-} from "@luke/database/models/plan-comments";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey, setProviderKeyForAgents } from "@luke/database/models/provider-key-store";
-import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
+} from "@repo/database/models/plan-comments";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey, setProviderKeyForAgents } from "@repo/database/models/provider-key-store";
+import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   createTaskOnce,
   savePlanText,
@@ -20,27 +20,27 @@ import {
   type TaskRunsOnWrite,
   type TaskTreeRepositoryLocked,
   updateTask,
-} from "@luke/database/models/task-store";
-import { type WorkspaceSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
-import { createWorkspace, ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/task-store";
+import { type WorkspaceSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
+import { createWorkspace, ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import {
   type ConversationTarget,
   type StoreWriter,
   storeWriter,
-} from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { AGENT_MACHINE, MESSAGE_SENDER } from "@luke/features/agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { INBOX_REPLY, openAskOf } from "@luke/features/inbox-wire";
+} from "@repo/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { AGENT_MACHINE, MESSAGE_SENDER } from "@repo/features/agent-wire";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
-} from "@luke/features/plan-comment-wire";
-import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/plan-comment-wire";
+import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { type Cause, Clock, Data, Effect, Option, type Redacted, Result } from "effect";
@@ -109,7 +109,7 @@ import {
  * answered.
  *
  * How to run it: `DATABASE_URL=<a Postgres on loopback> pnpm --filter
- * @luke/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
+ * @repo/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
  * is migrated and `auth:seed` has run. It refuses any database that is not
  * on loopback (`demo-database.ts`). Where `APP_DEMO_CLAUDE_TOKEN` (a
  * `claude setup-token`) or `APP_DEMO_ANTHROPIC_API_KEY` is set, it is saved

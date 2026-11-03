@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   type Agent,
   createAgent,
   hasRepository,
   readAgent,
-} from "@luke/database/models/agent-store";
-import { createAutomation } from "@luke/database/models/automation-store";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
+} from "@repo/database/models/agent-store";
+import { createAutomation } from "@repo/database/models/automation-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_AUTHOR, type AgentAuthor } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/automation-wire";
+import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option, Redacted } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {

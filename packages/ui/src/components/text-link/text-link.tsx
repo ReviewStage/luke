@@ -113,7 +113,7 @@ function linkClass(
     .join(" ");
 }
 
-/** What an underlined link with an address wears where an engine draws it without React, an editor's link mark (`@luke/ui/link-face`). */
+/** What an underlined link with an address wears where an engine draws it without React, an editor's link mark (`@repo/ui/link-face`). */
 export const TEXT_LINK_MARK_CLASS = linkClass(
   TEXT_LINK_LOOK.UNDERLINED,
   undefined,

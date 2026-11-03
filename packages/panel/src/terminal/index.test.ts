@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
+import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TerminalHandle } from "./contract.js";
 import { terminal } from "./index.js";

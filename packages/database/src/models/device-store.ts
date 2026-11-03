@@ -27,7 +27,7 @@ import {
   type HostUpdate,
   hostUpdateSchema,
   knownDeviceCapabilities,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

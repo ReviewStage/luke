@@ -69,10 +69,10 @@
  * handle Connect answers a sign-in with, which is never answered at all.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import type { integrationStatusesReadSchema } from "@luke/features/contract";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import type { integrationStatusesReadSchema } from "@repo/features/contract";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_ADD_ACCOUNT,
@@ -90,7 +90,7 @@ import {
   integrationConnectionOf,
   integrationProviderFromWire,
   mintIntegrationConnectionName,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

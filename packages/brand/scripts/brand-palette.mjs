@@ -1,13 +1,13 @@
 // brand-palette.mjs -- the brand's colours, the one table both generators read.
 //
-// generate-surface-shared.mjs writes these onto @luke/ui's roles (brand.css)
+// generate-surface-shared.mjs writes these onto @repo/ui's roles (brand.css)
 // and as plain values (BRAND_PALETTE); generate-brand-assets.mjs draws the
 // icons, the cards, and the buttons in them.
 
 // The brand's colours: every --ui-color-* role a change of brand changes,
 // in the light theme and the dark, for the desktop and the site alike. The
 // roles a brand leaves alone (the fills and edges drawn as alphas of the ink,
-// shadows, the identity and chart hues, find's yellows) stay in @luke/ui's
+// shadows, the identity and chart hues, find's yellows) stay in @repo/ui's
 // palettes.css. Each entry is one brand; `BRAND` names the one the product
 // wears, so a rebrand is a new entry and that one name, and a second theme
 // is a second entry the generator writes under a selector of its own.
@@ -15,7 +15,7 @@
 // Copper: warm graphite neutrals and one copper accent at 60 degrees of
 // OKLCH hue, held there in the dark rather than lightened toward peach. Every
 // ink holds its contrast pair on the grounds it is drawn on, which
-// @luke/ui's brand-contrast.test.ts asserts.
+// @repo/ui's brand-contrast.test.ts asserts.
 export const BRAND_PALETTES = {
   COPPER: {
     LIGHT: {

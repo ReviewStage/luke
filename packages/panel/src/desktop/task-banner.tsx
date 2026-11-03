@@ -1,4 +1,4 @@
-import { AttentionMark, BANNER_LOOK, Banner, BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
+import { AttentionMark, BANNER_LOOK, Banner, BUTTON_VARIANT, Button, STATUS_TONE } from "@repo/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
  * one press that mends it, an outlined button, on a faint attention tint. It has no close: it
  * goes once what it says no longer holds. Its words are text, never an
  * attribute, because the session recording masks text and nothing else. Where
- * the column is narrow it gives way as every banner does (`@luke/ui`'s `Banner`):
+ * the column is narrow it gives way as every banner does (`@repo/ui`'s `Banner`):
  * the words wrap and the press takes a line of its own beneath them.
  */
 

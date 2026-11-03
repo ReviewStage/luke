@@ -1,5 +1,5 @@
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { MenuKeys, menuKey } from "@luke/ui";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
+import { MenuKeys, menuKey } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

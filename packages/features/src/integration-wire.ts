@@ -1,5 +1,5 @@
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import { Schema as EffectSchema } from "effect";
 
 /**

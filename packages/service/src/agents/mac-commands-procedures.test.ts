@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   claimMacCommands,
   macCommandResult,
@@ -27,18 +27,18 @@ import {
   markMacListening,
   queueMacCommand,
   settleMacCommand,
-} from "@luke/database/models/mac-command-store";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
+} from "@repo/database/models/mac-command-store";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandResult,
-} from "@luke/features/mac-command-wire";
-import { RUN_ON_MAC_OFF } from "@luke/features/workspace-tools-wire";
-import { unparsedWire } from "@luke/wire";
+} from "@repo/features/mac-command-wire";
+import { RUN_ON_MAC_OFF } from "@repo/features/workspace-tools-wire";
+import { unparsedWire } from "@repo/wire";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";

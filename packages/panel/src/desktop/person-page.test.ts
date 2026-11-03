@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -11,7 +11,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationScope,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -19,13 +19,13 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppHostRead, type AppInboxItems, UNREAD } from "@luke/host/app-state";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppHostRead, type AppInboxItems, UNREAD } from "@repo/host/app-state";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

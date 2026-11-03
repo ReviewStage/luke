@@ -11,8 +11,8 @@
  * the account is unread or a sign-in is under way.
  */
 
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { APP_SLICE, useAppSlice } from "@luke/panel/use-app-state";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { APP_SLICE, useAppSlice } from "@repo/panel/use-app-state";
 import { useEffect } from "react";
 
 /** Where the word is kept, as `public/app-theme.js` reads it. */

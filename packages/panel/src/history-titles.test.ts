@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { test } from "vitest";
 import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
 import { PANEL_TAB } from "./panel-tabs.js";

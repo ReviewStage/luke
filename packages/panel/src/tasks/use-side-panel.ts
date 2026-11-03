@@ -1,5 +1,5 @@
-import type { CodeRef } from "@luke/features/task-wire";
-import { CommentsIcon, DocumentIcon } from "@luke/ui";
+import type { CodeRef } from "@repo/features/task-wire";
+import { CommentsIcon, DocumentIcon } from "@repo/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -28,7 +28,7 @@ import {
   type ViewedAt,
   viewedLast,
   withoutViewedAt,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -370,7 +370,7 @@ const keptTaskPinTabSchema = Schema.Union([
 /**
  * A tab pinned to the sidebar on a task: the task, the tab, the name the
  * sidebar draws for it, when it was pinned, where it stands among the pins
- * once it was dragged (`@luke/features/pin-order`), kept on this Mac alone,
+ * once it was dragged (`@repo/features/pin-order`), kept on this Mac alone,
  * and, an agent's an earlier version pinned, the model it ran on then.
  */
 const taskPinSchema = Schema.Struct({

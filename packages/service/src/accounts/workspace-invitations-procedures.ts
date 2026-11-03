@@ -22,16 +22,16 @@
  * whatever it sent.
  */
 
-import type { MemberSeams, PluginInvitation } from "@luke/database/models/workspace-seams";
-import { workspaceGitHubAccountId } from "@luke/database/models/workspace-store";
-import { githubAccountAvatarUrl } from "@luke/features/account-picture";
+import type { MemberSeams, PluginInvitation } from "@repo/database/models/workspace-seams";
+import { workspaceGitHubAccountId } from "@repo/database/models/workspace-store";
+import { githubAccountAvatarUrl } from "@repo/features/account-picture";
 import {
   INVITATION_ROLE,
   invitationAcceptUrl,
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
-} from "@luke/features/workspace-invitation-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-invitation-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Clock, Effect, Option } from "effect";
 import {
   recordServerEvent,

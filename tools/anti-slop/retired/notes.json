@@ -1,5 +1,5 @@
 {
-  "instead": "Say a failure with FailureNote and a muted line with NoteLine (a read that did not land is an ErrorState), all from @luke/ui.",
+  "instead": "Say a failure with FailureNote and a muted line with NoteLine (a read that did not land is an ErrorState), all from @repo/ui.",
   "classes": [
     { "class": "sidebar-note", "allow": [] },
     { "class": "sidebar-failure", "allow": [] },

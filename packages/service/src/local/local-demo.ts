@@ -31,7 +31,7 @@ export interface LocalDemoShape {
 const OFF: LocalDemoShape = { on: false };
 
 /** The demo as one runtime has it: on only where `localDemoFromEnvironment` read it so, off otherwise. */
-export const LocalDemo = Context.Reference<LocalDemoShape>("@luke/service/LocalDemo", {
+export const LocalDemo = Context.Reference<LocalDemoShape>("@repo/service/LocalDemo", {
   defaultValue: () => OFF,
 });
 

@@ -1,11 +1,11 @@
-import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
+import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
 import {
   holdsSlashWord,
   type SkillOption,
   skillTokens,
   skillWord,
   type TextRange,
-} from "@luke/ui/skill-mention";
+} from "@repo/ui/skill-mention";
 import {
   createContext,
   type ReactNode,

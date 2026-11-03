@@ -1,18 +1,18 @@
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
+import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import {
   AGENT_MACHINE,
   AGENT_STATUS,
   type AgentPullRequest,
   type AgentStatus,
   type AgentSummary,
-} from "@luke/features/agent-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
-import { readingWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/agent-wire";
+import type { ModelChoice } from "@repo/features/models-wire";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@repo/features/terminal-entry";
+import { readingWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   CloseIcon,
   CollapseIcon,
@@ -39,9 +39,9 @@ import {
   Text,
   Tooltip,
   useResizeEdge,
-} from "@luke/ui";
-import { ListIcon } from "@luke/ui/icons";
-import { usePlanComments } from "@luke/ui/plan-comments";
+} from "@repo/ui";
+import { ListIcon } from "@repo/ui/icons";
+import { usePlanComments } from "@repo/ui/plan-comments";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -60,7 +60,7 @@ import {
   TAB_WORDS,
   type TerminalStripTab,
   tabKey,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import {
   Fragment,
   type ReactNode,

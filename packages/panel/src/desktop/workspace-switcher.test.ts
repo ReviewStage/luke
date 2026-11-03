@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

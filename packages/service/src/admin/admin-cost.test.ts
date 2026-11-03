@@ -3,8 +3,8 @@ import {
   ADMIN_COST_TOP_ACCOUNTS_LIMIT,
   type AdminCostAccountInfo,
   COST_SOURCE,
-} from "@luke/features/admin-cost-wire";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+} from "@repo/features/admin-cost-wire";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import { test } from "vitest";
 import type { OfferedModel } from "../providers/model-catalog.js";
 import {
