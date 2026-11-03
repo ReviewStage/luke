@@ -1344,8 +1344,8 @@ credentials.
 ## The account group
 
 `src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
-router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
-template procedures, on the paths `@repo/features/contract`'s `account.ts`
+router (`src/orpc/`): the signed-in desktop's own delete, preferences, access,
+provider-key, memory, and ChatGPT-credential procedures, on the paths `@repo/features/contract`'s `account.ts`
 declares, each answering from this deployment's own database.
 Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
@@ -1363,30 +1363,44 @@ and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
-The preferences snapshot carries three parts. `preferences` is the settings
+The preferences snapshot carries six parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
-`codingAgent` is the account's default model and effort for an agent —
+`linkOpen`, where the account's app links open (null reads as the browser),
+and `agentEnter`, what Enter does in an agent's box while it works (`steer`
+or `queue`, null reads as steer), are synced settings kept as parts of their
+own (`link_open`, `agent_enter`), so a build that predates them neither
+refuses the snapshot nor clears them by writing `preferences` back whole.
+`agent` is the account's default model and effort for an agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
-spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses,
+spelling, and until the account chooses, the fallback a Start naming no
+model runs on (`accountModelChoices`), which follows the provider whose
+credential pays: `anthropic/claude-opus-5.5` at `high` for Anthropic's,
 with `contextWindow: "standard"` beside them where the smaller context window
 of a model offering two was chosen (absent is the model's whole window).
 Settings › Agents and the Start menu's chevron both write it, as one
-value rather than two that could disagree. A PUT carries either part or both;
-a part left out stands as it was, so the desktop's settings sync never
-resets the chosen model and the Start menu never touches the settings. A
-`codingAgent` write is accepted only as the instance's model catalog accepts
+value rather than two that could disagree. A PUT carries any of the parts,
+and one that carries none is `invalid-request`; a part left out stands as it was, so the desktop's settings sync never
+resets the chosen model and the Start menu never touches the settings. An
+`agent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
-is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
+is `invalid-request`, and a catalog the instance cannot read is `unavailable`;
+and it moves the default to another model only where a credential of the
+account's pays for that model's provider, else `invalid-request`.
 The store keeps the columns on `account_preference`, and
 reads a half-written pair as the default; `agent_context_window` is
-null for the model's whole window (migration 0077). `updated_at` is the preferences
-part's own instant, nullable since migration 0062 and left null by a write
-that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
+null for the model's whole window (migration `20261004033640_coding_agent_context_window`). `updated_at` is the preferences
+part's own instant, nullable since migration
+`20260930063320_coding_agent_default_model` and left null by a write
+that carries no `preferences`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
-`experiments` is the third part: each experiment the account turned on or
+`chaptersModel` is the Claude model Generate chapters runs on, one of
+`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
+the account chooses; any other value is `invalid-request`.
+
+`experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
 `EXPERIMENT`, as `{ "memory": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
