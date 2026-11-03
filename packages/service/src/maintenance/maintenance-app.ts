@@ -3,6 +3,7 @@ import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/
 import { sweepHostPairings } from "@repo/database/models/host-pairing-store";
 import { hostedStore } from "@repo/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@repo/database/models/plan-attachments";
+import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
@@ -120,6 +121,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepRepositorySnapshots: () =>
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
+    pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
   });
 });
 

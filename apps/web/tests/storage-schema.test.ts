@@ -104,6 +104,7 @@ const DECLARED_TABLES = [
   "slack_channel_repository",
   "slack_installation",
   "slack_member",
+  "sync_log",
   "task",
   "task_block",
   "task_number_counter",
