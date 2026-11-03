@@ -9,16 +9,19 @@
  * it runs as the base model with its own fast mode on; Codex takes GPT
  * models, a fast version among them where the account's ChatGPT plan or
  * OpenAI API key pays, which it runs as the base model on its `fast` service
- * tier; on a Mac's own sign-in, whatever it is signed in with, it runs none.
- * A runtime's rule is one row of `NATIVE_MODEL_RULE`, Codex's where a payer
- * that runs Fast pays its own (`CODEX_FAST`); a runtime with no row is eve's,
- * which offers everything.
+ * tier, and an Ultrafast version only where its OpenAI API key pays, on its
+ * `ultrafast` tier, since OpenAI offers Ultrafast on few plans; on a Mac's
+ * own sign-in, whatever it is signed in with, it runs neither. A runtime's
+ * rule is one row of `NATIVE_MODEL_RULE`, Codex's on the plan
+ * (`CODEX_FAST`) and on an API key (`CODEX_ON_API_KEY`) its own; a runtime
+ * with no row is eve's, which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
- * decides the runtime (`agent-runtime-choice.ts`).
+ * decides the runtime (`agent-runtime-choice.ts`). eve runs no new agent,
+ * and its rule is left offering everything, Ultrafast versions among them.
  */
 
 import { AGENT_PAYER, AGENT_RUNTIME, type AgentPayer, type AgentRuntime } from "./agent-wire.js";
-import { MODEL_PROVIDER, type ModelProvider } from "./models-wire.js";
+import { MODEL_PROVIDER, MODEL_SPEED, type ModelProvider, modelSpeedOf } from "./models-wire.js";
 
 /** What a runtime lets an agent move to. */
 export interface RuntimeModelRule {
@@ -26,18 +29,23 @@ export interface RuntimeModelRule {
   readonly provider: ModelProvider | undefined;
   /** Whether it runs a model's fast version. */
   readonly fast: boolean;
+  /** Whether it runs a model's Ultrafast version. */
+  readonly ultrafast: boolean;
   /** Whether it takes a choice of context window. */
   readonly contextWindow: boolean;
   /** How a refusal names it. */
   readonly name: string;
   /** What a refusal of a fast version says of it, where a fast version runs on another payer of the same runtime. */
   readonly fastRefusal?: string;
+  /** What a refusal of an Ultrafast version says of it, where one runs on another payer of the same runtime. */
+  readonly ultrafastRefusal?: string;
 }
 
 /** eve's rule: everything the catalog offers. */
 const ANY_MODEL: RuntimeModelRule = {
   provider: undefined,
   fast: true,
+  ultrafast: true,
   contextWindow: true,
   name: "eve",
 };
@@ -47,28 +55,36 @@ const NATIVE_MODEL_RULE: Partial<Record<AgentRuntime, RuntimeModelRule>> = {
   claude_code: {
     provider: MODEL_PROVIDER.ANTHROPIC,
     fast: true,
+    ultrafast: false,
     contextWindow: false,
     name: "Claude",
   },
   codex: {
     provider: MODEL_PROVIDER.OPENAI,
     fast: false,
+    ultrafast: false,
     contextWindow: false,
     name: "Codex",
     fastRefusal: "which runs a fast version on the ChatGPT plan or an OpenAI API key alone",
+    ultrafastRefusal: "which runs an Ultrafast version on an OpenAI API key alone",
   },
 };
 
-/** The payers Codex runs a fast version on, as the launch hands them its credential: not a Mac's own sign-in. */
-const CODEX_FAST_PAYERS: ReadonlySet<AgentPayer> = new Set([
-  AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-  AGENT_PAYER.API_KEY,
-]);
-
-/** Codex where a payer that runs Fast pays: a GPT model's fast version runs on its `fast` service tier. */
+/** Codex where the account's ChatGPT plan pays: a GPT model's fast version runs on its `fast` service tier, and no Ultrafast version. */
 const CODEX_FAST: RuntimeModelRule = {
   provider: MODEL_PROVIDER.OPENAI,
   fast: true,
+  ultrafast: false,
+  contextWindow: false,
+  name: "Codex",
+  ultrafastRefusal: "which runs an Ultrafast version on an OpenAI API key alone",
+};
+
+/** Codex where the account's OpenAI API key pays: a GPT model's fast version runs on its `fast` service tier, and its Ultrafast version on its `ultrafast` one. */
+const CODEX_ON_API_KEY: RuntimeModelRule = {
+  provider: MODEL_PROVIDER.OPENAI,
+  fast: true,
+  ultrafast: true,
   contextWindow: false,
   name: "Codex",
 };
@@ -80,9 +96,6 @@ export function harnessNameOf(provider: ModelProvider): string {
     : (NATIVE_MODEL_RULE.codex?.name ?? "Codex");
 }
 
-/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast`. */
-const FAST_ID_SUFFIX = "-fast";
-
 /** What separates a catalog id's provider from its model. */
 const CATALOG_ID_SEPARATOR = "/";
 
@@ -90,6 +103,7 @@ const CATALOG_ID_SEPARATOR = "/";
 const RUNTIME_CHOICE_REFUSAL = {
   PROVIDER: "provider",
   FAST: "fast",
+  ULTRAFAST: "ultrafast",
   CONTEXT_WINDOW: "context_window",
 } as const;
 
@@ -101,12 +115,8 @@ export function runtimeModelRule(
   runtime: AgentRuntime | undefined,
   payer?: AgentPayer | null | undefined,
 ): RuntimeModelRule {
-  if (
-    runtime === AGENT_RUNTIME.CODEX &&
-    payer !== null &&
-    payer !== undefined &&
-    CODEX_FAST_PAYERS.has(payer)
-  ) {
+  if (runtime === AGENT_RUNTIME.CODEX && payer === AGENT_PAYER.API_KEY) return CODEX_ON_API_KEY;
+  if (runtime === AGENT_RUNTIME.CODEX && payer === AGENT_PAYER.CHATGPT_SUBSCRIPTION) {
     return CODEX_FAST;
   }
   return (runtime === undefined ? undefined : NATIVE_MODEL_RULE[runtime]) ?? ANY_MODEL;
@@ -118,14 +128,17 @@ function providerWord(modelId: string): string {
   return separator === -1 ? "" : modelId.slice(0, separator);
 }
 
-/** Whether a catalog id names a model's fast version. */
-function isFastId(modelId: string): boolean {
-  return modelId.endsWith(FAST_ID_SUFFIX);
+/** Whether the rule runs the version of its model a catalog id names, by its speed. */
+function runsSpeedOf(rule: RuntimeModelRule, modelId: string): boolean {
+  const speed = modelSpeedOf(modelId);
+  if (speed === MODEL_SPEED.FAST) return rule.fast;
+  if (speed === MODEL_SPEED.ULTRAFAST) return rule.ultrafast;
+  return true;
 }
 
 /**
  * The models an agent on the runtime may move to, of those offered: its
- * provider's alone, no fast version where it runs none, and no context
+ * provider's alone, no fast or Ultrafast version where it runs none, and no context
  * windows where it takes no choice of them, so a menu drawn from the list
  * offers neither. eve's list is the one given, untouched.
  */
@@ -145,7 +158,7 @@ export function runtimeModels<
   if (rule === ANY_MODEL) return models;
   return models
     .filter((model) => rule.provider === undefined || model.provider === rule.provider)
-    .filter((model) => rule.fast || !isFastId(model.id))
+    .filter((model) => runsSpeedOf(rule, model.id))
     .map((model) => {
       const { contextWindows: _windows, fastNotEnabled: _fast, ...rest } = model;
       const kept = {
@@ -164,7 +177,7 @@ export function runtimeModels<
 
 /**
  * Why the runtime refuses a change to the choice given, or nothing where it
- * takes it: another provider's model, a fast version, or a context window
+ * takes it: another provider's model, a fast or Ultrafast version, or a context window
  * named at all, the long one included, since the harness takes no choice.
  */
 export function runtimeChoiceRefusal(
@@ -176,7 +189,11 @@ export function runtimeChoiceRefusal(
   if (rule.provider !== undefined && providerWord(choice.model) !== rule.provider) {
     return RUNTIME_CHOICE_REFUSAL.PROVIDER;
   }
-  if (!rule.fast && isFastId(choice.model)) return RUNTIME_CHOICE_REFUSAL.FAST;
+  if (!runsSpeedOf(rule, choice.model)) {
+    return modelSpeedOf(choice.model) === MODEL_SPEED.ULTRAFAST
+      ? RUNTIME_CHOICE_REFUSAL.ULTRAFAST
+      : RUNTIME_CHOICE_REFUSAL.FAST;
+  }
   if (!rule.contextWindow && choice.contextWindow !== undefined) {
     return RUNTIME_CHOICE_REFUSAL.CONTEXT_WINDOW;
   }
@@ -194,6 +211,8 @@ export function runtimeChoiceRefusalWords(
       return `that agent runs on ${rule.name}, which runs ${providerName(rule.provider)} models alone; choose one of those, or start a new agent on another model.`;
     case RUNTIME_CHOICE_REFUSAL.FAST:
       return `that agent runs on ${rule.name}, ${rule.fastRefusal ?? "which runs no fast version of a model"}; choose the model itself.`;
+    case RUNTIME_CHOICE_REFUSAL.ULTRAFAST:
+      return `that agent runs on ${rule.name}, ${rule.ultrafastRefusal ?? "which runs no Ultrafast version of a model"}; choose the model itself.`;
     case RUNTIME_CHOICE_REFUSAL.CONTEXT_WINDOW:
       return `that agent runs on ${rule.name}, which manages its own context; leave contextWindow out.`;
   }

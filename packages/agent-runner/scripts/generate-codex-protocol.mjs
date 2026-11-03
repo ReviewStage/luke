@@ -1,5 +1,5 @@
 /**
- * generate-codex-protocol.mjs -- the pinned Codex app-server's protocol types, generated into `src/codex-protocol/` with the import paths Node ESM loads.
+ * generate-codex-protocol.mjs -- the pinned Codex app-server's protocol types and bundled model catalog, generated into `src/codex-protocol/` with the import paths Node ESM loads.
  *
  * Codex writes its own TypeScript bindings (`codex app-server generate-ts`,
  * from its Rust types through ts-rs). They are committed rather than
@@ -10,6 +10,12 @@
  * repository's checks require of every package. The pin is `src/pins.ts`'s,
  * and the version generated from is written beside the types
  * (`generated-from.ts`).
+ *
+ * Beside the types, the catalog of models that Codex release bundles
+ * (`codex-rs/models-manager/models.json` at its `rust-v<version>` tag), kept
+ * verbatim as a string (`bundled-models.ts`): a launch on an API key hands
+ * Codex this catalog with the Ultrafast tier added (`codex.ts`), and the
+ * file replaces the bundled one whole, so it must be the very release's.
  */
 
 import { execFileSync } from "node:child_process";
@@ -30,6 +36,9 @@ import { CODEX_PIN } from "../src/pins.ts";
 /** The Codex the runner drives in the sandbox, the one the image installs. */
 const CODEX_PACKAGE = `@openai/codex@${CODEX_PIN.VERSION}`;
 
+/** The catalog the pinned release bundles, at its own tag. */
+const BUNDLED_MODELS_URL = `https://raw.githubusercontent.com/openai/codex/rust-v${CODEX_PIN.VERSION}/codex-rs/models-manager/models.json`;
+
 /** The file the generated types name their Codex in. */
 const GENERATED_FROM = [
   "// generated-from.ts -- the Codex these types were generated from (`scripts/generate-codex-protocol.mjs`).",
@@ -37,6 +46,16 @@ const GENERATED_FROM = [
   `export const CODEX_PROTOCOL_VERSION = "${CODEX_PIN.VERSION}";`,
   "",
 ].join("\n");
+
+/** The bundled catalog as a module: its text verbatim, which the runner parses. */
+function bundledModelsModule(text) {
+  return [
+    "// bundled-models.ts -- the model catalog the Codex these types were generated from bundles (`scripts/generate-codex-protocol.mjs`).",
+    "",
+    `export const CODEX_BUNDLED_MODELS_JSON = ${JSON.stringify(text)};`,
+    "",
+  ].join("\n");
+}
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const target = path.join(packageRoot, "src", "codex-protocol");
@@ -61,6 +80,13 @@ try {
     });
     writeFileSync(file, text);
   }
+  const models = await fetch(BUNDLED_MODELS_URL);
+  if (!models.ok) throw new Error(`${BUNDLED_MODELS_URL} answered ${models.status}`);
+  const modelsText = await models.text();
+  // Note that a catalog that does not parse, or lists no model, is refused here, as Codex would refuse it at launch.
+  if (!(JSON.parse(modelsText).models?.length > 0))
+    throw new Error("the bundled catalog lists no model");
+  writeFileSync(path.join(scratch, "bundled-models.ts"), bundledModelsModule(modelsText));
   writeFileSync(path.join(scratch, "generated-from.ts"), GENERATED_FROM);
   rmSync(target, { recursive: true, force: true });
   execFileSync("cp", ["-R", scratch, target]);

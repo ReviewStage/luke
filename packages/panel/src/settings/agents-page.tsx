@@ -4,6 +4,7 @@ import {
   agentFallbackChoice,
   type CatalogModel,
   MODEL_PROVIDER,
+  MODEL_SPEED,
   type ModelChoice,
   type ModelProvider,
 } from "@repo/features/models-wire";
@@ -56,6 +57,9 @@ import {
   modelLabel,
   offeredModels,
   readModelChoice,
+  SPEED_LABEL,
+  SPEED_WORD,
+  speedsOf,
   unrunnableChoice,
   unsearchedModels,
   windowLabel,
@@ -86,7 +90,7 @@ import { SwitchRow } from "./switch-row.js";
  * fallback. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
- * version folded into its model, the chosen one checked; a model no
+ * and Ultrafast version folded into its model, the chosen one checked; a model no
  * subscription or API key of the account's pays for says "Connect Claude" or
  * "Connect Codex" at its end, and its pick lands on that harness's row above
  * rather than keeping it, and a default that is such a model, as a stored
@@ -98,7 +102,9 @@ import { SwitchRow } from "./switch-row.js";
  * a link to ask Anthropic for it; for a model nothing pays for, its press
  * lands on that harness's row as the pick's does, and writes nothing;
  * the stored id is the catalog's own, the fast version's where the switch
- * is on. The effort row is a segmented control over the efforts the chosen
+ * is on. For a model with an Ultrafast version a Speed row stands in Fast's
+ * place, a segmented control over the speeds the model offers, Standard,
+ * Fast, and Ultrafast, storing that version's id. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
  * row is one over the two, the whole window the default, saying what it
  * costs past the standard one; a change of model keeps the standard window
@@ -110,7 +116,7 @@ import { SwitchRow } from "./switch-row.js";
  * refusal is said in a toast as the switch flips back. With no account signed in
  * there is no default to show, and the page says so.
  *
- * The group is `@repo/ui`'s `SettingsSection`, and Effort and Context each
+ * The group is `@repo/ui`'s `SettingsSection`, and Speed, Effort, and Context each
  * its `SettingsRow` holding the shared `ChoiceBar`, segmented.
  */
 
@@ -197,6 +203,7 @@ function DefaultRows({
   // Fast's switch says its own refusal in a toast, and each of the others words its own under its row and ticks Saved when its write lands.
   const modelWrite = useSettingWrite(onChange);
   const effortWrite = useSettingWrite(onChange);
+  const speedWrite = useSettingWrite(onChange);
   const contextWrite = useSettingWrite(onChange);
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
@@ -282,50 +289,80 @@ function DefaultRows({
         anchor={SETTINGS_SEARCH_ROW.AGENT_MODEL}
         disabled={busy}
         onPick={(id) => {
-          // The pick keeps Fast where the model has a fast version, and drops it where it has none.
+          // The pick keeps the speed chosen where the model has a version at it, and drops to standard where it has none.
           const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
           if (picked === undefined) return;
           // A model nothing pays for is never kept as the default: its pick goes to connect it.
           const missing = modelConnectFailure(picked.model);
           if (missing !== undefined) return remedy(missing)?.();
-          modelWrite.run(choiceAt(choiceModelId(picked, read.fast)));
+          modelWrite.run(choiceAt(choiceModelId(picked, read.speed)));
         }}
       />
-      <SwitchRow
-        label={FAST_WORD}
-        detail={
-          fastNote === undefined ? undefined : (
-            <>
-              {`${fastNote}.`}
-              {fastAskable ? (
-                <>
-                  {" "}
-                  <TextLink
-                    look={TEXT_LINK_LOOK.UNDERLINED}
-                    href={FAST_ACCESS_URL}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      openLink(FAST_ACCESS_URL);
-                    }}
-                  >
-                    {FAST_ACCESS_WORD}
-                  </TextLink>
-                </>
-              ) : null}
-            </>
-          )
-        }
-        checked={read.fast}
-        anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
-        disabled={busy || base?.fast === undefined}
-        onChange={(fast) => {
-          if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
-          // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
-          const missing = modelConnectFailure(base.model);
-          if (missing !== undefined) return remedy(missing)?.();
-          return onChange(choiceAt(choiceModelId(base, fast)));
-        }}
-      />
+      {/* Speed in Fast's place where the model has an Ultrafast version. */}
+      {base?.ultrafast !== undefined ? (
+        <SettingsRow
+          label={SPEED_LABEL}
+          adornment={
+            <SettingMarks changed={read.speed !== MODEL_SPEED.STANDARD} saves={speedWrite.saves} />
+          }
+          error={refusalShown(speedWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
+        >
+          {() => (
+            <ChoiceBar
+              label={SPEED_LABEL}
+              items={speedsOf(base).map((speed) => ({ value: speed, label: SPEED_WORD[speed] }))}
+              value={read.speed}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              disabled={busy}
+              {...searchAnchorProps(SETTINGS_SEARCH_ROW.AGENT_FAST)}
+              onChange={(speed) => {
+                // A model nothing pays for runs no faster: the press goes to connect it, as its pick does.
+                const missing = modelConnectFailure(base.model);
+                if (missing !== undefined) return remedy(missing)?.();
+                speedWrite.run(choiceAt(choiceModelId(base, speed)));
+              }}
+            />
+          )}
+        </SettingsRow>
+      ) : (
+        <SwitchRow
+          label={FAST_WORD}
+          detail={
+            fastNote === undefined ? undefined : (
+              <>
+                {`${fastNote}.`}
+                {fastAskable ? (
+                  <>
+                    {" "}
+                    <TextLink
+                      look={TEXT_LINK_LOOK.UNDERLINED}
+                      href={FAST_ACCESS_URL}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        openLink(FAST_ACCESS_URL);
+                      }}
+                    >
+                      {FAST_ACCESS_WORD}
+                    </TextLink>
+                  </>
+                ) : null}
+              </>
+            )
+          }
+          checked={read.speed === MODEL_SPEED.FAST}
+          anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
+          disabled={busy || base?.fast === undefined}
+          onChange={(fast) => {
+            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
+            const missing = modelConnectFailure(base.model);
+            if (missing !== undefined) return remedy(missing)?.();
+            return onChange(
+              choiceAt(choiceModelId(base, fast ? MODEL_SPEED.FAST : MODEL_SPEED.STANDARD)),
+            );
+          }}
+        />
+      )}
       <SettingsRow
         label="Effort"
         adornment={

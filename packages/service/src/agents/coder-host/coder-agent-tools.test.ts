@@ -3415,6 +3415,7 @@ test("update_agent renames a teammate's eve agent, moves it to a model the catal
  */
 const SONNET = "anthropic/claude-sonnet-5.5";
 const SOL_FAST = "openai/gpt-6.1-sol-fast";
+const SOL_ULTRAFAST = "openai/gpt-6.1-sol-ultrafast";
 const RUNTIME_CATALOG: readonly OfferedModel[] = [
   {
     id: OPUS,
@@ -3439,6 +3440,12 @@ const RUNTIME_CATALOG: readonly OfferedModel[] = [
   {
     id: SOL_FAST,
     name: "GPT-6.1 Sol Fast",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
+  {
+    id: SOL_ULTRAFAST,
+    name: "GPT-6.1 Sol (Ultrafast)",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
   },
@@ -3488,7 +3495,7 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
   const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: onEve.id });
   const forClaudeCode = await call(CODER_TOOL.LIST_MODELS, { agentId: onClaudeCode.id });
 
-  assert.deepEqual(ids(forStart), [OPUS, OPUS_FAST, SONNET, SOL, SOL_FAST]);
+  assert.deepEqual(ids(forStart), [OPUS, OPUS_FAST, SONNET, SOL, SOL_FAST, SOL_ULTRAFAST]);
   assert.deepEqual(forEve, forStart);
   assert.deepEqual(ids(forClaudeCode), [OPUS, OPUS_FAST, SONNET]);
   assert.deepEqual(forClaudeCode.default, forStart.default);
@@ -3590,7 +3597,7 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   assert.equal((await stored(onEve)).model, SOL);
 });
 
-test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one, while one its ChatGPT plan pays for lists and takes the fast version", async () => {
+test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no fast or Ultrafast version, and update_agent refuses it a Claude model, a fast version, an Ultrafast one, and a context window in words and takes a GPT one, while one its ChatGPT plan pays for lists and takes the fast version and is refused the Ultrafast one, and one its OpenAI API key pays for lists and takes both", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onCodex = await claimed(agents.teammates.userId, {
@@ -3619,6 +3626,7 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   for (const change of [
     { model: OPUS, effort: "high" },
     { model: SOL_FAST, effort: "high" },
+    { model: SOL_ULTRAFAST, effort: "high" },
     { model: SOL, effort: "high", contextWindow: "standard" },
   ]) {
     refusals.push(await call(CODER_TOOL.UPDATE_AGENT, { agentId: onCodex.id, ...change }));
@@ -3633,6 +3641,11 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
         "Not changed: that agent runs on Codex, which runs a fast version on the ChatGPT plan or an OpenAI API key alone; choose the model itself.",
+    },
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Codex, which runs an Ultrafast version on an OpenAI API key alone; choose the model itself.",
     },
     {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -3675,6 +3688,46 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   assert.equal(
     Option.getOrThrow(await database.run(readAgent(onPlan.userId, onPlan.id))).model,
     SOL_FAST,
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AGENT, {
+      agentId: onPlan.id,
+      model: SOL_ULTRAFAST,
+      effort: "high",
+    }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not changed: that agent runs on Codex, which runs an Ultrafast version on an OpenAI API key alone; choose the model itself.",
+    },
+  );
+
+  const onApiKey = await claimed(agents.teammates.userId, {
+    ...AGENT_CHOICE,
+    model: SOL,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.billing,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: AGENT_RUNTIME.CODEX,
+    payer: AGENT_PAYER.API_KEY,
+  });
+  const listedOnApiKey = await call(CODER_TOOL.LIST_MODELS, { agentId: onApiKey.id });
+  assert.deepEqual(
+    Array.isArray(listedOnApiKey.models)
+      ? listedOnApiKey.models.map((model) => isRecord(model) && model.id)
+      : [],
+    [SOL, SOL_FAST, SOL_ULTRAFAST],
+  );
+  const ultrafast = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: onApiKey.id,
+    model: SOL_ULTRAFAST,
+    effort: "high",
+  });
+  assert.equal(ultrafast.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(ultrafast));
+  assert.equal(
+    Option.getOrThrow(await database.run(readAgent(onApiKey.userId, onApiKey.id))).model,
+    SOL_ULTRAFAST,
   );
 });
 

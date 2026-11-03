@@ -47,6 +47,18 @@
  * from there, the provider's documented `env_key`, and no command it runs
  * inherits it.
  *
+ * Speed. Each turn names its service tier: `fast` for a fast version,
+ * which Codex sends as the API's `priority`, on the plan and an API key
+ * alike, `ultrafast` for an Ultrafast one, on an API key alone, and null for
+ * the standard tier. Codex sends a tier only
+ * where its catalog lists it for the model (`service_tier_for_request`),
+ * and the catalog it bundles lists no `ultrafast`, so an API-key launch
+ * hands app-server a catalog of its own (`model_catalog_json`), read once
+ * as it starts in place of the bundled one: the pinned release's own
+ * (`codex-protocol/bundled-models.ts`) with the Ultrafast tier listed on
+ * every model, which leaves the service's catalog, which offers an
+ * Ultrafast version only where OpenAI prices one, the one gate on it.
+ *
  * Sandbox. Every command Codex runs is under its own sandbox in
  * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
  * set as the thread starts and again as the `sandboxPolicy` of each
@@ -59,7 +71,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
@@ -69,6 +82,7 @@ import {
   type AppServerListener,
   spawnAppServer,
 } from "./app-server.js";
+import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import type {
   SandboxPolicy,
   ThreadStartParams,
@@ -254,8 +268,79 @@ interface TokenCommand {
   readonly tokenUrl: string;
 }
 
-/** The service tier a fast version runs on: Codex's documented `fast`, which it sends as the API's `priority`. */
-const FAST_TIER = "fast";
+/**
+ * The service tiers a turn names on an API key: a fast version's, Codex's
+ * documented `fast`, which it sends as the API's `priority`, and an
+ * Ultrafast version's, which it sends as it is; a turn naming none runs on
+ * the standard tier.
+ */
+const SERVICE_TIER = {
+  FAST: "fast",
+  ULTRAFAST: "ultrafast",
+} as const;
+
+type ServiceTier = (typeof SERVICE_TIER)[keyof typeof SERVICE_TIER];
+
+/**
+ * The Ultrafast tier as Codex's catalog lists a model's tiers
+ * (`ModelServiceTier`, each of whose keys it requires), in the words
+ * OpenAI's own catalog gives its tiers.
+ */
+const ULTRAFAST_CATALOG_TIER = {
+  id: SERVICE_TIER.ULTRAFAST,
+  name: "Ultrafast",
+  description: "Fastest speed, highest usage",
+} as const;
+
+/** The file an API-key launch writes its catalog to, in a folder of its own it removes as it ends. */
+const CATALOG_FILE = { PREFIX: "vespin-codex-", NAME: "models.json" } as const;
+
+/** The tier a turn names for the speed keys given; null, the standard tier, for neither. */
+function serviceTierOf(
+  fast: boolean | undefined,
+  ultrafast: boolean | undefined,
+): ServiceTier | null {
+  if (ultrafast === true) return SERVICE_TIER.ULTRAFAST;
+  return fast === true ? SERVICE_TIER.FAST : null;
+}
+
+/** A catalog entry as this file reads it: its tiers, and whatever else Codex reads, kept as it is. */
+const CatalogSchema = Schema.Struct({
+  models: Schema.Array(
+    Schema.StructWithRest(
+      Schema.Struct({ service_tiers: Schema.optionalKey(Schema.Array(Schema.Unknown)) }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
+  ),
+});
+
+/**
+ * The pinned release's bundled catalog with the Ultrafast tier listed on
+ * every model that lists none, as Codex's `model_catalog_json` reads it.
+ */
+function ultrafastCatalog(): string {
+  const catalog = Schema.decodeUnknownSync(CatalogSchema)(JSON.parse(CODEX_BUNDLED_MODELS_JSON));
+  const isUltrafast = (tier: unknown) =>
+    typeof tier === "object" && tier !== null && "id" in tier && tier.id === SERVICE_TIER.ULTRAFAST;
+  const models = catalog.models.map((model) => {
+    const tiers = model.service_tiers ?? [];
+    return tiers.some(isUltrafast)
+      ? model
+      : { ...model, service_tiers: [...tiers, ULTRAFAST_CATALOG_TIER] };
+  });
+  return JSON.stringify({ ...catalog, models });
+}
+
+/** The Ultrafast catalog written to a folder of the launch's own, which the launch's scope removes; its absolute path, as `model_catalog_json` takes it. */
+const ultrafastCatalogFile = Effect.acquireRelease(
+  Effect.sync(() => {
+    const folder = mkdtempSync(join(tmpdir(), CATALOG_FILE.PREFIX));
+    const file = join(folder, CATALOG_FILE.NAME);
+    writeFileSync(file, ultrafastCatalog());
+    return { folder, file };
+  }),
+  ({ folder }) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+).pipe(Effect.map(({ file }) => file));
 
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
@@ -277,7 +362,11 @@ const CODEX_AUTH = {
 
 type CodexAuth =
   | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
-  | { readonly kind: typeof CODEX_AUTH.API_KEY };
+  | {
+      readonly kind: typeof CODEX_AUTH.API_KEY;
+      /** The catalog app-server reads in place of its bundled one (`ultrafastCatalogFile`). */
+      readonly catalog: string;
+    };
 
 /**
  * How our provider is handed its token: from the runner's token command
@@ -308,8 +397,15 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
     // A fast version runs on the `fast` tier, which the documented feature turns on, on the plan and an API key alike
-    // (https://learn.chatgpt.com/docs/agent-configuration/speed).
+    // (https://learn.chatgpt.com/docs/agent-configuration/speed). On an API key alone an Ultrafast one runs on the
+    // `ultrafast` tier, which its own feature turns on and our catalog lists.
     ["features.fast_mode", "true"],
+    ...(auth.kind === CODEX_AUTH.API_KEY
+      ? ([
+          ["features.ultrafast_mode", "true"],
+          ["model_catalog_json", toml(auth.catalog)],
+        ] as const)
+      : []),
   ];
 }
 
@@ -465,11 +561,23 @@ interface CodexLaunch {
   readonly sandbox: SandboxPolicy;
   model: string;
   effort: CodexEffort | undefined;
-  /** Whether the next turn runs on the `fast` service tier: a fast version, on the plan or an API key. */
-  fast: boolean;
+  /** The service tier the next turn names (`turnTierOf`); null for the standard one. */
+  tier: ServiceTier | null;
   stopping: boolean;
   /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
   warm: boolean;
+}
+
+/**
+ * The service tier a turn of the launch names: the one asked for, but on the
+ * plan, which hands Codex no catalog listing Ultrafast, the fast tier for an
+ * Ultrafast version, as a runner from before Ultrafast runs it, rather than
+ * a tier Codex would drop for the standard one.
+ */
+function turnTierOf(launch: Pick<CodexLaunch, "auth" | "tier">): ServiceTier | null {
+  return launch.tier === SERVICE_TIER.ULTRAFAST && launch.auth.kind !== CODEX_AUTH.API_KEY
+    ? SERVICE_TIER.FAST
+    : launch.tier;
 }
 
 /** Ends the launch: the outcome the controller's loop stops on. */
@@ -657,8 +765,8 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       effort: launch.effort ?? null,
       approvalPolicy: "never",
       sandboxPolicy: launch.sandbox,
-      // Note that a null tier is the standard one, which a fast version turned off goes back to.
-      serviceTier: launch.fast ? FAST_TIER : null,
+      // Note that a null tier is the standard one, which a fast or Ultrafast version turned off goes back to.
+      serviceTier: turnTierOf(launch),
     }),
   );
   if (Option.isNone(answer)) {
@@ -743,7 +851,10 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
     }
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
-      if (value.fast !== undefined) launch.fast = value.fast;
+      // Note that a line naming either speed key says both, the one it leaves out being off.
+      if (value.fast !== undefined || value.ultrafast !== undefined) {
+        launch.tier = serviceTierOf(value.fast, value.ultrafast);
+      }
       if (value.effort !== undefined && isCodexEffort(value.effort)) launch.effort = value.effort;
       else if (value.effort !== undefined) {
         yield* Effect.logWarning("agent-runner: skipped an effort Codex does not take");
@@ -829,12 +940,16 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
 }
 
 /**
- * The credential a launch's app-server runs on: the account's API key where
- * the environment holds it, and the plan's token command otherwise, where
- * the runner knows its own bundle; none where it does not.
+ * The credential a launch's app-server runs on: the account's API key, with
+ * the catalog written for it, where the environment holds it, and the
+ * plan's token command otherwise, where the runner knows its own bundle;
+ * none where it does not.
  */
-function authOf(context: LaunchContext<CodexConfig>): CodexAuth | undefined {
-  if (onApiKey(context)) return { kind: CODEX_AUTH.API_KEY };
+function authOf(
+  context: LaunchContext<CodexConfig>,
+  catalog: string | undefined,
+): CodexAuth | undefined {
+  if (catalog !== undefined) return { kind: CODEX_AUTH.API_KEY, catalog };
   if (context.self === undefined) return undefined;
   return {
     kind: CODEX_AUTH.TOKEN_COMMAND,
@@ -861,7 +976,8 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const auth = authOf(context);
+  const catalog = onApiKey(context) ? yield* ultrafastCatalogFile : undefined;
+  const auth = authOf(context, catalog);
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
@@ -897,7 +1013,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     sandbox,
     model: config.model,
     effort: config.effort,
-    fast: config.fast === true,
+    tier: serviceTierOf(config.fast, config.ultrafast),
     stopping: false,
     warm: false,
   };

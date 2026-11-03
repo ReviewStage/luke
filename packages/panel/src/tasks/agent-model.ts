@@ -54,8 +54,12 @@ import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
+  MODEL_SPEED,
   type ModelChoice,
   type ModelProvider,
+  type ModelSpeed,
+  modelSpeedOf,
+  standardModelIdOf,
 } from "@repo/features/models-wire";
 import { formatCompact, formatUsd } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -1268,12 +1272,9 @@ const LEAD_FAMILIES: readonly string[] = [
   "terra",
 ];
 
-/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast` beside `anthropic/claude-opus-5.5`. */
-const FAST_ID_SUFFIX = "-fast";
-
 /**
  * Where a model's family stands in `LEAD_FAMILIES`: the last word of its
- * own name, its version and any fast suffix aside, so `claude-opus-5.5` is
+ * own name, its version and any speed's suffix aside, so `claude-opus-5.5` is
  * Opus and `gpt-6-astra` Astra, while `gpt-6-astra-mini` is no lead family's
  * and stands after them all.
  */
@@ -1313,8 +1314,18 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
 /** What the model menu and Settings say where the catalog could not be read. */
 export const MODELS_READ_FAILED = readFailedWords("the models");
 
+/** The word a choice label, the Fast row, and the Speed choice say for each speed. */
+export const SPEED_WORD = {
+  [MODEL_SPEED.STANDARD]: "Standard",
+  [MODEL_SPEED.FAST]: "Fast",
+  [MODEL_SPEED.ULTRAFAST]: "Ultrafast",
+} as const satisfies Record<ModelSpeed, string>;
+
 /** The word a choice label and the Fast row say for the fast version. */
-export const FAST_WORD = "Fast";
+export const FAST_WORD = SPEED_WORD[MODEL_SPEED.FAST];
+
+/** The word the Speed choice is named by, which stands in the Fast row's place for a model with an Ultrafast version. */
+export const SPEED_LABEL = "Speed";
 
 /** What the Fast row says where the service withholds the model's fast version because Anthropic never granted the organization of the key the account's agents run on fast mode. */
 const FAST_NOT_ENABLED_NOTE = "Fast isn't enabled for this key's Anthropic organization";
@@ -1325,36 +1336,44 @@ export const FAST_ACCESS_URL = "https://claude.com/fast-mode";
 /** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
 const CHOICE_WORD_SEPARATOR = " ";
 
-/** A model as the menus offer it: the base model, and its fast version where the catalog lists one beside it. */
+/** A model as the menus offer it: the base model, and its fast and Ultrafast versions where the catalog lists each beside it. */
 export interface OfferedModel {
   readonly model: CatalogModel;
   readonly fast: CatalogModel | undefined;
+  readonly ultrafast: CatalogModel | undefined;
 }
 
-/** The id a fast version's id is the fast version of, or nothing for an id without the suffix. */
+/** The id a fast or Ultrafast version's id is a version of, or nothing for an id without a speed's suffix. */
 function baseIdOf(id: string): string | undefined {
-  return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
+  return modelSpeedOf(id) === MODEL_SPEED.STANDARD ? undefined : standardModelIdOf(id);
 }
 
 /**
- * The catalog folded to its base models, each with its fast version, in the
- * menus' order. The signal is the id: a model whose id is another offered
- * model's with the fast suffix is that model's fast version, and is not
- * listed on its own. Neither the name's "(Fast)" nor the catalog's `fast`
- * tag would do: the tag sits on the base and the fast version alike, the
- * wire carries no tags in any case, and a name is display text. A suffixed
- * id with no base beside it is a model of its own.
+ * The catalog folded to its base models, each with its fast and Ultrafast
+ * versions, in the menus' order. The signal is the id: a model whose id is
+ * another offered model's with a speed's suffix is that model's version at
+ * that speed, and is not listed on its own. Neither the name's "(Fast)" nor
+ * the catalog's `fast` tag would do: the tag sits on the base and the fast
+ * version alike, the wire carries no tags in any case, and a name is
+ * display text. A suffixed id with no base beside it is a model of its own.
  */
 export function offeredModels(models: readonly CatalogModel[]): readonly OfferedModel[] {
   const ids = new Set(models.map((model) => model.id));
-  const fastOf = new Map<string, CatalogModel>();
+  const versionsOf = new Map<string, Map<ModelSpeed, CatalogModel>>();
   for (const model of models) {
     const base = baseIdOf(model.id);
-    if (base !== undefined && ids.has(base)) fastOf.set(base, model);
+    if (base === undefined || !ids.has(base)) continue;
+    const versions = versionsOf.get(base) ?? new Map<ModelSpeed, CatalogModel>();
+    versions.set(modelSpeedOf(model.id), model);
+    versionsOf.set(base, versions);
   }
   return orderedModels(models)
-    .filter((model) => !isFastVersion(model.id, ids))
-    .map((model) => ({ model, fast: fastOf.get(model.id) }));
+    .filter((model) => !isSpeedVersion(model.id, ids))
+    .map((model) => ({
+      model,
+      fast: versionsOf.get(model.id)?.get(MODEL_SPEED.FAST),
+      ultrafast: versionsOf.get(model.id)?.get(MODEL_SPEED.ULTRAFAST),
+    }));
 }
 
 /**
@@ -1388,40 +1407,54 @@ export function fastRestingNote(
   return `No fast version of ${modelLabel(baseId, models)}`;
 }
 
-/** Whether the id is the fast version of a model the catalog offers. */
-function isFastVersion(id: string, ids: ReadonlySet<string>): boolean {
+/** Whether the id is the fast or Ultrafast version of a model the catalog offers. */
+function isSpeedVersion(id: string, ids: ReadonlySet<string>): boolean {
   const base = baseIdOf(id);
   return base !== undefined && ids.has(base);
 }
 
-/** A stored id as the menus draw it: the base model's id, and whether it named the fast version. */
+/** The model's version at the speed given, where the catalog lists one beside it: the base itself at standard speed. */
+function versionAt(offered: OfferedModel, speed: ModelSpeed): CatalogModel | undefined {
+  if (speed === MODEL_SPEED.FAST) return offered.fast;
+  if (speed === MODEL_SPEED.ULTRAFAST) return offered.ultrafast;
+  return offered.model;
+}
+
+/** The speeds a model offers, slowest first: standard, and fast and Ultrafast where the catalog lists each. */
+export function speedsOf(offered: OfferedModel): readonly ModelSpeed[] {
+  return Object.values(MODEL_SPEED).filter((speed) => versionAt(offered, speed) !== undefined);
+}
+
+/** A stored id as the menus draw it: the base model's id, and the speed it named. */
 export interface ModelChoiceRead {
   readonly base: string;
-  readonly fast: boolean;
+  readonly speed: ModelSpeed;
 }
 
 export function readModelChoice(models: readonly CatalogModel[], modelId: string): ModelChoiceRead {
   const offered = offeredModels(models).find(
-    (each) => each.model.id === modelId || each.fast?.id === modelId,
+    (each) =>
+      each.model.id === modelId || each.fast?.id === modelId || each.ultrafast?.id === modelId,
   );
-  if (offered === undefined) return { base: modelId, fast: false };
-  return { base: offered.model.id, fast: offered.fast?.id === modelId };
+  if (offered === undefined) return { base: modelId, speed: MODEL_SPEED.STANDARD };
+  const speed = modelId === offered.model.id ? MODEL_SPEED.STANDARD : modelSpeedOf(modelId);
+  return { base: offered.model.id, speed };
 }
 
-/** The catalog id a base and a Fast switch name: the fast version's where it is on and the model has one, else the base's. */
-export function choiceModelId(offered: OfferedModel, fast: boolean): string {
-  return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
+/** The catalog id a base and a speed name: the version at that speed where the model has one, else the base's, at standard speed. */
+export function choiceModelId(offered: OfferedModel, speed: ModelSpeed): string {
+  return (versionAt(offered, speed) ?? offered.model).id;
 }
 
 /**
- * What a choice says after its model's name: the effort, Fast where the
- * fast version is on, and the standard window's size where it runs on that,
+ * What a choice says after its model's name: the effort, Fast or Ultrafast
+ * where that version is on, and the standard window's size where it runs on that,
  * so the model's whole window, which every choice runs on unless it says,
  * says nothing.
  */
-function choiceDetail(effort: string, fast: boolean, standardTokens?: number): string {
+function choiceDetail(effort: string, speed: ModelSpeed, standardTokens?: number): string {
   const words = [effortLabel(effort)];
-  if (fast) words.push(FAST_WORD);
+  if (speed !== MODEL_SPEED.STANDARD) words.push(SPEED_WORD[speed]);
   if (standardTokens !== undefined) words.push(windowLabel(standardTokens));
   return words.join(CHOICE_WORD_SEPARATOR);
 }
@@ -1516,7 +1549,7 @@ export function choiceWords(choice: ModelChoice, models: readonly CatalogModel[]
       : undefined;
   return {
     model: modelLabel(read.base, models),
-    detail: choiceDetail(choice.effort, read.fast, standard),
+    detail: choiceDetail(choice.effort, read.speed, standard),
   };
 }
 
