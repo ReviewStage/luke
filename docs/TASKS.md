@@ -8,7 +8,7 @@ comments cite it by section heading.
 ## The Tasks tab
 
 Tasks are the window's first place, `Tasks`, beside `Settings`, and the
-one the window opens on. The tab draws in the work column beside the
+one the window opens on, on Home. The tab draws in the work column beside the
 sidebar, one page at a time:
 
 ```
@@ -32,15 +32,22 @@ sidebar, one page at a time:
  └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Resting page**: whenever no task is open the window shows what the
-  sidebar does not list: the Inbox beside the task list. An account with
-  nothing yet sees a welcome with New task's composer instead
-  (`resting-page.ts`). There is no empty page in between.
+- **Home** (`desktop/desktop-home.tsx`): whenever no task is open the
+  window rests on Home, which the sidebar's Home row and ⇧⌘H open too: a
+  greeting over New task's composer, then the Inbox's items waiting on the
+  developer, then Recent, the tasks worked on latest. An account with
+  nothing yet, no task and nothing an agent waits on it for
+  (`tasks/fresh-account.ts`), sees a welcome with the composer instead
+  (`desktop/desktop-welcome.tsx`). There is no empty page in between. The
+  sidebar's rows over its sections are New task, Search, Home, Inbox, Tasks,
+  Automations, and, for an admin, Admin.
 - **Document page**: the open task's saved document. Its header holds
   still, and only the document scrolls beneath it.
 
-Escape unwinds one page at a time: the document page back to the
-resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
+Escape on the document page is Back: one step back through the window's
+history, to wherever the task was opened from, or to Home where nothing
+stands behind it, which leaves the task; on Home it closes nothing. Escape
+on any Settings page leaves Settings.
 
 ### Opening and leaving
 
