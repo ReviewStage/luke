@@ -8,8 +8,8 @@ import { app, nativeImage, nativeTheme } from "electron";
  * icon, so the running app draws the Dock image itself from these.
  */
 const DOCK_ICON_FILES = {
-  LIGHT: "luke-icon-light.png",
-  DARK: "luke-icon-dark.png",
+  LIGHT: "icon-light.png",
+  DARK: "icon-dark.png",
 } as const;
 
 /**

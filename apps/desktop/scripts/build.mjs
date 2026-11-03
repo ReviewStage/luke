@@ -36,8 +36,8 @@ const uploadsSourceMaps =
   Boolean(process.env.SENTRY_AUTH_TOKEN) && process.env.GITHUB_EVENT_NAME !== "workflow_dispatch";
 // The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
-  "luke-icon-light.png": "luke-icon-light-512.png",
-  "luke-icon-dark.png": "luke-icon-dark-512.png",
+  "icon-light.png": "icon-light-512.png",
+  "icon-dark.png": "icon-dark-512.png",
 };
 
 // The imports the panel's build table (`@luke/panel/build-table`) answers

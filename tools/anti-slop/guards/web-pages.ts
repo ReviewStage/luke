@@ -21,7 +21,7 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
 
 const WEB = "apps/web";
 const PUBLIC = `${WEB}/public`;
-const BRAND_FAVICON = "packages/brand/assets/icon/luke-favicon.svg";
+const BRAND_FAVICON = "packages/brand/assets/icon/favicon.svg";
 const FRAMED_PAGE = "page-in-mac-app.html";
 const PANEL_BASE = "packages/panel/src/styles/base.css";
 
