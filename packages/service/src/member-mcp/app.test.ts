@@ -8,20 +8,24 @@ import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resourc
 import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { createTask } from "@repo/database/models/task-store";
 import { oauthClient, oauthClientResource, oauthResource } from "@repo/database/schemas/auth";
 import {
+  getTestDB,
+  openInboxItem,
   openMigratedPglite,
   openTaskAgent,
   openWorkspace,
   sqlClientOverPglite,
 } from "@repo/database/testing";
+import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, vi } from "vitest";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
@@ -39,8 +43,11 @@ import {
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { fakeEve, openAskOf, openTask, startedAgent } from "../testing/agents-app-support.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
+import { harnessFor } from "../testing/native-harness-fake.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpApp, memberMcpAuth, memberMcpIssuer } from "./app.js";
 import {
   MEMBER_MCP_PATH,
@@ -60,7 +67,10 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * against is fetched from the auth service, as on a deployment, through a
  * `fetch` that reaches the in-process handler alone. The SDK's own client
  * drives the server at both revisions it serves. GitHub is reached by no
- * read here, and the model catalog offers nothing. Synthetic accounts.
+ * read here, and the model catalog offers nothing. An answer's hand-off to
+ * the agent that asked is driven apart, over the agents' own test world
+ * (`../testing/agents-app-support.ts`): a started agent on a fake eve, its
+ * server admitted on the world's bearers. Synthetic accounts.
  */
 
 const ORIGIN = "https://app.test";
@@ -103,6 +113,33 @@ const decodeMetadata = Schema.decodeUnknownSync(
 /** The rows of a list read by their ids alone. */
 const IdsSchema = Schema.Array(Schema.Struct({ id: Schema.String }));
 const decodeTasks = Schema.decodeUnknownSync(Schema.Struct({ tasks: IdsSchema }));
+/** The inbox read, each thread by its id, the ask it holds open, and its messages' asks by their options. */
+const decodeInbox = Schema.decodeUnknownSync(
+  Schema.Struct({
+    threads: Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        status: Schema.String,
+        askId: Schema.optionalKey(Schema.String),
+        waitsOnMember: Schema.Boolean,
+        thread: Schema.Array(
+          Schema.Struct({
+            from: Schema.String,
+            ask: Schema.optionalKey(
+              Schema.Struct({
+                options: Schema.optionalKey(Schema.Array(Schema.Struct({ label: Schema.String }))),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  }),
+);
+/** A write's answer: the thread as it then stands. */
+const decodeWritten = Schema.decodeUnknownSync(
+  Schema.Struct({ thread: Schema.Struct({ status: Schema.String }) }),
+);
 const decodeAgents = Schema.decodeUnknownSync(Schema.Struct({ agents: IdsSchema }));
 const decodeListed = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -374,7 +411,7 @@ it.effect(
 );
 
 it.effect.each(Object.values(REVISION))(
-  "an SDK client at %s lists every tool as its golden shows it, each only reading, and runs list_workspaces as the member",
+  "an SDK client at %s lists every tool as its golden shows it, with its annotations, and runs list_workspaces as the member",
   (revision) =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -396,13 +433,13 @@ it.effect.each(Object.values(REVISION))(
       yield* Effect.promise(() => client.close());
 
       assert.equal(transport.protocolVersion, revision);
-      const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name }) =>
+      const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name, annotations }) =>
         Effect.promise(async () => ({
           name,
           inputSchema: JSON.parse(
             await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
           ),
-          annotations: { readOnlyHint: true },
+          annotations,
         })),
       );
       assert.deepEqual(
@@ -430,7 +467,7 @@ it.effect.each(Object.values(REVISION))(
 );
 
 it.effect(
-  "a member with several workspaces lists the one a list names, reads their own tasks and agents by id, and reads nothing of a workspace they are not in",
+  "a member with several workspaces lists the one a list names, reads their own tasks, agents, and inbox, and reads or answers nothing of a workspace they are not in",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -448,16 +485,30 @@ it.effect(
           organizationId: elsewhere,
           name: "A stranger's task",
         });
+        const ownAgent = yield* openTaskAgent(member.userId, own, ownTask.id);
+        const strangerAgent = yield* openTaskAgent(stranger.userId, elsewhere, strangerTask.id);
         return {
           own,
           second,
           elsewhere,
           ownTask: ownTask.id,
           strangerTask: strangerTask.id,
-          ownAgent: yield* openTaskAgent(member.userId, own, ownTask.id),
-          strangerAgent: yield* openTaskAgent(stranger.userId, elsewhere, strangerTask.id),
+          ownAgent,
+          strangerAgent,
+          ownItem: yield* openInboxItem(member.userId, own, ownTask.id, ownAgent, true),
+          strangerItem: yield* openInboxItem(
+            stranger.userId,
+            elsewhere,
+            strangerTask.id,
+            strangerAgent,
+            true,
+          ),
         };
       }).pipe(Effect.provide(services));
+      const strangerAsk = yield* readInboxItem(stranger.userId, rows.strangerItem).pipe(
+        Effect.map((stored) => Option.getOrThrow(stored).item),
+        Effect.provide(services),
+      );
       const token = yield* Effect.promise(() =>
         mintedToken(auth, member.cookie, {
           client: MCP_CLIENT,
@@ -466,7 +517,7 @@ it.effect(
         }),
       );
       const { client } = yield* connected(fetch, token, REVISION.MODERN);
-      const call = (name: string, args: Record<string, string>) =>
+      const call = (name: string, args: Record<string, unknown>) =>
         Effect.promise(async () => {
           const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
           return { refused: answer.isError === true, text: answer.content[0].text };
@@ -476,6 +527,7 @@ it.effect(
       const unnamed = yield* call(MEMBER_MCP_TOOL.LIST_TASKS, {});
       const tasks = yield* call(MEMBER_MCP_TOOL.LIST_TASKS, { workspace: slugOf(rows.own) });
       const agents = yield* call(MEMBER_MCP_TOOL.LIST_AGENTS, { workspace: slugOf(rows.own) });
+      const inbox = yield* call(MEMBER_MCP_TOOL.READ_INBOX, { workspace: slugOf(rows.own) });
       const strangers = yield* Effect.forEach(
         [
           [MEMBER_MCP_TOOL.LIST_TASKS, { workspace: slugOf(rows.elsewhere) }],
@@ -483,6 +535,21 @@ it.effect(
           [MEMBER_MCP_TOOL.READ_TASK, { taskId: rows.strangerTask }],
           [MEMBER_MCP_TOOL.READ_AGENT, { agentId: rows.strangerAgent }],
           [MEMBER_MCP_TOOL.READ_AGENT_CHANGES, { agentId: rows.strangerAgent }],
+          [MEMBER_MCP_TOOL.READ_INBOX, { workspace: slugOf(rows.elsewhere) }],
+          [
+            MEMBER_MCP_TOOL.ANSWER_ASK,
+            {
+              threadId: rows.strangerItem,
+              askId: openAskOf(strangerAsk),
+              reply: INBOX_REPLY.CHOSE,
+              choices: ["Approve"],
+            },
+          ],
+          [MEMBER_MCP_TOOL.REPLY_TO_THREAD, { threadId: rows.strangerItem, text: "Approve it." }],
+          [
+            MEMBER_MCP_TOOL.CLOSE_THREAD,
+            { threadId: rows.strangerItem, revision: strangerAsk.revision },
+          ],
         ] as const,
         ([name, args]) => call(name, args),
       );
@@ -510,6 +577,10 @@ it.effect(
         decodeAgents(JSON.parse(agents.text)).agents.map(({ id }) => id),
         [rows.ownAgent],
       );
+      assert.deepEqual(
+        decodeInbox(JSON.parse(inbox.text)).threads.map(({ id }) => id),
+        [rows.ownItem],
+      );
       for (const refused of strangers) {
         assert.equal(refused.refused, true, refused.text);
         assert.ok(
@@ -517,8 +588,81 @@ it.effect(
         );
       }
       for (const read of owns) assert.equal(read.refused, false, read.text);
+      // The stranger's thread stands as it was, its ask open and its thread its agent's alone.
+      const after = yield* readInboxItem(stranger.userId, rows.strangerItem).pipe(
+        Effect.map((stored) => Option.getOrThrow(stored).item),
+        Effect.provide(services),
+      );
+      assert.deepEqual(after, strangerAsk);
     }),
 );
+
+it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
+  it.effect(
+    "an outside agent reads the decide ask waiting on the member, answers it, and the agent that asked takes the answer up as the member's",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask, mcpFetch } = yield* openTask({ eve });
+        const { agent, target } = yield* startedAgent(owner, task.id, ask);
+        const sessionId = eve.opened[0]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        const posted = yield* postInboxThread(
+          { userId: owner, taskId: task.id, agentId: agent.id },
+          {
+            key: "invite-expiry",
+            title: "How long should an invitation stand?",
+            body: "An invitation nobody accepts expires after this.",
+            ask: { type: INBOX_ASK.DECIDE, options: [{ label: "7 days" }, { label: "30 days" }] },
+          },
+        );
+        assert.ok(Result.isSuccess(posted));
+        const askId = openAskOf(posted.success);
+        const before = eve.sent.length;
+        const { client } = yield* connected(mcpFetch, owner, REVISION.MODERN);
+        const call = (name: string, args: Record<string, unknown>) =>
+          Effect.promise(async () =>
+            decodeAnswer(await client.callTool({ name, arguments: args })),
+          );
+
+        const read = yield* call(MEMBER_MCP_TOOL.READ_INBOX, {});
+        const answered = yield* call(MEMBER_MCP_TOOL.ANSWER_ASK, {
+          threadId: posted.success.id,
+          askId,
+          reply: INBOX_REPLY.CHOSE,
+          choices: ["30 days"],
+        });
+        yield* Effect.promise(() => client.close());
+
+        assert.notEqual(read.isError, true, read.content[0].text);
+        const [waiting] = decodeInbox(JSON.parse(read.content[0].text)).threads;
+        assert.deepEqual(
+          [
+            waiting?.id,
+            waiting?.askId,
+            waiting?.waitsOnMember,
+            waiting?.thread.at(-1)?.ask?.options?.map(({ label }) => label),
+          ],
+          [posted.success.id, askId, true, ["7 days", "30 days"]],
+        );
+        assert.notEqual(answered.isError, true, answered.content[0].text);
+        assert.equal(
+          decodeWritten(JSON.parse(answered.content[0].text)).thread.status,
+          INBOX_STATUS.ANSWERED,
+        );
+        // The answer is handed to the session the agent runs in, as the member's message its next turn opens on.
+        assert.deepEqual(
+          eve.sent.slice(before).map((each) => [each.authorization, each.sessionId]),
+          [[harnessFor(owner), sessionId]],
+        );
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD) && handed.includes("30 days"), handed);
+      }),
+  );
+});
 
 it.effect("the metadata names the resource, the auth service, the scopes, and the header", () =>
   Effect.gen(function* () {

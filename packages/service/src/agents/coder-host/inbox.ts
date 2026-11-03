@@ -157,7 +157,7 @@ export const INBOX_TOOLS = {
  * agent still acts on it, and once settled its type and where it stands,
  * and an answered `do`'s steps, which the answer names by their places alone.
  */
-type AgentAskLine =
+export type AgentAskLine =
   | InboxReadAsk
   | (Pick<InboxReadAsk, "type" | "status" | "withdrawnReason"> & {
       readonly steps?: readonly string[];
@@ -258,8 +258,8 @@ function writerOf(message: InboxMessage): string {
   return message.member?.name ?? "a former member";
 }
 
-/** An ask as the agent reads it back: whole while open, and its type and standing, with why it was withdrawn, once settled. */
-function askLineOf(ask: InboxReadAsk): AgentAskLine {
+/** An ask as the agent reads it back: whole while open, and its type and standing, with why it was withdrawn, once settled; as a member's outside agent reads one too (`member-mcp/inbox.ts`). */
+export function askLineOf(ask: InboxReadAsk): AgentAskLine {
   if (ask.status === INBOX_ASK_STATUS.OPEN) return ask;
   return {
     type: ask.type,
@@ -271,8 +271,8 @@ function askLineOf(ask: InboxReadAsk): AgentAskLine {
   };
 }
 
-/** An answer as the agent reads it back: how the member answered, without the id of the message it answers, which is the ask before it. */
-function answersLineOf(answers: InboxAnswers): Omit<InboxAnswers, "ask"> {
+/** An answer as the agent reads it back: how the member answered, without the id of the message it answers, which is the ask before it; as a member's outside agent reads one too. */
+export function answersLineOf(answers: InboxAnswers): Omit<InboxAnswers, "ask"> {
   const { ask: _ask, ...answered } = answers;
   return answered;
 }
@@ -318,9 +318,10 @@ function settlementOf(item: InboxItem, messages: readonly InboxMessage[]): Parti
 /**
  * The messages a settled thread's read carries: its latest few, and its
  * latest ask and latest answer however long ago, which say what came of it
- * once later words push them out, each in the thread's order.
+ * once later words push them out, each in the thread's order; as a member's
+ * outside agent reads a settled thread too.
  */
-function settledMessages(messages: readonly InboxMessage[]): readonly InboxMessage[] {
+export function settledMessages(messages: readonly InboxMessage[]): readonly InboxMessage[] {
   const latest = (has: (message: InboxMessage) => boolean) => messages.findLast(has);
   const kept = new Set<InboxMessage | undefined>([
     latest((message) => message.ask !== undefined),
