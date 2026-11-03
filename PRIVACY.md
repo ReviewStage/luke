@@ -993,6 +993,13 @@ deletes the Slack workspace's record and every member's Slack user id with
 it; deleting the workspace does the same, and deleting your account deletes
 your Slack user id. Messages the bot already sent stay in Slack.
 
+When an agent posts a thread that waits on you, the bot messages you its
+title, the agent's words as plain text, and a link to the thread, and our
+service keeps that Slack message's conversation and timestamp beside the
+agent's message so it can rewrite it once the ask is answered, withdrawn, or
+replaced, then forgets them. Slack notifications, under the bot's row in
+Settings › Workspace, turns these messages off for you in every workspace.
+
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while
 Google's sign-in for them is limited to that organization's Google

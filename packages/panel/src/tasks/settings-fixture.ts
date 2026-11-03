@@ -708,8 +708,13 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   }),
   [ACT_KIND.WORKSPACE_SLACK_BOT_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME
-      ? { configured: true, team: { id: "T0ACME", name: "Acme" } }
+      ? { configured: true, team: { id: "T0ACME", name: "Acme" }, notifications: true }
       : { configured: true },
+  [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => ({
+    configured: true,
+    team: { id: "T0ACME", name: "Acme" },
+    notifications,
+  }),
   [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },

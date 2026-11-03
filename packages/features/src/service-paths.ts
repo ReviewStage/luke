@@ -376,6 +376,8 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_SLACK_BOT_CONNECT: "/api/workspaces/slack-bot/connect",
   /** A workspace's Slack bot disconnected by an owner or admin (POST), answering the bot as it then stands. */
   WORKSPACE_SLACK_BOT_DISCONNECT: "/api/workspaces/slack-bot/disconnect",
+  /** The reader's own Slack notifications turned on or off by any member (POST), answering the bot as it then stands. */
+  WORKSPACE_SLACK_BOT_NOTIFICATIONS: "/api/workspaces/slack-bot/notifications",
   /**
    * The Sentry integration's Redirect URL (GET): Sentry lands the browser
    * here after an install with the code, the installation's id, the

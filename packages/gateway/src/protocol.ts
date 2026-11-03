@@ -132,6 +132,8 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
   /** A workspace's Slack bot disconnected on the service by an owner or admin, answered with the bot as it then stands. */
   WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
+  /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**
