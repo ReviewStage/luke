@@ -71,6 +71,7 @@ export const APP_COMMAND = {
   FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
+  HOME: "home",
   INBOX: "inbox",
   TASKS: "tasks",
   INBOX_LIST: "inbox-list",
@@ -385,7 +386,7 @@ export interface AppShortcut {
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
  * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
- * and Chrome have them, ⇧⌘⏎ to fill the window
+ * and Chrome have them, ⇧⌘H for Home as Finder has it, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⇧⌘↑ and ⇧⌘↓ to move the focused
  * row of a list that reorders up or down it, ⌘T to open a tab, ⌘W
@@ -569,6 +570,7 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
   // Note that the Tasks page takes ⇧⌘B, for the Board it once was alone, because ⇧⌘T reopens a closed tab.
   [APP_COMMAND.TASKS]: { label: "Tasks", chord: { key: SHORTCUT_KEY.B, shift: true } },
@@ -811,6 +813,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.DELETE,
       APP_COMMAND.OPEN_IN_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
+      APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.TASKS,
       APP_COMMAND.INBOX_LIST,

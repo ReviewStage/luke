@@ -1649,7 +1649,7 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opens on nothing chosen, from its row, from a link, and as the window rests on it, whatever was chosen in it before", () => {
+test("the Inbox opens on nothing chosen, from its row and from a link, whatever was chosen in it before", () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
@@ -1665,14 +1665,9 @@ test("the Inbox opens on nothing chosen, from its row, from a link, and as the w
   choose();
   act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.INBOX } }));
   const fromLink = tab.control().inboxView.chosen;
-  choose();
-  act(() => tab.control().onSelect(TASK.id));
-  act(() => tab.control().onLeaveTask());
 
   assert.equal(fromRow, undefined);
   assert.equal(fromLink, undefined);
-  assert.equal(tab.control().inboxView.open, true, "leaving the plan rests on the Inbox");
-  assert.equal(tab.control().inboxView.chosen, undefined);
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
@@ -2530,52 +2525,22 @@ test("the Board and the Inbox stand in the plan's place in turn: opening one put
   assert.equal(tab.control().boardView.open, false);
 });
 
-test("with no plan open the window rests on the Inbox: it stands once the list lands, and closing it or any page over it lands on it again", () => {
-  const tab = mount({ shown: true, tasks: listRead([listed()]) });
-  assert.equal(tab.control().inboxView.open, true, "the window opens on the Inbox");
-
-  act(() => tab.control().inboxView.onClose());
-  assert.equal(tab.control().inboxView.open, true, "the Inbox has nothing under it to close to");
-
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().boardView.onClose());
-  assert.equal(tab.control().inboxView.open, true, "the Tasks page put away lands on the Inbox");
-  assert.equal(tab.control().resting, true, "the Inbox stands as the page rested on");
-
-  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
-  assert.equal(tab.control().resting, true, "an item chosen in it keeps it the page rested on");
-
-  act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
-  assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
-});
-
-test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  act(() =>
-    tab.control().inboxView.onChoose({ agentId: "agent-personal", itemId: "item-personal" }),
+test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
+    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
-  assert.deepEqual(tab.control().inboxView.chosen, {
-    agentId: "agent-personal",
-    itemId: "item-personal",
-  });
+  act(() => tab.control().onGoHome());
+  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
+  assert.equal(tab.control().boundFor, undefined);
 
-  act(() => tab.control().onChooseWorkspace(ACME.id));
-  assert.equal(tab.control().inboxView.open, true, "the other workspace rests on its Inbox");
-  assert.equal(tab.control().inboxView.chosen, undefined, "on none of the last workspace's items");
-});
-
-test("an account with nothing yet rests on no page, its welcome standing, and neither does a window whose list is still read", () => {
-  const fresh = mount({ shown: true, tasks: listRead([]) });
-  assert.equal(fresh.control().page, TASKS_PAGE.HOME);
-  assert.equal(fresh.control().inboxView.open, false);
-  assert.equal(fresh.control().boardView.open, false);
-
-  const reading = mount({
-    shown: true,
-    tasks: { ...listRead([listed()]), listStatus: TASKS_READ.READING },
-  });
-  assert.equal(reading.control().inboxView.open, false);
+  const home = mount({ shown: true, tasks: listRead([]) });
+  act(() => home.control().inboxView.onOpen());
+  const toldBefore = home.told.length;
+  act(() => home.control().onGoHome());
+  assert.equal(home.control().inboxView.open, false);
+  assert.equal(home.control().page, TASKS_PAGE.HOME);
+  assert.deepEqual(home.told.slice(toldBefore), [], "the host is asked nothing");
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {

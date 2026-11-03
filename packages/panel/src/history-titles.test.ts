@@ -59,7 +59,7 @@ test("a task on its way, its strips still another's, is named by the task alone"
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, opening), { label: "Auth refactor" });
 });
 
-test("the Inbox's step names the task its item is of, and Settings and a new account's welcome are named alone", () => {
+test("the Inbox's step names the task its item is of, and Settings and Home are named alone", () => {
   const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
   const base = tasksControl({ tasks: [TASK] });
   const inbox = tasksControl({
@@ -68,7 +68,7 @@ test("the Inbox's step names the task its item is of, and Settings and a new acc
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, inbox), { label: "Inbox", detail: "Auth refactor" });
   assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Welcome" });
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
 });
 
 test("with Channels on, a step on a channel listed later is named by the channel's name now, with the task of the thread open in it", () => {

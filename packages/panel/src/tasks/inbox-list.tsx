@@ -1020,8 +1020,7 @@ export function SearchEmpty({ searched }: { searched: string }): React.JSX.Eleme
 const NEW_TASK_LABEL = "New task";
 
 /**
- * The way on from an Inbox with nothing in it, where the window rests with
- * no task open (`resting-page.ts`): New task, opening its dialog, primary
+ * The way on from an Inbox with nothing in it: New task, opening its dialog, primary
  * because starting one is all there is to do from an Inbox with nothing to
  * answer. None where nothing can start.
  */

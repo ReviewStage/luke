@@ -469,6 +469,7 @@ export function AgentComposer({
   onKey,
   onLeave,
   focusedByOwner = false,
+  takesFocus = true,
   listSide = MENTION_MENU_SIDE.ABOVE,
   queueing,
 }: {
@@ -532,7 +533,9 @@ export function AgentComposer({
   onLeave?: (() => void) | undefined;
   /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
   focusedByOwner?: boolean;
-  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on a new account's welcome. */
+  /** Whether the field takes the caret as it mounts at all; none on a phone's Home, where the keyboard would cover the places bar. */
+  takesFocus?: boolean;
+  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on Home. */
   listSide?: MentionMenuSide;
   /** How the box queues behind the turn and edits a queued message; none where it queues nothing. */
   queueing?: ComposerQueueing | undefined;
@@ -895,7 +898,7 @@ export function AgentComposer({
                   : COMPOSER_INPUT.EDITABLE
             }
             maxLength={maxLength}
-            takesFocus={!(focusedByOwner && mountedFirst)}
+            takesFocus={takesFocus && !(focusedByOwner && mountedFirst)}
             {...pickers.field}
             onKey={(event) =>
               pickers.field.onKey(event) ||

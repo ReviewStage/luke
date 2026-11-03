@@ -16,7 +16,7 @@ import { groupCount } from "./sidebar-fold.js";
  * sidebar's drawer for everything else.
  *
  * It stands only in a narrow room and only on a place's list, the Inbox's,
- * the Tasks page, Automations, or the window resting with no task open, so
+ * the Tasks page, Automations, or Home, so
  * a task, an agent's page, an item, or a channel being read keeps the whole
  * screen and is left by Back. Each press lands on its place's list, not on
  * the item or channel last read, since on a phone the list is the place

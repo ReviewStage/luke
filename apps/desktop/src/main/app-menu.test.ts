@@ -41,6 +41,7 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Vespin"), "Go"), [
       "Command Palette",
       "-",
+      "Home",
       "Inbox",
       "Tasks",
       "Automations",
@@ -65,6 +66,7 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
       "Command Palette",
       "-",
+      "Home",
       "Tasks",
       "Automations",
       "-",
@@ -82,6 +84,7 @@ describe("the menu bar's gate", () => {
       "Vespin",
       undefined,
       (command) =>
+        command !== APP_COMMAND.HOME &&
         command !== APP_COMMAND.INBOX &&
         command !== APP_COMMAND.TASKS &&
         command !== APP_COMMAND.AUTOMATIONS,

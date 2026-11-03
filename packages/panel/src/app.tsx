@@ -526,8 +526,8 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ADMIN)) return;
       // An open task steps back through the history, as the toolbar's Back
-      // does, to the page it was opened from, which leaves it; a task with no step behind it is left for the page the window
-      // rests on (`resting-page.ts`), where a press does nothing. A side panel
+      // does, to the page it was opened from, which leaves it; a task with no step behind it is left for Home
+      // (`desktop-home.tsx`), where a press does nothing. A side panel
       // standing only full screen shuts through the history, as its Close does.
       shellDoors.current.back();
     };
@@ -561,7 +561,7 @@ function AppWindow(): React.JSX.Element {
     () => ({
       workspaces: tasks.workspaces,
       workspaceId: settingsWorkspace.shownId,
-      // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
+      // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
       onLeft: leftWorkspace,
       // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
       listFailed: tasks.workspacesFailed,

@@ -1223,6 +1223,7 @@ function inboxRow(
  * shortcuts page go on naming the place alone.
  */
 const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.HOME,
   APP_COMMAND.TASKS,
   APP_COMMAND.INBOX,
   APP_COMMAND.AUTOMATIONS,

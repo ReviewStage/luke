@@ -144,7 +144,7 @@ export function stepTitle(tab: PanelTab, tasks: StepTitleTasks): StepTitle | und
   }
   if (tasks.automationsView.open) return { label: "Automations" };
   if (tasks.boardView.open) return { label: "Tasks" };
-  if (tasks.boundFor === undefined) return { label: "Welcome" };
+  if (tasks.boundFor === undefined) return { label: "Home" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;
   if (tasks.history.open) return { label: name, detail: VERSION_HISTORY_WORDS };
