@@ -131,7 +131,7 @@ it.layer(getTestDB())("an automation run's result sent on Slack", (it) => {
         assert.equal(more.length, 0);
         assert.ok(message !== undefined);
         assert.equal(message.channel, SLACK_USER);
-        assert.ok(message.text?.startsWith("Email digest: "), message.text);
+        assert.match(message.text ?? "", /^Email digest: /u);
         const blocks = JSON.stringify(JSON.parse(message.blocks ?? "[]"));
         assert.ok(
           blocks.includes("*3 threads* need you. See <https://vespin.dev/acme/plan/1|the plan>."),
