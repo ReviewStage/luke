@@ -120,6 +120,16 @@ test("a cookie POST, PUT, DELETE, or PATCH from the deployment's own origin goes
   }
 });
 
+test("a cookie PUT from the host links were once written on, which production still serves the app at, goes on to its route", async () => {
+  const guard = cookieOriginGuard(PRODUCTION);
+  const sent = request(COOKIE_ROUTE, {
+    method: "PUT",
+    headers: { cookie: SESSION_COOKIE, origin: "https://tryluke.dev" },
+  });
+
+  assert.equal(await verdict(guard, sent), undefined);
+});
+
 test("a cookie POST that names no origin goes on where the browser says its page was the same origin's", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
