@@ -28,6 +28,7 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
@@ -82,7 +83,7 @@ import { useAct } from "../act.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { useSettleOpenAiKey } from "../openai-key.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useCapability } from "../use-app-state.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
@@ -92,10 +93,12 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  *
  * The account holds up to two credentials per harness: a plan (Claude's
  * `claude setup-token`, or the ChatGPT sign-in) and the provider's API key.
- * A row's line says which of them that harness's new agents use, or that
- * the one in use needs a hand, and its button is the act: Connect while
- * neither is set, Manage once one is. The
- * button opens the harness's dialog: a radio card per credential, each
+ * A row's line names the credential that harness's new agents use, then
+ * what is wrong with it, or says it is not connected, and its button is
+ * the fix: Connect while neither is set, Manage once one is, Sign in again
+ * for a ChatGPT plan OpenAI signed out, and Manage usage, which opens
+ * ChatGPT's usage settings, for one at its limit. Every other press
+ * opens the harness's dialog: a radio card per credential, each
  * holding its own controls, the checked radio being the default. The
  * default is the plan's `forAgents`: Subscription checked is on, API key
  * checked is off, and every agent Start makes on that provider's models
@@ -140,6 +143,28 @@ const CREDENTIAL = {
 
 type Credential = (typeof CREDENTIAL)[keyof typeof CREDENTIAL];
 
+/** What a harness's row button does: connect, manage, or the fix its state asks for. */
+const ROW_ACT = {
+  CONNECT: "connect",
+  MANAGE: "manage",
+  /** Opens the dialog on Continue with ChatGPT, for a ChatGPT plan OpenAI signed out. */
+  SIGN_IN_AGAIN: "sign_in_again",
+  /** Opens ChatGPT's usage settings, for a ChatGPT plan at its limit. */
+  MANAGE_USAGE: "manage_usage",
+} as const;
+
+type RowAct = (typeof ROW_ACT)[keyof typeof ROW_ACT];
+
+/** Where OpenAI's guidelines send Manage usage: ChatGPT's own usage settings. */
+const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+
+/** What a harness's row says under its name, in which tint, and what its button does. */
+interface Connection {
+  readonly words: string;
+  readonly state: SettingsRowState;
+  readonly act: RowAct;
+}
+
 /** What a harness's row and dialog are drawn from. */
 interface Harness {
   readonly name: string;
@@ -175,9 +200,9 @@ const HARNESS = {
   },
 } as const satisfies Record<ProviderKeyProvider, Harness>;
 
-/** A harness's row while the keys are read: its mark, its name, and the press that connects it. */
+/** A harness's row while the keys are read: its mark, its name, its state line, and its button. */
 const KEY_ROW_SKELETON: SettingsRowSkeletonShape = {
-  described: false,
+  described: true,
   mark: SETTINGS_ROW_MARK_WIDTH,
   controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
 };
@@ -192,11 +217,11 @@ const WORDS = {
   SIGNED_OUT: SIGNED_OUT_WORDS,
   CONNECT: "Connect",
   MANAGE: "Manage",
-  VIA_SUBSCRIPTION: "Connected with a subscription",
-  VIA_API_KEY: "Connected with an API key",
-  SIGN_IN_EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
-  PLAN_ATTENTION: "Subscription needs attention",
-  KEY_ATTENTION: "API key needs attention",
+  SIGN_IN_AGAIN: "Sign in again",
+  MANAGE_USAGE: "Manage usage",
+  NOT_CONNECTED: "Not connected",
+  NEEDS_ATTENTION: "Needs attention",
+  SIGNED_OUT_OF_PLAN: "Signed out",
   API_KEY: "API key",
   GET_KEY: "Get key",
   DESKTOP_ONLY: "Desktop app only",
@@ -280,35 +305,78 @@ function defaultOf(
   return undefined;
 }
 
-/** What a harness's row says under its name, connected or needing a hand, or nothing while neither credential is set. */
+/**
+ * What a harness's row says under its name: the credential its new agents
+ * use, by name, then what is wrong with it, and its button the fix. A key
+ * is named with its hint, a plan at its limit with its reset where the
+ * provider named one. A ChatGPT plan OpenAI signed out offers Sign in again
+ * where this client can take the sign-in (`signInOffered`), and one at its
+ * limit Manage usage, as OpenAI's guidelines ask; a Claude plan at its limit
+ * keeps Manage, and every other lapse says it needs attention, its card
+ * saying why.
+ */
 function connectionOf(
+  provider: ProviderKeyProvider,
   plan: SubscriptionKeySummary | undefined,
   key: ProviderKeySummary | undefined,
-): { words: string; state: SettingsRowState } | undefined {
+  signInOffered: boolean,
+): Connection {
+  const harness = HARNESS[provider];
   const chosen = defaultOf(plan, key);
   if (chosen === CREDENTIAL.API_KEY && key !== undefined) {
+    const keyName = `${harness.keyName} ${WORDS.API_KEY}`;
     return keyStanding(key.status)
-      ? { words: WORDS.VIA_API_KEY, state: SETTINGS_ROW_STATE.CONNECTED }
-      : { words: WORDS.KEY_ATTENTION, state: SETTINGS_ROW_STATE.ATTENTION };
+      ? {
+          words: key.hint === "" ? keyName : `${keyName} ${key.hint}`,
+          state: SETTINGS_ROW_STATE.CONNECTED,
+          act: ROW_ACT.MANAGE,
+        }
+      : {
+          words: `${keyName} · ${WORDS.NEEDS_ATTENTION}`,
+          state: SETTINGS_ROW_STATE.ATTENTION,
+          act: ROW_ACT.MANAGE,
+        };
   }
-  if (plan === undefined) return undefined;
+  if (plan === undefined) {
+    return { words: WORDS.NOT_CONNECTED, state: SETTINGS_ROW_STATE.PLAIN, act: ROW_ACT.CONNECT };
+  }
+  const chatGpt = plan.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH;
   if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
-    return { words: WORDS.USAGE_LIMIT, state: SETTINGS_ROW_STATE.ATTENTION };
+    return {
+      words: `${harness.planName} · ${limitWords(plan)}`,
+      state: SETTINGS_ROW_STATE.ATTENTION,
+      act: chatGpt ? ROW_ACT.MANAGE_USAGE : ROW_ACT.MANAGE,
+    };
   }
-  if (standing(plan)) return { words: WORDS.VIA_SUBSCRIPTION, state: SETTINGS_ROW_STATE.CONNECTED };
-  return { words: lapsedPlanWords(plan), state: SETTINGS_ROW_STATE.ATTENTION };
+  if (standing(plan)) {
+    return { words: harness.planName, state: SETTINGS_ROW_STATE.CONNECTED, act: ROW_ACT.MANAGE };
+  }
+  if (chatGpt && plan.status === PROVIDER_KEY_STATUS.INVALID) {
+    return {
+      words: `${harness.planName} · ${WORDS.SIGNED_OUT_OF_PLAN}`,
+      state: SETTINGS_ROW_STATE.ATTENTION,
+      act: signInOffered ? ROW_ACT.SIGN_IN_AGAIN : ROW_ACT.MANAGE,
+    };
+  }
+  return {
+    words: `${harness.planName} · ${WORDS.NEEDS_ATTENTION}`,
+    state: SETTINGS_ROW_STATE.ATTENTION,
+    act: ROW_ACT.MANAGE,
+  };
 }
 
-/**
- * What a harness's row says of a plan that no longer stands: a sign-in
- * expired only for a ChatGPT sign-in OpenAI ended, since a Claude token has
- * no sign-in, and that it needs attention otherwise, its card saying why.
- */
-function lapsedPlanWords(plan: SubscriptionKeySummary): string {
-  return plan.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
-    plan.status === PROVIDER_KEY_STATUS.INVALID
-    ? WORDS.SIGN_IN_EXPIRED
-    : WORDS.PLAN_ATTENTION;
+/** A row's button's words and its accessible name, which says which harness it acts on. */
+function rowActWords(act: RowAct, harness: string): { words: string; label: string } {
+  switch (act) {
+    case ROW_ACT.CONNECT:
+      return { words: WORDS.CONNECT, label: `${WORDS.CONNECT} ${harness}` };
+    case ROW_ACT.MANAGE:
+      return { words: WORDS.MANAGE, label: `${WORDS.MANAGE} ${harness}` };
+    case ROW_ACT.SIGN_IN_AGAIN:
+      return { words: WORDS.SIGN_IN_AGAIN, label: `Sign in to ${harness} again` };
+    case ROW_ACT.MANAGE_USAGE:
+      return { words: WORDS.MANAGE_USAGE, label: `Manage ${harness} usage` };
+  }
 }
 
 /** A reached limit's words, with its reset where the provider named one. */
@@ -673,11 +741,14 @@ function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.
 function ChatGptPanel({
   plan,
   offered,
+  signInButton,
   onAnswer,
 }: {
   plan: SubscriptionKeySummary | undefined;
   /** Whether this client can take the sign-in's loopback (the desktop). */
   offered: boolean;
+  /** The dialog's way to Continue with ChatGPT while it stands. */
+  signInButton: React.RefObject<HTMLButtonElement | null>;
   onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element | null {
   const { act } = useAct();
@@ -773,6 +844,7 @@ function ChatGptPanel({
                 </Button>
               ) : null}
               <Button
+                ref={signInButton}
                 variant={BUTTON_VARIANT.OUTLINE}
                 icon={
                   <ProviderMark provider={MARK_PROVIDER.CHATGPT} size={PROVIDER_MARK_SIZE.ICON} />
@@ -997,14 +1069,20 @@ function AgentAuthDialog({
   const [refused, setRefused] = useState<string | undefined>(undefined);
   const tokenField = useRef<HTMLInputElement | null>(null);
   const keyField = useRef<HTMLInputElement | null>(null);
-  // Note that the card opens on the first field it draws, the setup-token's above the API key's, and none where both are kept.
+  const signInButton = useRef<HTMLButtonElement | null>(null);
+  // Note that a ChatGPT plan OpenAI signed out opens on Continue with ChatGPT, the fix its row's Sign in again named.
+  const signInFirst =
+    connectionOf(provider, plan, key, chatGptOffered).act === ROW_ACT.SIGN_IN_AGAIN;
+  // Note that the card otherwise opens on the first field it draws, the setup-token's above the API key's, and none where both are kept.
   const firstField = useMemo(
     () => ({
       get current() {
-        return tokenField.current ?? keyField.current;
+        return (
+          (signInFirst ? signInButton.current : null) ?? tokenField.current ?? keyField.current
+        );
       },
     }),
-    [],
+    [signInFirst],
   );
   const claude = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC;
   // The ChatGPT sign-in is the desktop's alone, so elsewhere its card stands out of reach until one made there is held.
@@ -1045,7 +1123,12 @@ function AgentAuthDialog({
       below: planOutOfReach ? null : claude ? (
         <ClaudeTokenPanel plan={plan} field={tokenField} onAnswer={onAnswer} />
       ) : (
-        <ChatGptPanel plan={plan} offered={chatGptOffered} onAnswer={onAnswer} />
+        <ChatGptPanel
+          plan={plan}
+          offered={chatGptOffered}
+          signInButton={signInButton}
+          onAnswer={onAnswer}
+        />
       ),
     },
     {
@@ -1113,6 +1196,8 @@ export function AgentAuthSection({
   onConnected?: ((connected: boolean) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
+  const openLink = useOpenLink();
+  const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const [answer, setAnswer] = useState<ProviderKeysAnswer | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -1153,11 +1238,11 @@ export function AgentAuthSection({
     onConnected(
       HARNESSES.some(
         (provider) =>
-          connectionOf(planOf(answer, provider), keyOf(answer, provider))?.state ===
-          SETTINGS_ROW_STATE.CONNECTED,
+          connectionOf(provider, planOf(answer, provider), keyOf(answer, provider), chatGptOffered)
+            .state === SETTINGS_ROW_STATE.CONNECTED,
       ),
     );
-  }, [answer, onConnected]);
+  }, [answer, onConnected, chatGptOffered]);
 
   // The window hears every answer too, so Call and Dictate turn as an OpenAI key is saved or removed.
   const settleOpenAiKey = useSettleOpenAiKey();
@@ -1173,8 +1258,13 @@ export function AgentAuthSection({
         ) : answer !== undefined ? (
           HARNESSES.map((provider) => {
             const harness = HARNESS[provider];
-            const connection = connectionOf(planOf(answer, provider), keyOf(answer, provider));
-            const verb = connection === undefined ? WORDS.CONNECT : WORDS.MANAGE;
+            const connection = connectionOf(
+              provider,
+              planOf(answer, provider),
+              keyOf(answer, provider),
+              chatGptOffered,
+            );
+            const press = rowActWords(connection.act, harness.name);
             return (
               <div key={provider} {...searchAnchorProps(HARNESS[provider].anchor)}>
                 <SettingsRow
@@ -1185,25 +1275,35 @@ export function AgentAuthSection({
                   }
                   label={harness.name}
                   description={
-                    connection === undefined ? undefined : (
-                      <SettingsRowStateLine state={connection.state}>
-                        {connection.words}
-                      </SettingsRowStateLine>
-                    )
+                    <SettingsRowStateLine state={connection.state}>
+                      {connection.words}
+                    </SettingsRowStateLine>
                   }
                 >
-                  {(control) => (
+                  {(control) =>
                     // Note that the act is named for its harness, since both rows may say Manage, and described by the row's state.
-                    <Button
-                      variant={BUTTON_VARIANT.OUTLINE}
-                      label={`${verb} ${harness.name}`}
-                      aria-haspopup="dialog"
-                      aria-describedby={control["aria-describedby"]}
-                      onClick={() => setOpen(provider)}
-                    >
-                      {verb}
-                    </Button>
-                  )}
+                    connection.act === ROW_ACT.MANAGE_USAGE ? (
+                      <ButtonLink
+                        href={CHATGPT_USAGE_URL}
+                        variant={BUTTON_VARIANT.OUTLINE}
+                        label={press.label}
+                        aria-describedby={control["aria-describedby"]}
+                        onClick={linkPressOf(openLink, CHATGPT_USAGE_URL)}
+                      >
+                        {press.words}
+                      </ButtonLink>
+                    ) : (
+                      <Button
+                        variant={BUTTON_VARIANT.OUTLINE}
+                        label={press.label}
+                        aria-haspopup="dialog"
+                        aria-describedby={control["aria-describedby"]}
+                        onClick={() => setOpen(provider)}
+                      >
+                        {press.words}
+                      </Button>
+                    )
+                  }
                 </SettingsRow>
               </div>
             );
