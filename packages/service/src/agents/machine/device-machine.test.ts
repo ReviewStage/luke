@@ -583,6 +583,31 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
+      "a Mac quiet past its lease before its runner opened a turn fails the turn its message waits on, naming the Mac",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent();
+          const { userId, deviceId, agent } = opened;
+          const launch = yield* launched(opened);
+          // The Mac took the launch and went quiet while preparing it, before its runner posted anything.
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+          const writer = yield* storeWriter({ tools: {} });
+          yield* TestClock.adjust("6 minutes");
+
+          yield* sweepDeviceLeases(writer, { now: yield* Clock.currentTimeMillis });
+
+          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
+            agent.conversationId,
+          );
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(
+            turn?.failureDetail,
+            "Studio went away during this turn. Send a message to carry on once it's back.",
+          );
+        }),
+    );
+
+    it.effect(
       "an older launch a newer one replaced is settled alone, so no stop lands after the newer launch once its Mac is back",
       () =>
         Effect.gen(function* () {
