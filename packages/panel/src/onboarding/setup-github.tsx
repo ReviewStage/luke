@@ -1,6 +1,5 @@
 import {
   GITHUB_TOKEN_CREATE_URL,
-  GITHUB_TOKEN_REJECTION,
   type GitHubTokenRejection,
   type GitHubTokenSummary,
 } from "@repo/features/github-token-wire";
@@ -25,7 +24,6 @@ import {
 } from "@repo/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
-import { useGitHubConnection } from "../github-connect.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
@@ -40,8 +38,8 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
  * The App is one trip to GitHub, which also links the member's GitHub
  * (the service keeps the install's user token). The token is made on
  * GitHub's own page and pasted here, then the repositories it may push to
- * are added; where the service refuses it for want of a linked GitHub
- * account, the card offers the link and the save again. The step is done once the workspace
+ * are added. The token stands on its own, needing no GitHub account linked
+ * first. The step is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
  * so a trip finished in the browser lands on its own.
  */
@@ -104,7 +102,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   );
 }
 
-/** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to; GitHub linked only where the service asks for it. */
+/** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to. */
 function TokenRoute({
   workspaceId,
   onAdded,
@@ -114,7 +112,6 @@ function TokenRoute({
 }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
-  const { connect } = useGitHubConnection();
   const repositories = useTokenRepositories(workspaceId);
   const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
   const [pasted, setPasted] = useState("");
@@ -184,18 +181,7 @@ function TokenRoute({
         onChange={setPasted}
         onEnter={save}
       />
-      {rejection === GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT ? (
-        <>
-          <CardWords>Link the GitHub account this token is for, then save it again.</CardWords>
-          <ProviderButton
-            provider={MARK_PROVIDER.GITHUB}
-            name="GitHub"
-            words="Link GitHub"
-            size={PROVIDER_BUTTON_SIZE.GATE}
-            onPress={() => void connect()}
-          />
-        </>
-      ) : rejection !== undefined ? (
+      {rejection !== undefined ? (
         <CardWords>{rejectionLabel(rejection)}</CardWords>
       ) : failed ? (
         <CardWords>The token could not be saved. Try again.</CardWords>

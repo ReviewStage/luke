@@ -4,9 +4,11 @@
  * `GET /api/github/token` answers the member's token as its login, hint,
  * status, and expiry; `PUT` saves one, first asking GitHub whose it is with
  * one `GET /user` on it, and keeps it sealed
- * (`@repo/database/models/provider-key-seal`) only where GitHub accepts it,
- * it carries the `repo` scope, and it is the member's own linked GitHub
- * account's; `DELETE` removes it. A fine-grained token is refused before it
+ * (`@repo/database/models/provider-key-seal`) only where GitHub accepts it
+ * and it carries the `repo` scope, with the GitHub user GitHub named it as;
+ * `DELETE` removes it. The token stands on its own: it need not match a
+ * GitHub account linked to the member's, since holding it is what grants
+ * what it reaches. A fine-grained token is refused before it
  * is sent anywhere. Every answer is the token as it then stands and none
  * carries it: the one body that holds a token is the `PUT`'s own, it is
  * sealed the moment it is checked, and neither it nor what GitHub said of it
@@ -25,7 +27,6 @@
 
 import {
   type GitHubTokenRow,
-  linkedGitHubUserIds,
   readGitHubTokenRow,
   removeGitHubToken,
   saveGitHubToken,
@@ -125,7 +126,6 @@ function expiryOf(header: string | undefined): Date | null {
  */
 const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   token: Redacted.Redacted<string>,
-  linked: readonly string[],
 ): Effect.fn.Return<
   Result.Result<CheckedToken, GitHubTokenRejection>,
   never,
@@ -134,7 +134,6 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Redacted.value(token).startsWith(TOKEN_PREFIX.FINE_GRAINED)) {
     return Result.fail(GITHUB_TOKEN_REJECTION.FINE_GRAINED);
   }
-  if (linked.length === 0) return Result.fail(GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT);
   const client = yield* HttpClient.HttpClient;
   const answered = yield* client.execute(githubRead("/user", token)).pipe(
     Effect.flatMap((response) =>
@@ -163,7 +162,6 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
     .map((scope) => scope.trim());
   if (!scopes.includes(REQUIRED_SCOPE)) return Result.fail(GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE);
   const githubUserId = String(user.value.id);
-  if (!linked.includes(githubUserId)) return Result.fail(GITHUB_TOKEN_REJECTION.OTHER_USER);
   return Result.succeed({
     githubUserId,
     githubLogin: user.value.login,
@@ -207,15 +205,14 @@ export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
       return yield* tokenAnswer(context.userId, context.ring);
     }),
 
-    /** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it as the member's own. */
+    /** A save: braked, checked with GitHub, and kept sealed only where GitHub accepts it. */
     save: held.save.effect(function* ({ context, input }) {
       const { userId, ring } = context;
       const token = Redacted.make(input.token);
       if (!(yield* brake.check(userId))) {
         return yield* tokenAnswer(userId, ring, GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES);
       }
-      const linked = yield* hostedStoreOrUnavailable(linkedGitHubUserIds(userId));
-      const checked = yield* checkGitHubToken(token, linked);
+      const checked = yield* checkGitHubToken(token);
       if (Result.isFailure(checked)) return yield* tokenAnswer(userId, ring, checked.failure);
       const now = yield* DateTime.nowAsDate;
       const facts = { hint: tokenHint(token), ...checked.success };

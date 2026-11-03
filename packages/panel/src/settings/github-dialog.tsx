@@ -10,7 +10,6 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { dayText } from "@repo/features/time-format";
 import { ACT_KIND } from "@repo/host/acts";
-import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
   BUTTON_TYPE,
@@ -41,7 +40,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
-import { SettingsPageLink } from "../open-settings.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 
@@ -76,16 +74,6 @@ export function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
       return "GitHub rejected this token. Check that you copied all of it, or create a new one.";
     case GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE:
       return "This token is missing the repo scope. Create a new token with repo ticked.";
-    case GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT:
-      return (
-        <>
-          No GitHub account is connected to your {PRODUCT_NAME} account. Connect GitHub in{" "}
-          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} /> settings, then save the token
-          again.
-        </>
-      );
-    case GITHUB_TOKEN_REJECTION.OTHER_USER:
-      return `This token belongs to a different GitHub account than the one connected to ${PRODUCT_NAME}. Create it while signed in to the connected account.`;
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
       return "GitHub could not be reached. Try again.";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
