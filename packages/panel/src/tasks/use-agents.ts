@@ -445,7 +445,7 @@ export interface AgentDraft {
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
-  readonly refused?: Failure | undefined;
+  readonly refused?: StartFailure | undefined;
 }
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
@@ -477,7 +477,7 @@ interface HandedDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
-  readonly refused: Failure;
+  readonly refused: StartFailure;
 }
 
 /** A draft's fork as an optional key, absent where it forks nothing. */
