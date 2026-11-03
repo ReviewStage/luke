@@ -10,6 +10,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -237,7 +238,27 @@ test("nothing waiting says so in the Inbox's words, and a list that could not be
 });
 
 test("an account with nothing yet is welcomed in Home's place", async () => {
-  const { page } = mount({ tasks: [], listed: { tasks: [], inbox: [], inboxTasks: [] } }, []);
+  const base = tasksControl();
+  const { page } = mount(
+    {
+      tasks: [],
+      listed: { tasks: [], inbox: [], inboxTasks: [] },
+      // An agent connected, so the welcome asks nothing of setup and stands whole.
+      newTask: {
+        ...base.newTask,
+        workspaceId: ACME.id,
+        models: [
+          {
+            id: "anthropic/claude-opus-5.5",
+            name: "Claude Opus 5.5",
+            provider: MODEL_PROVIDER.ANTHROPIC,
+            efforts: ["high"],
+          },
+        ],
+      },
+    },
+    [],
+  );
   await settle();
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
   assert.equal(page.querySelector("section.home-section"), null);

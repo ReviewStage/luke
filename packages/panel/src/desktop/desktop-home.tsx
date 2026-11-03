@@ -263,7 +263,7 @@ export function DesktopHome({
   const roving = useRovingKeys<HTMLDivElement>();
   // Note that on a phone the words leave the caret alone, because a field typed in puts the places bar away (`mobile-bar.tsx`).
   const takesFocus = room !== SHELL_ROOM.NARROW;
-  if (welcomed(tasks)) return <DesktopWelcome tasks={tasks} takesFocus={takesFocus} />;
+  if (welcomed(tasks)) return <DesktopWelcome tasks={tasks} />;
   const reading = !tasks.listRead && !tasks.listFailed;
   return (
     <DetailPage

@@ -15,7 +15,8 @@ import { CatalogSection } from "../section";
  * rest with the way in taken last filled and wearing its pill, and pending,
  * the pressed one named for its wait while the other stands back. A press
  * begins the wait and a second press of the waited one is refused, so the
- * example is pressed through as a sign-in is.
+ * example is pressed through as a sign-in is. Setup's GitHub step names
+ * its own act, "Install on GitHub", in place of "Continue with GitHub".
  */
 
 const WAYS_IN = [
@@ -76,6 +77,18 @@ function ProviderButtons(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="provider-button-gate-pending" title="Gate, waiting on GitHub">
         <Choices size={PROVIDER_BUTTON_SIZE.GATE} initial={MARK_PROVIDER.GITHUB} />
+      </CatalogSection>
+      <CatalogSection id="provider-button-words" title="Gate, naming its own act">
+        <div className="catalog-column">
+          <ProviderButton
+            provider={MARK_PROVIDER.GITHUB}
+            name="GitHub"
+            words="Install on GitHub"
+            size={PROVIDER_BUTTON_SIZE.GATE}
+            primary
+            onPress={() => undefined}
+          />
+        </div>
       </CatalogSection>
     </>
   );

@@ -414,11 +414,8 @@ test("the title bar's buttons, each wrapped in its hint, tell a reader the chord
   ]);
 });
 
-test("an account with no plan is welcomed on New task's composer, and the title bar's New task still raises the dialog over the window, which Escape puts away", () => {
+test("an account with no plan raises New task from the title bar over the window, which Escape puts away", () => {
   const page = mount(false);
-  const welcome = page.querySelector('section[aria-label="Welcome"]');
-  assert.ok(welcome, "the welcome stands");
-  assert.ok(welcome.querySelector(".new-task-composer"), "the welcome holds New task's composer");
   const newTask = page.querySelector<HTMLButtonElement>(
     '.title-bar-controls:not([data-edge]) button[aria-label="New task"]',
   );

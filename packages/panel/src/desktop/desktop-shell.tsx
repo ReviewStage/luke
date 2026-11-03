@@ -41,6 +41,8 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { setupOwed } from "../onboarding/setup-model.js";
+import { SETUP_FINISHED, SetupSteps } from "../onboarding/setup-steps.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
@@ -52,6 +54,7 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useAdminAccessPending, useCapability } from "../use-app-state.js";
+import { useKept } from "../use-kept.js";
 import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
@@ -65,6 +68,7 @@ import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import { welcomed } from "./desktop-welcome.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -719,6 +723,10 @@ export function DesktopShell({
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
+  // A new account is set up once, in the window before the app, until it finishes on this machine.
+  const [setupFinished, , keepSetupFinished] = useKept(SETUP_FINISHED, []);
+  const signedInId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+  const owesSetup = setupOwed({ id: signedInId, fresh: welcomed(tasks), finished: setupFinished });
   const inboxKept = useInboxKept(
     tasks.inboxView.open,
     tasks.workspace?.id,
@@ -810,6 +818,19 @@ export function DesktopShell({
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
   const away = useMemo(() => ({ label: awayLabel, onPress: onLeave }), [awayLabel, onLeave]);
+  if (owesSetup && signedInId !== undefined) {
+    return (
+      <ScrollArea>
+        <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
+          <div className="desktop-drag-strip" />
+          <SetupSteps
+            tasks={tasks}
+            onFinish={() => keepSetupFinished((finished) => [...finished, signedInId])}
+          />
+        </div>
+      </ScrollArea>
+    );
+  }
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (

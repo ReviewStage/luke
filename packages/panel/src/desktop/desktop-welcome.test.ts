@@ -1,24 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { ModelChoice } from "@repo/features/models-wire";
+import { MODEL_PROVIDER, type CatalogModel } from "@repo/features/models-wire";
+import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import type { AppInboxTasklessItem } from "@repo/host/app-state";
-import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import type { NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
+import { afterEach, beforeEach, test } from "vitest";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 
@@ -49,20 +41,46 @@ function automationQuestion(startedBy?: string): AppInboxTasklessItem {
   };
 }
 
-/** The workspace listed, which the composer starts a task in. */
+/** The workspace listed, which setup reads GitHub's repositories in. */
 const LISTED_WORKSPACE = "workspace-personal";
 
-/** The account's default model, which the composer's chip starts on. */
-const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+/** A model the account's agents may run on, missing its credential where `missing` says. */
+function model(missing: boolean): CatalogModel {
+  return {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+    ...(missing ? { credentialMissing: true } : {}),
+  };
+}
+
+/** The repositories the listed workspace reaches: one where `reached` says, none otherwise. */
+function repositoriesRead(reached: boolean): () => Promise<TasksRepositoriesAnswer> {
+  return () =>
+    Promise.resolve({
+      repositories: {
+        installed: reached,
+        repositories: reached
+          ? [
+              {
+                fullName: "acme/relay",
+                owner: "acme",
+                name: "relay",
+                defaultBranch: "main",
+                private: true,
+                updatedAt: 1,
+              },
+            ]
+          : [],
+        installationUrl: "https://github.com/apps/vespin/installations/new",
+      },
+    });
+}
 
 let root: Root | undefined;
 
-// Landed before any page renders, as the panel lands it after its first paint.
-beforeAll(() => Effect.runPromise(editorBundleLanded));
-
 beforeEach(() => {
-  installScrollIntoView();
-  installEditorLayout();
   fakeAppBridge({});
   fakeActPort({});
 });
@@ -72,47 +90,25 @@ afterEach(() => {
   root = undefined;
   window.localStorage.clear();
   document.body.innerHTML = "";
-  document.head.innerHTML = "";
 });
 
-/** A task the composer started: its name, repository, workspace, and the agent it asked for. */
-interface Started {
-  readonly name: string;
-  readonly repository: string | null;
-  readonly workspaceId: string | undefined;
-  readonly agent: NewTaskAgent | undefined;
-}
-
-/** The tab's New task control as the welcome's composer meets it, each start written to `started`. */
-function newTaskControl(started: Started[]): TasksControl["newTask"] {
-  const control = tasksControl().newTask;
-  return {
-    ...control,
-    workspaceId: LISTED_WORKSPACE,
-    repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
-    readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
-    start: (name, repository, workspaceId, from) => {
-      started.push({
-        name,
-        repository,
-        workspaceId,
-        agent: from?.handed,
-      });
-      return Promise.resolve(undefined);
-    },
-  };
-}
-
-/** The page with no task open over `overrides`, an account with nothing yet where they say nothing else, each start recorded. */
-function mount(overrides: Partial<TasksControl> = {}) {
-  const started: Started[] = [];
+/** The page with no task open over `overrides`, an account with nothing yet where they say nothing else, with an agent and GitHub set up unless `setup` says otherwise; New task's presses counted in `opened`. */
+function mount(overrides: Partial<TasksControl> = {}, setup = { agent: true, github: true }) {
+  const opened: number[] = [];
+  const base = tasksControl();
   const tasks = tasksControl({
     listRead: true,
     tasks: [],
     listed: { tasks: [], inbox: [], inboxTasks: [] },
     inbox: [],
     inboxTasks: [],
-    newTask: newTaskControl(started),
+    onNewTask: () => opened.push(1),
+    newTask: {
+      ...base.newTask,
+      workspaceId: LISTED_WORKSPACE,
+      models: [model(!setup.agent)],
+      repositoriesIn: () => ({ ...base.repositories, read: repositoriesRead(setup.github) }),
+    },
     ...overrides,
   });
   const container = document.createElement("div");
@@ -121,7 +117,7 @@ function mount(overrides: Partial<TasksControl> = {}) {
   act(() =>
     root?.render(onRegistry(AtomRegistry.make(), createElement(DesktopWelcome, { tasks }))),
   );
-  return { page: container, started };
+  return { page: container, opened };
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -136,22 +132,35 @@ function welcomed(page: HTMLElement): boolean {
   return page.querySelector("[aria-label='Welcome']") !== null;
 }
 
-test("an account with no plan yet is welcomed with New task's composer under Vespin's line, and nothing the page says names the sidebar", async () => {
-  const { page, started } = mount();
+/** The button the page names `name`. */
+function button(page: HTMLElement, name: string): HTMLButtonElement | undefined {
+  return [...page.querySelectorAll("button")].find((each) => each.textContent?.trim() === name);
+}
 
-  await settle();
-  typeInComposer(page, "Set up the repository");
-  pressInComposer(page, "Enter");
+test("an account with an agent and GitHub set up is welcomed with New task, which opens New task's dialog, and nothing the page says names the sidebar", async () => {
+  const { page, opened } = mount();
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
   assert.ok(welcomed(page), "the welcome stands");
-  assert.deepEqual(
-    started.map((each) => each.agent?.prompt),
-    ["Set up the repository"],
-    "its composer starts the first task",
-  );
+  act(() => button(page, "New task")?.click());
+  assert.equal(opened.length, 1, "New task opens its dialog");
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
+});
+
+test("an account setup left without an agent is asked to finish setting up, its first task held until one is connected", async () => {
+  const { page, opened } = mount({}, { agent: false, github: true });
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Finish setting up");
+  assert.match(page.textContent ?? "", /Connect an agent/u);
+  assert.doesNotMatch(
+    page.textContent ?? "",
+    /Connect GitHub/u,
+    "GitHub, set up, is not asked again",
+  );
+  act(() => button(page, "Start your first task")?.click());
+  assert.equal(opened.length, 0, "no task starts before an agent is connected");
 });
 
 test("an account whose task list is unread is not welcomed until the list says it is new", () => {
@@ -182,56 +191,4 @@ test("an account with no plan yet whose only waiting question is a teammate's ag
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
-});
-
-test("the welcome's composer takes the caret as the page shows, and ↑, ↓, and Return typed in it are the composer's", async () => {
-  const { page, started } = mount();
-  await settle();
-  const editor = composerEditor(page);
-  assert.ok(document.activeElement === editor, "the words take the caret");
-
-  typeInComposer(page, "Fix the refresh");
-  const down = pressInComposer(page, "ArrowDown");
-  const up = pressInComposer(page, "ArrowUp");
-
-  assert.ok(document.activeElement === editor, "the caret stays in the words");
-  assert.equal(down.defaultPrevented || up.defaultPrevented, false, "the page takes neither arrow");
-  pressInComposer(page, "Enter");
-  await settle();
-  assert.equal(started.length, 1, "Return started the composer's task");
-});
-
-test("the welcome's composer leaves the caret in a field the developer is typing in as the page shows", async () => {
-  const field = document.createElement("input");
-  document.body.append(field);
-  field.focus();
-  const { page } = mount();
-  await settle();
-
-  assert.ok(composerEditor(page));
-  assert.ok(document.activeElement === field, "the field keeps the caret");
-});
-
-test("Return in the welcome's composer starts the task in the listed workspace, and an agent on the words naming no model while the chip is unpicked", async () => {
-  const { page, started } = mount();
-  await settle();
-  typeInComposer(page, "Make the sidebar keep its folds.");
-  pressInComposer(page, "Enter");
-  await settle();
-
-  const [{ agent, ...task } = assert.fail("a task started")] = started;
-  const { idempotencyKey, ...handed } = agent ?? assert.fail("an agent was asked for");
-  assert.deepEqual(task, {
-    name: "",
-    repository: "acme/relay",
-    workspaceId: LISTED_WORKSPACE,
-  });
-  assert.deepEqual(handed, {
-    prompt: "Make the sidebar keep its folds.",
-    attachments: [],
-    choice: undefined,
-    disabledServers: [],
-  });
-  assert.ok(idempotencyKey, "the agent's start carries the card's key");
-  assert.equal(started.length, 1);
 });

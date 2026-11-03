@@ -41,7 +41,7 @@ function mount(element: React.ReactElement): HTMLElement {
 function gitHub(
   size: ProviderButtonSize,
   presses: string[],
-  props: { busy?: boolean; disabled?: boolean; lastUsed?: boolean } = {},
+  props: { busy?: boolean; disabled?: boolean; lastUsed?: boolean; words?: string } = {},
 ): React.ReactElement {
   return createElement(ProviderButton, {
     provider: MARK_PROVIDER.GITHUB,
@@ -71,6 +71,13 @@ test("a provider's button is named for its provider and begins its sign-in when 
     act(() => button.click());
     expect(presses).toEqual(["github"]);
   }
+});
+
+test("a button that names its own act is named by it rather than as a sign-in", () => {
+  const { name } = only(
+    mount(gitHub(PROVIDER_BUTTON_SIZE.GATE, [], { words: "Install on GitHub" })),
+  );
+  expect(name).toBe("Install on GitHub");
 });
 
 test("a busy button is named for the act in progress, says it is busy, and refuses a press", () => {

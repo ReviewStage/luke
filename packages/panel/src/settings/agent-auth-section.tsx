@@ -1101,10 +1101,13 @@ function AgentAuthDialog({
 export function AgentAuthSection({
   signedIn,
   onKeys,
+  onConnected,
 }: {
   signedIn: boolean;
   /** The API keys as last read or changed, none where they could not be read; not called while the read is out. */
   onKeys: (keys: readonly ProviderKeySummary[]) => void;
+  /** Whether either harness stands connected, as each answer leaves them; setup's steps go on by it. */
+  onConnected?: ((connected: boolean) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const [answer, setAnswer] = useState<ProviderKeysAnswer | undefined>(undefined);
@@ -1140,6 +1143,18 @@ export function AgentAuthSection({
   useEffect(() => {
     if (answer !== undefined || readFailed) onKeys(answer?.keys ?? []);
   }, [answer, readFailed, onKeys]);
+
+  // Setup hears whether either harness now pays for an agent.
+  useEffect(() => {
+    if (answer === undefined || onConnected === undefined) return;
+    onConnected(
+      HARNESSES.some(
+        (provider) =>
+          connectionOf(planOf(answer, provider), keyOf(answer, provider))?.state ===
+          SETTINGS_ROW_STATE.CONNECTED,
+      ),
+    );
+  }, [answer, onConnected]);
 
   // The window hears every answer too, so Call and Dictate turn as an OpenAI key is saved or removed.
   const settleOpenAiKey = useSettleOpenAiKey();
