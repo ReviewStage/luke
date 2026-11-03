@@ -152,6 +152,39 @@ function useHolderPages(place: PagePlace | undefined): HeldRead<readonly PageLin
   return { rows: held?.rows, status: statusOf(held) };
 }
 
+/** No place's pages, for a surface whose tabs stand on none beside its own. */
+const NO_PAGES_SLICE: Atom.Atom<undefined> = Atom.make(undefined);
+
+/**
+ * The pages of each place given, a task's or an agent's on no task, held by
+ * this surface while it names them as `useHolderPages` holds one: what a
+ * side panel reads of the places its page tabs stand on beside the one it
+ * stands for. Answers each place's pages, none until they are read.
+ */
+export function usePlacesPages(
+  places: readonly PagePlace[],
+): (place: PagePlace) => readonly PageLine[] | undefined {
+  const held = useAppSlice(places.length === 0 ? NO_PAGES_SLICE : APP_SLICE.PAGES);
+  useEffect(() => {
+    const holds = places.map((place) =>
+      streamFrom(
+        () => askAct(ACT_KIND.TASKS_PAGES_FOLLOW, place),
+        () => undefined,
+      ),
+    );
+    return () => {
+      for (const release of holds) release();
+    };
+  }, [places]);
+  return useCallback(
+    (place) =>
+      "taskId" in place
+        ? held?.[PAGE_OWNER.TASK][place.taskId]?.rows
+        : held?.[PAGE_OWNER.AGENT][place.agentId]?.rows,
+    [held],
+  );
+}
+
 /**
  * One workspace's channels, open and archived, held by this surface while
  * `workspaceId` names one: the hold is a stream on the act port, which

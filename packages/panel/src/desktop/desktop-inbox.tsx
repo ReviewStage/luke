@@ -87,7 +87,11 @@ import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
 import { OpenAddressesHere, type OpenAddressHere, placeOfMention } from "../tasks/use-open-link.js";
-import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
+import {
+  type FileReads,
+  PULL_REQUEST_VIEW,
+  type SidePanelControl,
+} from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -440,9 +444,13 @@ export const DesktopInbox = memo(function DesktopInbox({
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
-  // A file the item names opens beside the Inbox as the panel's preview.
+  // A file the item names opens beside the Inbox as the panel's preview, an agent's with no task read through its repository.
   const openFile = (ref: CodeRef, commit: string | undefined) =>
-    sidePanel.onPreviewFile(ref, commit);
+    sidePanel.onPreviewFile(
+      ref,
+      commit,
+      chosen?.holder.kind === INBOX_HOLDER.TASK ? undefined : repositoryReads(place),
+    );
   // A file the item's words or box name opens as its code does, in the panel beside the Inbox.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     openFile(fileRef(path, lines), lines?.commit);
@@ -1076,8 +1084,15 @@ function tasklessCode(
   return {
     repository,
     readFile: (window) => act(ACT_KIND.TASKS_FILE, { workspaceId, repository, ...window }),
-    onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit),
+    onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit, repositoryReads(place)),
   };
+}
+
+/** Where a file of an agent with no task is read: through its workspace and repository; none until both are known. */
+function repositoryReads(place: TasklessPlace | undefined): FileReads | undefined {
+  if (place === undefined || place.repository === null) return undefined;
+  const { workspaceId, repository } = place;
+  return { place: { workspaceId, repository }, repository };
 }
 
 /**

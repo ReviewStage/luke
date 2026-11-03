@@ -1596,6 +1596,29 @@ export function useTasksTab(input: {
     [cloudPlace, cloudListed, cloudDrafts],
   );
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  // Where the panel's file and page tabs opened here read, saved with each tab: the task the panel
+  // stands for and its repository, or, beside an agent on no task, the agent's pages and no files,
+  // whose opener names the workspace and repository it reads them through (`desktop-agent-page.tsx`).
+  const panelTaskId =
+    inboxView !== undefined ? inboxTask : pageAgents === undefined ? activeTaskId : undefined;
+  const panelRepository = tasks.tasks.find((task) => task.id === panelTaskId)?.repository ?? null;
+  const panelFileReads = useMemo(
+    () =>
+      panelTaskId === undefined
+        ? undefined
+        : { place: { taskId: panelTaskId }, repository: panelRepository },
+    [panelTaskId, panelRepository],
+  );
+  const panelPagesAgent = inboxView !== undefined ? inboxAgent : pageAgent;
+  const panelPages = useMemo(
+    () =>
+      panelTaskId !== undefined
+        ? { taskId: panelTaskId }
+        : panelPagesAgent === undefined
+          ? undefined
+          : { agentId: panelPagesAgent },
+    [panelTaskId, panelPagesAgent],
+  );
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -1603,10 +1626,12 @@ export function useTasksTab(input: {
           id: inboxTask ?? inboxAgent,
           holds: NO_HOLDS,
           bare: true,
+          files: panelFileReads,
+          pages: panelPages,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: NO_HOLDS }
-        : { id: pageAgent, holds: NO_HOLDS },
+        ? { id: viewed.activeTaskId, holds: NO_HOLDS, files: panelFileReads, pages: panelPages }
+        : { id: pageAgent, holds: NO_HOLDS, pages: panelPages },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : agentPageIds,
