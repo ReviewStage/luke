@@ -120,6 +120,9 @@ const MARK_INK = {
 
 type MarkInk = (typeof MARK_INK)[keyof typeof MARK_INK];
 
+/** A chip's seat in a card's head: as wide as the chip, and no wider than the line, where the chip is cut. */
+const CHIP_SEAT = "inline-flex min-w-0 max-w-full *:min-w-0 *:max-w-full";
+
 /** A mark in a card's icon's seat, at the size and in the seat the Pull request tab's badge stands in. */
 function CardMark({ ink, children }: { ink: MarkInk; children: ReactNode }): React.JSX.Element {
   return (
@@ -285,16 +288,19 @@ export function GitHubLineCard({
       open={folds ? undefined : false}
       fill={DISCLOSURE_FILL.ACTIONS}
       actions={
-        <>
-          <span className="github-line-head flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap">
-            {sender == null ? null : <span className="inline-flex min-w-0">{sender}</span>}
-            <span className="flex-none text-muted-foreground">{head.does}</span>
-            <span className="inline-flex flex-none">
+        // Note that a head too wide for its card wraps between its parts as a sentence does, what they did kept with the pull request's chip, rather than shrinking a chip under the words beside it; a chip still too wide for a line of its own is cut at its end.
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-list-gap py-list-gap">
+          {sender == null ? null : <span className={CHIP_SEAT}>{sender}</span>}
+          <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-tight-gap gap-y-list-gap">
+            <span className="min-w-0 text-muted-foreground">{head.does}</span>
+            <span className={CHIP_SEAT}>
               <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>
           </span>
-          {count === "" ? null : <span className="flex-none text-muted-foreground">{count}</span>}
-        </>
+          {count === "" ? null : (
+            <span className="ms-auto whitespace-nowrap text-muted-foreground">{count}</span>
+          )}
+        </span>
       }
     >
       <PlanHeader folds={folds} aria-label={count === "" ? named : `${named}, ${count}`}>
