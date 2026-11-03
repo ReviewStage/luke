@@ -10,6 +10,13 @@ import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
 
 /**
+ * The page the OAuth provider sends an authorization that holds no session
+ * to, whose sign-in resumes it. The local server's demo sign-in answers this
+ * path in the page's place (`apps/web/server/local-sign-in.ts`).
+ */
+export const LOGIN_PAGE = "/sign-in.html";
+
+/**
  * What a GitHub sign-in asks for. It is our GitHub App's user
  * authorization, and a GitHub App has permissions rather than scopes: what
  * the token reaches is fixed by the App's registration (repository metadata,

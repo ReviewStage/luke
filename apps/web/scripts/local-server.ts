@@ -128,14 +128,20 @@ function answerRawImports(): void {
 
 /**
  * The routes this server answers ahead of the deployment's and the pages,
- * by the path each answers: where a local-only route mounts, the demo's
- * sign-in among them, which answers `/sign-in.html` in the page's place.
- * None ever stands under `server/routes/`, so no function a deploy carries
- * reaches one. Read once the environment is settled, as the deployment's
- * routes are, since what they import may read it as it loads.
+ * by the path each answers: where a local-only route mounts. The demo's
+ * sign-in answers `/sign-in.html` in the page's place, as the member the
+ * demo seed writes (`server/local-sign-in.ts`). None ever stands under
+ * `server/routes/`, so no function a deploy carries reaches one. Read once
+ * the environment is settled, as the deployment's routes are, since what
+ * they import may read it as it loads.
  */
-function localRoutes(): Promise<ReadonlyMap<string, Route>> {
-  return Promise.resolve(new Map());
+async function localRoutes(): Promise<ReadonlyMap<string, Route>> {
+  const [{ auth }, { DEMO_DEAN }, { LOCAL_SIGN_IN_PATH, localSignIn }] = await Promise.all([
+    import("@luke/service/auth/auth"),
+    import("@luke/service/demo/demo-seed"),
+    import("../server/local-sign-in.js"),
+  ]);
+  return new Map([[LOCAL_SIGN_IN_PATH, localSignIn(auth, DEMO_DEAN.id)]]);
 }
 
 /**
