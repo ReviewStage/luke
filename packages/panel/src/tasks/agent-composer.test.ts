@@ -3,11 +3,13 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import { AGENT_BOUNDS, AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { formatCount } from "@repo/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@repo/features/repository-reach-wire";
+import { type ShownFailureSentry, sendShownFailure } from "@repo/features/shown-failure";
 import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { pasteCutWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -21,6 +23,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { installShownFailureReporter } from "../failure-report.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
@@ -905,6 +908,50 @@ test("a message refused because the member's token is not authorized for the org
 
   assert.deepEqual(box.opened.github, [authorizeUrl]);
   assert.deepEqual(box.opened.settings, []);
+});
+
+test("a message refused for want of a connected credential is reported as the service's refusal, by its word, and opens no issue", async () => {
+  const reported: [string, Readonly<Record<string, unknown>>][] = [];
+  let issues = 0;
+  const recording: ShownFailureSentry = {
+    captureException: () => {
+      issues += 1;
+      return "";
+    },
+    logger: {
+      warn: (_message, attributes) => reported.push(["warn", attributes]),
+      error: (_message, attributes) => reported.push(["error", attributes]),
+    },
+    getActiveSpan: () => undefined,
+    getCurrentScope: () => ({
+      getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
+    }),
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  try {
+    const box = await mounted(() =>
+      Promise.resolve({
+        failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+        provider: MODEL_PROVIDER.ANTHROPIC,
+      }),
+    );
+    typeInComposer(box.container, "Rebase on main");
+    pressInComposer(box.container, "Enter");
+    await settle();
+  } finally {
+    uninstall();
+  }
+
+  assert.deepEqual(
+    reported.map(([level, attributes]) => [
+      level,
+      attributes["failure.surface"],
+      attributes["failure.kind"],
+      attributes["failure.code"],
+    ]),
+    [["warn", "agent.send", "refused", AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING]],
+  );
+  assert.equal(issues, 0);
 });
 
 test("messages still waiting to go as the agent refuses one for good are all kept for Continue, in the order sent", async () => {

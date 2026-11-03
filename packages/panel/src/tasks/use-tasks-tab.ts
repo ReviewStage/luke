@@ -172,6 +172,7 @@ import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
+import type { ComposerNote } from "./use-agent-composer.js";
 import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -2600,7 +2601,8 @@ export function useTasksTab(input: {
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
-    const refusedWith = (note: Failure): Failure => {
+    // Note that a refusal keeps what refused it, so the box that shows it reports that in its place.
+    const refusedWith = (note: ComposerNote): ComposerNote => {
       if (handed !== undefined) {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.
@@ -2641,6 +2643,7 @@ export function useTasksTab(input: {
               answer.failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED
                 ? localAgentRefusalWords(answer.localAgentRefusal, from.device)
                 : startFailureNote(answer.failure),
+            cause: answer,
           });
         }
         // Note that an agent's start put the card and whatever stood away as it was pressed, so
@@ -2666,7 +2669,8 @@ export function useTasksTab(input: {
         openAgent(answer.planId, handed, answer.agentStart, from.device, sentAt);
         return undefined;
       },
-      (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
+      (refused: Error) =>
+        refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message, cause: refused }),
     );
   };
 
@@ -2710,11 +2714,9 @@ export function useTasksTab(input: {
       mainTabs.onShow(planId, { agent: started.agent.id });
       return;
     }
-    const refused = agentStartFailureNote(
-      started ?? { failure: AGENT_CALL_FAILURE.UNANSWERED },
-      planId,
-      device,
-    );
+    // Note that the refusal keeps the answer that said it, so the draft's tab reports the service's word for it.
+    const answer = started ?? { failure: AGENT_CALL_FAILURE.UNANSWERED };
+    const refused = { ...agentStartFailureNote(answer, planId, device), cause: answer };
     const { idempotencyKey: id, ...words } = handed;
     agents.onHandDraft(planId, { id, ...words, refused });
     mainTabs.onShow(planId, { draft: id });

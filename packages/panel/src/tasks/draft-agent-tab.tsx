@@ -1,5 +1,4 @@
 import { AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
-import type { Failure } from "@repo/features/failure-remedy";
 import { useSecond } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
@@ -11,7 +10,7 @@ import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
-import type { AgentComposerControl } from "./use-agent-composer.js";
+import type { AgentComposerControl, ComposerNote } from "./use-agent-composer.js";
 import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
 
@@ -101,7 +100,7 @@ export function DraftAgentTab({
   const [sending, setSending] = useState(false);
   // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
-  const [note, setNote] = useState<Failure | undefined>(undefined);
+  const [note, setNote] = useState<ComposerNote | undefined>(undefined);
   // Note that a send lets the refusal New task handed over go, so a tab opened again after says only its own.
   const shownNote = note ?? draft.refused;
   // The account's default as read, which the chip names until the developer makes a choice of their own.
