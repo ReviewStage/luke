@@ -2415,11 +2415,37 @@ svg.lucide {
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
    pair, and wrapping where more would leave each too narrow for a video's
-   bar (`grid-cols-picture-row`); each still hugs its own picture, and none
-   grows past its own size. */
+   bar (`grid-cols-picture-row`). Note that each picture fills its cell at a
+   shape between 3:4 and 2:1, cut from its top and centre past either, rather
+   than hugging its own shape, because a whole page or a phone's screenshot
+   shrunk to the row's height is a sliver beside a screenshot's wide box; a
+   press still opens it whole. A video keeps its player's own shape. */
 .transcript-pictures > .picture-block {
   min-width: 0;
   margin: 0;
+}
+
+.transcript-pictures > .picture-block:not([data-video]) {
+  width: auto;
+  container-type: inline-size;
+}
+
+.transcript-pictures > .picture-block:not([data-video]) :is(.luke-picture-tile, .picture-frame) {
+  width: 100%;
+}
+
+/* The frame holds the 3:4 bound, and the picture its own screenful's worth
+   (`max-h-picture-most`) under it. */
+.transcript-pictures > .picture-block .picture-frame:has(> .picture-image) {
+  max-height: calc(100cqw * 4 / 3);
+  overflow: clip;
+}
+
+.transcript-pictures > .picture-block .picture-image {
+  width: 100%;
+  min-height: calc(100cqw / 2);
+  object-fit: cover;
+  object-position: top;
 }
 
 /* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
