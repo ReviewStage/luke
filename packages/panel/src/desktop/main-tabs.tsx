@@ -441,12 +441,18 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
 
 /**
  * The task's Inbox as ⌘K offers it, by itself rather than among the task's
- * agents, though only they post to it; none on a task with no agent.
- * Picking it opens the window's Inbox narrowed to the task, through `onPick`.
+ * agents, though only they post to it; none on a task with no agent and
+ * nothing main says waits on it (`waiting`), which holds the Inbox while its
+ * agents are unread. Picking it opens the window's Inbox narrowed to the
+ * task, through `onPick`.
  */
-export function inboxEntries(agents: AgentsControl, onPick: () => void): AddEntry[] {
+export function inboxEntries(
+  agents: AgentsControl,
+  waiting: boolean,
+  onPick: () => void,
+): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0) return [];
+  if ((agents.heldIds?.length ?? 0) === 0 && !waiting) return [];
   return [inboxEntry(onPick, 0)];
 }
 

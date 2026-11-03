@@ -748,7 +748,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                     rows={columns.rows}
                     head={{
                       shown: tasks.shown,
-                      view: choices,
+                      // Note that a task's items are listed whole, so its Inbox offers no view's menu.
+                      view: narrowedTask === undefined ? choices : undefined,
                       search,
                       phone:
                         room === SHELL_ROOM.NARROW
@@ -778,7 +779,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                         onRetry={onRetry}
                         searched={searched}
                         onNewTask={narrowedTo === undefined ? newTask : undefined}
-                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
+                        none={
+                          narrowedTo === undefined && narrowedTask === undefined
+                            ? undefined
+                            : NOTHING_HERE
+                        }
                       />
                     }
                     onChoose={open}
@@ -820,7 +825,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                       <InboxPaneEmpty
                         listed={listedRows.length}
                         newTask={narrowedTo === undefined ? newTask : undefined}
-                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
+                        none={
+                          narrowedTo === undefined && narrowedTask === undefined
+                            ? undefined
+                            : NOTHING_HERE
+                        }
                       />
                     )}
                   </section>

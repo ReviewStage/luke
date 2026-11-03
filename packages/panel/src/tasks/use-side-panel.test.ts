@@ -427,6 +427,21 @@ test("a record kept while the Call and Code stood in the panel reads with their 
   assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
+test("an Inbox tab an earlier version pinned, a task's or an agent's, is let go, since threads open in the window's Inbox", () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: false,
+      tabs: ["comments"],
+      width: 400,
+      pins: [{ task: TASK, tab: "inbox", label: "Inbox", at: 1 }],
+      agentPins: [{ agent: AGENT, tab: "inbox", label: "Inbox", at: 2 }],
+    }),
+  );
+  const panel = launch({ task: TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().pins, []);
+});
+
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {
   let room: ShellRoom = SHELL_ROOM.NARROW;
   let control: SidePanelControl | undefined;

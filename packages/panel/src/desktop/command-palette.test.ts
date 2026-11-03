@@ -2715,6 +2715,27 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
   assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
+test("⌘K's \"This task\" still offers the task's Inbox while an item waits on it and its agents are unread", async () => {
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
+  });
+  await paletteUnderState(tasks);
+  chooseFilter("This task");
+  assert.ok(rows().includes(`Inbox · ${DOCUMENT_TASK.name}`), "a waiting item holds the Inbox");
+});
+
 test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
