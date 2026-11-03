@@ -1,4 +1,5 @@
-import { BUTTON_SIZE, COPY_LOOK, CopyButton, GAP, Inline } from "@repo/ui";
+import { devBuildBadge } from "@repo/settings/dev-build";
+import { BUTTON_SIZE, BuildChip, COPY_LOOK, CopyButton, GAP, Inline } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -7,11 +8,18 @@ import { CatalogSection } from "../section";
  * copy-buttons.tsx -- the one Copy, named for what it copies: one whose copy
  * lands and turns to the check, one the clipboard refuses and turns to the
  * alert, compact, one with nothing to copy, and the chip look that names
- * what it copies, a branch. The catalog's copy act is
+ * what it copies, a branch, and a development build's chip, led by its
+ * color. The catalog's copy act is
  * the browser's own clipboard; an app hands in its shell's.
  */
 
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
+
+/** Two development builds, a named instance and a plain one on a detached head. */
+const BUILDS = [
+  devBuildBadge({ instance: "demo", commit: { sha: "f8b5406", dirty: false, branch: "main" } }),
+  devBuildBadge({ commit: { sha: "8f3c2a1", dirty: true, branch: "fix/merge-queue-notice~2" } }),
+];
 
 const refuse = (): Promise<void> => Promise.reject(new Error("The clipboard refused the copy."));
 
@@ -54,6 +62,18 @@ function CopyButtons(): React.JSX.Element {
             what="branch agent/copy-button-chip-look-for-the-branch-chips"
             copy={refuse}
           />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="copy-button-build" title="A development build, led by its color">
+        <Inline gap={GAP.CONTROL}>
+          {BUILDS.map((build) => (
+            <BuildChip
+              key={build.detail}
+              detail={build.detail}
+              color={build.color}
+              copy={copyToClipboard}
+            />
+          ))}
         </Inline>
       </CatalogSection>
     </>
