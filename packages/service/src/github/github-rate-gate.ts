@@ -65,7 +65,7 @@ const GATE = {
   /** How long an instance trusts its last read of an identity's shared hold. */
   SHARED_READ_FOR: Duration.seconds(5),
   /** The header a held answer carries, so a log or a test can tell it from GitHub's own. */
-  HELD_MARK: "x-luke-github-held",
+  HELD_MARK: "x-app-github-held",
 } as const;
 
 const GITHUB_API_HOST = "api.github.com";

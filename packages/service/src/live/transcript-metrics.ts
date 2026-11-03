@@ -23,12 +23,12 @@ const BYTE_BOUNDARIES = Metric.exponentialBoundaries({ start: 1024, factor: 2, c
 const MILLI_BOUNDARIES = Metric.exponentialBoundaries({ start: 10, factor: 2, count: 12 });
 
 export const TRANSCRIPT_METRIC = {
-  ANSWER_MILLIS: Metric.histogram("luke.transcript.answer_ms", {
+  ANSWER_MILLIS: Metric.histogram("app.transcript.answer_ms", {
     description:
       "Milliseconds from the instance hearing a write to a transcript's rows that carry it being answered, for a held read that a notification woke",
     boundaries: MILLI_BOUNDARIES,
   }),
-  ANSWER_BYTES: Metric.histogram("luke.transcript.answer_bytes", {
+  ANSWER_BYTES: Metric.histogram("app.transcript.answer_bytes", {
     description: "Bytes of rows a transcript live answer carried, for an answer that carried any",
     boundaries: BYTE_BOUNDARIES,
   }),

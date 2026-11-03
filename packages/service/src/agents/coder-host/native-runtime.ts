@@ -18,15 +18,28 @@ export type NativeRuntime = Exclude<ConversationRuntime, typeof CONVERSATION_RUN
 
 /** What the id of a session we mint for each native harness begins with. */
 export const NATIVE_SESSION_PREFIX = {
+  [CONVERSATION_RUNTIME.CLAUDE_CODE]: "claude-code-",
+  [CONVERSATION_RUNTIME.CODEX]: "codex-",
+} as const satisfies Record<NativeRuntime, string>;
+
+/**
+ * What the id of a session minted before the product's rename began with,
+ * read and never written. Note that it is read for good, because a
+ * conversation keeps its session's id, and its sandbox the `sessionId` tag
+ * that finds it, for as long as the agent lives.
+ */
+const NATIVE_SESSION_PREFIX_BEFORE_RENAME = {
   [CONVERSATION_RUNTIME.CLAUDE_CODE]: "luke-claude-code-",
   [CONVERSATION_RUNTIME.CODEX]: "luke-codex-",
 } as const satisfies Record<NativeRuntime, string>;
 
 /** The native harness that minted the session, by its id; none for a session eve minted. */
 export function nativeRuntimeOfSession(sessionId: string): NativeRuntime | undefined {
-  for (const [runtime, prefix] of Object.entries(NATIVE_SESSION_PREFIX)) {
-    // SAFETY: the keys are `NATIVE_SESSION_PREFIX`'s own, each a native runtime.
-    if (sessionId.startsWith(prefix)) return runtime as NativeRuntime;
+  for (const prefixes of [NATIVE_SESSION_PREFIX, NATIVE_SESSION_PREFIX_BEFORE_RENAME]) {
+    for (const [runtime, prefix] of Object.entries(prefixes)) {
+      // SAFETY: the keys are the prefix tables' own, each a native runtime.
+      if (sessionId.startsWith(prefix)) return runtime as NativeRuntime;
+    }
   }
   return undefined;
 }

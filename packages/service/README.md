@@ -654,7 +654,8 @@ one account at a provider (two Notion workspaces), each its own row and its
 own grant. Connect keys a grant by connector and subject, so each row keeps
 the subject it asks under (`connect_subject`): the Vespin account's own user
 id for the first account at a provider, as every ask was before a second
-was possible, and a minted `luke_acct_…` id for another. Each row also keeps
+was possible, and a minted `app_acct_…` id for another (`luke_acct_…` on
+rows minted before the rename, which stay valid). Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
@@ -828,7 +829,7 @@ vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
 vercel connect create granola --name granola                   # Granola
-vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
+vercel connect create mcp.mercury.com --name vespin-mercury    # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
 vercel connect create supabase --name supabase                 # Supabase
@@ -2162,7 +2163,7 @@ replacement each wake every watch, so its reader reads again.
 reconnects or where the deployment has no `DATABASE_URL_UNPOOLED`, every
 `next` waits its caller's own poll, as every held read did before Vespin Sync;
 a watch on no topics always does, and a runtime that provides no hub, as a
-test may, stands on the clock. The hub's metrics (`luke.sync.*`) count
+test may, stands on the clock. The hub's metrics (`app.sync.*`) count
 notifications, wakes, fallback wakes, reconnects, and the milliseconds the
 listener stood down, and gauge the notification queue's usage; none carries a
 topic, an id, or a transaction id.

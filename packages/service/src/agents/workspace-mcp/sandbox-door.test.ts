@@ -27,7 +27,7 @@ import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
-const SESSION = "luke-claude-code-fixture";
+const SESSION = "claude-code-fixture";
 
 /** An unsigned token naming the fixture's project and team. */
 function fixtureToken(): Promise<string> {
