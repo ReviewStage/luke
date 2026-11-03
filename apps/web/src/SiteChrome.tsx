@@ -20,8 +20,8 @@ import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
-/** The newest release's version-free DMG, under its old name until the first release under the new name publishes one of its own. */
-export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Vespin.dmg`;
+/** The newest release's version-free DMG, named for the product as the Release workflow names it. */
+export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/${PRODUCT_NAME}.dmg`;
 
 /** Where the web app opens, the one address the site and the invitation page send a reader to. */
 export const WEB_APP_URL = PANEL_PATH;
