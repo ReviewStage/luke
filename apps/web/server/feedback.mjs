@@ -323,7 +323,7 @@ function surveyResponse(submission, apiKey) {
       feedback_screenshot_count: submission.images.length,
       environment: process.env.VERCEL_ENV?.trim() || "development",
       $process_person_profile: false,
-      // Without it a note with no address resolves to the data centre's.
+      // Without it a note with no address resolves to the data center's.
       $geoip_disable: true,
     },
   };
