@@ -6,6 +6,7 @@ import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-b
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { writePage } from "@repo/database/models/plan-pages";
+import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import { createTaskCommitted } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -37,6 +38,10 @@ import {
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import {
+  pullRequestChaptersLiveAnswerSchema,
+  pullRequestChaptersOfLive,
+} from "@repo/features/pull-request-chapters-live";
 import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
@@ -50,8 +55,16 @@ import { sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { markInboxItemRead, postInboxThread } from "../inbox/inbox-store.js";
+import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
+import {
+  connectWorkspaceGitHub,
+  type FakeGitHub,
+  githubReaching,
+  type InstallationFixture,
+} from "../testing/github-app-fake.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
@@ -1104,6 +1117,131 @@ it.layer(getTestDB())("the account's sidebar's live read", (it) => {
           (yield* ask({ bearer: dana, forUser: "user-erin", path })).status,
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
         );
+      }),
+  );
+});
+
+const RELAY = { owner: "Acme", name: "Relay" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+
+/** The one installation the chapters' read reaches the repository through. */
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 9_300,
+  login: RELAY.owner,
+  repositories: [RELAY],
+};
+
+/** A deployment that seals members' API keys under the fixture ring and holds nothing else. */
+const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: AGENT_KEY_RING,
+};
+
+/** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */
+const askChapters = (options: {
+  readonly bearer: string;
+  readonly agentId: string;
+  readonly number: number;
+  readonly github: FakeGitHub;
+}) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      Layer.succeed(HostedEnvironment, CHAPTERS_ENVIRONMENT),
+      options.github.layer,
+    );
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+    });
+    const url = new URL("/api/live/pull-request-chapters", ORIGIN);
+    url.searchParams.set("id", options.agentId);
+    url.searchParams.set("number", String(options.number));
+    url.searchParams.set(LIVE_USER_QUERY, options.bearer);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
+    return { status: response.status, body };
+  });
+
+it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
+  it.effect(
+    "a member is answered the agent's own workspace's newest chapters polled, with whether they can generate them, and an account outside it is not found though its own workspace keeps chapters of the same pull request",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Invitations", repository: RELAY_FULL_NAME });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        yield* connectAgentApiKeys(teammate);
+        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+        const started = yield* createAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: RELAY_FULL_NAME,
+          planSnapshot: "# Invitations\n",
+          prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        assert.ok(Option.isSome(started));
+        const agentId = started.value.agent.id;
+        const claimed = (
+          organizationId: string,
+          requestedBy: string,
+          headSha: string,
+          at: number,
+        ) =>
+          claimChapterGeneration({
+            organizationId,
+            repository: RELAY_FULL_NAME,
+            pullRequestNumber: 7,
+            baseSha: "ba5e000",
+            headSha,
+            requestedBy,
+            now: new Date(at),
+          });
+        yield* claimed(task.workspaceId, owner, "c0ffee1", 1_000);
+        // The stranger's own workspace claims the same pull request later, which no read through the agent may answer.
+        yield* claimed(yield* openWorkspace(stranger), stranger, "dec0de2", 2_000);
+        const github = githubReaching([RELAY_INSTALLATION]);
+
+        const polled = yield* askChapters({ bearer: teammate, agentId, number: 7, github });
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(pullRequestChaptersLiveAnswerSchema)(polled.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          pullRequestChaptersOfLive(answer.queries.chapters.rows ?? [], 7, answer.generatable),
+          {
+            pullRequest: {
+              number: 7,
+              generatable: true,
+              chapters: {
+                status: "generating",
+                headSha: "c0ffee1",
+                baseSha: "ba5e000",
+                startedAt: 1_000,
+              },
+            },
+          },
+        );
+        assert.deepEqual(yield* askChapters({ bearer: stranger, agentId, number: 7, github }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
       }),
   );
 });

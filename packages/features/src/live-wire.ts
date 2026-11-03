@@ -820,6 +820,8 @@ export const LIVE_READ = {
   HOLDER_INBOX: "holderInbox",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
+  /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
+  PULL_REQUEST_CHAPTERS: "pullRequestChapters",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

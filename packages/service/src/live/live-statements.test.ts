@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import { workspacesLiveStatements } from "@repo/database/models/workspace-store";
@@ -58,6 +59,9 @@ function liveStatements() {
       browserTabsLiveStatement(USER_ID, { agentId: randomUUID() }),
     ),
     "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
+    "agent.pullRequestChapters": Option.getOrThrow(
+      pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
+    ),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),

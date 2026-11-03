@@ -90,6 +90,16 @@
  * so a reader whose `since` moved to the items it was just answered is
  * held rather than answered again; woken by Sync on the account's
  * topic (`inboxItemsLive`).
+ *
+ * `GET /api/live/pull-request-chapters?id=&number=` answers one coding
+ * agent's pull request's newest chapters as one statement, after the agent
+ * is read as the account and a token minted for its repository confirms its
+ * workspace still reaches it, as the agent's own read of them admits a
+ * reader (`agentChaptersAdmission`), so an agent it does not reach is not
+ * found; with whether the reader can generate them on a key of their own
+ * beside it, which no statement can read. It is woken by a claim, finish,
+ * or failure in the agent's workspace (`pullRequestChaptersLive`), so
+ * another member's Generate reaches an open view without a Refresh.
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
@@ -117,6 +127,8 @@ import { readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
+import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
+import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -138,6 +150,7 @@ import {
   inboxItemsLive,
   inboxLive,
   macCommandsLive,
+  pullRequestChaptersLive,
   sidebarLive,
   taskBrowserTabsLive,
   taskHistoryLive,
@@ -709,6 +722,26 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
       return { ...sealed, origin: new URL(context.request.url).origin };
+    }),
+    pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const number = yield* pullRequestNumberOf([input.number]);
+      // One number named always reads as one or is refused.
+      if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      const { agent } = yield* reachedAgentById(context.userId, input.id);
+      // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
+      const { generatable } = yield* agentChaptersAdmission(context.userId, agent);
+      const sealed = yield* liveQueryParts(
+        pullRequestChaptersLive,
+        {
+          userId: context.userId,
+          agentId: agent.id,
+          number: String(number),
+          workspaceId: agent.organizationId,
+        },
+        input,
+      );
+      return { ...sealed, generatable };
     }),
   };
 }
