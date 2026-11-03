@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "./command-items.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import type { MenuAction } from "./desktop/action-menu.js";
+import { useNumberedPlace } from "./tasks/use-link-standing.js";
 
 /**
  * copy-link-item.tsx -- Copy link as any menu offers it: the one item every thing's ⋯ and right-click menu holds, copying the thing's app link and saying Link copied.
@@ -14,7 +15,9 @@ import type { MenuAction } from "./desktop/action-menu.js";
  * which the surface hands down: a task's page its workspace's slug, an
  * agent's page its agent's. Where none is handed down, as in a test of
  * one surface or a place whose workspace is not yet read, the item stands
- * nowhere rather than copy a link that names no workspace. The item prints
+ * nowhere rather than copy a link that names no workspace. A task's place
+ * is written by the task's number where the window lists it with one
+ * (`useNumberedPlace`), as the address bar writes it. The item prints
  * ⇧⌘C only where its link is the one the chord would copy now, the open or
  * focused thing's (`links-at-hand.ts`); every other row's prints nothing.
  */
@@ -71,9 +74,10 @@ export function copyLinkItem(
 export function useCopyLink(): ((place: LinkPlace) => void) | undefined {
   const workspace = useContext(LinkWorkspaceContext);
   const copy = useCopyToast();
+  const numbered = useNumberedPlace();
   return workspace === undefined
     ? undefined
-    : (place) => copy(linkOf(place, workspace), LINK_COPY.COPIED);
+    : (place) => copy(linkOf(numbered(place, workspace), workspace), LINK_COPY.COPIED);
 }
 
 /** Copy link for a place, under the workspace the surface hands down; none where it hands down none. */
@@ -81,8 +85,11 @@ export function useCopyLinkItem(): (place: LinkPlace) => MenuAction | undefined 
   const workspace = useContext(LinkWorkspaceContext);
   const copy = useCopyToast();
   const chord = useChordLinks();
+  const numbered = useNumberedPlace();
   return (place) =>
-    workspace === undefined ? undefined : copyLinkItem(copy, linkOf(place, workspace), chord);
+    workspace === undefined
+      ? undefined
+      : copyLinkItem(copy, linkOf(numbered(place, workspace), workspace), chord);
 }
 
 /** The place an agent is linked by, its own whichever task it works on, which its reader finds by the agent. */

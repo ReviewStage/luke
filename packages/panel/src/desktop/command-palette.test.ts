@@ -1856,7 +1856,7 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
 
   assert.deepEqual(copied, [
     `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
-    `https://vespin.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://vespin.dev/acme/inbox/${itemId}`,
     `https://vespin.dev/acme/automation/${automationId}`,
   ]);
 });

@@ -71,6 +71,7 @@ import {
   versionDiff,
 } from "../tasks/plan-history-model.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
+import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import {
   HISTORY_READ,
   type OpenedSections,
@@ -742,6 +743,7 @@ export function DesktopVersionHistory({
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
+  const numbered = useNumberedPlace();
   const linked = subject.task;
   const versionLinkItem = (revision: number): MenuAction | undefined =>
     linked === undefined
@@ -749,7 +751,10 @@ export function DesktopVersionHistory({
       : copyLinkItem(
           copy,
           linkOf(
-            { kind: LINK_PLACE.VERSION, planId: linked.taskId, revision },
+            numbered(
+              { kind: LINK_PLACE.VERSION, planId: linked.taskId, revision },
+              linked.place.workspace,
+            ),
             linked.place.workspace,
           ),
           chord,

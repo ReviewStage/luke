@@ -493,7 +493,7 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
     window.shown().inboxView.onChoose(ITEM);
   });
 
-  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
+  assert.deepEqual(window.addresses(), ["/acme/inbox", "/acme/inbox/item-1"]);
   assert.equal(window.standingAddress(), copiedHere());
   const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
@@ -513,7 +513,7 @@ test("in a room still wide, as a 700px stage is, an Inbox showing one column by 
     window.shown().inboxView.onChoose(ITEM);
   });
 
-  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
+  assert.deepEqual(window.addresses(), ["/acme/inbox", "/acme/inbox/item-1"]);
   const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
 
@@ -530,8 +530,8 @@ test("on the desktop's width the step's link names the Inbox's item standing alo
       inbox: { open: true, chosen: undefined, single },
     });
     window.press(() => window.shown().inboxView.onChoose(ITEM));
-    assert.equal(window.standingAddress(), single ? `${TASK_PATH}/inbox/item-1` : "/acme/inbox");
-    assert.equal(copiedHere(), `${TASK_PATH}/inbox/item-1`, "Copy link names the item at hand");
+    assert.equal(window.standingAddress(), single ? "/acme/inbox/item-1" : "/acme/inbox");
+    assert.equal(copiedHere(), "/acme/inbox/item-1", "Copy link names the item at hand");
     unmountAll();
   }
 });

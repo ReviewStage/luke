@@ -651,13 +651,17 @@ const ACME = {
   github: null,
 };
 
-/** A task drawn in Acme, the workspaces as `workspaces` lists them. */
-function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
+/** A task drawn in Acme, the workspaces as `workspaces` lists them, numbered `number` in it where given. */
+function onTask(workspaces: TasksControl["workspaces"], number?: number): TasksControl {
+  const task = { ...DOCUMENT_TASK, workspaceId: ACME.id };
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     boundFor: DOCUMENT_TASK.id,
-    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
+    region: {
+      kind: DOCUMENT_REGION.READY,
+      task: number === undefined ? task : { ...task, number },
+    },
     workspaces,
     workspace: ACME,
   });
@@ -668,7 +672,7 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const listed = { workspaces: [ACME], workspace: ACME };
   const places: TasksControl[] = [
-    onTask([ACME]),
+    onTask([ACME], 42),
     tasksControl(listed),
     tasksControl({ ...listed, boardView: { ...tasksControl().boardView, open: true } }),
     tasksControl({ ...listed, inboxView: { ...tasksControl().inboxView, open: true } }),
@@ -695,6 +699,7 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
   }
 
   assert.equal(copied.length, places.length);
+  assert.equal(copied[0], "https://vespin.dev/acme/task/42");
   assert.deepEqual(
     addresses,
     copied.map((link) => new URL(link).pathname),
@@ -779,7 +784,7 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   assert.deepEqual(copied, []);
 });
 
-test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own, as the home page a tab opened at /app moves to the workspace's", () => {
+test("a workspace's slug or a task's number read after the visit moves the standing step to its address, without a step of its own, as the home page a tab opened at /app moves to the workspace's", () => {
   for (const [unread, read, from, to] of [
     [
       onTask([]),
@@ -787,6 +792,7 @@ test("a workspace's slug read after the visit moves the standing step to its add
       `/workspace-acme/task/${DOCUMENT_TASK.id}`,
       `/acme/task/${DOCUMENT_TASK.id}`,
     ],
+    [onTask([ACME]), onTask([ACME], 42), `/acme/task/${DOCUMENT_TASK.id}`, "/acme/task/42"],
     [tasksControl(), tasksControl({ workspaces: [ACME], workspace: ACME }), "/app", "/acme"],
   ] as const) {
     const window = mount(unread);
@@ -825,7 +831,7 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
   await settle();
   const addresses = window.addresses();
   assert.equal(addresses.length, 2, "the Inbox and its first item are one step");
-  assert.match(addresses.at(-1) ?? "", new RegExp(ITEM.itemId, "u"));
+  assert.equal(addresses.at(-1), `/acme/inbox/${ITEM.itemId}`);
 });
 
 /** A press of the pointer, as lands before whatever door it opens. */

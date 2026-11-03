@@ -1,6 +1,5 @@
+import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
 import {
-  encodeMention,
-  MENTION_KIND,
   type MentionLines,
   type MentionPlace,
   type PlanMention,
@@ -117,9 +116,10 @@ import {
  * (`../plan-diagram.tsx`).
  *
  * On a task's own page each section has a link: its ⋯, shown while the
- * pointer or the keyboard is on it, copies the section's address
- * (`@repo/features/mention-link`), which a transcript or the plan draws as
- * the section's chip wherever it is pasted, and a mention in the
+ * pointer or the keyboard is on it, copies the section's address, naming
+ * the task by its number where it has one (`taskLinkStep`), which a
+ * transcript or the plan draws as the section's chip wherever it is
+ * pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
  * which copies the task's link and offers Rename, where the title can be
@@ -148,9 +148,10 @@ export interface SectionReveal {
   readonly ask: number;
 }
 
-/** The task a page's sections link to, and where its links are written. */
+/** The task a page's sections link to, the step its links name it by (`taskLinkStep`), and where its links are written. */
 interface LinkedTask {
   readonly taskId: string;
+  readonly step: string;
   readonly place: MentionPlace;
 }
 
@@ -723,9 +724,9 @@ function SectionLink({
   anchor: string;
   tabbable: boolean;
 }): React.JSX.Element {
-  const link = encodeMention(
-    { kind: MENTION_KIND.SECTION, taskId: linked.taskId, anchor },
-    linked.place,
+  const link = linkOf(
+    { kind: LINK_PLACE.SECTION, planId: linked.step, anchor },
+    linked.place.workspace,
   );
   return <UnitLinkButton link={link} tabbable={tabbable} />;
 }
@@ -738,7 +739,7 @@ function TitleLink({
   linked: LinkedTask;
   tabbable: boolean;
 }): React.JSX.Element {
-  const link = encodeMention({ kind: MENTION_KIND.TASK, taskId: linked.taskId }, linked.place);
+  const link = linkOf({ kind: LINK_PLACE.TASK, planId: linked.step }, linked.place.workspace);
   return <UnitLinkButton link={link} tabbable={tabbable} />;
 }
 
@@ -1062,8 +1063,12 @@ export const PlanBody = memo(function PlanBody({
     () =>
       linkedWorkspace === undefined
         ? undefined
-        : { taskId: task.id, place: { workspace: linkedWorkspace, repository: task.repository } },
-    [linkedWorkspace, task.id, task.repository],
+        : {
+            taskId: task.id,
+            step: taskLinkStep({ id: task.id, number: task.number }),
+            place: { workspace: linkedWorkspace, repository: task.repository },
+          },
+    [linkedWorkspace, task.id, task.number, task.repository],
   );
   const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
   /** The ticks and dates written from the words at rest, each sent once the one before it settles. */

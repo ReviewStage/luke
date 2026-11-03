@@ -25,8 +25,8 @@ import {
  * does.
  */
 
-/** A task of the fixture run's, which its tasks profile opens with its side panel. */
-const FIXTURE_TASK_PATH = "/personal/task/0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+/** A task of the fixture run's, which its tasks profile opens with its side panel, at its address by its number. */
+const FIXTURE_TASK_PATH = "/personal/task/42";
 
 /** A phone's width, narrower than the panel stands two panes side by side at. */
 const PHONE_WIDTH = 390;

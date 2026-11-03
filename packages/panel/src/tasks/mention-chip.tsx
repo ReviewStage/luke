@@ -27,6 +27,7 @@ import {
   type MentionLines,
   type MentionPlace,
   mentionName,
+  type NumberedTaskIdOf,
   type PlanMention,
   pageRepositoryOf,
   pastedLinkMention,
@@ -1049,9 +1050,11 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label, at) => linkChip(href, label, doors, at);
 }
 
-/** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
+/** What a place pasted into knows to call a pasted address by: the names the window holds, how it finds a task a link names by its number, and the plan it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
+  /** The id of the task a link names by its number among those the window lists (`useNumberedTaskIdOf`). */
+  readonly taskIdOf: NumberedTaskIdOf;
   /** The plan the words are pasted on; none off a plan. */
   readonly taskId: string | undefined;
   /** The plan's text as the place holds it. */
@@ -1073,19 +1076,36 @@ function pastedName(
 }
 
 /**
+ * Words pasted whole that name a task by its number, `…/task/42`, as the
+ * address naming it by the id `taskIdOf` finds for it among the window's
+ * tasks, so it is laid in as the mention a link by the task's id is, which
+ * every build reads; the words as they are where they name no number, or
+ * a task the window lists not.
+ */
+function byTaskId(words: string, taskIdOf: NumberedTaskIdOf): string {
+  const read = readLink(words.trim());
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return words;
+  const taskId = taskIdOf({ workspace: read.workspace, number });
+  return taskId === undefined ? words : linkOf(withTaskId(read.place, taskId), read.workspace);
+}
+
+/**
  * The mention node words pasted whole stand for: an address of our own,
  * a plan's, a section's, a page's, or an agent's, by the scheme of the web
- * or the app's own, named as its bare link's chip is (`pastedName`); or a
- * page of an integration's, named by its address's readable form; nothing
- * for any other words, a file of the plan's repository among them, or a
- * person's page in another workspace than the place's.
+ * or the app's own, a task's by its id or by its number where the window
+ * lists the task (`byTaskId`), named as its bare link's chip is
+ * (`pastedName`); or a page of an integration's, named by its address's
+ * readable form; nothing for any other words, a file of the plan's
+ * repository among them, or a person's page in another workspace than the
+ * place's.
  */
 export function pastedMentionNode(
   words: string,
   place: MentionPlace,
   names: PastedNames,
 ): MentionNode | undefined {
-  const link = pastedLinkMention(words, place.repository);
+  const link = pastedLinkMention(byTaskId(words, names.taskIdOf), place.repository);
   // A person's page is of the workspace its link names, so one of another workspace stays the link it is.
   const elsewhere =
     link?.mention.kind === MENTION_KIND.PERSON &&
