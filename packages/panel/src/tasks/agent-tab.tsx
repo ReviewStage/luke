@@ -118,7 +118,6 @@ import {
   AGENT_PART,
   type AgentPart,
   type AgentPartCut,
-  agentActor,
   agentLines,
   agentListCallIds,
   agentMessageOf,
@@ -1475,7 +1474,7 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Who wrote or said the message, named over it: a teammate, the app, an automation, or the agent itself, whose wakeup it is; none for the reader's own, or where nobody is named. */
+  /** Who wrote or said the message, named over it: a teammate, the app, an automation, or the agent itself, for a wakeup it set; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
   arrived?: readonly ArrivedLine[];
@@ -2204,7 +2203,6 @@ function AgentTranscriptView({
   earlierOmitted = false,
   briefTitle,
   briefSender,
-  self,
   origin,
   readerId,
   agentId,
@@ -2264,8 +2262,6 @@ function AgentTranscriptView({
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
-  /** The agent itself, named over a wakeup it set when the line comes back to it; none where no line can be one. */
-  self?: Actor | undefined;
   /** Who handed the agent what it opens on, which is then its card under their line, a prompt among them; none where only a plan is, whose card names nobody. */
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
@@ -2413,9 +2409,7 @@ function AgentTranscriptView({
                           sender={
                             message === task
                               ? briefSender
-                              : isWakeupLine(message) && self !== undefined
-                                ? self
-                                : lineSender(message.sentBy, readerId, members, former)
+                              : lineSender(message.sentBy, readerId, members, former)
                           }
                           wakeupDelay={
                             isWakeupLine(message)
@@ -2797,7 +2791,6 @@ function AgentTabView({
                     messages={lines}
                     brief={agent.brief}
                     briefSender={starter === undefined ? undefined : starterActor}
-                    self={agentActor({ model: agent.model }, name)}
                     origin={origin}
                     readerId={readerId}
                     agentId={agent.id}

@@ -63,8 +63,6 @@ export const CALL_KIND = {
   WORKER_MESSAGE: "worker-message",
   /** A background command, monitor, or subagent stopped (Claude Code's `TaskStop`), its row naming it by its id. */
   STOP_BACKGROUND: "stop-background",
-  /** A wakeup the agent set for itself (Claude Code's `ScheduleWakeup`), its row naming the tool as any other call's does, under an icon of its own. */
-  SCHEDULE_WAKEUP: "schedule-wakeup",
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
@@ -192,7 +190,6 @@ export const CALL_WORDS = {
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.OPEN_PULL_REQUEST]: { verb: "Opened pull request", code: false },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
-  [CALL_KIND.SCHEDULE_WAKEUP]: { verb: "Used", code: true },
   [CALL_KIND.LIST_TASKS]: { verb: "Listed the tasks", code: false },
   [CALL_KIND.REMEMBER]: { verb: "Saved to memory:", code: false },
   [CALL_KIND.RECALL]: { verb: "Searched memory", code: false },

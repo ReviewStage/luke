@@ -1660,9 +1660,9 @@ export function agentMessageOf(message: AgentTranscriptMessage): AgentMessageMet
 
 /**
  * Whether a line is one of the agent's own wakeups: the prompt a
- * `ScheduleWakeup` set, which the scheduled sweep hands back to the agent as
- * a line of ours once it comes due (`native-wakeup-sweep.ts`), so it is drawn
- * as the agent's own rather than the app's.
+ * `ScheduleWakeup` set, which the scheduled sweep hands back to the agent,
+ * sent by the agent itself, once it comes due (`native-wakeup-sweep.ts`), so
+ * its head says the agent woke up.
  */
 export function isWakeupLine(message: AgentTranscriptMessage): boolean {
   return userMetadataOf(message)?.channel === MESSAGE_CHANNEL.LUKE;

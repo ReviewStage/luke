@@ -1196,7 +1196,7 @@ const RETIRED_TOOL_VIEWS = {
     namedCall(CALL_KIND.REOPEN_THREAD, input, output, undefined),
 } as const satisfies Record<RetiredTool, ToolReader>;
 
-/** The tools eve gives a session and a native harness's subagent, a message to one, a stop of what runs in Claude Code's background, and a wakeup it set, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
+/** The tools eve gives a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
 const OTHER_TOOL_VIEWS: Readonly<Record<string, ToolReader>> = {
   [CLAUDE_CODE_TOOL.AGENT]: ({ input, output }) => subagentCallView(input, output),
   [CODEX_TOOL.SUBAGENT]: ({ input, output }) => subagentCallView(input, output),
@@ -1209,13 +1209,6 @@ const OTHER_TOOL_VIEWS: Readonly<Record<string, ToolReader>> = {
       output,
       stringAt(input, "task_id") === undefined ? "shell_id" : "task_id",
     ),
-  // Note that a wakeup reads as any call the tab has no words for, under its own icon alone.
-  [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: ({ input, output }) => ({
-    kind: CALL_KIND.SCHEDULE_WAKEUP,
-    subject: CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP,
-    input: input === undefined ? textBlock("") : jsonBlock(input),
-    output: output === undefined ? undefined : jsonBlock(output),
-  }),
   [EVE_TOOL.TASK_WAIT]: ({ input, output }) =>
     namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined),
   [EVE_TOOL.TASK_CANCEL]: ({ input, output, jobs }) => ({
