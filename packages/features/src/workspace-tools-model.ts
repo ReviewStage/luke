@@ -58,7 +58,7 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.POST_THREAD]: {
     group: WORKSPACE_TOOL_GROUP.THREADS,
-    summary: "Posts a thread to one of the workspace's channels",
+    summary: "Posts a thread to the inbox",
   },
   [AGENT_TOOL.READ_THREADS]: {
     group: WORKSPACE_TOOL_GROUP.THREADS,
@@ -67,18 +67,6 @@ const WORKSPACE_TOOL_WORDS = {
   [AGENT_TOOL.WITHDRAW_ASK]: {
     group: WORKSPACE_TOOL_GROUP.THREADS,
     summary: "Withdraws an ask it no longer needs answered",
-  },
-  [AGENT_TOOL.CREATE_CHANNEL]: {
-    group: WORKSPACE_TOOL_GROUP.THREADS,
-    summary: "Makes a channel in the workspace",
-  },
-  [AGENT_TOOL.UPDATE_CHANNEL]: {
-    group: WORKSPACE_TOOL_GROUP.THREADS,
-    summary: "Renames, describes, or archives a channel",
-  },
-  [AGENT_TOOL.MOVE_THREAD]: {
-    group: WORKSPACE_TOOL_GROUP.THREADS,
-    summary: "Moves a thread to another channel",
   },
   [AGENT_TOOL.LIST_AGENTS]: {
     group: WORKSPACE_TOOL_GROUP.AGENTS,

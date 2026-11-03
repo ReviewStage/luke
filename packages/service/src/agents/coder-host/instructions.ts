@@ -57,8 +57,8 @@ const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * request and its checks over GitHub's REST API alone, as the firewall
  * carries that token on nothing else (`terminal/agent-sandbox.ts`).
  * What the agent needs of the developer, and what is ready for their eyes,
- * goes in a thread it posts to one of its workspace's channels (`inbox.ts`),
- * which the developer also reads on its task; another agent is reached
+ * goes in a thread it posts to the inbox (`inbox.ts`), which the developer
+ * also reads on its task; another agent is reached
  * with `message_agent` alone (`agent-message.ts`), which only the two of
  * them see.
  * The worker's instructions stand beside the agent's: it owns one slice,
@@ -1072,7 +1072,7 @@ ${place.search}${place.skills}${place.links}${place.link} Older messages write t
 
 What you need from the developer goes in a thread with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Post too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a \`do\`. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published.
 
-A thread goes to one of your workspace's channels, which every member reads, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
+A thread goes to the inbox, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own.
 
 Where another agent started you, as your first message says, your final message reaches it by itself as your report, and you may send it before then, ${STARTER_REACH_WORDS}, what concerns the work it handed you, such as a question it can answer for you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
 
