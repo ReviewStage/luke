@@ -37,7 +37,7 @@ function Landing(): React.JSX.Element {
     <LandingPage
       bar={<Bar />}
       title="An inbox for all your coding agents."
-      lead="Agents post when they need you, and you answer them there."
+      lead="Agents work in cloud sandboxes, open pull requests, and post to your Inbox when they need you."
       actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Download for macOS</Button>}
       close={{
         title: "Free and open source.",
@@ -47,22 +47,25 @@ function Landing(): React.JSX.Element {
       footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
     >
       <LandingSection
-        title="One inbox for every agent."
-        lead="Agents post only when something needs you."
+        title="Monitor all your agents with one inbox."
+        lead="Agents only post to your inbox when something needs your attention."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
-        title="Bring your own subscription."
-        lead="Pick the model and effort for each agent."
-        scene={LANDING_SCENE.MODELS}
+        title="Bring your own keys."
+        lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
+        scene={LANDING_SCENE.KEYS}
         aside={
           <LandingFacts
             facts={[
               {
-                title: "Your plan or your key",
-                detail: "A plan you already pay for, or an API key.",
+                title: "A model per agent",
+                detail: "Agents in one task can each run on a different model and effort.",
               },
-              { title: "Per agent", detail: "Each agent runs on the model you pick for it." },
+              {
+                title: `Nothing billed by ${PRODUCT_NAME}`,
+                detail: "Anthropic or OpenAI bills your plan or key for model calls.",
+              },
             ]}
           />
         }

@@ -29,7 +29,7 @@ const SCENE_FIELD: Readonly<Record<LandingScene, LandingFieldPattern>> = {
   [LANDING_SCENE.AGENTS]: LANDING_FIELD.WAVES,
   [LANDING_SCENE.AUTOMATIONS]: LANDING_FIELD.RINGS,
   [LANDING_SCENE.DEVICES]: LANDING_FIELD.FLOW,
-  [LANDING_SCENE.MODELS]: LANDING_FIELD.WAVES,
+  [LANDING_SCENE.KEYS]: LANDING_FIELD.WAVES,
 };
 
 /** A feature: `title` and `lead` over its scene's stage, `aside` beside the stage where given. */
@@ -108,7 +108,8 @@ export function LandingPage({
   barCall?: ReactNode;
   /** The page's one line, its `h1`. */
   title: ReactNode;
-  lead: ReactNode;
+  /** The sentence under the line; none sets the calls under the line itself. */
+  lead?: ReactNode;
   /** The hero's calls, under its lead. */
   actions: ReactNode;
   /** The page's `LandingSection`s. */
@@ -125,7 +126,7 @@ export function LandingPage({
         <div className="ui-landing-hero">
           <div className="ui-landing-hero-words">
             <h1 className="ui-landing-title">{title}</h1>
-            <p className="ui-landing-hero-lead">{lead}</p>
+            {lead === undefined ? null : <p className="ui-landing-hero-lead">{lead}</p>}
             <div className="ui-landing-actions">{actions}</div>
           </div>
           <div className="ui-landing-hero-art">
