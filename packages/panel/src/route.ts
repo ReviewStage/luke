@@ -5,6 +5,7 @@ import {
   pullRequestAddressOf,
   type ReadLink,
   readLink,
+  taskNumberOf,
 } from "@repo/features/link-grammar";
 import {
   decodeMention,
@@ -324,6 +325,8 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
   const at = link.place;
   switch (at.kind) {
     case LINK_PLACE.PAGE: {
+      // A page under a task named by a number no one found the task for is the window's, which finds it on the service.
+      if (taskNumberOf(at) !== undefined) return NOTHING;
       // A page of the item's own task, or of the agent on no task that holds it, opens beside the item;
       // another's opens there too, read on its own place, so the reader stays on the item.
       const own =
@@ -433,7 +436,8 @@ function besideItem(address: Address, here: InboxItemHere): Route {
 
 /** A page of another task, or of another agent on no task, than the one a task's or an agent's page shows, beside it, read on its own place; its own is the window's, which opens it as the panel's. */
 function pageBeside(at: LinkPlace, here: AgentsHere): Route {
-  if (at.kind !== LINK_PLACE.PAGE) return NOTHING;
+  // Note that a task named by a number no one found the task for is no place a page reads on, so the window finds it on the service.
+  if (at.kind !== LINK_PLACE.PAGE || taskNumberOf(at) !== undefined) return NOTHING;
   const place: PagePlace = "planId" in at ? { taskId: at.planId } : { agentId: at.agentId };
   const own =
     here.kind === HERE.TASK

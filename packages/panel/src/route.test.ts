@@ -160,6 +160,12 @@ it.each<[string, string, Here, Route]>([
     preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
   ],
   [
+    "an Inbox item: a page under a task named by a number not found, the window's, which finds the task",
+    `${APP}/task/42/page/${PAGE}`,
+    ITEM,
+    NOTHING,
+  ],
+  [
     "an Inbox item of an agent on no task: that agent's page, beside it",
     `${APP}/agent/${AGENT}/page/${PAGE}`,
     TASKLESS_ITEM,
@@ -308,6 +314,12 @@ it.each<[string, string, Here, Route]>([
     `${APP}/plan/${TASK}/page/${PAGE}`,
     ON_AGENT,
     preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: TASK } }),
+  ],
+  [
+    "an agent's page: a page under a task named by a number not found, the window's, which finds the task",
+    `${APP}/task/42/page/${PAGE}`,
+    ON_AGENT,
+    NOTHING,
   ],
   [
     "an agent's page: another pull request of its repository, by its number",

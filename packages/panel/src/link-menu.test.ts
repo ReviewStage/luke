@@ -8,7 +8,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { LinkMenu, useEditedLinksHost } from "./link-menu.js";
-import { OpenHereProvider } from "./tasks/use-open-link.js";
+import type { Address } from "./route.js";
+import { OpenAddressesHere } from "./tasks/use-open-link.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { TextLink } from "./text-link.js";
@@ -164,10 +165,10 @@ test("a link in words being edited opens where the words stand, through the plac
   const openedHere: string[] = [];
   mount(
     createElement(
-      OpenHereProvider,
+      OpenAddressesHere,
       {
-        value: (href: string) => {
-          openedHere.push(href);
+        value: (address: Address) => {
+          if (address.href !== undefined) openedHere.push(address.href);
           return true;
         },
       },
@@ -187,7 +188,7 @@ test("a chip the editor holds fixed in words being edited opens through its own 
   const pressed: string[] = [];
   mount(
     createElement(
-      OpenHereProvider,
+      OpenAddressesHere,
       { value: () => assert.fail("a fixed chip opens through its own press") },
       createElement(
         "div",

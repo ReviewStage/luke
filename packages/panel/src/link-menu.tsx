@@ -142,7 +142,7 @@ export function LinkMenu(): React.JSX.Element | null {
  * The ref of an element holding words being edited, a plan's body or a
  * composer's field: a link in them that the link menu opens opens through
  * the opener where the element stands, the place's own around it
- * (`OpenHereProvider`) included, as a press on the link drawn there would.
+ * (`OpenAddressesHere`) included, as a press on the link drawn there would.
  */
 export function useEditedLinksHost(): (element: Element | null) => void {
   const openLink = useOpenLink();

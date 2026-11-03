@@ -66,7 +66,7 @@ import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type AgentsControl, useAgents } from "../tasks/use-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
 import {
-  OpenHereProvider,
+  OpenAddressesHere,
   OpenLinkProvider,
   openPullRequestsHere,
   useOpenPlace,
@@ -764,7 +764,7 @@ export function DesktopAgentPage({
             <SkillFiles source={control.readSkills} onOpen={openSkill}>
               <AgentMentions value={mentions}>
                 <OpenLinkProvider value={openLinkHere}>
-                  <OpenHereProvider value={openHere}>
+                  <OpenAddressesHere value={openHere}>
                     {/* An archived agent's sandbox takes no shell, so ⌘J and New terminal stand only while it does not. */}
                     {terminalDoors.terminals && agent.archivedAt === undefined ? (
                       <TerminalCommands
@@ -842,7 +842,7 @@ export function DesktopAgentPage({
                         />
                       ) : null}
                     </div>
-                  </OpenHereProvider>
+                  </OpenAddressesHere>
                 </OpenLinkProvider>
               </AgentMentions>
             </SkillFiles>
