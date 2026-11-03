@@ -651,7 +651,13 @@ export function AgentComposer({
         : reloads
           ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
           : note === composer.note
-            ? failureShown({ surface: FAILURE_SURFACE.AGENT_SEND, cause: note, about: { agentId } })
+            ? // Note that a send's failure is reported as the answer that refused it, where its note holds one,
+              // so a refusal the service worded is sent as its word rather than as an unexpected failure.
+              failureShown({
+                surface: FAILURE_SURFACE.AGENT_SEND,
+                cause: composer.note?.cause ?? note,
+                about: { agentId },
+              })
             : failureShown({
                 surface: FAILURE_SURFACE.AGENT_COMPOSER,
                 cause: note.reason,

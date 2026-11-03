@@ -301,7 +301,7 @@ export interface AgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
-  ) => Promise<Failure | undefined>;
+  ) => Promise<StartFailure | undefined>;
   /**
    * Starts the draft's fork: from its source at its message, under the
    * draft's key, with the box's words and files as a note where it holds
@@ -316,7 +316,7 @@ export interface AgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
-  ) => Promise<Failure | undefined>;
+  ) => Promise<StartFailure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
   onUnarchive: (() => void | Promise<void>) | undefined;
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
@@ -1230,7 +1230,7 @@ export function useAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
-  ): Promise<Failure | undefined> => {
+  ): Promise<StartFailure | undefined> => {
     if (taskId === undefined || !taskStarts)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
     const answer = await askStart(taskId, {
@@ -1240,7 +1240,8 @@ export function useAgents(input: {
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
-    if ("failure" in answer) return startFailureNote(answer, taskId, input.device);
+    if ("failure" in answer)
+      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(taskId, answer.agent);
@@ -1255,7 +1256,7 @@ export function useAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
-  ): Promise<Failure | undefined> => {
+  ): Promise<StartFailure | undefined> => {
     if (startsOn === undefined || !startsFrom)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
     const asked = forkStart({
@@ -1267,7 +1268,7 @@ export function useAgents(input: {
       disabledServers,
     });
     const answer = await askStart(startsOn, asked);
-    if ("failure" in answer) return startFailureNote(answer, taskId ?? null);
+    if ("failure" in answer) return { ...startFailureNote(answer, taskId ?? null), cause: answer };
     withDraft(startsOn, undefined);
     writer.drop((kept) => kept.kind === DRAFT_PLACE.NEW_AGENT && kept.draftId === draftId);
     landed(startsOn, answer.agent);

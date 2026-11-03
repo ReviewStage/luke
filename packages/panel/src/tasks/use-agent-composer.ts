@@ -85,6 +85,9 @@ export type MessageSender = (
 /** How the agent is taken back to just before one of the developer's lines, by its message id, answered as the view hears it. */
 export type MessageRewinder = (agentId: string, messageId: string) => Promise<AgentActAnswer>;
 
+/** Why a message did not go, with the answer that said so, which the shown failure reports in its place. */
+export type ComposerNote = Failure & { readonly cause?: unknown };
+
 /** Everything the composer draws and presses. */
 export interface AgentComposerControl {
   /** The words in the box. */
@@ -97,7 +100,7 @@ export interface AgentComposerControl {
   /** Whether a send holds the box until it answers, during which the box takes nothing: New task's, whose send opens the task; an agent's box never holds. */
   sending: boolean;
   /** Why the last message did not go, said under the box beside what mends it; nothing while none failed. */
-  note: Failure | undefined;
+  note: ComposerNote | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
   /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box or a closed agent. */
@@ -115,7 +118,7 @@ interface Failed {
   readonly clientKey: string;
   /** Whether its words came back into the box, which Retry sends; else the line keeps them, marked as not sent. */
   readonly inBox: boolean;
-  readonly note: Failure;
+  readonly note: ComposerNote;
 }
 
 interface Held {
@@ -130,7 +133,7 @@ interface Held {
   /** The messages a rewind under way or just done drops, by their ids, hidden until the transcript reads back without them. */
   cut: ReadonlySet<string> | undefined;
   /** The Revert that did not go, which the note under the box is of and its Retry asks again. */
-  revertFailed: { readonly messageId: string; readonly note: Failure } | undefined;
+  revertFailed: { readonly messageId: string; readonly note: ComposerNote } | undefined;
   closed: string | undefined;
   /** What the box held as it closed, newer than every line sent, which Continue carries after them. */
   behind: Draft;
@@ -329,12 +332,15 @@ export function useAgentComposer(input: {
       }
       // A line the tab no longer holds, its agent's tab drawn afresh meanwhile, is nobody's to mark.
       if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
-      const note = messageFailureNote(
-        answer,
-        latest.current.taskId,
-        latest.current.payer,
-        latest.current.starter,
-      );
+      const note: ComposerNote = {
+        ...messageFailureNote(
+          answer,
+          latest.current.taskId,
+          latest.current.payer,
+          latest.current.starter,
+        ),
+        cause: answer,
+      };
       // A refusal for good closes the box, and the line stays where it went, marked as not
       // delivered, its words kept in the agent's draft for Continue with every other line that
       // did not go, ahead of what the box holds, which is newer.
@@ -444,7 +450,10 @@ export function useAgentComposer(input: {
         ours((was) => ({ ...was, reverting: undefined }));
         return;
       }
-      const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
+      const note: ComposerNote = {
+        ...messageFailureNote(answer, latest.current.taskId, latest.current.payer),
+        cause: answer,
+      };
       ours((was) => ({
         ...was,
         cut: undefined,
