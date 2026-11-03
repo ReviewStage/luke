@@ -907,12 +907,15 @@
   --spacing-picture-row: calc(var(--luke-picture-ratio) * var(--luke-picture-row));
   --spacing-picture-thumb: calc(var(--luke-picture-ratio) * var(--luke-picture-thumb));
   /* An attachment chip (`components/attachment-chip/`): as tall as a
-     thumbnail, a thumbnail's width where it holds one, and at most this
-     wide; its face a hair inside its edge, led a hair under a row's inset;
+     thumbnail, a thumbnail's width where it holds a wait or a failure, a
+     picture at its own shape between a 2:3 and a 2:1 bound, and at most
+     this wide; its face a hair inside its edge, led a hair under a row's inset;
      the way off a disc over its corner, whose 24px target overhangs it; a
      landed file's check; and the upload's hairline meter. */
   --spacing-attachment-chip: 48px; /* off-scale: a thumbnail's height */
   --spacing-attachment-chip-thumb: 64px; /* off-scale: a thumbnail's width */
+  --spacing-attachment-chip-picture-min: 32px; /* off-scale: 2:3 at the chip's height */
+  --spacing-attachment-chip-picture-max: 96px; /* off-scale: 2:1 at the chip's height */
   --spacing-attachment-chip-max: min(220px, 100%); /* off-scale: a chip's longest */
   --spacing-attachment-chip-lead: 10px; /* off-scale: the glyph's inset */
   --spacing-attachment-chip-remove: 24px; /* off-scale: the way off's target */
