@@ -156,7 +156,7 @@ import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from the app's voice, or from an automation's run.
+ * start.ts -- an agent started on a task, or in a workspace with no task: the one path a start takes, from New task, an agent's draft, or the terminal picker, from another agent's `start_agent`, from the app's voice, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the

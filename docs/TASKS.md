@@ -14,7 +14,7 @@ sidebar, one page at a time:
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Tasks ]   Settings                                        │
- │  ‹  Teammate invitations                 [ ▶ Start ▾ ] [ ⋯ ]   │
+ │  ‹  Teammate invitations                               [ ⋯ ]   │
  │     acme/relay                                               │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
@@ -181,7 +181,7 @@ Dictate, and Start.
 - The task's repository is the sidebar's to name: by the group it stands in,
   or on its row where the list's view groups by creator or not at all.
   A task with none yet shows a compact `Choose a repository` chip in the toolbar's actions row, left
-  of Start, with the composer's menu: a pick is saved through
+  of the ⋯, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
   used without a repository.
 - **The task's menu**, from the toolbar's ⋯ (drawn while the task's own tab
@@ -194,18 +194,6 @@ Dictate, and Start.
   ⌘⌫ asks to delete it, from any of its tabs.
 - An archived task opened from Archived tasks reads and works as any other,
   under a quiet line, "This task is archived", with Unarchive beside it.
-- **Start**, a split button (`desktop/desktop-tasks.tsx`), drawn
-  while the task's own tab is chosen, as the ⋯ is. Its main
-  part starts an agent on the plan with the account's default model and
-  effort; its chevron drops the searchable picker over the models the service
-  offers, grouped by provider with the newest first, each under its provider's
-  mark and the default checked, with the efforts the chosen model lists and
-  "Start with <model> · <effort>" pinned under the scrolling list. What the
-  chevron picks is what the main part starts on while the plan's tab stays open, and
-  never the account's default, which only Settings changes. A task with no repository has Start unavailable, saying why on
-  hover. Each press mints a key of its own, and a press asked again after
-  the service did not answer carries the same key, so one press is one agent
-  ("From a plan to a pull request" below).
 - **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
   toolbar's, heard on every tab of the task. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
@@ -308,7 +296,7 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 Each agent started on the task has a tab of its own in the task's column
 (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`, `tasks/agent-tab.tsx`,
-`tasks/use-agents.ts`), opened and selected the moment its Start
+`tasks/use-agents.ts`), opened and selected the moment its start
 lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
@@ -318,7 +306,7 @@ holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
 
 - **A new agent from the "+".** The column's "+" offers New agent,
-  unavailable with Start's own reason while Start could not run, then each
+  unavailable with the reason while no agent could start, then each
   of the task's agents, picking one opening its tab again. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
@@ -364,12 +352,12 @@ Codex's for OpenAI's), the efforts the chosen model lists, and, for a
 model that offers two context windows (one whose provider prices prompts
 past a boundary apart, such as OpenAI's 272K), the two windows with what the
 whole one costs past the boundary. The whole window is the default; the
-smaller standard one is the opt-in. The Start menu and an agent's chip offer
+smaller standard one is the opt-in. New task's model chip and an agent's chip offer
 the same choice as a Context row beside Effort, and the chip says the window
 after the effort only where it is the opted-in smaller one ("GPT-5.5 High
 272K"). The page
 reads the default as it opens, and it is the one place the default changes:
-a model chosen from Start's chevron, an agent's chip, a draft, a fork, or by
+a model chosen from New task's chip, an agent's chip, a draft, a fork, or by
 another agent runs that agent alone. A first-time
 account starts on Claude Opus 5.5 at high.
 
@@ -652,8 +640,9 @@ instead on a prompt the developer wrote, it is handed that prompt as its first
 message and never the plan, and works in the task's repository the same way. How it runs,
 its routes, and what it is told are described in
 `packages/service/README.md` under "The agent service" and "The
-agent routes"; the desktop's Start button ("The Tasks tab" above),
-the column's New agent and the agent tabs ("Agent tabs" above), and Settings › Agents are how the
+agent routes"; New task ("The Tasks tab" above), the column's New agent,
+the terminal picker's Start an agent, and the agent tabs ("Agent tabs"
+above), and Settings › Agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## Copy
@@ -681,7 +670,7 @@ a task named "Teammate invitations":
 This is direct formatting of the saved document, not a second model step.
 There is no separate handoff prompt: the plan is what the agent
 reads. The developer pastes it into the agent of their choice, or
-presses `Start` instead, and an agent of Vespin's own checks the
+starts an agent on it instead, and an agent of Vespin's own checks the
 repository out in a sandbox, implements the plan, and decides on a pull
 request, watched from its tab in the task's column ("From a plan to a pull
 request" above). When an agent or the developer changes the plan later,
@@ -701,5 +690,6 @@ Copy copies the new document.
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
   `unavailable` where the agent's session could not be started; the reason is said
-  beside the button until the next press. An agent that ends `failed` or
+  under the composer that sent it, or on the window's toast for a start from
+  the terminal picker. An agent that ends `failed` or
   `cancelled` says so in its tab's head, and anything it pushed stays.

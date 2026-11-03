@@ -200,7 +200,7 @@ import {
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
  * tail, to a bound. One agent messages another with `message_agent`
- * (`coder-host/agent-message.ts`). A start takes the one path the Start button's does
+ * (`coder-host/agent-message.ts`). A start takes the one path every other start does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
@@ -819,8 +819,8 @@ export const START_AGENT_TOOL = {
   name: AGENT_TOOL.START_AGENT,
   description:
     "Start a new agent on the task you work on, or on another task of your workspace by " +
-    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start ` +
-    "button would: on the task's plan itself with no prompt, or on the prompt given in the " +
+    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer would: ` +
+    "on the task's plan itself with no prompt, or on the prompt given in the " +
     "plan's place, with the note after either and any pictures images names, which it sees as " +
     "images. Start it on the task you work on, taskId left " +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
