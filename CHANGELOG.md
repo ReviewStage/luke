@@ -69,6 +69,79 @@ Vespin is an inbox for all your coding agents. These are its notable changes,
 newest first. Each heading is a released version and the date its release was
 published.
 
+## 0.25.1 — 2026-11-03
+
+### Setting up a new account
+
+Vespin sets a new account up after sign-in, before its first task: whether
+it's for you or your team, a team workspace with its picture and
+invitations, an agent to connect, GitHub through Vespin's GitHub App or a
+personal access token, and your tools, Linear, Slack, Sentry, and Notion.
+The team, agent, and GitHub steps can each be skipped, and setup picks up
+where you left it after a reload. Whatever you skipped waits on Home as
+Finish setting up, over New task, until it's done.
+([#6394](https://github.com/ReviewStage/vespin/pull/6394))
+
+### Improvements
+
+- A personal access token stands on its own: Vespin keeps a classic token
+  with the `repo` scope as the GitHub user it names, with no GitHub account
+  linked first ([#6394](https://github.com/ReviewStage/vespin/pull/6394))
+- New task on Home puts the caret in Home's own message box rather than
+  opening its dialog over it
+  ([#6498](https://github.com/ReviewStage/vespin/pull/6498))
+- Vespin reacts with 👀 to a Slack message it acts on, in place of an "On it"
+  reply, and its Slack messages leave out link previews
+  ([#6483](https://github.com/ReviewStage/vespin/pull/6483),
+  [#6493](https://github.com/ReviewStage/vespin/pull/6493))
+- An agent started from Slack is named from your message and wears Slack's
+  mark in the sidebar and its page's bar, and its transcript draws your Slack
+  message as a line of its own, linked to it in Slack
+  ([#6503](https://github.com/ReviewStage/vespin/pull/6503),
+  [#6506](https://github.com/ReviewStage/vespin/pull/6506),
+  [#6508](https://github.com/ReviewStage/vespin/pull/6508))
+- A message in a Slack thread brings its archived agent back, or continues
+  its work in a new agent once it has stopped, and an agent whose Slack turn
+  finished archives itself as a finished automation run does
+  ([#6518](https://github.com/ReviewStage/vespin/pull/6518))
+- An agent started from Slack stops offering to run commands on your Mac
+  once anyone else's words in the Slack thread reach it
+  ([#6512](https://github.com/ReviewStage/vespin/pull/6512))
+- Settings › Workspace draws the Slack bot as it draws GitHub: Add channel
+  beside its ⋯, its default repository and each channel on a row of its own,
+  and a line saying how to add it when it's in no channel
+  ([#6505](https://github.com/ReviewStage/vespin/pull/6505))
+- A GitHub line in a transcript wears its sender's GitHub avatar
+  ([#6482](https://github.com/ReviewStage/vespin/pull/6482))
+- A window or page that fails to draw shows the Vespin mark, what failed,
+  and Reload, and nothing else
+  ([#6496](https://github.com/ReviewStage/vespin/pull/6496))
+
+### Fixes
+
+- Fixed a menu item's printed shortcut doing nothing while its menu was open
+  ([#6480](https://github.com/ReviewStage/vespin/pull/6480))
+- Fixed an Inbox thread with many pictures and videos crashing a phone's
+  browser ([#6440](https://github.com/ReviewStage/vespin/pull/6440))
+- Fixed an agent failing to start on a repository with no commits yet
+  ([#6504](https://github.com/ReviewStage/vespin/pull/6504))
+- Fixed a Slack thread's reply saying only "The agent finished." when the
+  agent had answered, and an agent not knowing its answer to a Slack
+  follow-up goes back to the thread
+  ([#6507](https://github.com/ReviewStage/vespin/pull/6507),
+  [#6510](https://github.com/ReviewStage/vespin/pull/6510))
+- Fixed a Settings page or version history that failed to draw standing off
+  centre ([#6491](https://github.com/ReviewStage/vespin/pull/6491))
+
+### Misc
+
+- Updated vespin.dev's Download and the README to download Vespin.dmg
+  ([#6481](https://github.com/ReviewStage/vespin/pull/6481))
+- Updated vespin.dev to hold its content to a standard width on a wide
+  window, and to list Vespin as an organisation in search results
+  ([#6486](https://github.com/ReviewStage/vespin/pull/6486),
+  [#6495](https://github.com/ReviewStage/vespin/pull/6495))
+
 ## 0.25.0 — 2026-11-03
 
 ### Luke is now Vespin
