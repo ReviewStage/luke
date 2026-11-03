@@ -282,7 +282,7 @@ test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the tas
   }
 });
 
-test("Overview's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while an agent's ⋯ stays the agent's", async () => {
+test("Overview's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab, leaves out Mark done and Cancel task, and keeps Change repository, while an agent's ⋯ stays the agent's", async () => {
   const container = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
   const { main } = bars(container);
   const fromMore = pressBarMore(main);
@@ -295,6 +295,7 @@ test("Overview's ⋯ and its right-click offer the task's own document menu, whi
     "Relations",
     "Pin",
     "Move to section",
+    "Change repository",
     "Permanently delete",
   ]);
   // The right-click leads with the tab's keeping, which holds no Close nor Pin tab: Overview always stands, and the one Pin is the task's, among its own.
