@@ -101,9 +101,7 @@ test("a record kept before tasks had their name holds each task's choices under 
   act(() => first.control().onChoose({ changes: AGENT }));
   act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Changes: Invite flow"));
   first.quit();
-  const { tasks, pins, ...kept } = JSON.parse(
-    window.localStorage.getItem("app.sidePanel") ?? "{}",
-  );
+  const { tasks, pins, ...kept } = JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}");
   assert.ok(tasks, "the record keeps the task's choices");
   const earlierPins = pins.map(({ task, ...pin }: { readonly task: string }) => ({
     ...pin,

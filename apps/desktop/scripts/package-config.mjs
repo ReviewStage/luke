@@ -106,5 +106,6 @@ export function replayProjectKeyDefine(env) {
  * account's shared caches, which every app on the Mac writes beside, so it is
  * named by the bundle's identifier rather than a word another app could take.
  */
-export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/vespin/releases/latest/download/";
+export const APP_UPDATE_FEED_URL =
+  "https://github.com/ReviewStage/vespin/releases/latest/download/";
 export const APP_UPDATE_CACHE_DIR_NAME = `${APP_ID}.updater`;

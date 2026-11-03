@@ -105,7 +105,7 @@ const MODELS = [
 /** What the agent published, as the service answers it. */
 const PUBLISHED = {
   repository: "acme/relay",
-  branch: "luke/teammate-invitations",
+  branch: "agent/teammate-invitations",
   pullRequest: {
     number: 123,
     title: "Teammate invitations",
@@ -163,7 +163,7 @@ const OVERVIEW = {
       state: PULL_REQUEST_STATE.OPEN,
       html: "<p>Sends the invite once.</p>",
       base: "main",
-      head: "luke/invite-once",
+      head: "agent/invite-once",
       createdAt: 1_800_000_000_000,
       mergedAt: null,
       merge: MERGE_STATE.CLEAN,

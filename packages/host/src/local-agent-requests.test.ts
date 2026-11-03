@@ -13,7 +13,7 @@ const NODE = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 /** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in where a host kept it before and where it keeps it now, in gh's config in the agent's home, and a symlink in the worktree pointing at each. */
 const staged = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const root = yield* temporaryDirectoryScoped("luke-local-agent-");
+  const root = yield* temporaryDirectoryScoped("local-agent-");
   const layout = deviceAgentLayout(`${root}/home`, AGENT);
   yield* fileSystem.makeDirectory(layout.checkoutPath, { recursive: true });
   yield* fileSystem.writeFileString(`${layout.checkoutPath}/notes.txt`, "the agent's own");

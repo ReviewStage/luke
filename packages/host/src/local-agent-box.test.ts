@@ -18,7 +18,7 @@ describe("an agent's folders made on the box", () => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-agent-box-");
+        const root = yield* temporaryDirectoryScoped("agent-box-");
         const home = `${root}/agent/home`;
         yield* fileSystem.makeDirectory(`${home}/.local/share/pnpm/store/v10`, { recursive: true });
         yield* fileSystem.writeFileString(`${home}/.npmrc`, OWN_NPMRC);

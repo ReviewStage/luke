@@ -98,7 +98,7 @@ const settled = (done: () => boolean) =>
 
 /** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
-  const root = yield* temporaryDirectoryScoped("luke-host-daemon-");
+  const root = yield* temporaryDirectoryScoped("host-daemon-");
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 

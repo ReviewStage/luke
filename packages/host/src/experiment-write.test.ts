@@ -44,7 +44,7 @@ const CIPHER: SecretCipher = {
 
 /** A store over a directory of its own, the test's account signed in. */
 const signedInStore = Effect.gen(function* () {
-  const directory = yield* temporaryDirectoryScoped("luke-experiments-");
+  const directory = yield* temporaryDirectoryScoped("experiments-");
   const store = new SettingsStore({
     directory: () => directory,
     cipher: CIPHER,
