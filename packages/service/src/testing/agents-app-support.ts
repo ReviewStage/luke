@@ -111,7 +111,7 @@ export const WORKSPACE_STARTS = "/api/workspaces/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
 /** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
-export const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
+export const AGENT_WORKSPACE_TOOLS = "/api/agents/workspace-tools";
 export const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 export const AGENT_OVERVIEW = [
@@ -383,7 +383,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
-  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
+  ["/api/agents/workspace-tools", (id: string) => `/api/agents/${id}/workspace-tools`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],

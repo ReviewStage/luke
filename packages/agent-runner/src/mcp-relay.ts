@@ -12,7 +12,7 @@
  * with the bearer from its own environment. Nothing listens on a port.
  *
  * The relay is JSON-RPC verbatim, since our MCP server is stateless and
- * answers each POST with one JSON body (`luke-mcp/app.ts`): a request's
+ * answers each POST with one JSON body (`workspace-mcp/app.ts`): a request's
  * answer is handed back to the CLI as the service wrote it, a notification's 202 is
  * nothing to hand back, and a request the service did not answer is answered with
  * a JSON-RPC error, so the CLI's call fails rather than hangs.

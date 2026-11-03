@@ -4,7 +4,7 @@
  * A native agent's runner (`@luke/agent-runner`) runs on a machine we
  * open for it, today a Vercel Sandbox (`vercel-machine.ts`). Its launch
  * (`../coder-host/runner-sessions.ts`) and the door our MCP tools read
- * a file through (`../luke-mcp/sandbox-door.ts`) reach that machine here
+ * a file through (`../workspace-mcp/sandbox-door.ts`) reach that machine here
  * and nowhere else, so a second kind of machine shares one launch path and
  * one door rather than a copy of each that drifts.
  *

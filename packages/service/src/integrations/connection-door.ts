@@ -2,7 +2,7 @@
  * connection-door.ts -- a native agent's integrations, each its own MCP server: which it is handed, and the tools each lists and calls, on the member's own grants, with no eve.
  *
  * A native harness's agent is handed each connection as an MCP server of
- * its own at the service (`../agents/luke-mcp/app.ts`), the way Claude Code and
+ * its own at the service (`../agents/workspace-mcp/app.ts`), the way Claude Code and
  * Codex take any remote server: its launch names one server per connection
  * (`nativeAgentConnections`), and each server lists the provider's own tools
  * and forwards a call of one, which is this door.

@@ -60,7 +60,6 @@ import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK, INBOX_CURSOR_START, inboxAnswerSchema } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { lukeToolsAnswerSchema } from "@luke/features/luke-tools-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -70,6 +69,7 @@ import {
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
 } from "@luke/features/task-wire";
+import { workspaceToolsAnswerSchema } from "@luke/features/workspace-tools-wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
@@ -82,10 +82,10 @@ import { postInboxThread } from "../inbox/inbox-store.js";
 import {
   AGENT,
   AGENT_INBOX,
-  AGENT_LUKE_TOOLS,
   AGENT_MESSAGES,
   AGENT_PICTURE,
   AGENT_STOP,
+  AGENT_WORKSPACE_TOOLS,
   agentStartedOn,
   countedWith,
   fakeEve,
@@ -1351,11 +1351,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const read = readAnswer(
-          lukeToolsAnswerSchema,
+          workspaceToolsAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_LUKE_TOOLS, owner, { id: agent.id })),
+          yield* ask(request(AGENT_WORKSPACE_TOOLS, owner, { id: agent.id })),
         );
-        const teammate = yield* ask(request(AGENT_LUKE_TOOLS, other, { id: agent.id }));
+        const teammate = yield* ask(request(AGENT_WORKSPACE_TOOLS, other, { id: agent.id }));
 
         assert.ok(read.tools.includes(AGENT_TOOL.RUN_ON_MAC));
         assert.deepEqual(

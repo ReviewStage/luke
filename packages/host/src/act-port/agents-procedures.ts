@@ -24,7 +24,6 @@ import {
   type AgentGitHubImageView,
   type AgentListAnswer,
   type AgentListParams,
-  type AgentLukeToolsAnswerView,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -57,6 +56,7 @@ import {
   type AgentTranscriptOlderParams,
   type AgentTranscriptPage,
   type AgentWorkspaceListParams,
+  type AgentWorkspaceToolsAnswerView,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
   type HostsAnswerView,
@@ -116,7 +116,9 @@ export interface AgentProceduresDependencies {
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
     agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
-    agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
+    agentWorkspaceTools(
+      params: AgentPullRequestParams,
+    ): Effect.Effect<AgentWorkspaceToolsAnswerView>;
     agentOverviewChecks(
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewChecksAnswerView>;
@@ -494,10 +496,10 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.agentReviewOptions(input);
       },
     ),
-    [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actPort[AGENT_ACT_KIND.AGENTS_LUKE_TOOLS].effect(
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]: actPort[AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentLukeTools(input);
+        return yield* host.agentWorkspaceTools(input);
       },
     ),
     [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(

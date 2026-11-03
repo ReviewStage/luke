@@ -25,7 +25,6 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
   type AgentListAnswer,
-  type AgentLukeToolsAnswerView,
   type AgentMessageAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
@@ -40,6 +39,7 @@ import {
   type AgentQueueAnswerView,
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
+  type AgentWorkspaceToolsAnswerView,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -1104,10 +1104,13 @@ export class HostedAgentClient {
   }
 
   /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now. */
-  lukeTools(
+  workspaceTools(
     agentId: string,
-  ): Effect.Effect<AgentLukeToolsAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.agents.lukeTools, { id: agentId }), ROW_REFUSALS);
+  ): Effect.Effect<AgentWorkspaceToolsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.workspaceTools, { id: agentId }),
+      ROW_REFUSALS,
+    );
   }
 
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */

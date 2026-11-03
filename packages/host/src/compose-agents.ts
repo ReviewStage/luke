@@ -13,7 +13,6 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
   type AgentListAnswer,
-  type AgentLukeToolsAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
   type AgentOverviewChecksAnswerView,
@@ -28,6 +27,7 @@ import {
   type AgentReviewOptionsAnswerView,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
+  type AgentWorkspaceToolsAnswerView,
   ARCHIVE_DRAWN,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
@@ -219,7 +219,7 @@ export type AgentClient = Pick<
   | "changes"
   | "overviewPullRequest"
   | "reviewOptions"
-  | "lukeTools"
+  | "workspaceTools"
   | "overviewChecks"
   | "overviewConversation"
   | "githubImage"
@@ -955,15 +955,15 @@ function composed(
         const answer = yield* asked(client.reviewOptions(agentId));
         return carried<AgentReviewOptionsAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_LUKE_TOOLS]: (params) =>
+    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
           agentPullRequestParamsSchema,
           params,
           `reading an agent's ${PRODUCT_NAME} tools names one agent`,
         );
-        const answer = yield* asked(client.lukeTools(agentId));
-        return carried<AgentLukeToolsAnswerView>(answer);
+        const answer = yield* asked(client.workspaceTools(agentId));
+        return carried<AgentWorkspaceToolsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {

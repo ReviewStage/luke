@@ -740,7 +740,7 @@ reads a task's id.
 **The agents** (`src/integrations/connection-door.ts`,
 `src/agents/agent-runtime/servers.ts`). Each connection an agent is handed
 is an MCP server of its own at Vespin
-(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`)
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/workspace-mcp/app.ts`)
 on the runner's bearer, and the launch names them (`nativeAgentConnections`):
 every integration offered to the caller that the developer has not switched
 off for that agent, the switches naming connections, and a server mentioned
@@ -1127,9 +1127,9 @@ as the deployment acting for the cookie's account ("Reaching eve as the
 deployment").
 
 The agent is offered Vespin's own tools on Vespin's MCP server
-(`src/agents/luke-mcp/app.ts`, at `/api/agents/mcp`), which admits the
+(`src/agents/workspace-mcp/app.ts`, at `/api/agents/mcp`), which admits the
 runner's bearer, minted at each launch and kept on the agent's row only as
-its hash (`luke-mcp/bearer.ts`), and runs each call as the agent's starter
+its hash (`workspace-mcp/bearer.ts`), and runs each call as the agent's starter
 through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
 Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,

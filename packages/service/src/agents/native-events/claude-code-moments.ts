@@ -263,12 +263,12 @@ function settlementOf(
   content: string | readonly WireValue[] | undefined,
   isError: boolean,
 ): ToolCallSettlement {
-  const lukeTool =
+  const workspaceTool =
     !CLI_TOOL_NAMES.has(storedName) && integrationOfRemoteTool(storedName) === undefined;
-  const text = answerText(content, !lukeTool);
-  return lukeTool
-    ? toolAnswerSettlement({ lukeTool: true, text }, isError)
-    : toolAnswerSettlement({ lukeTool: false, text, output: text }, isError);
+  const text = answerText(content, !workspaceTool);
+  return workspaceTool
+    ? toolAnswerSettlement({ workspaceTool: true, text }, isError)
+    : toolAnswerSettlement({ workspaceTool: false, text, output: text }, isError);
 }
 
 /**
@@ -489,7 +489,7 @@ function taskNotificationMoments(message: WireValue): readonly NativeMoment[] {
       kind: NATIVE_MOMENT.SUBAGENT_ENDED,
       key: tool_use_id,
       settlement: toolAnswerSettlement(
-        { lukeTool: false, text, output: text },
+        { workspaceTool: false, text, output: text },
         status !== TASK_COMPLETED,
       ),
     },

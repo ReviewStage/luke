@@ -172,7 +172,7 @@ workspace of the agent naming the conversation, or naming its standing
 parent one hop up (a subagent's session), and the opener alone for a
 conversation no agent names, so a member who leaves the workspace leaves its
 conversations with it. The MCP door's admission
-(`packages/service/src/agents/luke-mcp/bearer.ts`, which answers the caller
+(`packages/service/src/agents/workspace-mcp/bearer.ts`, which answers the caller
 beside the conversation's owner) and the ask door read it, so a member speaks
 into the session a teammate opened. From there the caller and the owner are
 two ids: the task, every tool binding, and an integration's grant are read,
