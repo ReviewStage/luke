@@ -21,7 +21,7 @@ import {
  * menu.test.ts -- a menu behaves as a system menu does: its button opens it
  * with focus on its first item, the arrows pass over an item that does not
  * apply now, a submenu opens beside its item and closes alone, choosing an
- * item acts, and Escape, Tab, or a press elsewhere closes it, the keys
+ * item acts, as does the key it prints as its shortcut, and Escape, Tab, or a press elsewhere closes it, the keys
  * handing focus back to what opened it. An item steered from a field, as
  * a searchable menu's pinned rows are, is a switch for a setting and says
  * whether the list it opens stands, keeps a press from taking the focus,
@@ -623,6 +623,45 @@ test("a press or Right on an item whose submenu the pointer opened takes the key
   act(() => button("Order by").focus());
   key("ArrowRight");
   expect(focused()).toBe("Last updated");
+});
+
+test("a key an item prints as its shortcut chooses that item, and one a submenu prints opens it with the keyboard in it, the key going no further", () => {
+  const chosen: Chosen = [];
+  const pressedBy = (letter: string) => (event: React.KeyboardEvent) => event.key === letter;
+  const heard: string[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event.key);
+  window.addEventListener("keydown", hear);
+  try {
+    mount(
+      createElement(Harness, {
+        groups: [
+          [
+            { ...action("Priority", chosen), pressedBy: pressedBy("u") },
+            { ...action("Pin", chosen), pressedBy: pressedBy("p") },
+          ],
+          [
+            {
+              label: "Group by",
+              items: [action("Repository", chosen), action("None", chosen)],
+              pressedBy: pressedBy("g"),
+            },
+          ],
+        ],
+      }),
+    );
+    press(button("More"));
+    key("p");
+    expect(chosen).toEqual(["Pin"]);
+    expect(openMenu()).toBeNull();
+
+    press(button("More"));
+    key("g");
+    expect(openMenu("Group by")).not.toBeNull();
+    expect(focused()).toBe("Repository");
+    expect(heard).toEqual([]);
+  } finally {
+    window.removeEventListener("keydown", hear);
+  }
 });
 
 test("a finger's arrival on a submenu's item opens nothing, so iOS spends no tap on it, and the tap opens it with the keyboard in it", () => {

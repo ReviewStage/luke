@@ -1,8 +1,9 @@
-import { APP_SHORTCUTS, type KeyedCommand } from "@repo/settings/shortcuts";
+import { APP_SHORTCUTS, type KeyedCommand, shortcutMatches } from "@repo/settings/shortcuts";
 import {
   type DrawnMenu,
   type ListRowMenu,
   Menu,
+  type MenuKeyMatch,
   type MenuPanel,
   type MenuSubject,
   type MenuAction as SharedMenuAction,
@@ -21,11 +22,13 @@ import {
  * keys, submenus, the panels an item opens beside it, and exit, is
  * `@repo/ui`'s `Menu`, opened through
  * `useMenu`; what is the window's own is an item's shortcut, named by the
- * command it takes and printed as the menu bar prints its chord.
+ * command it takes and printed as the menu bar prints its chord, which
+ * chooses the item while the menu stands, so a row's menu's P pins that
+ * row's task rather than the one the window has open.
  */
 
 /** One of the window's menu items: the shared item, its shortcut named by the command that takes the same action. */
-export interface MenuAction extends Omit<SharedMenuAction, "hint"> {
+export interface MenuAction extends Omit<SharedMenuAction, "hint" | "pressedBy"> {
   /** The shortcut that takes the same action, printed muted at the item's end. */
   command?: KeyedCommand;
 }
@@ -48,10 +51,16 @@ export interface MenuEnds {
   readonly footer?: React.ReactNode;
 }
 
+/** A command's chord as a shared item prints it and hears it: muted at its end, and choosing it while the menu stands. */
+function keyedBy(command: KeyedCommand): { hint: React.ReactNode; pressedBy: MenuKeyMatch } {
+  const { chord } = APP_SHORTCUTS[command];
+  return { hint: <Shortcut chord={chord} />, pressedBy: (event) => shortcutMatches(chord, event) };
+}
+
 /** The shared item for one of the window's, its command's chord as its hint. */
 function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
   if (command === undefined) return action;
-  return { ...action, hint: <Shortcut chord={APP_SHORTCUTS[command].chord} /> };
+  return { ...action, ...keyedBy(command) };
 }
 
 function sharedEntry(entry: MenuEntry): SharedMenuEntry {
@@ -59,9 +68,7 @@ function sharedEntry(entry: MenuEntry): SharedMenuEntry {
   if (!("items" in entry)) return sharedAction(entry);
   const { command, ...submenu } = entry;
   const items = submenu.items.map(sharedAction);
-  return command === undefined
-    ? { ...submenu, items }
-    : { ...submenu, items, hint: <Shortcut chord={APP_SHORTCUTS[command].chord} /> };
+  return command === undefined ? { ...submenu, items } : { ...submenu, items, ...keyedBy(command) };
 }
 
 /** A row's menu (`ListRow`'s `menu`) of the window's items, each item's chord at its end; `thing` is what the row is, which names its ⋯ and the menu, and `shown` whether the surface the row stands on is, which the menu does not outlive. */
