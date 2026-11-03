@@ -31,7 +31,13 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@repo/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
-import { agentOfTab, followedAgent, isDraftTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentOfTab,
+  followedAgent,
+  isDraftTab,
+  sameTab,
+  TAB_WORDS,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -106,7 +112,6 @@ import { tabCard } from "./tab-card.js";
 import { TaskActions, type TaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
-  OVERVIEW_BACK,
   screenBack,
   TASK_PANE,
   TASKS_BACK,
@@ -1109,7 +1114,7 @@ function PlanDocument({
   };
   // What the column shows, by name: the agent's or the draft's screen, and where a tab of the panel goes back to.
   const columnLabel =
-    tab === undefined || isOverviewTab(tab) ? OVERVIEW_BACK : mainTabLabel(tab, agents);
+    tab === undefined || isOverviewTab(tab) ? TAB_WORDS.OVERVIEW : mainTabLabel(tab, agents);
   const draftShown =
     pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
   // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
@@ -1118,8 +1123,8 @@ function PlanDocument({
     pane === TASK_PANE.OVERVIEW
       ? away
       : pane === TASK_PANE.PANEL
-        ? screenBack(columnLabel ?? OVERVIEW_BACK, sidePanel.onToggle)
-        : screenBack(OVERVIEW_BACK, () => mainTabs.onChoose(MAIN_TAB.OVERVIEW));
+        ? screenBack(columnLabel ?? TAB_WORDS.OVERVIEW, sidePanel.onToggle)
+        : screenBack(TAB_WORDS.OVERVIEW, () => mainTabs.onChoose(MAIN_TAB.OVERVIEW));
   // What the header's ⋯ offers follows what is on screen: the task's own menu on Overview, the
   // agent's on its screen, Discard draft on a draft's, and the tab's on one of the panel's, each
   // agent's item left unnamed, since the header names the agent.
