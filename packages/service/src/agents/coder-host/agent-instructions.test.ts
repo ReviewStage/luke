@@ -19,6 +19,7 @@ function agentHanded(handed: Pick<Agent, "planSnapshot" | "prompt">): Agent {
     organizationId: "workspace-1",
     automationId: null,
     automationOrigin: null,
+    automationRunId: null,
     startedFrom: null,
     startedByAgentId: null,
     conversationId: "conversation-1",

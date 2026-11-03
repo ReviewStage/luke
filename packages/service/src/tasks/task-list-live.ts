@@ -13,6 +13,7 @@ import {
 import { agentPin, conversations, device, taskPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
+import { automationRun } from "@luke/database/schemas/automation";
 import { task } from "@luke/database/schemas/task";
 import { AGENT_BRIEF, AGENT_KIND } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -149,6 +150,8 @@ function agentsStatement(userId: string) {
           starterPilotModel: starterPilot.model,
           automationId: agentTable.automationId,
           automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
+          runId: agentTable.automationRunId,
+          runAutomationId: automationRun.automationId,
           archivedBy: agentTable.archivedBy,
           archiverName: archiver.name,
           disabledServers: agentTable.disabledServers,
@@ -188,6 +191,7 @@ function agentsStatement(userId: string) {
         eq(starterPilot.kind, AGENT_KIND.PILOT),
       ),
     )
+    .leftJoin(automationRun, eq(automationRun.id, agentTable.automationRunId))
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
     .leftJoin(device, eq(device.id, agentTable.deviceId))

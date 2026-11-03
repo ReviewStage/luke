@@ -159,6 +159,7 @@ export const tasksLive = defineLiveQuery({
     taskPinSync,
     agentSync,
     agentPinSync,
+    automationRunSync,
     userSync,
     turnsSync,
     messagesSync,
