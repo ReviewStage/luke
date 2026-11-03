@@ -36,6 +36,8 @@ test("production trusts every preview, by deployment or by branch, and the dev s
   assert.ok(await productionTrusts(PRODUCTION_URL));
   assert.ok(await productionTrusts("https://luke-abc123xyz-stage-review.vercel.app"));
   assert.ok(await productionTrusts("https://luke-web-git-feature-branch-stage-review.vercel.app"));
+  assert.ok(await productionTrusts("https://vespin-abc123xyz-stage-review.vercel.app"));
+  assert.ok(await productionTrusts("https://vespin-git-feature-branch-stage-review.vercel.app"));
   assert.ok(await productionTrusts("http://localhost:5173"));
 });
 
