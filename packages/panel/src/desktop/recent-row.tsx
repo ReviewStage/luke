@@ -14,7 +14,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
+import { openedTaskOf, TASK_MENU_SURFACE, taskRowTab, useTaskMenuItems } from "./task-actions.js";
 import { TaskRowStatus, taskCardOf } from "./task-card.js";
 
 /**
@@ -56,11 +56,12 @@ export function RecentRow({
   const directory = useMemberDirectory();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
-  const actions = useTaskMenuItems(tasks, task.id, task.name, {
+  const actions = useTaskMenuItems(taskRowTab(tasks), task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread,
     surface: TASK_MENU_SURFACE.ROW,
+    opened: openedTaskOf(tasks),
   });
   const row = useRef<HTMLElement | null>(null);
   const hold = useCallback((press: HTMLElement | null) => {

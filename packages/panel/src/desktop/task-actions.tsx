@@ -4,6 +4,7 @@ import {
   PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
+  type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
@@ -76,6 +77,7 @@ import { useChordLinks } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
@@ -98,8 +100,9 @@ import {
   TASK_STATUS_WORDS,
   useAssigneeRows,
 } from "../tasks/task-standing.js";
-import { useReadMarks } from "../tasks/use-task-looks.js";
-import { useTaskOrigin } from "../tasks/use-task-origin.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
+import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -197,14 +200,125 @@ function listedTask(list: readonly TaskSummary[], taskId: string): TaskSummary |
   return index.get(taskId);
 }
 
+/**
+ * What a task's row and its menu read of the tab (`TasksControl`), wherever
+ * the row stands: the values that move seldom, and the tab's doors. Note
+ * that the tab's tasks, which a delivery moves for any one of them, are read
+ * through `tasksNow` where they are used rather than handed over, so a row
+ * that holds while what it is handed does (`memo`) holds as another task
+ * moves, and that the compiler refuses a read of anything else.
+ */
+export interface TaskRowTab
+  extends Pick<
+    TasksControl,
+    | "shown"
+    | "signedIn"
+    | "me"
+    | "workspaces"
+    | "taskSections"
+    | "onRenameTask"
+    | "onDeleteTask"
+    | "onSettleTasks"
+    | "onMarkTask"
+    | "onSetTaskStanding"
+    | "onSetTaskBlock"
+    | "onSetTaskParent"
+    | "onNewRelatedTask"
+    | "onRemoveTaskParent"
+    | "onChangeRepository"
+    | "onMoveTask"
+    | "onWriteSections"
+  > {
+  /** The tab's tasks as they stand when read. */
+  readonly tasksNow: () => readonly TaskSummary[];
+  /** Copies the open plan, as Copy plan does. */
+  readonly onCopyPlan: () => void;
+  readonly onOpenHistory: TasksControl["history"]["onOpen"];
+  /** Opens a repository's page on GitHub. */
+  readonly onOpenGitHub: TasksControl["repositories"]["openGitHub"];
+  /** Whether a repository is drawn by its owner's picture. */
+  readonly pictures: boolean;
+}
+
+/** What a task's row reads of `tasks`, its tasks read through `tasksNow`: as `tasks` holds them unless said. */
+export function taskRowTab(
+  tasks: TasksControl,
+  tasksNow: () => readonly TaskSummary[] = () => tasks.tasks,
+): TaskRowTab {
+  return {
+    shown: tasks.shown,
+    signedIn: tasks.signedIn,
+    me: tasks.me,
+    workspaces: tasks.workspaces,
+    taskSections: tasks.taskSections,
+    onRenameTask: tasks.onRenameTask,
+    onDeleteTask: tasks.onDeleteTask,
+    onSettleTasks: tasks.onSettleTasks,
+    onMarkTask: tasks.onMarkTask,
+    onSetTaskStanding: tasks.onSetTaskStanding,
+    onSetTaskBlock: tasks.onSetTaskBlock,
+    onSetTaskParent: tasks.onSetTaskParent,
+    onNewRelatedTask: tasks.onNewRelatedTask,
+    onRemoveTaskParent: tasks.onRemoveTaskParent,
+    onChangeRepository: tasks.onChangeRepository,
+    onMoveTask: tasks.onMoveTask,
+    onWriteSections: tasks.onWriteSections,
+    tasksNow,
+    onCopyPlan: tasks.copy.onPress,
+    onOpenHistory: tasks.history.onOpen,
+    onOpenGitHub: tasks.repositories.openGitHub,
+    pictures: tasks.repositories.pictures,
+  };
+}
+
+/**
+ * What a page's rows read of `tasks` (`taskRowTab`), handed back as the one
+ * handed back last while it says the same (`useSteadyDoors`), its tasks read
+ * as they stand at the moment, so a row held while what it is handed does
+ * (`memo`) draws again only as something it reads moves.
+ */
+export function useTaskRowTab(tasks: TasksControl): TaskRowTab {
+  const tasksNow = useSteadyDoor(() => tasks.tasks);
+  return useSteadyDoors(taskRowTab(tasks, tasksNow));
+}
+
+/**
+ * The task the window has open, as a row of it reads it: its document, and
+ * its agents, which name who last edited it. A page hands it only to the
+ * open task's row, so a save of the open plan draws that row alone.
+ */
+export interface OpenedTask {
+  readonly task: Task;
+  readonly agents: AgentsControl;
+}
+
+/** The task `tasks` has open and its agents; none while no document is drawn. */
+export function openedTaskOf(
+  tasks: Pick<TasksControl, "region" | "agents">,
+): OpenedTask | undefined {
+  const { region } = tasks;
+  return region.kind === DOCUMENT_REGION.READY
+    ? { task: region.task, agents: tasks.agents }
+    : undefined;
+}
+
+/** The open task where it is `taskId`; none for any other. */
+function openedAs(opened: OpenedTask | undefined, taskId: string): OpenedTask | undefined {
+  return opened?.task.id === taskId ? opened : undefined;
+}
+
+/** A task as the list or the open document holds it; nothing for a task neither holds. */
+function rowTaskOf(
+  list: readonly TaskSummary[],
+  opened: OpenedTask | undefined,
+  taskId: string,
+): TaskSummary | undefined {
+  return listedTask(list, taskId) ?? openedAs(opened, taskId)?.task;
+}
+
 /** A task as the list or the open document holds it; nothing for a task neither holds. */
 export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
-  const listed = listedTask(tasks.tasks, taskId);
-  if (listed !== undefined) return listed;
-  const { region } = tasks;
-  return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
-    ? region.task
-    : undefined;
+  return rowTaskOf(tasks.tasks, openedTaskOf(tasks), taskId);
 }
 
 /** One way a task can be moved in the sidebar or settled, as a sidebar row's buttons offer it: the list's command and what it does to this task. */
@@ -215,7 +329,7 @@ interface PlaceMark {
 }
 
 /** Pin, offered as whichever way the task is not yet: the reader's own pin of the task, which the Plan tab's menu offers as the tab's. */
-function pinMark(tasks: TasksControl, task: TaskSummary): PlaceMark {
+function pinMark(tasks: Pick<TasksControl, "onMarkTask">, task: TaskSummary): PlaceMark {
   const marking = (mark: TaskMark) => () => tasks.onMarkTask(task.id, mark);
   return task.pinnedAt === undefined
     ? { key: TASK_MARK.PIN, item: PANEL_COMMAND.PIN_TASK, onSelect: marking(TASK_MARK.PIN) }
@@ -235,7 +349,7 @@ function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
 
 /** Pin or Unpin as the menu's item, keyed where `keyed`; nothing for a task neither the list nor the document holds. */
 function pinAction(
-  tasks: TasksControl,
+  tasks: Pick<TasksControl, "onMarkTask">,
   task: TaskSummary | undefined,
   keyed: boolean,
 ): MenuAction[] {
@@ -360,7 +474,7 @@ function SidebarTaskMarks({
  * None for a task from a service before statuses, which draws no chips.
  */
 function standingSubmenus(
-  tasks: TasksControl,
+  tasks: Pick<TasksControl, "onSettleTasks">,
   task: TaskSummary,
   assignees: readonly MenuRow[],
   setStanding: ReturnType<typeof useStandingDoor>,
@@ -391,10 +505,10 @@ function standingSubmenus(
  * its own workspace's name and tasks, and the task list's doors, which act
  * on the task by its id whether or not it is the one open.
  */
-function relationDoor(tasks: TasksControl, task: TaskSummary): TaskRelationDoor {
+function relationDoor(tasks: TaskRowTab, task: TaskSummary): TaskRelationDoor {
   return {
     workspaceName: tasks.workspaces.find((each) => each.id === task.workspaceId)?.name ?? "",
-    tasks: tasks.tasks.filter((each) => each.workspaceId === task.workspaceId),
+    tasks: tasks.tasksNow().filter((each) => each.workspaceId === task.workspaceId),
     onChange: (change) => tasks.onSetTaskBlock(task.id, change),
     onSetParent: tasks.onSetTaskParent,
     onNewTask: (kind) => tasks.onNewRelatedTask(task.id, kind),
@@ -426,7 +540,8 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * print their chords, since a chord acts on the open task alone.
  */
 function taskActionGroups(
-  tasks: TasksControl,
+  tasks: TaskRowTab,
+  task: TaskSummary | undefined,
   taskId: string,
   doors: {
     rename: () => void;
@@ -444,14 +559,15 @@ function taskActionGroups(
     standing: readonly MenuSubmenu[];
     /** The id Task relation's search stands under while its panel is drawn. */
     relationId: string;
+    /** The open task, where it is this one. */
+    opened: OpenedTask | undefined;
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
-  const { region } = tasks;
-  const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === taskId;
-  const task = taskOf(tasks, taskId);
+  const { opened } = doors;
+  const drawn = opened !== undefined;
   const copy: MenuAction[] = drawn
-    ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.copy.onPress, drawn)]
+    ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.onCopyPlan, drawn)]
     : [];
   const link: MenuAction[] =
     task === undefined
@@ -462,7 +578,7 @@ function taskActionGroups(
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];
   const rename = renameTaskItem(doors.rename);
   // Note that the open task relates as the document holds it, whose blocks the list's row does not carry.
-  const subject: TaskRelationSubject | undefined = drawn ? region.task : task;
+  const subject: TaskRelationSubject | undefined = opened?.task ?? task;
   const relate: MenuEntry[] =
     subject === undefined
       ? []
@@ -471,7 +587,7 @@ function taskActionGroups(
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
+  const versions = versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
     PANEL_COMMAND.CHANGE_REPOSITORY,
@@ -520,22 +636,23 @@ function taskActionGroups(
 function TaskMenuFooter({
   tasks,
   task,
+  opened,
 }: {
-  tasks: TasksControl;
+  tasks: Pick<TaskRowTab, "me">;
   task: TaskSummary;
+  /** The open task, where it is this one, whose newest revision names its last editor. */
+  opened: OpenedTask | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: tasks.me });
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
-  const origin = useTaskOrigin()(task);
-  const { region } = tasks;
-  const opened = region.kind === DOCUMENT_REGION.READY && region.task.id === task.id;
-  const edit = opened ? lastEditOf(region.task) : undefined;
+  const origin = useTaskMaker(task)?.actor;
+  const edit = opened === undefined ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
-    sections: (opened ? region.task.sectionEdits : undefined) ?? [],
-    agents: { control: tasks.agents, onOpen: undefined },
+    sections: opened?.task.sectionEdits ?? [],
+    agents: opened === undefined ? undefined : { control: opened.agents, onOpen: undefined },
   };
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
@@ -602,7 +719,7 @@ function settledTask(task: TaskSummary | undefined): boolean {
  * elsewhere, or waiting for the next time the panel opens.
  */
 export function useTaskMenuItems(
-  tasks: TasksControl,
+  tasks: TaskRowTab,
   taskId: string,
   name: string,
   doors: {
@@ -613,10 +730,13 @@ export function useTaskMenuItems(
     rowKeys?: boolean;
     /** Which surface offers the items, which decides what they hold. */
     surface: TaskMenuSurface;
+    /** The task the window has open (`openedTaskOf`), which the items read only where it is this one. */
+    opened: OpenedTask | undefined;
   },
 ) {
-  const task = taskOf(tasks, taskId);
-  const reads = useReadMarks();
+  const opened = openedAs(doors.opened, taskId);
+  const task = rowTaskOf(tasks.tasksNow(), opened, taskId);
+  const markRead = useReadMark();
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
     () => tasks.onDeleteTask(taskId),
@@ -635,7 +755,7 @@ export function useTaskMenuItems(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined
-      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections, name)
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
@@ -648,6 +768,7 @@ export function useTaskMenuItems(
     ...withRowMoves(
       taskActionGroups(
         tasks,
+        task,
         taskId,
         {
           rename: doors.rename,
@@ -659,10 +780,11 @@ export function useTaskMenuItems(
           section,
           standing,
           relationId,
+          opened,
           read: {
             unread: doors.unread,
             onMark: (unread) => {
-              if (task !== undefined) reads.mark(task, unread);
+              if (task !== undefined) markRead(task, unread);
             },
           },
         },
@@ -671,7 +793,8 @@ export function useTaskMenuItems(
       place,
     ),
   ];
-  const footer = task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />;
+  const footer =
+    task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} opened={opened} />;
   const subject =
     task === undefined
       ? undefined
@@ -726,11 +849,12 @@ export function TaskActions({
   hand: React.RefObject<TaskMenuItems | undefined>;
 }): React.JSX.Element {
   // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
-  const actions = useTaskMenuItems(tasks, task.id, task.name, {
+  const actions = useTaskMenuItems(taskRowTab(tasks), task.id, task.name, {
     rename: onRename,
     drawn: true,
     unread: useReadMarks().markedUnread(task.id),
     surface: TASK_MENU_SURFACE.DOCUMENT,
+    opened: openedTaskOf(tasks),
   });
   hand.current = actions;
   const { deletion } = actions;
@@ -859,12 +983,13 @@ export function SidebarTask({
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
-  const actions = useTaskMenuItems(tasks, task.id, task.name, {
+  const actions = useTaskMenuItems(taskRowTab(tasks), task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread,
     rowKeys: true,
     surface: TASK_MENU_SURFACE.ROW,
+    opened: openedTaskOf(tasks),
   });
   const reads = useReadMarks();
   const coarse = useCoarsePointer();
