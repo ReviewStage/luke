@@ -60,9 +60,9 @@ import {
  * workspace reads and writes every thread; a plan the account does not reach,
  * or an archived one for a write, answers as not found, and a thread the plan
  * does not hold as not found too. A member's comment reaches the agents in
- * its thread, each the thread handed to it (\`mentionsHandedOver\`): every
+ * its thread, each the thread handed to it (`mentionsHandedOver`): every
  * agent a comment was handed to before and every one that answered in it,
- * and each one of the task's agents its words mention with \`@\`, which
+ * and each one of the task's agents its words mention with `@`, which
  * joins it.
  *
  * A page of the task is commented on through the same doors: the read names
@@ -215,8 +215,8 @@ function agentsIn(
 /**
  * Whom a member's comment hands its thread to: the one rule of who a comment
  * wakes, for the plan's threads and the pages' alike, which is that a thread
- * reaches the agents in it (\`agentsIn\`), and each agent its words mention
- * with \`@\` joins it. One already in the thread that cannot take it, an
+ * reaches the agents in it (`agentsIn`), and each agent its words mention
+ * with `@` joins it. One already in the thread that cannot take it, an
  * archived one say, is said back as not sent; a mention of one that cannot
  * take it is a reference, which asks no one.
  */
@@ -239,11 +239,11 @@ function handedTo(
 
 /**
  * The thread handed to each of the task's standing agents the comment reaches
- * (\`handedTo\`); an agent of another task, or an archived one, cannot take
+ * (`handedTo`); an agent of another task, or an archived one, cannot take
  * it, and neither can the app's own assistant, which no task has any more.
  * Who can take it is read before the answer, which says back the ones in the
  * thread who could not; the hand-overs themselves run past it
- * (\`afterResponse\`), because waking an idle agent resumes its sandbox, which
+ * (`afterResponse`), because waking an idle agent resumes its sandbox, which
  * can outlast the member's request, and a comment posted must never read as
  * not posted. Each ask is written under a key drawn from the words' own, so
  * the words sent again ask no one twice; a hand-over that does not land is

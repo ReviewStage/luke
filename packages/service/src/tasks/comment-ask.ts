@@ -21,7 +21,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 /**
  * comment-ask.ts -- a plan's comment thread sent to one of the task's agents: the words it is handed over in, and the hand-over.
  *
- * A member's comment hands its thread over to each agent in it, one an \`@\`
+ * A member's comment hands its thread over to each agent in it, one an `@`
  * of the comment's adds among them (`plan-comments-procedures.ts`'s
  * `handedTo`), as the request: who wrote what in it, the words of the plan
  * it is on, and what the agent is to do with it, which is to read the thread
@@ -34,7 +34,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * as the deployment acting for the member. It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment in a thread no agent is in
- * that mentions none hands nothing to anyone, an \`@\` of the app's own name
+ * that mentions none hands nothing to anyone, an `@` of the app's own name
  * among it, and an agent's own reply never does. The line keeps beside
  * the text what a window draws it by, the member's words, what the thread is
  * on, and the plan or page, so a transcript shows the comment rather than

@@ -297,14 +297,6 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /**
- * The agent a start asks for, started on the plan it just made through the
- * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
- * a refusal is answered beside the plan rather than in its place, since the
- * plan stands either way and the developer's words are theirs to try again.
- * A Start that failed after its agent was made answers that agent, since it
- * works all the same.
- */
-/**
  * The task as it stands once an agent started on it, which moved it into
  * progress (`beginTaskWork`), so the open document says what the list says;
  * the task as it was made where it cannot be read again just now.
@@ -315,6 +307,14 @@ const taskAfterStart = (userId: string, task: Task) =>
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
   );
 
+/**
+ * The agent a start asks for, started on the plan it just made through the
+ * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * a refusal is answered beside the plan rather than in its place, since the
+ * plan stands either way and the developer's words are theirs to try again.
+ * A Start that failed after its agent was made answers that agent, since it
+ * works all the same.
+ */
 const startedAgentOn = (
   seams: TasksProcedureSeams,
   request: Request,
@@ -630,7 +630,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      // A child takes its parent's assignee where the start names none.
       const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
       const { task: stored, txid } = yield* createTaskRelated(
         userId,
