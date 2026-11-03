@@ -182,6 +182,9 @@ export interface MenuPlacement {
  */
 export const MENU_KEEPS_CLEAR = { "data-menu-keeps-clear": "" } as const;
 
+/** Whether a key press is an item's shortcut, as the app that prints it reads its chord. */
+export type MenuKeyMatch = (event: React.KeyboardEvent) => boolean;
+
 export interface MenuAction {
   label: string;
   /** The glyph leading the label, drawn in a column every item keeps whether or not it has one. */
@@ -197,6 +200,8 @@ export interface MenuAction {
   danger?: boolean;
   /** Printed muted at the item's end: the shortcut that takes the same action, as the app draws it. */
   hint?: React.ReactNode;
+  /** Whether a key press is the shortcut its hint prints, which chooses it while the menu stands. */
+  pressedBy?: MenuKeyMatch | undefined;
   /** Drawn dimmed and not chosen: the action does not apply now. */
   disabled?: boolean;
   /** A setting rather than an action: whether it is on, a check at the item's end saying so. */
@@ -233,6 +238,8 @@ export interface MenuSubmenu {
   items: readonly MenuAction[];
   /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
   hint?: React.ReactNode;
+  /** Whether a key press is the shortcut its hint prints, which opens it while the menu stands. */
+  pressedBy?: MenuKeyMatch | undefined;
 }
 
 /** What a panel standing as a menu's submenu is handed: the way back to its item, and the menu's close. */
@@ -614,6 +621,24 @@ function itemsOf(menu: HTMLElement): HTMLElement[] {
   return [...menu.querySelectorAll<HTMLElement>(MENU_ITEM)].filter(
     (item) => item.closest('[role="menu"]') === menu,
   );
+}
+
+/** The action or submenu of `groups` whose shortcut a key pressed on `menu`'s own items is; nothing for a key pressed in a panel or submenu beside it. */
+function keyedEntryOf(
+  groups: readonly (readonly MenuEntry[])[],
+  event: React.KeyboardEvent,
+  menu: HTMLElement | null,
+): MenuAction | MenuSubmenu | undefined {
+  const target = event.target instanceof Element ? event.target : null;
+  if (menu === null || target?.closest('[role="menu"]') !== menu) return undefined;
+  return groups
+    .flat()
+    .find(
+      (entry): entry is MenuAction | MenuSubmenu =>
+        !isPanel(entry) &&
+        !("disabled" in entry && entry.disabled === true) &&
+        entry.pressedBy?.(event) === true,
+    );
 }
 
 /**
@@ -1088,6 +1113,7 @@ function Submenu({
         className="ui-menu-item"
         {...rovingItem()}
         data-open={open ? "true" : undefined}
+        {...{ [SUBMENU_ITEM_ATTRIBUTE]: entry.label }}
         endClassName={endSlot(entry.hint !== undefined, false)}
         onClick={pulseOnPress((event: BaseUIEvent<React.MouseEvent<HTMLElement>>) => {
           // Note that Base UI's own press would take focus back to the item after it went into the submenu.
@@ -1137,11 +1163,18 @@ function Submenu({
 /** The attribute an item that opens a panel wears, naming it, so the panel finds the item it hangs beside and hands focus back to. */
 const PANEL_ATTRIBUTE = "data-menu-panel";
 
-/** The item of `menu` that opens the panel named `label`. */
-function panelItemOf(menu: HTMLElement | null, label: string): HTMLElement | undefined {
+/** The attribute an item that opens a submenu wears, naming it, so its shortcut finds the item to open it from. */
+const SUBMENU_ITEM_ATTRIBUTE = "data-menu-submenu";
+
+/** The item of `menu` wearing `attribute` that opens the panel or submenu named `label`. */
+function namedItemOf(
+  menu: HTMLElement | null,
+  attribute: typeof PANEL_ATTRIBUTE | typeof SUBMENU_ITEM_ATTRIBUTE,
+  label: string,
+): HTMLElement | undefined {
   if (menu === null) return undefined;
-  return [...menu.querySelectorAll<HTMLElement>(`[${PANEL_ATTRIBUTE}]`)].find(
-    (item) => item.getAttribute(PANEL_ATTRIBUTE) === label,
+  return [...menu.querySelectorAll<HTMLElement>(`[${attribute}]`)].find(
+    (item) => item.getAttribute(attribute) === label,
   );
 }
 
@@ -1303,7 +1336,7 @@ function MenuPanelLayer({
     const panel = box.current;
     if (panel === null || menu === null) return undefined;
     const measure = () => {
-      const item = panelItemOf(menu, entry.label);
+      const item = namedItemOf(menu, PANEL_ATTRIBUTE, entry.label);
       if (item === undefined) return;
       const { width, height } = panel.getBoundingClientRect();
       const next = panelPlace(
@@ -1409,7 +1442,8 @@ interface MenuProps {
  * stands under them on the same terms: who made what the menu is about.
  *
  * Base UI keys it: the arrows, Home, End, and a typed name move between the
- * items that apply now. What closes it is this menu's own, as before:
+ * items that apply now, but for a key an item prints as its shortcut
+ * (`pressedBy`), which chooses that item, or opens that submenu. What closes it is this menu's own, as before:
  * Escape and Tab hand focus back to the opener, a press elsewhere (but on
  * the opener, which closes it itself, or on an item's card) or the window
  * losing the keyboard or its size closes it where it stands, and a choice
@@ -1535,6 +1569,20 @@ function FloatingMenu({
       onClose(true);
       return;
     }
+    // Note that an item's printed shortcut chooses it here, because Base UI's
+    // typed name would take a letter to walk the items, and a chord let
+    // through would act on what the window has open rather than on what
+    // the menu is about.
+    const keyed = keyedEntryOf(groups, event, element.current);
+    if (keyed !== undefined) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.preventBaseUIHandler();
+      if ("items" in keyed)
+        namedItemOf(element.current, SUBMENU_ITEM_ATTRIBUTE, keyed.label)?.click();
+      else choose(keyed);
+      return;
+    }
     // Walking the menu's own items leaves a submenu the pointer opened behind.
     if (!roving.onKeyDown(event)) return;
     event.preventBaseUIHandler();
@@ -1575,7 +1623,7 @@ function FloatingMenu({
   };
   const backFromPanel = useCallback((label: string) => {
     setSubmenu((standing) => (standing === label ? undefined : standing));
-    panelItemOf(element.current, label)?.focus();
+    namedItemOf(element.current, PANEL_ATTRIBUTE, label)?.focus();
   }, []);
   const panelBack = useMemo(
     () => (panel === undefined ? () => undefined : () => backFromPanel(panel.label)),
