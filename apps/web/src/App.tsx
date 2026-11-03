@@ -9,31 +9,16 @@ import {
   MARK_PROVIDER,
   ProviderMark,
   TEXT_LINK_HEIGHT,
-  TEXT_VARIANT,
   TextLink,
 } from "@repo/ui";
-import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import {
-  DMG_URL,
   REPOSITORY_URL,
   SITE_PAGE,
+  SiteDownload,
   SiteFooterLinks,
   SiteNavigation,
   WEB_APP_URL,
 } from "./SiteChrome";
-
-/** The download, the one call every part of the landing makes, counted wherever it is pressed. */
-function Download(): React.JSX.Element {
-  return (
-    <ButtonLink
-      variant={BUTTON_VARIANT.PRIMARY}
-      href={DMG_URL}
-      onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
-    >
-      Download for macOS
-    </ButtonLink>
-  );
-}
 
 /**
  * The landing: the one line beside the copper ball, then a section for each
@@ -44,26 +29,13 @@ function Download(): React.JSX.Element {
 export function App(): React.JSX.Element {
   return (
     <LandingPage
-      bar={
-        <SiteNavigation
-          current={{ page: SITE_PAGE.HOME }}
-          calls={
-            <TextLink
-              href={WEB_APP_URL}
-              variant={TEXT_VARIANT.LABEL}
-              height={TEXT_LINK_HEIGHT.CONTROL}
-            >
-              Sign in
-            </TextLink>
-          }
-        />
-      }
-      barCall={<Download />}
+      bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
+      barCall={<SiteDownload />}
       title="An inbox for all your coding agents."
       lead="Agents post to your Inbox when they need a decision, a manual step, or your eyes on something, and you answer them there. They work in cloud sandboxes on your own Claude or ChatGPT subscription or API key."
       actions={
         <>
-          <Download />
+          <SiteDownload />
           <TextLink href={WEB_APP_URL} height={TEXT_LINK_HEIGHT.CONTROL}>
             or sign in on the web
           </TextLink>
@@ -74,7 +46,7 @@ export function App(): React.JSX.Element {
         lead: "Apache 2.0. The Mac app, the web app, and the service behind them are one repository.",
         actions: (
           <>
-            <Download />
+            <SiteDownload />
             <ButtonLink
               variant={BUTTON_VARIANT.OUTLINE}
               href={REPOSITORY_URL}

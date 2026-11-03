@@ -1,28 +1,26 @@
 import { type ReactNode, useId } from "react";
 import { TEXT_VARIANT } from "../text/text.js";
+import { SiteFrame, SiteRule } from "../landing/site-frame.js";
 import { TextLink } from "../text-link/text-link.js";
 
 /**
- * public-page.tsx -- the page the public site is drawn on: the site's banner, the page's title and lead, its sections, and the site's footer, all on one column.
+ * public-page.tsx -- the page the public site is drawn on: the page's title and lead and its sections on one column, in the site's frame with the landing.
  *
- * The page owns the site's gutters and its rhythm. The banner, the content,
- * and the footer share one measure centred in the room, each inset by the
- * web profile's page inset, so the wordmark, a title, a section's words, and
- * a footer link start on one edge at every width. The banner stands still at
- * the top of the document's scroll over a wash of the ground, and the footer
- * opens under a rule across the page; their contents are the caller's. The
- * page sets no scroll of its own, because a public page is read in the
- * document's, which is what a prerendered page and a browser's find and
- * anchor links expect.
+ * The page stands in the site's frame (`site-frame.tsx`), as the landing
+ * does: the margin grid's rails, the bar that floats once the page scrolls
+ * holding the caller's banner and its call, and the foot holding the
+ * caller's footer over the wordmark in dots, a rule across the rails above
+ * it. Its content is on one measure centred in the room, inset by the web
+ * profile's page inset. The page sets no scroll of its own, because a
+ * public page is read in the document's, which is what a prerendered page
+ * and a browser's find and anchor links expect.
  *
- * The title is set in the profile's page title, or in the landing's hero,
- * which is the site's marketing display style and named apart from it; the
- * lead under either is the landing's. Sections follow at one rhythm, each
+ * The title is set in the landing's display face at a feature's size, or in
+ * its hero; the lead under either is the landing's. Sections follow at one rhythm, each
  * under an `h2` in the section role. The page takes no class or style.
  *
  * The content is on the site's reading column, or on a wider one for a page
- * that sets a rail beside its words, as the changelog does; the banner and
- * the footer keep to the reading column either way. A page beneath another
+ * that sets a rail beside its words, as the changelog does. A page beneath another
  * names its way back above its title. Its sections stand apart by room, or
  * under a rule across the column each, as a list of entries does; a picture
  * or a recording may bleed wider than the column, as the landing's does.
@@ -81,7 +79,7 @@ const COLUMN_CLASS = "ui-public-page-column box-border w-full mx-auto px-page-in
  * hero falls back to the page title.
  */
 const TITLE_CLASS = {
-  [PUBLIC_TITLE.PAGE]: "text-title font-title tracking-title",
+  [PUBLIC_TITLE.PAGE]: "",
   [PUBLIC_TITLE.HERO]: "leading-public-page-hero font-public-page-hero tracking-public-page-hero",
 } as const satisfies Record<PublicTitle, string>;
 
@@ -141,38 +139,10 @@ export function PublicMedia({ children }: { children: ReactNode }): React.JSX.El
   );
 }
 
-/**
- * The site's banner, standing still at the top of the document's scroll:
- * `children` on the page's column, over a wash of the ground across the page.
- */
-function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element {
-  return (
-    <header className="ui-public-page-banner sticky top-0 z-public-page-banner border-b border-border bg-public-page-banner backdrop-blur-public-page-banner">
-      <div
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} ui-public-page-banner-column grid items-center min-h-ui-64`}
-      >
-        {children}
-      </div>
-    </header>
-  );
-}
-
-/** The site's footer: `children` on the page's column, under a rule across the page. */
-function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element {
-  return (
-    <footer className="ui-public-page-footer border-t border-border">
-      <div
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[PUBLIC_PAGE_WIDTH.COLUMN]} ui-public-page-footer-column pt-ui-48 pb-ui-64`}
-      >
-        {children}
-      </div>
-    </footer>
-  );
-}
-
 /** A public page: `banner` over the way `back`, the `title`, `lead`, and sections, over `footer`. */
 export function PublicPage({
   banner,
+  bannerCall,
   footer,
   back,
   title,
@@ -182,9 +152,11 @@ export function PublicPage({
   lead,
   children,
 }: {
-  /** The site's wordmark and navigation, laid on the column inside the banner. */
+  /** The site's wordmark and navigation, laid across the site's bar. */
   banner?: ReactNode;
-  /** The site's closing links and notices, laid on the column under the rule. */
+  /** The bar's call at its end, which a page narrower than a phone's leaves out. */
+  bannerCall?: ReactNode;
+  /** The site's closing links and notices, laid over the wordmark at the foot. */
   footer?: ReactNode;
   /** The page this one stands beneath, named above the title as the way back to it. */
   back?: PublicBack | undefined;
@@ -200,49 +172,50 @@ export function PublicPage({
 }): React.JSX.Element {
   const intro = back !== undefined || said(title) || said(lead);
   return (
-    <div className="ui-public-page @container flex flex-col min-w-0 text-foreground font-ui">
-      {said(banner) ? <PublicBanner>{banner}</PublicBanner> : null}
-      <main
-        className={`${COLUMN_CLASS} ${WIDTH_CLASS[width]} ui-public-page-main flex-1 pt-public-page-start pb-public-page-end wrap-anywhere`}
-        data-width={width}
-      >
-        {intro ? (
-          <div className="ui-public-page-intro">
-            {back !== undefined ? (
-              <div className="ui-public-page-back mb-ui-16">
-                <TextLink href={back.href} variant={TEXT_VARIANT.LABEL}>
-                  <span aria-hidden="true">← </span>
-                  {back.label}
-                </TextLink>
-              </div>
-            ) : null}
-            {said(title) ? (
-              <h1
-                className={`ui-public-page-title m-0 text-pretty ${TITLE_CLASS[titleStyle]}`}
-                data-style={titleStyle}
-              >
-                {title}
-              </h1>
-            ) : null}
-            {said(lead) ? (
-              <p
-                className={`ui-public-page-lead m-0 ${said(title) ? "mt-ui-24" : ""} max-w-public-page-lead text-muted-foreground text-public-page-lead text-pretty`}
-              >
-                {lead}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {said(children) ? (
-          <div
-            className={`ui-public-page-sections ${intro ? SECTIONS_GAP_CLASS[sections] : ""}`}
-            data-sections={sections}
-          >
-            {children}
-          </div>
-        ) : null}
-      </main>
-      {said(footer) ? <PublicFooter>{footer}</PublicFooter> : null}
-    </div>
+    <SiteFrame bar={banner} barCall={bannerCall} footer={footer}>
+      <div className="ui-public-page @container flex flex-col min-w-0 text-foreground font-ui">
+        <main
+          className={`${COLUMN_CLASS} ${WIDTH_CLASS[width]} ui-public-page-main flex-1 pt-public-page-start pb-public-page-end wrap-anywhere`}
+          data-width={width}
+        >
+          {intro ? (
+            <div className="ui-public-page-intro">
+              {back !== undefined ? (
+                <div className="ui-public-page-back mb-ui-16">
+                  <TextLink href={back.href} variant={TEXT_VARIANT.LABEL}>
+                    <span aria-hidden="true">← </span>
+                    {back.label}
+                  </TextLink>
+                </div>
+              ) : null}
+              {said(title) ? (
+                <h1
+                  className={`ui-public-page-title m-0 text-pretty ${TITLE_CLASS[titleStyle]}`}
+                  data-style={titleStyle}
+                >
+                  {title}
+                </h1>
+              ) : null}
+              {said(lead) ? (
+                <p
+                  className={`ui-public-page-lead m-0 ${said(title) ? "mt-ui-24" : ""} max-w-public-page-lead text-muted-foreground text-public-page-lead text-pretty`}
+                >
+                  {lead}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {said(children) ? (
+            <div
+              className={`ui-public-page-sections ${intro ? SECTIONS_GAP_CLASS[sections] : ""}`}
+              data-sections={sections}
+            >
+              {children}
+            </div>
+          ) : null}
+        </main>
+      </div>
+      <SiteRule />
+    </SiteFrame>
   );
 }
