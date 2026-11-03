@@ -8,7 +8,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import {
   type AnyAct,
   fakeActPort,
@@ -98,6 +98,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** What a pane hands its words: the cards' doors over the task's repository, and the item's pictures as `images` holds them, each asked for kept. */
@@ -309,6 +311,50 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   assert.deepEqual(viewer(), ["Third.png", "3 of 4"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["Fourth.png", "4 of 4"]);
+});
+
+test("a picture far from the screen is neither asked for nor drawn until it comes near, and going away again lets its drawing go", () => {
+  const far = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
+  const away = { top: 5_000, bottom: 5_200, left: 0, right: 300, width: 300, height: 200 };
+  const near = { ...away, top: 100, bottom: 300 };
+  let box = away;
+  const seen: ((entries: readonly Partial<IntersectionObserverEntry>[]) => void)[] = [];
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(callback: (entries: readonly Partial<IntersectionObserverEntry>[]) => void) {
+        seen.push(callback);
+      }
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  // Every box stands far below the window, a long thread's first picture as its foot is read, until it is scrolled to.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => box as DOMRect);
+  const asked: string[] = [];
+  const text = `![Far](${pictureOf(ITEM_ID, far)})`;
+  const draw = (images: ReadonlyMap<string, InboxImage>) =>
+    inPane(createElement(TranscriptWords, { text, asDocument: true }), images, asked);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(draw(new Map())));
+  assert.deepEqual(asked, []);
+
+  const scrolled = (isIntersecting: boolean) => {
+    box = isIntersecting ? near : away;
+    act(() => seen.at(-1)?.([{ isIntersecting, boundingClientRect: box as DOMRect }]));
+  };
+  scrolled(true);
+  assert.deepEqual(asked, [`${ITEM_ID}/${far}`]);
+  act(() => root.render(draw(new Map([[far, HELD]]))));
+  assert.equal(container.querySelector("img")?.alt, "Far");
+
+  scrolled(false);
+  assert.equal(container.querySelector("img"), null);
+  scrolled(true);
+  assert.equal(container.querySelector("img")?.alt, "Far");
 });
 
 test("a picture of another item stands as its link and is never asked for", () => {

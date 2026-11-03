@@ -1087,6 +1087,8 @@
   --spacing-page-versions-end: calc(var(--ui-control-gap) - var(--ui-space-2));
   --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
   --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
+  /* off-scale: an Inbox picture away from the screen, as tall as it stood (`inbox-pictures.tsx`) */
+  --spacing-picture-held: var(--picture-held-height);
   --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
   --color-voice-luke: var(--voice-luke);
   /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
