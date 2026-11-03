@@ -74,6 +74,8 @@ export const device = pgTable(
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
     /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
+    /** The folder the device's own layout puts its local agents under, absolute, as it last registered (`deviceAgentsFolder`); null for a device whose host names none, whose agents are laid out under `home`. */
+    agentsFolder: text("agents_folder"),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),
     /**

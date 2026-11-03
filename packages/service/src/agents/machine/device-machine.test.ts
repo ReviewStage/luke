@@ -1,5 +1,5 @@
 /**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, over the sync hub, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
+ * device-machine.test.ts -- a local agent's machine over a real dialect: its launch laid out under the agents folder its Mac registered, its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, over the sync hub, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -24,7 +24,7 @@ import {
   withdrawDeviceAgentRequest,
   withdrawExpiredDeviceAgentRows,
 } from "@luke/database/models/device-agent-store";
-import { beatDevice } from "@luke/database/models/device-store";
+import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentTable } from "@luke/database/schemas/agent";
@@ -147,6 +147,33 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             unregistered.deviceRemoved,
             undefined,
             "a device never removed is no removed host",
+          );
+        }),
+    );
+
+    it.effect(
+      "a launch on a Mac that registered its own agents folder is laid out under that folder, whatever this build's root",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent();
+          // The Mac registers again, as a host whose release moved its agents' root would.
+          yield* registerDevice(opened.userId, {
+            id: opened.deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            agentsFolder: "/Users/fixture/.elsewhere/agents",
+          });
+          const { handle } = yield* launched(opened);
+          const db = yield* Database;
+          const [row] = yield* db
+            .select({ payload: deviceAgentLine.payload })
+            .from(deviceAgentLine)
+            .where(eq(deviceAgentLine.id, handle.command));
+          const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
+
+          assert.equal(
+            payload.checkoutPath,
+            `/Users/fixture/.elsewhere/agents/${opened.agent.id}/repository`,
           );
         }),
     );

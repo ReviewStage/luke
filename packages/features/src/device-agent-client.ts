@@ -90,6 +90,8 @@ export interface DeviceAgentDevice extends DeviceMachine {
   readonly arch: DeviceArch;
   readonly isolation: DeviceIsolation;
   readonly home: string;
+  /** The folder its own layout puts its agents under (`deviceAgentsFolder`), absolute. */
+  readonly agentsFolder: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
   readonly signedIn: DeviceSignedIn;

@@ -31,6 +31,7 @@ import {
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
   deviceAgentStdinPayloadSchema,
+  deviceAgentsFolder,
 } from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import {
@@ -1857,6 +1858,7 @@ export function composeLocalAgents(
             ...platform.deviceMachine,
             isolation: platform.deviceIsolation,
             home: folder,
+            agentsFolder: deviceAgentsFolder(folder),
             claudeExecutable: tools.claude,
             codexExecutable: tools.codex,
             signedIn: NOT_SIGNED_IN,
