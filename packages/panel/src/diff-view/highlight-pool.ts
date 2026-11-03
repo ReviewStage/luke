@@ -46,20 +46,20 @@ const HIGHLIGHT_WORKERS = 2;
 /**
  * How many results the pool keeps on the window's thread, for each of its
  * file and diff caches: Pierre's own `totalASTLRUCacheSize`. Note that a
- * list's file scrolled out of view lets its colours go with its drawing, and
+ * list's file scrolled out of view lets its colors go with its drawing, and
  * one scrolled back takes them from this cache by its read's name, or is
- * coloured anew, drawn plain and then again in colour, so a cache of a few
- * files makes every scroll back up a long pull request colour it again.
+ * colored anew, drawn plain and then again in color, so a cache of a few
+ * files makes every scroll back up a long pull request color it again.
  */
 export const HIGHLIGHT_CACHE_ENTRIES = 100;
 
 /**
  * The most characters a diff or file may hold, both sides counted, to be
- * coloured on the window's own thread rather than in a worker, where it
- * colours with Highlights: Pierre's advice, since Highlights colours a file
- * that size faster than a worker's round trip, and a file coloured at once
- * is drawn once, rather than plain and then again in colour. Shiki's
- * JavaScript engine colours every file in the workers.
+ * colored on the window's own thread rather than in a worker, where it
+ * colors with Highlights: Pierre's advice, since Highlights colors a file
+ * that size faster than a worker's round trip, and a file colored at once
+ * is drawn once, rather than plain and then again in color. Shiki's
+ * JavaScript engine colors every file in the workers.
  */
 const MAIN_THREAD_MAX_CHARACTERS = 100_000;
 
