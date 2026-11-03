@@ -180,6 +180,10 @@
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },
         {
+          "src": "/api/slack/events",
+          "dest": "/api/default.js?route=slack/events"
+        },
+        {
           "src": "/api/triggers/sentry",
           "dest": "/api/default.js?route=triggers/sentry"
         },

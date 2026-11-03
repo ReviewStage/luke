@@ -8,8 +8,9 @@
  * team, and the member's own switch is on (`slackNotificationsOn`). A
  * follow-up that asks nothing new on a thread still open writes nothing.
  * The DM says the thread's title, the post's words as plain text, and an
- * open button to the thread; a decide ask's options are not
- * buttons yet, so every ask is the link alone.
+ * open button to the thread; a decide ask that takes one option offers each
+ * as a button beside it (`SlackChoice`), which our Slack route answers the
+ * ask with (`slack-events-app.ts`), and every other ask is the link alone.
  *
  * The DM is kept on the agent's message (`inbox_message.slack_dm`). Once
  * the message's ask is answered, withdrawn, or replaced, `settleThreadDms`
@@ -20,6 +21,7 @@
  * no bot, a test's or an eve root's, writes nothing.
  */
 
+import { randomUUID } from "node:crypto";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { Database } from "@repo/database/core/query";
 import { slackNotificationsOn } from "@repo/database/models/slack-installation-store";
@@ -27,11 +29,13 @@ import { organization } from "@repo/database/schemas/auth";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { inboxMessage } from "@repo/database/schemas/inbox-message";
 import {
+  INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
+  knownAsk,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { linkLabels } from "@repo/features/mention-link";
@@ -39,10 +43,15 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type SlackBlock, SlackBot, type SlackMessageContent } from "./slack-bot.js";
+import {
+  type SlackBlock,
+  SlackBot,
+  type SlackMessage,
+  type SlackMessageContent,
+} from "./slack-bot.js";
 
-/** Slack's own limits a DM's parts are clipped to: a header's text and a section's. */
-const SLACK_TEXT_BOUND = { HEADER: 150, SECTION: 3_000 } as const;
+/** Slack's own limits a DM's parts are clipped to: a header's text, a section's, and a button's. */
+const SLACK_TEXT_BOUND = { HEADER: 150, SECTION: 3_000, BUTTON: 75 } as const;
 
 /** What a settled DM says in its button's place, by where its ask now stands. */
 const SETTLED_LINE = {
@@ -53,6 +62,23 @@ const SETTLED_LINE = {
 
 /** Where a settled ask stands: every status but open. */
 type SettledAskStatus = keyof typeof SETTLED_LINE;
+
+/** What a settled DM says once its member chose an option from it. */
+export function chosenLine(label: string): string {
+  return `You chose ${label}`;
+}
+
+/**
+ * What an option's button carries back when pressed: the item, the message
+ * whose ask it answers, and the option's label, as JSON in the button's
+ * value, which Slack bounds at 2,000 characters, far past two ids and a label.
+ */
+export const SlackChoiceSchema = Schema.fromJsonString(
+  Schema.Struct({ item: Schema.String, ask: Schema.String, choice: Schema.String }),
+);
+
+/** A press of an option's button, as `SlackChoiceSchema` reads it. */
+export type SlackChoice = typeof SlackChoiceSchema.Type;
 
 const SETTLED_STATUSES = [
   INBOX_ASK_STATUS.ANSWERED,
@@ -93,17 +119,41 @@ function clipped(words: string, bound: number): string {
 }
 
 /**
+ * A button per option of an open decide ask that takes one, the recommended
+ * ones primary, each under an action id of its own, which the route answers
+ * the ask under, so a press Slack sends again is the same answer; none for
+ * any other ask, or one that takes several, which the app alone answers.
+ */
+function choiceButtons(itemId: string, message: InboxMessage): SlackBlock[] {
+  if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) return [];
+  const ask = knownAsk(message.ask);
+  if (ask?.type !== INBOX_ASK.DECIDE || ask.multiple === true) return [];
+  const recommended = new Set([
+    ...(ask.recommended === undefined ? [] : [ask.recommended]),
+    ...(ask.recommendations ?? []),
+  ]);
+  return ask.options.map(({ label }) => ({
+    type: "button",
+    text: { type: "plain_text", text: clipped(label, SLACK_TEXT_BOUND.BUTTON) },
+    action_id: randomUUID(),
+    value: Schema.encodeSync(SlackChoiceSchema)({ item: itemId, ask: message.id, choice: label }),
+    ...(recommended.has(label) ? { style: "primary" } : undefined),
+  }));
+}
+
+/**
  * The DM a thread is written as: its title as the header, the agent's words
  * as plain text with each link written as its name, and the open
- * button; a settled one says where its ask stands above the button.
+ * button after any option's; a settled one says where its ask stands, in
+ * the line given, above the button.
  */
 function threadDmContent(
   view: ThreadDmView,
-  settled?: SettledAskStatus,
+  line?: string,
+  choices: readonly SlackBlock[] = [],
 ): SlackMessageContent {
   const title = clipped(view.title, SLACK_TEXT_BOUND.HEADER);
   const words = clipped(linkLabels(view.text).trim(), SLACK_TEXT_BOUND.SECTION);
-  const line = settled === undefined ? undefined : SETTLED_LINE[settled];
   const blocks: SlackBlock[] = [
     { type: "header", text: { type: "plain_text", text: title } },
     ...(words === "" ? [] : [{ type: "section", text: { type: "plain_text", text: words } }]),
@@ -113,6 +163,7 @@ function threadDmContent(
     {
       type: "actions",
       elements: [
+        ...choices,
         {
           type: "button",
           text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
@@ -144,14 +195,24 @@ const findOpenItem = SqlSchema.findOneOption({
     ),
 });
 
-/** What an item's DMs are drawn with beside a message's words: its title, its agent, and its workspace's slug, which its links are written under. */
+/** What an item's DMs are drawn with beside a message's words: its title, its agent, and its workspace, by id and by the slug its links are written under. */
 const findItemPlace = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ title: Schema.String, agentId: Schema.String, step: Schema.String }),
+  Result: Schema.Struct({
+    title: Schema.String,
+    agentId: Schema.String,
+    organizationId: Schema.String,
+    step: Schema.String,
+  }),
   execute: (itemId) =>
     Database.use((db) =>
       db
-        .select({ title: inboxItem.title, agentId: inboxItem.agentId, step: organization.slug })
+        .select({
+          title: inboxItem.title,
+          agentId: inboxItem.agentId,
+          organizationId: inboxItem.organizationId,
+          step: organization.slug,
+        })
         .from(inboxItem)
         .innerJoin(organization, eq(organization.id, inboxItem.organizationId))
         .where(eq(inboxItem.id, itemId)),
@@ -178,6 +239,7 @@ const recordDm = SqlSchema.void({
 const claimSettledDms = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
+    id: Schema.String,
     dm: SlackDmSchema,
     text: Schema.String,
     status: Schema.Literals(SETTLED_STATUSES),
@@ -201,6 +263,7 @@ const claimSettledDms = SqlSchema.findAll({
         .from(settled)
         .where(and(eq(inboxMessage.id, settled.id), isNotNull(inboxMessage.slackDm)))
         .returning({
+          id: inboxMessage.id,
           dm: settled.dm,
           text: inboxMessage.text,
           status: sql<string>`${inboxMessage.ask} ->> 'status'`,
@@ -221,13 +284,59 @@ export function threadStandsOpen(
   return Effect.map(findOpenItem({ ...agent, key }), Option.isSome);
 }
 
+/** The workspace an item is in, which a press from Slack finds its member under; nothing for an item that is gone. */
+export function itemWorkspace(
+  itemId: string,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    findItemPlace(itemId),
+    Option.map((place) => place.organizationId),
+  );
+}
+
+/**
+ * Rewrites one DM the bot wrote about the item's message to say the line
+ * given in its buttons' place, as a press on an ask already settled is
+ * told; nothing where the runtime holds no bot or the item is gone.
+ */
+export function rewriteThreadDm(
+  dm: SlackMessage,
+  itemId: string,
+  message: { readonly text: string },
+  line: string,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const bot = yield* Effect.serviceOption(SlackBot);
+    if (Option.isNone(bot) || !bot.value.configured) return;
+    const place = yield* findItemPlace(itemId);
+    if (Option.isNone(place)) return;
+    const view = {
+      title: place.value.title,
+      text: message.text,
+      link: threadLink(itemId, place.value),
+    };
+    yield* bot.value.update(dm.channel, dm.ts, threadDmContent(view, line));
+  });
+}
+
+/** Where the ask a press named stands, as its DM says it: settled as the line says, or no longer the thread's open ask. */
+export function settledLine(
+  status: (typeof INBOX_ASK_STATUS)[keyof typeof INBOX_ASK_STATUS] | undefined,
+): string {
+  return status === undefined || status === INBOX_ASK_STATUS.OPEN
+    ? `No longer open in ${PRODUCT_NAME}`
+    : SETTLED_LINE[status];
+}
+
 /**
  * Rewrites every DM of the item whose ask has settled to say where it
  * stands, as `threadDmContent` draws it, and forgets it; nothing where the
- * runtime holds no bot.
+ * runtime holds no bot. The message `chosen` names, the one a press from
+ * Slack answered, says its own line instead, the option chosen.
  */
 export function settleThreadDms(
   itemId: string,
+  chosen?: { readonly messageId: string; readonly line: string },
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const bot = yield* Effect.serviceOption(SlackBot);
@@ -240,8 +349,15 @@ export function settleThreadDms(
     const link = threadLink(itemId, place.value);
     yield* Effect.forEach(
       claimed,
-      ({ dm, text, status }) =>
-        bot.value.update(dm.channel, dm.ts, threadDmContent({ title, text, link }, status)),
+      ({ id, dm, text, status }) =>
+        bot.value.update(
+          dm.channel,
+          dm.ts,
+          threadDmContent(
+            { title, text, link },
+            id === chosen?.messageId ? chosen.line : SETTLED_LINE[status],
+          ),
+        ),
       { discard: true },
     );
   });
@@ -270,7 +386,8 @@ export function dmThreadPost(
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
     const view = { title: item.title, text: message.text, link: threadLink(item.id, place.value) };
-    const sent = yield* bot.value.dm(organizationId, recipient, threadDmContent(view));
+    const content = threadDmContent(view, undefined, choiceButtons(item.id, message));
+    const sent = yield* bot.value.dm(organizationId, recipient, content);
     if (Option.isSome(sent)) yield* recordDm({ messageId: message.id, dm: sent.value });
   });
 }

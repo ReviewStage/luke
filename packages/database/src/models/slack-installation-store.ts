@@ -14,7 +14,8 @@ import type { TaskStoreEffect } from "./task-store.js";
  * standing, so no member's id from the old team is kept. Disconnecting
  * deletes it, and every member's id with it. A member's id is read only
  * through the installation it was looked up under, and is kept as found or
- * as a miss (`slackUserId` null). Whether a member is written at all is
+ * as a miss (`slackUserId` null), and a press in Slack finds its member
+ * back by that id under the team connected. Whether a member is written at all is
  * their own switch (`account_preference.slack_notifications`), on until they
  * turn it off, in every workspace alike. Whether the account may connect or
  * disconnect is the caller's to check. Every function is an effect over the
@@ -154,6 +155,34 @@ const findMember = SqlSchema.findOneOption({
     ),
 });
 
+/** The member whose kept Slack id in the workspace is the one given, where the workspace's bot stands connected to the team given. */
+const findMemberBySlackId = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    teamId: Schema.String,
+    slackUserId: Schema.String,
+  }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: ({ organizationId, teamId, slackUserId }) =>
+    Database.use((db) =>
+      db
+        .select({ userId: slackMember.userId })
+        .from(slackMember)
+        .innerJoin(
+          slackInstallation,
+          eq(slackInstallation.organizationId, slackMember.organizationId),
+        )
+        .where(
+          and(
+            eq(slackMember.organizationId, organizationId),
+            eq(slackInstallation.teamId, teamId),
+            eq(slackMember.slackUserId, slackUserId),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 /** A lookup kept, found or missed; the workspace's installation must stand, since the row is keyed under it. */
 const upsertMember = SqlSchema.void({
   Request: Schema.Struct({
@@ -209,6 +238,24 @@ export function slackMemberLookup(
   userId: string,
 ): TaskStoreEffect<Option.Option<SlackMemberLookup>> {
   return findMember({ organizationId, userId });
+}
+
+/**
+ * The member of the workspace a Slack user of its connected team is, as
+ * the bot's lookups kept them; nothing where the team is not the one
+ * connected, or no member was found as that user. Note that only a member
+ * the bot has written is known, which is every member a DM's button can
+ * reach.
+ */
+export function slackMemberOf(
+  organizationId: string,
+  teamId: string,
+  slackUserId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findMemberBySlackId({ organizationId, teamId, slackUserId }),
+    Option.map((row) => row.userId),
+  );
 }
 
 /** Keeps what a lookup found for the member, or null for a miss; fails where the workspace holds no installation. */

@@ -10,6 +10,7 @@ import {
   linkSlackInstallation,
   recordSlackMemberLookup,
   slackMemberLookup,
+  slackMemberOf,
   workspaceSlackInstallation,
 } from "../slack-installation-store.js";
 
@@ -65,6 +66,9 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
         Option.some("U0001"),
       );
       assert.equal(Option.isNone(yield* slackMemberLookup(theirs, member)), true);
+      assert.deepEqual(yield* slackMemberOf(ours, "T0001", "U0001"), Option.some(member));
+      assert.equal(Option.isNone(yield* slackMemberOf(theirs, "T0001", "U0001")), true);
+      assert.equal(Option.isNone(yield* slackMemberOf(ours, "T0002", "U0001")), true);
       assert.equal(yield* deleteSlackInstallation(theirs), false);
       assert.equal(Option.isSome(yield* workspaceSlackInstallation(ours)), true);
     }),
