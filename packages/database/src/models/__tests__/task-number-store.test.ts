@@ -8,6 +8,7 @@ import { organization, user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { taskIdOfNumber } from "../task-number-store.js";
 import { createTask, updateTask } from "../task-store.js";
+import { setWorkspaceSlug } from "../workspace-slug-store.js";
 
 /**
  * A task found by its workspace's slug and its number, as a link
@@ -37,7 +38,7 @@ const slugOf = (organizationId: string) =>
 
 it.layer(getTestDB())("a task found by its number", (it) => {
   it.effect(
-    "a member finds the task its number names under the workspace's slug or id, and another account, or a number naming no task, finds nothing",
+    "a member finds the task its number names under the workspace's slug, a former one, or its id, and another account, or a number naming no task, finds nothing",
     () =>
       Effect.gen(function* () {
         const dean = yield* openAccount;
@@ -55,6 +56,9 @@ it.layer(getTestDB())("a task found by its number", (it) => {
         assert.deepEqual(yield* taskIdOfNumber(stranger, slug, 2), Option.none());
         assert.deepEqual(yield* taskIdOfNumber(stranger, workspace, 2), Option.none());
         assert.deepEqual(yield* taskIdOfNumber(dean, slug, 3), Option.none());
+        // A link written under the slug the workspace stood under before still finds it.
+        yield* setWorkspaceSlug(workspace, `renamed-${workspace}`);
+        assert.deepEqual(yield* taskIdOfNumber(charles, slug, 2), Option.some(sidebar.id));
       }),
   );
 

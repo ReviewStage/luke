@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { member, organization } from "../schemas/auth.js";
 import { task, taskNumberForward } from "../schemas/task.js";
 import {
   isWorkspaceMember,
   taskReachableBy,
   type WorkspaceStoreEffect,
 } from "./workspace-store.js";
+import { workspaceIdOfSlug } from "./workspace-slug-store.js";
 
 /**
  * task-number-store.ts -- a task found by its number in a workspace, as a link `/<slug>/task/<number>` names it, and the numbers a task left behind as it moved.
@@ -18,8 +18,8 @@ import {
  * good: the task holding it now, or else the task that held it before it
  * moved to another workspace (`task_number_forward`), written as it moves.
  * Either is answered only to an account that reaches the task where it
- * stands now, and the workspace is found by its slug, or its id, only for
- * a member of it, so a number another account's workspace holds, one
+ * stands now, and the workspace is found by its slug, current or former
+ * (`workspace-slug-store.ts`), or its id, only for a member of it, so a number another account's workspace holds, one
  * naming no task, and a slug naming no workspace of the reader's all
  * answer as nothing.
  */
@@ -33,40 +33,9 @@ const TaskNumberSchema = Schema.Struct({
 const TaskIdSchema = Schema.Struct({ id: Schema.String });
 
 /**
- * The workspace a slug names to the account, of those it is a member of.
- *
- * Note that this reads the current slug alone, standing in for the
- * workspace slug resolver (`workspaceIdOfSlug`) that reads former slugs
- * too, which this is swapped for once it lands.
- */
-const findMemberWorkspaceOfSlug = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, slug: Schema.String }),
-  Result: TaskIdSchema,
-  execute: ({ userId, slug }) =>
-    Database.use((db) =>
-      db
-        .select({ id: organization.id })
-        .from(organization)
-        .innerJoin(member, eq(member.organizationId, organization.id))
-        .where(and(eq(organization.slug, slug), eq(member.userId, userId)))
-        .limit(1),
-    ),
-});
-
-function workspaceIdOfSlug(
-  userId: string,
-  slug: string,
-): WorkspaceStoreEffect<Option.Option<string>> {
-  return Effect.map(
-    findMemberWorkspaceOfSlug({ userId, slug }),
-    Option.map((row) => row.id),
-  );
-}
-
-/**
- * The workspace a link's step names to the account: by its slug, or else
- * by its id, as a link written before its slug was known spells it; only
- * one it is a member of.
+ * The workspace a link's step names to the account: by its slug, as the
+ * one slug resolver reads it, or else by its id, as a link written before
+ * its slug was known spells it; only one it is a member of.
  */
 function memberWorkspaceOfStep(
   userId: string,
