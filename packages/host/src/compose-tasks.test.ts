@@ -659,6 +659,11 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }).pipe(Effect.tap(() => service.renameAnswered)),
+      setSlug: (workspaceId, slug) =>
+        Effect.sync(() => {
+          service.reads.push(`slugSet:${workspaceId}:${slug}`);
+          return UNANSWERED_WORKSPACE;
+        }),
       // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {

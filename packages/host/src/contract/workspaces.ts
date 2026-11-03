@@ -19,6 +19,7 @@ import {
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
   tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
@@ -169,6 +170,11 @@ export const workspaceActsContract = {
     "Could not change that workspace's photo on this system.",
   )
     .input(exactInput(tasksWorkspacePhotoSetParamsSchema))
+    .output(answersWorkspace),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: actProcedure(
+    "Could not change that workspace's link on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSlugSetParamsSchema))
     .output(answersWorkspace),
   [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actProcedure(
     "Could not read that workspace's repositories on this system.",

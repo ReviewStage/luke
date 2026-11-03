@@ -382,6 +382,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Rename workspace", "rename name change workspace photo"],
         }
       : undefined,
+    // The workspace's link, which its owner alone changes on the row under its identity.
+    input.workspace?.role === WORKSPACE_ROLE.OWNER
+      ? {
+          id: SETTINGS_SEARCH_ROW.WORKSPACE_SLUG,
+          label: "Workspace link",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Workspace link", "link slug address url change workspace"],
+        }
+      : undefined,
     // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.
     input.workspace
       ? {

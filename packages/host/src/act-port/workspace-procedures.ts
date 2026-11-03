@@ -22,6 +22,7 @@ import type {
   TasksWorkspaceSentryDisconnectParams,
   TasksWorkspaceSlackBotAnswer,
   TasksWorkspaceSlackBotNotificationsParams,
+  TasksWorkspaceSlugSetParams,
   TasksWorkspaceTokenRepositoriesAnswer,
   TasksWorkspaceTokenRepositoriesParams,
   TasksWorkspaceTokenRepositorySetParams,
@@ -30,11 +31,13 @@ import type {
   WorkspacePeopleFollow,
   WorkspacePeopleFollowed,
 } from "@repo/features/tasks-view";
+import { WORKSPACE_SLUG_PROBLEM } from "@repo/features/workspace-wire";
 import { Effect, Option, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
+  WORKSPACE_SLUG_REFUSAL,
 } from "../acts.js";
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -60,6 +63,7 @@ export interface WorkspaceProceduresDependencies {
     workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
+    workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
@@ -144,6 +148,18 @@ function refusedWorkspace<E>(refused: Refused<E>, failure: WorkspaceCallFailure)
       return Effect.fail(refused({ message: WORKSPACE_NOT_PERMITTED_REFUSAL }));
     case WORKSPACE_CALL_FAILURE.ALREADY_INVITED:
       return Effect.fail(refused({ message: ALREADY_INVITED_REFUSAL }));
+    case WORKSPACE_CALL_FAILURE.SLUG_MALFORMED:
+      return Effect.fail(
+        refused({ message: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.MALFORMED] }),
+      );
+    case WORKSPACE_CALL_FAILURE.SLUG_RESERVED:
+      return Effect.fail(
+        refused({ message: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.RESERVED] }),
+      );
+    case WORKSPACE_CALL_FAILURE.SLUG_TAKEN:
+      return Effect.fail(
+        refused({ message: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN] }),
+      );
     default:
       return Effect.fail(refused());
   }
@@ -216,6 +232,14 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       if ("workspace" in answer) return answer.workspace;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const answer = yield* host.workspaceSlugSet(input);
+        if ("workspace" in answer) return answer.workspace;
+        return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+      },
+    ),
     [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ
     ].effect(function* ({ input, context, errors }) {

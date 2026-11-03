@@ -41,13 +41,17 @@ import { workspaceIdSchema } from "./task-wire.js";
  * owner alone makes a member an admin or an admin a member, and removes an
  * admin; an admin removes a member alone. Nobody changes or removes
  * themselves, whose way out is leaving, or the owner. A rename moves the
- * name alone: the slug stays the one the workspace was made under.
+ * name alone: the slug stays the one the workspace was made under, until the
+ * owner, and the owner alone, changes it.
  *
  * A workspace's slug is the first step of our links' paths
  * (`https://vespin.dev/<slug>/task/<id>`, `mention-link.ts`), so no workspace
  * takes one our own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
  * slug only reads well; a link is found by the task's id alone, so a slug
- * spelled differently later breaks no link written under the old one.
+ * the owner changes breaks no link written under the old one, and links
+ * written after it are written under the new. A slug the owner chooses is
+ * held to the rules a slug spelled from a name keeps
+ * (`workspaceSlugProblemOf`), and to no other workspace's, whatever its case.
  *
  * A workspace may show a photo an owner or admin uploaded, served to its
  * members alone at `GET /api/workspaces/<id>/photo` as its bytes; the list
@@ -161,7 +165,42 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
 export const WORKSPACE_BOUNDS = {
   /** The most characters a workspace's name may spell, after its ends are trimmed. */
   MAX_NAME_CHARS: 64,
+  /** The most characters a slug spelled from a name, or chosen by an owner, may hold. */
+  MAX_SLUG_CHARS: 48,
 } as const;
+
+/** The opening of the slug an account's first workspace falls back to, `personal-<id>`, which no other slug takes. */
+export const PERSONAL_WORKSPACE_SLUG_PREFIX = "personal-";
+
+/** A slug's shape: runs of lowercase letters and digits, one hyphen between each run and the next. */
+const WORKSPACE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+/** Why a slug an owner chose was refused. */
+export const WORKSPACE_SLUG_PROBLEM = {
+  /** Something other than lowercase letters, digits, and single hyphens between them, or none, or more than `WORKSPACE_BOUNDS.MAX_SLUG_CHARS`. */
+  MALFORMED: "malformed",
+  /** One of `RESERVED_WORKSPACE_SLUGS`, or one opening `PERSONAL_WORKSPACE_SLUG_PREFIX`. */
+  RESERVED: "reserved",
+  /** Another workspace's, whatever its case. */
+  TAKEN: "taken",
+} as const;
+
+export type WorkspaceSlugProblem =
+  (typeof WORKSPACE_SLUG_PROBLEM)[keyof typeof WORKSPACE_SLUG_PROBLEM];
+
+/**
+ * What is wrong with a slug by its spelling alone, or nothing: the window
+ * says it as it is typed, and the service refuses it on the same reading.
+ * Whether another workspace holds it only the service knows.
+ */
+export function workspaceSlugProblemOf(slug: string): WorkspaceSlugProblem | undefined {
+  if (slug.length > WORKSPACE_BOUNDS.MAX_SLUG_CHARS || !WORKSPACE_SLUG_PATTERN.test(slug)) {
+    return WORKSPACE_SLUG_PROBLEM.MALFORMED;
+  }
+  const reserved =
+    RESERVED_WORKSPACE_SLUGS.has(slug) || slug.startsWith(PERSONAL_WORKSPACE_SLUG_PREFIX);
+  return reserved ? WORKSPACE_SLUG_PROBLEM.RESERVED : undefined;
+}
 
 /**
  * The image types a workspace's photo may be: a picture's (`picture-wire.ts`),
@@ -235,6 +274,12 @@ export const workspaceSchema = EffectSchema.Struct({
    * past, since a link is found by its task's id alone.
    */
   slug: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The slugs it stood under before its owner changed it, which stay its
+   * own, so a link written under one still names it (`workspaceOfSlug`);
+   * absent where it never changed, and from a service before slugs could.
+   */
+  formerSlugs: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
   /** The GitHub account of its first-linked installation still active, else its first-linked, or null where none is connected: what a desktop from before several installations reads. */
   github: EffectSchema.NullOr(workspaceGithubSchema),
@@ -271,6 +316,33 @@ export const workspaceSchema = EffectSchema.Struct({
 
 export type Workspace = typeof workspaceSchema.Type;
 
+/**
+ * The workspace a link's first step names among the reader's own: the one
+ * it names by id, else the one that stands under it as its slug now, else
+ * the one that stood under it before, a slug read whatever its case; nothing
+ * where none of them does. The one reading of a link's workspace every
+ * reader goes through, since a slug alone names a workspace in a link no
+ * task's id pins, and only the reader's own workspaces are ever handed in,
+ * so a link names no workspace its reader is not a member of.
+ */
+export function workspaceOfSlug<Listed extends Pick<Workspace, "id" | "slug" | "formerSlugs">>(
+  workspaces: readonly Listed[],
+  step: string,
+): Listed | undefined {
+  const asked = step.toLowerCase();
+  return (
+    workspaces.find((one) => one.id === step) ??
+    workspaces.find((one) => one.slug?.toLowerCase() === asked) ??
+    workspaces.find((one) => one.formerSlugs?.some((former) => former.toLowerCase() === asked))
+  );
+}
+
+/** The slugs a workspace stood under before, as `formerSlugs` carries them: the text a row spells them in, a space between each, read as a list, and absent for none. */
+export function formerSlugsOf(spelled: string): Pick<Workspace, "formerSlugs"> {
+  const formerSlugs = spelled.split(" ").filter((slug) => slug !== "");
+  return formerSlugs.length === 0 ? {} : { formerSlugs };
+}
+
 /** The account's workspaces, its first one first and the rest by name (GET). */
 export const workspacesAnswerSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
@@ -291,6 +363,16 @@ export const workspaceCreateRequestSchema = EffectSchema.Struct({
 export const workspaceRenameRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: workspaceCreateRequestSchema.fields.name,
+});
+
+/**
+ * A workspace's slug changed (POST) by its owner alone: the workspace, and
+ * the slug as typed, which the service reads by `workspaceSlugProblemOf`
+ * itself so a refusal names why; answered with the workspace.
+ */
+export const workspaceSlugSetRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  slug: EffectSchema.String,
 });
 
 /** A workspace's photo set or removed (POST) by an owner or admin of it: the photo as a `data:` URL, or null to remove it; answered with the workspace. */

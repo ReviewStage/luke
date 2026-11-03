@@ -8,6 +8,7 @@ import {
   type WorkspaceInvitation,
 } from "./workspace-invitation-wire.js";
 import {
+  formerSlugsOf,
   roleOf,
   WORKSPACE_ROLE,
   type Workspace,
@@ -59,6 +60,8 @@ const workspaceLiveRowSchema = EffectSchema.Struct({
   photoVersion: EffectSchema.NullOr(EffectSchema.String),
   /** The reader's own sign-in picture on their own first workspace, else null. */
   ownerImage: EffectSchema.NullOr(EffectSchema.String),
+  /** The slugs it stood under before, a space between each, empty for none; absent from a service before slugs could change. */
+  formerSlugs: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /** One installation connected to a workspace the reader is a member of, as its row delivers it. */
@@ -107,6 +110,7 @@ function workspaceOfLiveRow(
     github: first === undefined ? null : { login: first.login, active: first.active },
     githubInstallations,
     memberCount: row.memberCount,
+    ...formerSlugsOf(row.formerSlugs ?? ""),
     ...(row.photoVersion === null ? undefined : { photoVersion: row.photoVersion }),
     ...(pictureUrl === undefined ? undefined : { pictureUrl }),
     ...(row.personal ? { personal: true } : undefined),

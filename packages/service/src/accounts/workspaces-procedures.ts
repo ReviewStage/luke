@@ -1,5 +1,5 @@
 /**
- * workspaces-procedures.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, and its members read, removed, given a role, or left.
+ * workspaces-procedures.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a slug or a photo, or handed over, and its members read, removed, given a role, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -24,6 +24,11 @@
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug; an account's first
  * workspace is refused, since it is named by its owner's account name.
+ * `POST /api/workspaces/slug/set` lets the owner alone change the slug, an
+ * account's first workspace's among them, refusing one spelled other than a
+ * slug may be, one reserved, and one another workspace holds or held, each
+ * by its own word; the slug it stood under stays its own
+ * (`workspace-slug-store.ts`), and it is answered under the new one.
  * `POST /api/workspaces/photo/set` lets an owner or admin set the photo, as
  * a `data:` URL of a photo's type within its bound, or remove it with null,
  * answering the workspace with its photo's new version or none. The photo's
@@ -35,7 +40,8 @@
  * (https://www.better-auth.com/docs/plugins/organization#remove-member),
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; the list, a
- * workspace created, and the members read take the Mac's OAuth token.
+ * workspace created, its slug changed, and the members read take the Mac's
+ * OAuth token.
  * Our own rules stand in front of the plugin's, which checks the caller's
  * role and membership again itself.
  *
@@ -46,6 +52,7 @@
 
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
+import { setWorkspaceSlug } from "@repo/database/models/workspace-slug-store";
 import {
   createWorkspace,
   ensurePersonalWorkspace,
@@ -55,7 +62,10 @@ import {
 import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_ROLE,
+  WORKSPACE_SLUG_PROBLEM,
   type WorkspaceRole,
+  type WorkspaceSlugProblem,
+  workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
 import {
@@ -82,6 +92,13 @@ const HEIR_ROLES: ReadonlySet<WorkspaceRole> = new Set([
   WORKSPACE_ROLE.ADMIN,
   WORKSPACE_ROLE.OWNER,
 ]);
+
+/** The refusal each reason a slug is refused for is answered with. */
+const SLUG_REFUSAL = {
+  [WORKSPACE_SLUG_PROBLEM.MALFORMED]: HOSTED_REFUSAL.WORKSPACE_SLUG_MALFORMED,
+  [WORKSPACE_SLUG_PROBLEM.RESERVED]: HOSTED_REFUSAL.WORKSPACE_SLUG_RESERVED,
+  [WORKSPACE_SLUG_PROBLEM.TAKEN]: HOSTED_REFUSAL.WORKSPACE_SLUG_TAKEN,
+} as const satisfies Record<WorkspaceSlugProblem, HostedRefusal>;
 
 /** The roles each role removes: the owner an admin or a member, an admin a member alone. */
 const REMOVABLE_BY: ReadonlyMap<WorkspaceRole, ReadonlySet<WorkspaceRole>> = new Map([
@@ -166,7 +183,7 @@ function memberChanged(userId: string, workspaceId: string, action: ServerWorksp
   );
 }
 
-/** The workspaces resource: the list, a workspace created, and its members read under the OAuth token; every other write under the Mac's session. */
+/** The workspaces resource: the list, a workspace created, its slug changed, and its members read under the OAuth token; every other write under the Mac's session. */
 export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
   const account = hosted.workspaces.use(accountMiddleware(seams.resolveUserId));
   const session = hosted.workspaces.use(sessionMiddleware(seams.resolveSessionUserId));
@@ -289,6 +306,26 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       );
       yield* workspaceRenamed(userId, workspace.id);
       yield* memberChanged(userId, workspace.id, SERVER_WORKSPACE_MEMBER_ACTION.RENAME);
+      return { workspace: yield* answeredWorkspace(userId, workspace.id) };
+    }),
+    /**
+     * Note that the slug is written by the store rather than the plugin,
+     * because the slug it leaves is kept as the workspace's in the same
+     * transaction, and the owner alone may change it, which our rule holds.
+     */
+    setSlug: account.setSlug.effect(function* ({ context, input }) {
+      const { userId } = context;
+      const { workspaceId, slug } = input;
+      const workspace = yield* ownedWorkspace(userId, workspaceId);
+      const problem = workspaceSlugProblemOf(slug);
+      if (problem !== undefined) return yield* Effect.fail(SLUG_REFUSAL[problem]);
+      const set = yield* hostedStoreOrUnavailable(
+        setWorkspaceSlug(workspace.id, slug).pipe(
+          Effect.as(true),
+          Effect.catchTag("WorkspaceSlugTaken", () => Effect.succeed(false)),
+        ),
+      );
+      if (!set) return yield* Effect.fail(SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN]);
       return { workspace: yield* answeredWorkspace(userId, workspace.id) };
     }),
     /**

@@ -25,6 +25,7 @@ import {
   workspaceMembersAnswerSchema,
   workspacePhotoSetRequestSchema,
   workspaceRenameRequestSchema,
+  workspaceSlugSetRequestSchema,
   workspacesAnswerSchema,
   workspaceTransferSchema,
 } from "../workspace-wire.js";
@@ -68,6 +69,11 @@ export const workspacesContract = {
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_RENAME }))
     .input(exactInput(workspaceRenameRequestSchema))
+    .output(EffectSchema.flip(workspaceAnswerSchema)),
+  setSlug: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET }))
+    .input(exactInput(workspaceSlugSetRequestSchema))
     .output(EffectSchema.flip(workspaceAnswerSchema)),
   setPhoto: hostedProcedure
     .meta(bodyCap(PHOTO_BODY_BYTES))

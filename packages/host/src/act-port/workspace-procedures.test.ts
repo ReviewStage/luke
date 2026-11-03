@@ -100,6 +100,7 @@ const REFUSAL = {
     "Could not read that workspace's photo on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]:
     "Could not change that workspace's photo on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: "Could not change that workspace's link on this system.",
 } as const;
 
 type WorkspaceKind = keyof typeof REFUSAL;
@@ -138,6 +139,7 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...WORKSPACE, photo: null } },
+  { kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET, payload: { ...WORKSPACE, slug: "acme-labs" } },
 ];
 
 /** What the fake host answers, set by each test before it asks. */
@@ -203,6 +205,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceRename: (params) =>
       ask(`rename:${params.workspaceId}:${params.name}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
+      ),
+    workspaceSlugSet: (params) =>
+      ask(`slugSet:${params.workspaceId}:${params.slug}`, () =>
+        script.notPermitted ? refusal() : { workspace: { ...ACME, slug: params.slug } },
       ),
     workspacePhotoSet: (params) =>
       ask(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`, () => {

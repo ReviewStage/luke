@@ -208,6 +208,14 @@ an owner or an admin rename a workspace, answering `{ workspace }` under its
 new name and the slug it already had, but for an account's first workspace,
 which the list marks `personal` to every member of it and whose rename is
 refused as `not-permitted`, because it is named by its owner's account name, and
+`POST /api/workspaces/slug/set { workspaceId, slug }` lets the owner alone
+change its slug, under the Mac's OAuth token, answering `{ workspace }` under
+the new one, and refusing a slug spelled otherwise as
+`workspace-slug-malformed`, one of `RESERVED_WORKSPACE_SLUGS` or opening
+`personal-` as `workspace-slug-reserved`, and one another workspace stands
+or stood under, whatever its case, as `workspace-slug-taken`; the slug it
+leaves stays the workspace's (`workspace-slug-store.ts`), so a link written
+under it still names it, and
 `POST /api/workspaces/photo/set { workspaceId, photo }` lets an owner or an
 admin set its photo, a `data:` URL of a PNG, JPEG, or WebP of at most
 `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES` decoded, or remove it with `null`,

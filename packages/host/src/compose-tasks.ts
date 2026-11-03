@@ -115,6 +115,7 @@ import {
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
   tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
@@ -363,6 +364,7 @@ export type TasksClient = Pick<
     | "live"
     | "create"
     | "rename"
+    | "setSlug"
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
@@ -2663,6 +2665,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, name } = read;
         return carried<TasksWorkspaceAnswer>(
           yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
+        );
+      }),
+    // A slug moves no task either: links resolve by id, or by a former
+    // slug the workspace keeps, so the answered workspace lands as a
+    // rename's does.
+    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlugSetParamsSchema,
+          params,
+          "changing a workspace's slug names it and its new slug",
+        );
+        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, slug } = read;
+        return carried<TasksWorkspaceAnswer>(
+          yield* workspaceWrite(client.workspaces.setSlug(workspaceId, slug)),
         );
       }),
     // A photo moves no task either, so it is a rename's twin: the answered

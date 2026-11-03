@@ -54,7 +54,7 @@ import {
   type TasksView,
 } from "@repo/features/tasks-view";
 import { managesWorkspace } from "@repo/features/workspace-role";
-import type { Workspace } from "@repo/features/workspace-wire";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppInboxAgentHolding,
@@ -2840,9 +2840,9 @@ export function useTasksTab(input: {
     return open?.changes ?? agentId;
   };
 
-  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
+  // A link's workspace, by its id, its slug, or a slug it stood under before, listed where the account is in it and another is listed; answers the workspace listed after it.
   const listLinked = (workspace: string): string | undefined => {
-    const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
+    const home = workspaceOfSlug(viewed.workspaces, workspace);
     if (home !== undefined && home.id !== listedWorkspace?.id) chooseListed(home.id);
     return home?.id ?? listedWorkspace?.id;
   };
@@ -3078,9 +3078,7 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.PERSON: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
-        const home = viewed.workspaces.find(
-          (each) => each.slug === workspace || each.id === workspace,
-        );
+        const home = workspaceOfSlug(viewed.workspaces, workspace);
         listLinked(workspace);
         standInFor({
           kind: STAND_IN.PERSON,
