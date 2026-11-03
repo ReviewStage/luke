@@ -173,7 +173,6 @@ import {
   type AddEntry,
   AddTabButton,
   AddTabSkeleton,
-  type DocumentMenu,
   DoorsTab,
   entryRow,
   HandTabActionsContext,
@@ -223,11 +222,7 @@ interface StripActivity {
  * was, and the "+" opens its tab again; closing a draft's lets the draft
  * go, nothing of it having been started. Every tab's right-click offers
  * Close and Close others, the Inbox's, the Comments', an agent's, and a
- * file's Pin to the sidebar, and a transcript's tab its two copies. The Plan
- * tab shows the task, so its ⋯ in the bar and its right-click offer the
- * task's own document menu, handed in whole (`planMenu`): the task's Pin
- * stands there in a Pin tab's place, since the tab that shows the task is
- * what stands for it in the sidebar. Where a delegated
+ * file's Pin to the sidebar, and a transcript's tab its two copies. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
  * otherwise. What an agent's or a delegated worker's tab last drew is kept
@@ -795,7 +790,7 @@ export function panelOffers(input: {
   viewedAgent: string | undefined;
   /** The tabs the holder's agents' cloud browsers hold, each offered to open in the strip; none where the caller reads none. */
   listedBrowsers?: readonly ListedCloudBrowser[] | undefined;
-  plan: PlanStanding | undefined;
+  plan?: PlanStanding | undefined;
   cards: PanelCards;
 }): AddEntry[] {
   const { holder, taskId, panel, agents, onNewTerminal, cards } = input;
@@ -842,17 +837,6 @@ export function panelOffers(input: {
 /** A tab's card as a hover hangs it (`tab-card.tsx`): none for a kind that hangs none, when the hover hangs its hint. */
 function hungCard(subject: CardSubject): ReactNode {
   return tabCard(subject) ?? undefined;
-}
-
-/** The task the panel stands beside, as its Plan tab's card reads it; none where the panel knows no task. */
-function planOf(input: {
-  planId: string | undefined;
-  plan: PlanStanding | undefined;
-}): { taskId: string; standing: PlanStanding } | undefined {
-  const { planId, plan } = input;
-  return planId === undefined || plan === undefined
-    ? undefined
-    : { taskId: planId, standing: plan };
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
@@ -925,10 +909,6 @@ function stripTabs(input: {
   shownAgent: string | undefined;
   /** The open plan, or the agent on no task, whose pages a page tab's card previews, and whose panel a closed cloud Browser draft leaves. */
   pagePlace: PagePlace;
-  /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
-  plan: PlanStanding | undefined;
-  /** The task's id, whose card its Plan tab hangs; none beside an agent's own page. */
-  planId: string | undefined;
   /** Whether the Inbox kind holds a channel's thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
 }): DrawnTab[] {
@@ -948,8 +928,8 @@ function stripTabs(input: {
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
-      ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan, thread: input.thread }),
-      card: hungCard({ kind: TAB_KIND.PANEL, tab, plan: planOf(input) }),
+      ...tabLook({ kind: TAB_KIND.PANEL, tab, thread: input.thread }),
+      card: hungCard({ kind: TAB_KIND.PANEL, tab }),
     }),
     close: () => panel.onClose(tab),
   }));
@@ -1143,7 +1123,6 @@ function PanelTabs({
   holder,
   taskId,
   pinOn,
-  task,
   keys,
   unread,
   agents,
@@ -1157,7 +1136,6 @@ function PanelTabs({
   held,
   actionsSlot,
   handed,
-  planMenu,
   onOpenAgent,
   shownAgent,
   activity,
@@ -1174,8 +1152,6 @@ function PanelTabs({
   pagePlace: PagePlace;
   /** What an agent's page's tab is pinned on; none where it offers no pin. */
   pinOn: PinHolder | undefined;
-  /** The task's name and status, which its Plan tab wears; none where they are not known. */
-  task: PlanStanding | undefined;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
   keys: boolean;
   unread: readonly StripTab[];
@@ -1200,8 +1176,6 @@ function PanelTabs({
   actionsSlot: HTMLElement | null;
   /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
   handed: HandedTabActions | undefined;
-  /** The task's document menu, which its Plan tab's ⋯ and right-click draw; none beside anything but a task's page. */
-  planMenu: DocumentMenu | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
@@ -1231,8 +1205,6 @@ function PanelTabs({
     onOpenAgent,
     shownAgent,
     pagePlace,
-    plan: task,
-    planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     // Note that beside the window's Inbox the one Inbox tab is a channel's thread, never a task's Inbox (`use-side-panel.ts`'s `thread`).
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
   });
@@ -1273,7 +1245,6 @@ function PanelTabs({
       ? handedCommand(handed.actions, APP_COMMAND.OPEN_ON_GITHUB)
       : undefined;
   useAppCommand(APP_COMMAND.OPEN_ON_GITHUB, openOnGitHub, FOCUSED_OFFER);
-  // Note that the Plan tab offers no pin of its own: the task's Pin, in its document menu, is what pins the task to the sidebar.
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
     // A task's page pins on the task; an agent's page pins where the sidebar draws the pin, as its page says; the Inbox's, nowhere.
     const on: PinHolder | undefined =
@@ -1282,7 +1253,7 @@ function PanelTabs({
         : holder === SIDE_PANEL_HOLDER.AGENT
           ? pinOn
           : undefined;
-    if (on === undefined || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab)) return undefined;
+    if (on === undefined || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => sameHolder(pin, on) && sameTab(pin.tab, tab));
     return {
       pinned,
@@ -1291,11 +1262,9 @@ function PanelTabs({
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const { agent } = entry;
-    // The Plan tab's menu is the task's own, Copy link among it, so the tab adds none of its own.
-    const document = entry.tab === SIDE_PANEL_TAB.PLAN ? planMenu : undefined;
     // Note that the Inbox's panel names no tab of its own: an agent's page holds its panel under the agent's id, and names its tabs by it.
     const linked =
-      document !== undefined || holder === SIDE_PANEL_HOLDER.INBOX
+      holder === SIDE_PANEL_HOLDER.INBOX
         ? undefined
         : panelTabPlace(holderPlaceOf(holder, taskId), entry.tab);
     return {
@@ -1313,7 +1282,6 @@ function PanelTabs({
         entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
           ? handed.actions
           : undefined,
-      document,
     };
   };
   return (
@@ -1337,8 +1305,7 @@ function PanelTabs({
               ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
               : entry.look;
           const slot = activity === undefined ? actionsSlot : null;
-          // A phone's header names itself by the plan, and offers the task's menu on its Plan view, so the strip hands it every tab past the plan.
-          const onShown = entry.tab === SIDE_PANEL_TAB.PLAN ? undefined : activity?.onShown;
+          const onShown = activity?.onShown;
           return entry.agent === undefined || transcriptDoors === undefined ? (
             <DoorsTab
               key={tabKey(entry.tab)}
@@ -1378,7 +1345,7 @@ function PanelTabs({
 }
 
 /**
- * A phone's Activity: every tab the panel holds but the plan's, each a row of
+ * A phone's Activity: every tab the panel holds, each a row of
  * its glyph, its name, and what its tab says after it, newest arrivals in
  * the strip's own order, a press showing it across the panel; under them,
  * what the "+" offers, as the empty panel offers it, since a phone draws no
@@ -1394,18 +1361,15 @@ export function ActivityList({
   offers: readonly AddEntry[];
   onListed: (listed: boolean) => void;
 }): React.JSX.Element {
-  const open = strip.filter((entry) => entry.tab !== SIDE_PANEL_TAB.PLAN);
-  // Note that a fixed kind already listed above, or the plan, its own view, is not offered again.
+  // Note that a fixed kind already listed above is not offered again.
   const more = offers.filter(
-    (entry) =>
-      entry.row.section !== undefined ||
-      (entry.row.id !== SIDE_PANEL_TAB.PLAN && !strip.some((each) => each.tab === entry.row.id)),
+    (entry) => entry.row.section !== undefined || !strip.some((each) => each.tab === entry.row.id),
   );
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT}>
       <div className="side-panel-activity flex flex-col gap-section-gap px-column-inset py-row-inset">
-        {open.length === 0 ? (
-          <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
+        {strip.length === 0 ? (
+          <div className="mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Nothing open beside Overview
             </Text>
@@ -1413,7 +1377,7 @@ export function ActivityList({
         ) : (
           // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
           <List label="Activity" density={LIST_DENSITY.DENSE}>
-            {open.map((entry) => (
+            {strip.map((entry) => (
               // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
               <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
                 <ListRow
@@ -1455,7 +1419,7 @@ export function ActivityList({
         {/* Note that the offers stand in one block, so the column's gap between sections never stands between a section's label and its rows. */}
         {more.length === 0 ? null : (
           <div className="side-panel-activity-more flex flex-col">
-            <div className="side-panel-no-tabs-line pb-ui-4 px-row-inset">
+            <div className="pb-ui-4 px-row-inset">
               <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                 Open more
               </Text>
@@ -1841,7 +1805,6 @@ function TabContent({
   shellsList,
   cloudBrowsers,
   cloudDrafts,
-  plan,
   transcript,
   onTabActions,
 }: {
@@ -1894,8 +1857,6 @@ function TabContent({
     readonly onOpened: (draftId: string, tab: AgentBrowserTab) => void;
     readonly onDiscard: (draftId: string) => void;
   };
-  /** The plan's document, drawn by the task's page that holds what it reads (`desktop-tasks.tsx`). */
-  plan: React.ReactNode;
   /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
@@ -2067,27 +2028,19 @@ function TabContent({
     // A tab no delegation started stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
-  switch (tab) {
-    case SIDE_PANEL_TAB.PLAN:
-      // The plan is drawn by the panel itself, mounted across tab switches (`SidePanel`).
-      return <>{plan}</>;
-    case SIDE_PANEL_TAB.INBOX:
-      // The task's Inbox of old stands nowhere, its threads opening in the window's Inbox.
-      return null;
-    case SIDE_PANEL_TAB.COMMENTS:
-      return (
-        <PlanCommentsTab
-          doors={{
-            agents: {
-              control: agents,
-              onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
-            },
-            me: agents.me,
-          }}
-          onShowDocument={() => onOpenTarget({ kind: TOOL_TARGET.PLAN })}
-        />
-      );
-  }
+  // Note that the plan's and the Inbox's kinds of old stand nowhere (`DRAWN_KINDS`), so Comments is the one fixed kind drawn.
+  return tab === SIDE_PANEL_TAB.COMMENTS ? (
+    <PlanCommentsTab
+      doors={{
+        agents: {
+          control: agents,
+          onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+        },
+        me: agents.me,
+      }}
+      onShowDocument={() => onOpenTarget({ kind: TOOL_TARGET.PLAN })}
+    />
+  ) : null;
 }
 
 /**
@@ -2322,9 +2275,6 @@ export function SidePanel({
   focused,
   onOpenTarget,
   banner,
-  plan,
-  planMenu,
-  task,
   transcript,
   transcriptDoors,
   activity: taskActivity,
@@ -2366,12 +2316,6 @@ export function SidePanel({
   onOpenTarget: (target: ToolTarget) => void;
   /** The task's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
   banner?: React.ReactNode;
-  /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
-  plan?: React.ReactNode;
-  /** The task's document menu (`task-actions.tsx`), which its Plan tab's ⋯ and right-click draw; none beside anything but a task's page. */
-  planMenu?: DocumentMenu | undefined;
-  /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
-  task?: PlanStanding | undefined;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
   /** What the agent of a transcript's tab opens on its task, which its menu offers; none where no transcript's tab stands. */
@@ -2585,13 +2529,12 @@ export function SidePanel({
                   ? TAB_WORDS.TERMINAL
                   : isCloudBrowserTab(tab)
                     ? cloudBrowserLabel(tab.cloudBrowser)
-                    : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
+                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // Note that only one tab panel stands at a time, so the one pair of ids serves whichever tab is chosen.
   const tabId = useId();
   const panelId = useId();
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
-  const planShown = !listing && tab === SIDE_PANEL_TAB.PLAN;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
   const offers = panelOffers({
@@ -2605,7 +2548,6 @@ export function SidePanel({
       : undefined,
     viewedAgent,
     listedBrowsers,
-    plan: task,
     cards: {
       agents,
       held: drawnTranscripts,
@@ -2663,10 +2605,8 @@ export function SidePanel({
           wiring={wiring}
           actionsSlot={actionsSlot}
           handed={handed}
-          planMenu={planMenu}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
-          task={task}
           shown={shown}
           transcriptDoors={transcriptDoors}
           activity={
@@ -2690,25 +2630,9 @@ export function SidePanel({
       {/* A panel with nothing to offer but kinds it has never closed stands
             empty, the "+" above offering any; otherwise every tab closed, it
             offers in place all that the "+" offers. */}
-      {/* The plan stays mounted while another tab is shown, hidden, so an
-          edit not yet saved is neither sent on a tab switch nor lost with it,
-          as it stayed in the column before it stood here. */}
-      {plan === undefined ? null : (
-        <FindScope
-          className="side-panel-content"
-          role="tabpanel"
-          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
-          {...(planShown ? { id: panelId, "aria-labelledby": tabId } : {})}
-          hidden={!planShown}
-          active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
-          subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
-        >
-          {plan}
-        </FindScope>
-      )}
       {listing ? (
         <Fill ref={setActivitySlot} className="side-panel-content" />
-      ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
+      ) : tab === undefined ? (
         <Fill className="side-panel-content" />
       ) : (
         // A page's words stand in a sandboxed frame no find of the window
@@ -2760,7 +2684,6 @@ export function SidePanel({
                 shellsList={shellsList}
                 cloudBrowsers={cloudBrowsers}
                 cloudDrafts={cloudDrafts}
-                plan={plan}
                 transcript={transcript}
                 onTabActions={handTabActions}
               />

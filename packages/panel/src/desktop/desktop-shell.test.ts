@@ -988,8 +988,7 @@ test("while the Automations pages are still loading their frame stands the list 
   );
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
-  // The window names the place, in its title bar over the frame where one stands.
-  assert.equal(page.querySelector("h1")?.textContent, "Automations");
+  assert.equal(loading.querySelector("h1")?.textContent, "Automations");
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
   assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);

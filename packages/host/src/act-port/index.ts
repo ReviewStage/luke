@@ -34,10 +34,6 @@ import {
   type MacCommandProceduresDependencies,
   macCommandProcedures,
 } from "./mac-command-procedures.js";
-import {
-  type PullRequestProceduresDependencies,
-  pullRequestProcedures,
-} from "./pull-request-procedures.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
@@ -121,7 +117,6 @@ export interface ActPortDependencies {
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   readonly macCommands: MacCommandProceduresDependencies;
-  readonly pullRequests: PullRequestProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -156,7 +151,6 @@ export function createActPortHandler<Sender>(
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
     ...macCommandProcedures(dependencies.macCommands),
-    ...pullRequestProcedures(dependencies.pullRequests),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...thisMacHostProcedures(dependencies.thisMacHost),

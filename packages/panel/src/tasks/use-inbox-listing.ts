@@ -163,7 +163,7 @@ function useChoiceFirst(
 }
 
 /** What the window's Inbox is narrowed to: a channel, or a task, or neither; never both. */
-export interface InboxNarrowing {
+interface InboxNarrowing {
   readonly channelId?: string | undefined;
   readonly taskId?: string | undefined;
 }

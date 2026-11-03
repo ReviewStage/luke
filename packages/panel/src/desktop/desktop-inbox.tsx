@@ -762,7 +762,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                       task:
                         narrowedTask === undefined
                           ? undefined
-                          : { id: narrowedTask, name: narrowedTaskName, onClear: leaveInboxTask },
+                          : { name: narrowedTaskName, onClear: leaveInboxTask },
                     }}
                     models={named.models}
                     readerId={tasks.me}

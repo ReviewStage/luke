@@ -378,13 +378,6 @@ function withCards(
       return card(entry, { kind: TAB_KIND.AGENT, subject, models });
     }
     if (row.id === INBOX_ROW) return card(entry, { kind: TAB_KIND.INBOX, inbox });
-    if (row.id === SIDE_PANEL_TAB.PLAN) {
-      const taskId = tasks.activeTaskId;
-      const standing = openPlanStanding(tasks);
-      const plan =
-        taskId === undefined || standing === undefined ? undefined : { taskId, standing };
-      return card(entry, { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan });
-    }
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);

@@ -1224,8 +1224,7 @@ export interface InboxListHead {
 }
 
 /** The task the window's Inbox is narrowed to, as the chip over its list names it: its name, none while it is not listed yet, and the × that clears it. */
-export interface InboxTaskHead {
-  readonly id: string;
+interface InboxTaskHead {
   readonly name: string | undefined;
   readonly onClear: () => void;
 }

@@ -559,13 +559,8 @@ function PlanDocument({
   // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // A row that opens the comments, which stand in the side panel, shows the
-  // panel on them and hands it the keys, as a terminal shown does; one that
-  // names the plan's tab of old, as a summary row may, opens Overview.
+  // panel on them and hands it the keys, as a terminal shown does.
   const openPanelTab = (opened: SidePanelTab) => {
-    if (opened === SIDE_PANEL_TAB.PLAN) {
-      openOverview();
-      return;
-    }
     sidePanel.onChoose(opened);
     showSide();
   };
@@ -595,10 +590,8 @@ function PlanDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
-        // A call that named this very task opens its plan beside the column, as one on its own plan does.
-        if (target.agent === undefined && target.task === taskId) {
-          return openPanelTab(SIDE_PANEL_TAB.PLAN);
-        }
+        // A call that named this very task opens its plan in the column, as one on its own plan does.
+        if (target.agent === undefined && target.task === taskId) return openOverview();
         return openPlace?.(placeOfTaskTarget(target));
     }
   };
@@ -735,14 +728,12 @@ function PlanDocument({
     repositoryMenu.request > answeredRequest
       ? repositoryMenu.request
       : undefined;
-  // The plan is in sight: the column shows Overview, and no panel fills the window over it, as a phone's always does.
-  const planInSight = planShown;
   useEffect(() => {
-    if (menuRequest === undefined || planInSight) return;
+    if (menuRequest === undefined || planShown) return;
     showOverview();
-  }, [menuRequest, planInSight, showOverview]);
+  }, [menuRequest, planShown, showOverview]);
   // Note that the crumb is handed the ask only once the plan is in sight, so its menu never opens behind a list.
-  const openRequest = planInSight ? menuRequest : undefined;
+  const openRequest = planShown ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
       openedId === undefined
@@ -792,11 +783,11 @@ function PlanDocument({
     relationMenu.request > answeredRelation
       ? relationMenu
       : undefined;
-  const relationAsk = planInSight ? relationPending : undefined;
+  const relationAsk = planShown ? relationPending : undefined;
   useEffect(() => {
-    if (relationPending === undefined || planInSight) return;
+    if (relationPending === undefined || planShown) return;
     showOverview();
-  }, [relationPending, planInSight, showOverview]);
+  }, [relationPending, planShown, showOverview]);
   const relations = useMemo<TaskRelationsDoor>(
     () => ({
       workspaceName,
@@ -818,9 +809,9 @@ function PlanDocument({
       tasks: blockTasks,
       onOpenTask: openTask,
       relations,
-      inSight: planInSight,
+      inSight: planShown,
     }),
-    [workspaceName, setStanding, repositoryDoor, blockTasks, openTask, relations, planInSight],
+    [workspaceName, setStanding, repositoryDoor, blockTasks, openTask, relations, planShown],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
@@ -1059,8 +1050,6 @@ function PlanDocument({
       },
     },
   };
-  // A phone heads the task with one row in place of the side panel's bar and toggle: the way back, what is on screen, and one ⋯.
-  const switched = room === SHELL_ROOM.NARROW;
   // Note that the document stays laid out while another tab of the column is
   // shown, so coming back to Overview finds it where it was left.
   const overviewShown = isOverviewTab(tab);
@@ -1087,7 +1076,7 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         head={planHead}
-        titleActions={!switched}
+        titleActions={!phone}
       />
     </Fill>
   );
@@ -1138,7 +1127,7 @@ function PlanDocument({
             ],
           ]
         : ((pane === TASK_PANE.AGENT ? shownAgentTab : shownTab)?.groups(opener) ?? []);
-  const head = switched ? (
+  const head = phone ? (
     <TaskHead
       back={back}
       // Note that the task's Rename opens the task's name in the title's place on any screen, since the screen hides the plan's own title.
@@ -1206,7 +1195,7 @@ function PlanDocument({
                     column={
                       <>
                         {/* On a phone no strip stands, Overview listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
-                        <div className={switched ? undefined : "contents"} hidden={switched}>
+                        <div className={phone ? undefined : "contents"} hidden={phone}>
                           <Toolbar
                             start={TOOLBAR_INSET.COLUMN}
                             look={TOOLBAR_LOOK.TABS}
@@ -1223,12 +1212,12 @@ function PlanDocument({
                                     tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
                                   onPin: tasks.onPinAgent,
                                 }}
-                                keys={!switched && tasks.shown && !sideFocused}
+                                keys={!phone && tasks.shown && !sideFocused}
                                 shown={tasks.shown}
                                 onOpenTerminal={terminalDoors.onOpenTerminal}
-                                onOpenBrowser={switched ? openBrowser : undefined}
-                                slot={switched ? null : actionsSlot}
-                                onShown={switched ? setShownAgentTab : undefined}
+                                onOpenBrowser={phone ? openBrowser : undefined}
+                                slot={phone ? null : actionsSlot}
+                                onShown={phone ? setShownAgentTab : undefined}
                                 planMenu={planMenu}
                               />
                             }
@@ -1258,7 +1247,7 @@ function PlanDocument({
                                 {tasks.history.viewing === undefined ? (
                                   <NewTabChord
                                     onNewTab={
-                                      switched
+                                      phone
                                         ? newAgentOnPhone
                                         : sideFocused
                                           ? sidePanel.onNewTab
@@ -1346,8 +1335,7 @@ function PlanDocument({
                         focused={sideFocused}
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
-                        task={{ name: task.name, status: listed.status }}
-                        activity={switched ? { onShown: setShownTab } : undefined}
+                        activity={phone ? { onShown: setShownTab } : undefined}
                       />
                     ) : null}
                     {stranded.dialog}

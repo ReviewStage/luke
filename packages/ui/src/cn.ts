@@ -266,14 +266,7 @@ const PANEL_SHELL = {
  * summary card's motion), by the group tailwind-merge reads each in.
  */
 const PANEL_SIDE = {
-  spacing: [
-    "half-container",
-    "side-panel",
-    "side-panel-no-tabs",
-    "summary",
-    "summary-card-inset",
-    "summary-rail",
-  ],
+  spacing: ["half-container", "side-panel", "summary", "summary-card-inset", "summary-rail"],
   animate: ["card-grow-in", "card-leave"],
 } as const;
 

@@ -47,8 +47,6 @@ export type CardSubject =
       readonly tab: FixedSidePanelTab;
       /** The task the panel stands beside, by its id and as its Plan tab names it; none where the place knows no task. */
       readonly plan?: { readonly taskId: string; readonly standing: PlanStanding } | undefined;
-      /** The task's Inbox as its board reads, which its Inbox tab's card counts; none where the place does not read it. */
-      readonly inbox?: InboxBoardView | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.PLAN;
@@ -152,7 +150,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   );
 }
 
-/** A fixed tab's card: the Plan tab's its task's, the Inbox's what waits; the panel's other kinds hang none, their names saying all there is. */
+/** A fixed tab's card: the Plan tab's its task's; the panel's other kinds hang none, their names saying all there is. */
 function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }>) {
   switch (subject.tab) {
     case SIDE_PANEL_TAB.PLAN:
@@ -160,7 +158,6 @@ function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }
         <PlanCard taskId={subject.plan.taskId} standing={subject.plan.standing} />
       );
     case SIDE_PANEL_TAB.INBOX:
-      return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
     case SIDE_PANEL_TAB.COMMENTS:
       return null;
   }
