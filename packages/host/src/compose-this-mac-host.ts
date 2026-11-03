@@ -19,16 +19,15 @@ import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-this-mac-host.ts -- This Mac's host, the account install the install command puts on a Mac, kept running while the account has Bring your own host on and stopped while it has it off, behind the One host program experiment.
+ * compose-this-mac-host.ts -- This Mac's host, the account install the install command puts on a Mac, kept running while the account has Bring your own host on and stopped while it has it off.
  *
  * There is one such install on a Mac, under the member's own home
  * (`ThisMacHost`'s `stateRoot`, `~/.local/state/luke-host`), so every build
  * of the app, released, Test, development, and each named instance, reads
  * and controls the same host. Where it stands is read again every `IDLE`,
- * and acted on only when it changed: at launch, at sign-in, and when either
- * experiment is turned on or off. While the One host program experiment is
- * off, or no account is signed in, nothing on this Mac is installed,
- * started, or stopped.
+ * and acted on only when it changed: at launch, at sign-in, and when Bring
+ * your own host is turned on or off. While no account is signed in, nothing
+ * on this Mac is installed, started, or stopped.
  *
  * With Bring your own host on, a Mac with no host of the account standing,
  * no record or one the service refused, is enrolled on the member's own
@@ -199,7 +198,6 @@ export function composeThisMacHost(
       if (userId === undefined || !account.capabilitiesActive() || !kernel.runMode.sendsNetwork) {
         return undefined;
       }
-      if (!(yield* dependencies.experimentOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST))) return undefined;
       return { userId, running: yield* dependencies.experimentOn(EXPERIMENT.BRING_YOUR_OWN_HOST) };
     });
 
