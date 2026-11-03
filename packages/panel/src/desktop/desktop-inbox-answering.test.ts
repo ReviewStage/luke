@@ -790,6 +790,31 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   );
 });
 
+test("on To do, an answered item a link or Back chooses stands its row, gray, until another is chosen", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
+  window.localStorage.removeItem(WHOSE_KEY);
+  world.inboxes.set(INVITES.id, [EXPIRY]);
+  world.inboxes.set(BILLING.id, [RETRY]);
+  const onRetry = { taskId: BILLING.id, itemId: RETRY.id, opened: true } as const;
+  const { page } = mount();
+  await settle();
+
+  // A link opens the answered item, a link in it opens another task's item, and Back chooses the answered one again.
+  act(() => world.chooseFromOutside(onRetry));
+  await settle();
+  const linked = listed(page);
+  act(() => world.chooseFromOutside({ ...ON_EXPIRY, opened: true }));
+  await settle();
+  const left = listed(page);
+  act(() => world.chooseFromOutside(onRetry));
+  await settle();
+
+  assert.deepEqual(linked, ["▸ How is a failed email retried?", "Expire after 7 days?"]);
+  assert.deepEqual(left, ["▸ Expire after 7 days?"], "its row goes once another is chosen");
+  assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "Expire after 7 days?"]);
+  assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
+});
+
 test("an answer moves no row while the list is shown, and the list sorts anew once the Inbox is left and come back to", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
   const { page } = mount();
