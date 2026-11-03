@@ -240,7 +240,7 @@ import {
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice.
  * A task's change takes the one path the member's own task menu does
- * (`tasks-app.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
+ * (`tasks-procedures.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
  * the caller acts for: a new name, a repository confirmed through the
  * workspace's installation or none, where it stands, or that member's own
  * pin, on any task of the caller's workspace, a teammate's among them. A
@@ -2068,7 +2068,7 @@ export const reachedRepository = (
 
 /**
  * One call of `update_task`: a task of the caller's workspace changed as the
- * member's own menu changes it (`updateTask`, which `tasks-app.ts`'s PATCH
+ * member's own menu changes it (`updateTask`, which `tasks-procedures.ts`'s PATCH
  * runs), for the member the caller acts for, its repository confirmed first
  * as the PATCH confirms one, or why not. Note that the task is read first, on
  * that member's standing, both to hold it to the caller's workspace and to
