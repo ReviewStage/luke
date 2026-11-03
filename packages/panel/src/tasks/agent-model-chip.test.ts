@@ -260,22 +260,6 @@ test("on a Claude Code agent the menu offers Claude models alone with Fast and n
   assert.match(eve.foot, /Fast/u);
 });
 
-test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not even a resting one, while Opus beside it keeps Fast", () => {
-  const withheld = RUNTIME_MODELS.map((model) =>
-    model.provider === MODEL_PROVIDER.OPENAI ? { ...model, fastWithheldByPlan: true } : model,
-  );
-  const gpt = openMenuOn(undefined, { model: "openai/gpt-6.1-sol", effort: "low" }, withheld);
-  const opus = openMenuOn(
-    undefined,
-    { model: "anthropic/claude-opus-5.5", effort: "high" },
-    withheld,
-  );
-
-  assert.match(gpt.foot, /Effort/u);
-  assert.doesNotMatch(gpt.foot, /Fast/u);
-  assert.match(opus.foot, /Fast/u);
-});
-
 test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://app.test/", openWeb: (href) => opened.push(href) });

@@ -224,10 +224,9 @@ export function ModelMenu(props: {
     ];
   };
 
-  /** The Fast switch, where the menu offers one: never for a model whose plan runs no fast mode. */
+  /** The Fast switch, where the menu offers one. */
   const fastRow = (read: ModelChoiceRead, chosen: ModelChoice): FootRow[] => {
     if (props.offersFast === false || models === undefined) return [];
-    if (offered?.model.fastWithheldByPlan === true) return [];
     return [
       {
         id: FOOT_ROW.FAST,

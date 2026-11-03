@@ -8,8 +8,7 @@
  *   a fast version running with Claude Code's own fast mode on, where the
  *   account keeps a Claude setup-token.
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model; Codex runs no fast mode on the plan, so an account whose
- *   ChatGPT plan pays is offered no GPT fast version (`accountFastOffer`), where the account
+ *   GPT model, a fast version running on Codex's `fast` service tier, where the account
  *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
  *   that OpenAI has not signed out and the deployment can still open.
  *
@@ -530,12 +529,7 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
   );
 });
 
-/**
- * Which fast versions the account is offered (`offeredToAccount`): by the
- * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
- * GPT agents, as Start would choose it here, since Codex runs no fast mode on the plan
- * and a Fast it cannot run is never offered.
- */
+/** Which fast versions the account is offered (`offeredToAccount`): by the Anthropic key its steps run on. */
 export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   read?: AccountKeyRows,
@@ -546,6 +540,5 @@ export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
     (row) =>
       row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC,
   )?.fastAccess;
-  const plan = keptPlan(userId, MODEL_PROVIDER.OPENAI, yield* deploymentRing, rows);
-  return { anthropic: anthropic ?? undefined, chatGptPlan: plan?.forAgents === true };
+  return { anthropic: anthropic ?? undefined };
 });

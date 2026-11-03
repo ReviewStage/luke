@@ -307,9 +307,9 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
-    // On an API key a fast version runs on the `fast` tier, which the documented feature turns on
-    // (https://learn.chatgpt.com/docs/agent-configuration/speed); the plan's launch runs none.
-    ...(auth.kind === CODEX_AUTH.API_KEY ? ([["features.fast_mode", "true"]] as const) : []),
+    // A fast version runs on the `fast` tier, which the documented feature turns on, on the plan and an API key alike
+    // (https://learn.chatgpt.com/docs/agent-configuration/speed).
+    ["features.fast_mode", "true"],
   ];
 }
 
@@ -465,7 +465,7 @@ interface CodexLaunch {
   readonly sandbox: SandboxPolicy;
   model: string;
   effort: CodexEffort | undefined;
-  /** Whether the next turn runs on the `fast` service tier: a fast version on an API key alone. */
+  /** Whether the next turn runs on the `fast` service tier: a fast version, on the plan or an API key. */
   fast: boolean;
   stopping: boolean;
   /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
@@ -658,9 +658,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       approvalPolicy: "never",
       sandboxPolicy: launch.sandbox,
       // Note that a null tier is the standard one, which a fast version turned off goes back to.
-      ...(launch.auth.kind === CODEX_AUTH.API_KEY
-        ? { serviceTier: launch.fast ? FAST_TIER : null }
-        : undefined),
+      serviceTier: launch.fast ? FAST_TIER : null,
     }),
   );
   if (Option.isNone(answer)) {
