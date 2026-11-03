@@ -670,6 +670,7 @@ const startRunAgent = Effect.fnUntraced(function* (
       serverWords: automation.action.prompt,
       automationId: automation.id,
       automationOrigin: handed.origin,
+      automationRunId: run.id,
       title: Option.isSome(adopting) ? undefined : subjectTitle(run.firing),
     }),
   );

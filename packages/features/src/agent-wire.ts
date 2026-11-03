@@ -829,6 +829,51 @@ const agentArchivedBySchema = EffectSchema.Struct({
 
 export type AgentArchivedBy = typeof agentArchivedBySchema.Type;
 
+/** What an agent belongs to: a task, or an automation's run. */
+export const AGENT_OWNER = {
+  TASK: "task",
+  RUN: "run",
+} as const;
+
+/**
+ * The one owner of an agent, the two cases excluding each other by their
+ * `kind`: the task it works on, or the run of an automation that started it
+ * or whose agent did, with the automation the run belongs to. An agent with
+ * neither, or whose owner is gone, carries none: the run of a deleted
+ * automation goes with it, and no case stands for that.
+ */
+export const agentOwnerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ kind: EffectSchema.Literal(AGENT_OWNER.TASK), taskId: wireUuidSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(AGENT_OWNER.RUN),
+    automationId: wireUuidSchema,
+    runId: wireUuidSchema,
+  }),
+]);
+
+export type AgentOwner = typeof agentOwnerSchema.Type;
+
+/** What an agent's owner is read from: its task, and its run and the automation that run belongs to. */
+export interface AgentOwnerRead {
+  readonly taskId: string | null;
+  readonly runId: string | null;
+  readonly runAutomationId: string | null;
+}
+
+/**
+ * Who owns the agent: its task, else its run; none where it has neither or
+ * its owner is gone. Note that the run's automation is read through the run,
+ * never from the agent's own `automationId`, which a run's child agent
+ * leaves null.
+ */
+export function agentOwnerOf(read: AgentOwnerRead): AgentOwner | undefined {
+  if (read.taskId !== null) return { kind: AGENT_OWNER.TASK, taskId: read.taskId };
+  if (read.runId !== null && read.runAutomationId !== null) {
+    return { kind: AGENT_OWNER.RUN, automationId: read.runAutomationId, runId: read.runId };
+  }
+  return undefined;
+}
+
 /**
  * One agent as the tabs draw it: the task it works on, its title, what it
  * runs on, when it started, where it stands, which turn that is, and when
@@ -950,6 +995,8 @@ export const agentSummarySchema = EffectSchema.Struct({
    * started by hand, and from a service before it.
    */
   automationName: EffectSchema.optionalKey(EffectSchema.String),
+  /** What the agent belongs to; absent once its owner is gone, and from a service before it. */
+  owner: EffectSchema.optionalKey(agentOwnerSchema),
   /**
    * The agent this one was started from, on the same plan, and the message
    * of its it was forked at where it was forked rather than continued, and

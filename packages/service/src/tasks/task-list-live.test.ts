@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
 import {
   archiveAgent,
   createAgent,
@@ -13,6 +14,7 @@ import {
   recordAgentPublished,
   renameAgentCommitted,
 } from "@luke/database/models/agent-store";
+import { createAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
 import { devicesNamed, registerDevice } from "@luke/database/models/device-store";
 import { addTaskBlock } from "@luke/database/models/task-block-store";
 import {
@@ -42,11 +44,18 @@ import {
   AGENT_ARCHIVER,
   AGENT_KIND,
   AGENT_MACHINE,
+  AGENT_OWNER,
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   agentPullRequestsOfLiveRows,
@@ -98,7 +107,12 @@ const openAgent = (
   userId: string,
   place: { readonly taskId: string; readonly blank?: boolean } | { readonly workspaceId: string },
   ago: number,
-  started: Partial<Pick<NewAgent, "runtime" | "machine" | "deviceId" | "startedFrom">> = {},
+  started: Partial<
+    Pick<
+      NewAgent,
+      "runtime" | "machine" | "deviceId" | "startedFrom" | "automationRunId" | "startedByAgentId"
+    >
+  > = {},
 ) =>
   Effect.gen(function* () {
     const made = yield* createAgent(userId, {
@@ -208,8 +222,17 @@ const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
       agents.map((agent) => agent.id),
     );
     const macs = yield* devicesNamed(summaryDevices(agents));
+    const owners = yield* agentOwnerFactsOf(agents);
     return agents.map((agent) =>
-      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
+      agentSummary(
+        agent,
+        standing(agent.conversationId),
+        now,
+        names,
+        owners,
+        continuedBy(agent.id),
+        macs,
+      ),
     );
   });
 
@@ -418,6 +441,33 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveAgent(owner, gone.id, true);
+        // An agent a run made, and one that agent started on no task.
+        const triage = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            organizationId: plan.workspaceId,
+            repositories: ["acme/relay"],
+            name: "Triage new issues",
+            trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
+            action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage the new issues." },
+            guards: AUTOMATION_DEFAULT_GUARDS,
+            nextRunAt: null,
+            webhookSecretHash: null,
+          }),
+        );
+        const triageRun = Option.getOrThrow(
+          yield* recordAutomationRun(triage, {
+            dedupeKey: "manual-1",
+            firing: { kind: AUTOMATION_FIRING.MANUAL },
+            firedAt: new Date(NOW),
+          }),
+        );
+        const runAgent = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 8 * 60_000, {
+          automationRunId: triageRun.id,
+        });
+        const runChild = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 7 * 60_000, {
+          automationRunId: triageRun.id,
+          startedByAgentId: runAgent.id,
+        });
         // A local agent on the owner's Mac running Claude Code, continued and forked on a plan of its own.
         const runs = yield* startTask(owner, { name: "Local runs" });
         const deviceId = randomUUID();
@@ -449,6 +499,16 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
+        // Each agent's owner, as the requirement names it: a run's agent and the child it started
+        // belong to the run, whose automation the agent itself does not name; one with no task and
+        // no run to none.
+        const { planlessAgents } = yield* heldListOf(owner, NOW);
+        const ownerOf = (agentId: string) =>
+          planlessAgents.find((agent) => agent.id === agentId)?.owner;
+        const ownedByRun = { kind: AGENT_OWNER.RUN, automationId: triage.id, runId: triageRun.id };
+        assert.deepEqual(ownerOf(runAgent.id), ownedByRun);
+        assert.deepEqual(ownerOf(runChild.id), ownedByRun);
+        assert.equal(ownerOf(loose.id), undefined);
         // Every plan's agents, the archived among them, as each plan's own list names them, for its
         // tabs, their harness, Mac, and continues among it; the live rows come in the order they
         // were started across the plans.
@@ -502,7 +562,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           "a line unanswered past its grace, or after an ended session, reads failed",
         );
         assert.deepEqual(
-          read.planlessAgents?.map((agent) => [agent.status, agent.pinnedAt !== undefined]),
+          read.planlessAgents
+            ?.filter((agent) => [gone.id, loose.id].includes(agent.id))
+            .map((agent) => [agent.status, agent.pinnedAt !== undefined]),
           [
             [AGENT_STATUS.STARTING, false],
             [AGENT_STATUS.RUNNING, true],
