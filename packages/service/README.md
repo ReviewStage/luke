@@ -348,6 +348,16 @@ that thread is sent to the agent instead, and every settled turn of the agent
 is posted back in the thread once (`SettledTurnListener`). The Slack app must
 subscribe to the `app_mention` and `message.im` bot events.
 
+An owner or admin names the repository a Slack start defaults to under
+Settings › Workspace › Slack bot (`POST /api/workspaces/slack-bot/repository`,
+kept as `slack_installation.default_repository`) and one per channel
+(`POST /api/workspaces/slack-bot/channel`, kept in `slack_channel_repository`),
+where they also put the bot in a public channel (`conversations.join`) or take
+it out of one (`conversations.leave`). The read answers an owner or admin the
+team's channels (`conversations.list`). A Slack start's repository is the one
+the message names, else its channel's, else the workspace's, else the
+member's latest agent's.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted

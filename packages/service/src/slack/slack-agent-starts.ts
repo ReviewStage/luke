@@ -20,8 +20,9 @@
  * starts an agent as the writer on no task, on the one path a Start takes
  * (`coder-host/start.ts`), keyed by Slack's event id. It works in the
  * repository the message names as `owner/name` where the workspace reaches
- * it, else in the repository of the writer's latest agent in the workspace,
- * else in none. Its prompt is the writer's words, the thread's earlier
+ * it, else in the channel's default repository, else in the workspace's,
+ * both as an owner or admin named them in Settings, else in the repository
+ * of the writer's latest agent in the workspace, else in none. Its prompt is the writer's words, the thread's earlier
  * messages fenced as data, since anyone in the channel wrote them, and the
  * message's link; only the writer's own words hand it MCP servers. The bot
  * replies at once with a link to the agent, and the thread is kept as the
@@ -43,6 +44,7 @@ import {
   recordSlackMemberLookup,
   slackAgentThreadAt,
   slackMemberByEmail,
+  slackStartRepositories,
   slackStartRepository,
   slackTeamWorkspaces,
 } from "@repo/database/models/slack-installation-store";
@@ -231,18 +233,24 @@ const memberIn = Effect.fnUntraced(function* (
   return found;
 });
 
-/** The repository the message names where the workspace reaches it, as GitHub spells it; else the member's latest agent's; else none. */
+/** The repository the message names where the workspace reaches it, as GitHub spells it; else the channel's default; else the workspace's; else the member's latest agent's; else none. */
 const startRepository = Effect.fnUntraced(function* (
   organizationId: string,
   userId: string,
-  text: string,
+  addressed: SlackAddressed,
 ) {
-  const named = NAMED_REPOSITORY.exec(text)?.[1];
+  const named = NAMED_REPOSITORY.exec(addressed.text)?.[1];
   if (named !== undefined) {
     const reached = yield* Effect.result(workspaceRepository(organizationId, named, userId));
     if (Result.isSuccess(reached)) return reached.success.repository.fullName;
   }
-  return Option.getOrNull(yield* slackStartRepository(organizationId, userId));
+  const { defaultRepository, channels } = yield* slackStartRepositories(organizationId);
+  const channel = channels.find((each) => each.channelId === addressed.channel)?.repository;
+  return (
+    channel ??
+    defaultRepository ??
+    Option.getOrNull(yield* slackStartRepository(organizationId, userId))
+  );
 });
 
 /**
@@ -328,7 +336,7 @@ const startFromSlack = Effect.fnUntraced(function* (
   userId: string,
 ) {
   const thread = threadOf(addressed);
-  const repository = yield* startRepository(organizationId, userId, addressed.text);
+  const repository = yield* startRepository(organizationId, userId, addressed);
   const messages =
     addressed.threadTs === undefined ? [] : yield* bot.threadMessages(addressed.channel, thread);
   const earlier = messages.filter((message) => Number(message.ts) < Number(addressed.ts));

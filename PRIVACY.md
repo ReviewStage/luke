@@ -1031,7 +1031,13 @@ conversation and thread each such agent was started from, so it can post the
 agent's final message, or that it failed or was stopped, back in that
 thread, where everyone in the conversation can read it; that record is
 deleted with the agent, with the workspace's bot connection, or with your
-account. Messages the bot posted stay in Slack.
+account. Messages the bot posted stay in Slack. An owner or admin sees the
+Slack workspace's public channels, and the private ones the bot is in, under
+Settings › Workspace, read from Slack each time the page opens and not kept;
+they can add the bot to a public channel or remove it from one, and choose a
+repository for the workspace's Slack starts and for each channel, which our
+service keeps with that channel's Slack id until the bot leaves the channel
+or is disconnected.
 
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while

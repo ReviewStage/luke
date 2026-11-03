@@ -24,6 +24,10 @@ import { organization, user } from "./auth.js";
  * mention in the thread is sent to the agent rather than starting another,
  * and each of the agent's settled turns is posted back in the thread once.
  * Each row leaves with its installation, its agent, and its member.
+ *
+ * An owner or admin may name a default repository for the workspace's Slack
+ * starts, and one for each channel the bot is in; a channel's leaves with
+ * its installation, and when the bot leaves the channel.
  */
 export const slackInstallation = pgTable("slack_installation", {
   organizationId: text("organization_id")
@@ -33,6 +37,8 @@ export const slackInstallation = pgTable("slack_installation", {
   teamId: text("team_id").notNull(),
   /** The team's name as Slack answered it, which the settings row shows. */
   teamName: text("team_name").notNull(),
+  /** The repository, `owner/name`, an agent started from Slack works in where neither its message nor its channel names one; null for none. */
+  defaultRepository: text("default_repository"),
   linkedByUserId: text("linked_by_user_id").references(() => user.id, {
     onDelete: "set null",
   }),
@@ -84,4 +90,20 @@ export const slackAgentThread = pgTable(
     primaryKey({ columns: [t.organizationId, t.channelId, t.threadTs] }),
     index("slack_agent_thread_agent_id").on(t.agentId),
   ],
+);
+
+/** The repository an agent started from one Slack channel works in where its message names none. */
+export const slackChannelRepository = pgTable(
+  "slack_channel_repository",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => slackInstallation.organizationId, { onDelete: "cascade" }),
+    /** Slack's id for the channel (`C…` or `G…`). */
+    channelId: text("channel_id").notNull(),
+    /** The repository as GitHub spells it, `owner/name`. */
+    repository: text("repository").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.channelId] })],
 );

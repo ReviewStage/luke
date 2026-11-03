@@ -4,7 +4,10 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
+import {
+  linkSlackInstallation,
+  writeSlackChannelRepository,
+} from "@repo/database/models/slack-installation-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
@@ -20,7 +23,12 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
-import { githubReaching, openGithubUser } from "../testing/github-app-fake.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "../testing/github-app-fake.js";
 import { recordingHarness } from "../testing/native-harness-fake.js";
 import { SlackBot, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { slackEventsApp } from "./slack-events-app.js";
@@ -140,6 +148,13 @@ const openAskedMember = (bot: Layer.Layer<SlackBot>) =>
     return { owner, item };
   });
 
+/** The installation the mention's workspace connects, reaching the repository its channel defaults to. */
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 8_100,
+  login: "Acme",
+  repositories: [{ owner: "Acme", name: "Relay" }],
+};
+
 /** The group over the test's store, the bot, and the verifier, answering one request. */
 const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
   Effect.gen(function* () {
@@ -148,7 +163,7 @@ const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, ENVIRONMENT),
-      githubReaching([]).layer,
+      githubReaching([RELAY_INSTALLATION]).layer,
       modelCatalogOf([
         {
           id: AGENT_DEFAULT_CHOICE.model,
@@ -262,7 +277,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names and replies with its link; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, in its channel's repository, and replies with its link; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -276,6 +291,8 @@ it.layer(getTestDB())("our Slack route", (it) => {
           teamName: "Team",
           userId: owner,
         });
+        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+        yield* writeSlackChannelRepository(task.workspaceId, "C0001", "Acme/Relay");
         const [row] = yield* (yield* Database)
           .select({ email: user.email })
           .from(user)
@@ -296,7 +313,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const [refused, onIt] = replies();
         assert.match(refused?.args.text ?? "", /couldn't find you/u);
         assert.equal(onIt?.args.thread_ts, "1700000002.000300");
-        assert.match(onIt?.args.text ?? "", /^On it: https:\/\/.+\/agent\//u);
+        assert.match(onIt?.args.text ?? "", /^On it in Acme\/Relay: https:\/\/.+\/agent\//u);
       });
     },
   );
