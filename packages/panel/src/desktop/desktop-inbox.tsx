@@ -1,16 +1,16 @@
-import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/agent-view";
-import type { Channel } from "@luke/features/channel-wire";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { CodeRef } from "@luke/features/task-wire";
-import { backToWords, readFailedWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@luke/ui";
-import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
-import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
+import type { Channel } from "@repo/features/channel-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { encodeMention, MENTION_KIND, type MentionLines } from "@repo/features/mention-link";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { CodeRef } from "@repo/features/task-wire";
+import { backToWords, readFailedWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@repo/ui";
+import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@repo/ui/inbox-panel-link";
+import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -127,7 +127,7 @@ import { taskCardOf } from "./task-card.js";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`) over New task, the window resting here
+ * glyph (`@repo/ui`'s `EmptyState`) over New task, the window resting here
  * with no task open (`resting-page.ts`); with its scope leaving out every item, the list
  * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press

@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent, renameAgent } from "@luke/database/models/agent-store";
-import { createAutomation } from "@luke/database/models/automation-store";
-import { createTask, updateTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { createAgent, renameAgent } from "@repo/database/models/agent-store";
+import { createAutomation } from "@repo/database/models/automation-store";
+import { createTask, updateTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire } from "@repo/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/automation-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import { memberIdOf } from "../accounts/workspace-members.js";

@@ -1,6 +1,6 @@
-import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import type { PlanAgentEdit } from "@luke/features/plan-template";
+import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import type { PlanAgentEdit } from "@repo/features/plan-template";
 import {
   PLAN_ACTOR,
   TASK_MODE,
@@ -10,7 +10,7 @@ import {
   type TaskMode,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -59,7 +59,7 @@ export const task = pgTable(
     /**
      * The task's number in its workspace, counted from one in the order its
      * tasks were made and never reused (`task_number_counter`), which its key (`ACME-42`,
-     * `@luke/features/workspace-key`) is drawn from. A task moved to another
+     * `@repo/features/workspace-key`) is drawn from. A task moved to another
      * workspace takes the next number there.
      */
     number: integer("number").notNull(),
@@ -106,7 +106,7 @@ export const task = pgTable(
       .$type<readonly PlanAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@luke/features/plan-document`). */
+    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@repo/features/plan-document`). */
     document: text("document").notNull(),
     /**
      * The GitHub repository the task is about, `owner/name` as GitHub spells

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";

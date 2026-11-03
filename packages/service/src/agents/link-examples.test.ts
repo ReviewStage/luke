@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { AGENT_BRIEF } from "@luke/features/agent-wire";
-import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
-import { decodeMention, isMentionLabel, MENTION_KIND } from "@luke/features/mention-link";
+import { AGENT_BRIEF } from "@repo/features/agent-wire";
+import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
+import { decodeMention, isMentionLabel, MENTION_KIND } from "@repo/features/mention-link";
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";

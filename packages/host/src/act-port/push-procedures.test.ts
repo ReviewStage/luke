@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import { it } from "vitest";
 import type { AppStateDelivery, AppStateSnapshot } from "../app-state.js";
 import { initialAppState } from "../client/app-state-store.js";

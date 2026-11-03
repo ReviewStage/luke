@@ -1,5 +1,5 @@
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result, type Schema } from "effect";
 import { Base64 } from "effect/encoding";
 

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import type { TaskCreateRelation, TaskSummary } from "@luke/features/task-wire";
-import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import type { TaskCreateRelation, TaskSummary } from "@repo/features/task-wire";
+import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

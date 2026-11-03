@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,8 +14,8 @@ import {
   TEXT_VARIANT,
   Text,
   UserIcon,
-} from "@luke/ui";
-import { ICON_SIZE } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ICON_SIZE } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

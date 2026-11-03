@@ -38,7 +38,7 @@ tester.run("no-raw-heading-outside-ui", noRawHeadingOutsideUiRule, {
     panel('const PAGE = "<h1>A page</h1>"; function A() { return <iframe srcDoc={PAGE} />; }'),
     // A component named like a heading is no intrinsic element.
     panel("function A() { return <H2>Words</H2>; }"),
-    // `@luke/ui` draws the headings Text and the page patterns stand in.
+    // `@repo/ui` draws the headings Text and the page patterns stand in.
     { code: "function A() { return <h2 id={titleId}>Words</h2>; }", filename: UI_FILE },
   ],
   invalid: [

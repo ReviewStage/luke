@@ -3,7 +3,7 @@ import { Schema as EffectSchema } from "effect";
 /**
  * account-wire.ts -- the account's preferences snapshot, its access, and its deletion, as `/api/account/*` carries them.
  *
- * The snapshot is the settings vocabulary's (`@luke/settings`), which sits
+ * The snapshot is the settings vocabulary's (`@repo/settings`), which sits
  * above this boundary, so each part is declared here only as far as the wire
  * knows it: the shared `preferences` a record, the link choice, the coding
  * agents' default, the chapters model, and the experiments as whatever they carry, and the

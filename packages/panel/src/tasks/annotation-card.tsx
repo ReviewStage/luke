@@ -19,8 +19,8 @@ import {
   useDisclosureState,
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
-} from "@luke/ui";
-import { landedMark } from "@luke/ui/landed";
+} from "@repo/ui";
+import { landedMark } from "@repo/ui/landed";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody } from "../ai-elements/fold.js";

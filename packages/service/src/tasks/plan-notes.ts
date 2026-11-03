@@ -1,19 +1,19 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { movePlanCommentAnchors, type ReportedAnchors } from "@luke/database/models/plan-comments";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { movePlanCommentAnchors, type ReportedAnchors } from "@repo/database/models/plan-comments";
 import {
   type PlanWriter,
   readRevisionContent,
   recordRevision,
-} from "@luke/database/models/plan-revisions";
-import { readTaskForUpdate, type StoredTask, savePlanText } from "@luke/database/models/task-store";
-import { changedSections } from "@luke/features/plan-document";
-import { applyDocumentEdit, type PlanEditRequest } from "@luke/features/plan-edit";
+} from "@repo/database/models/plan-revisions";
+import { readTaskForUpdate, type StoredTask, savePlanText } from "@repo/database/models/task-store";
+import { changedSections } from "@repo/features/plan-document";
+import { applyDocumentEdit, type PlanEditRequest } from "@repo/features/plan-edit";
 import {
   applyNotesToText,
   type PlanAgentEdit,
   type PlanNote,
   withAgentEdit,
-} from "@luke/features/plan-template";
+} from "@repo/features/plan-template";
 import {
   PLAN_ACTOR,
   type PlanDocument,
@@ -21,7 +21,7 @@ import {
   type PlanSectionEdit,
   TASK_BOUNDS,
   type Task,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
@@ -29,10 +29,10 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 /**
  * plan-notes.ts -- the plan's one write: take an agent's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
- * A plan is one Markdown text (`@luke/features/plan-document`). Its caller
+ * A plan is one Markdown text (`@repo/features/plan-document`). Its caller
  * is a coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose model
  * answers with
- * notes (`@luke/features/plan-template`): a point added under a heading, a
+ * notes (`@repo/features/plan-template`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as
  * it stands under the plan's lock, and taken whole or not at all: a note that
@@ -51,7 +51,7 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
  * now where we wrote meanwhile, or answered as a conflict with nothing
- * saved (`@luke/features/plan-edit`). Their restore of one of the plan's
+ * saved (`@repo/features/plan-edit`). Their restore of one of the plan's
  * revisions is the same save with the revision's text, kept as a revision of
  * the developer's that names the one it brought back.
  *
@@ -173,7 +173,7 @@ interface PlanConflict {
  * nothing saves the text as it stood. Every comment thread's anchor is
  * carried over the change in the same transaction, or set where the
  * developer's editor reported it, so a thread never stands on words the text
- * no longer holds there (`@luke/database/models/plan-comments`). A change
+ * no longer holds there (`@repo/database/models/plan-comments`). A change
  * that refuses the plan as it found it answers its refusal, and nothing is
  * saved.
  */
@@ -353,7 +353,7 @@ function takeDocumentEdit(
  * service bound under its lock and kept as a revision of theirs: set where
  * the text still holds the edit's base, the developer's change laid over it
  * where another writer wrote meanwhile, and a conflict naming that writer,
- * with nothing saved, where it cannot be (`@luke/features/plan-edit`).
+ * with nothing saved, where it cannot be (`@repo/features/plan-edit`).
  */
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,

@@ -6,32 +6,32 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   GITHUB_ACCESS,
   type GitHubAccess,
   type WorkspaceTokenRepository,
-} from "@luke/features/github-repositories-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+} from "@repo/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
-} from "@luke/features/tasks-view";
-import { dayAndTimeText } from "@luke/features/time-format";
-import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import { dayAndTimeText } from "@repo/features/time-format";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import {
   ACT_KIND,
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "@luke/host/acts";
+} from "@repo/host/acts";
 import {
   type ActPortClient,
   type PortActKind,
@@ -39,10 +39,10 @@ import {
   type PortActResult,
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
-} from "@luke/host/contract";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { ProviderMark, SettingsPage } from "@luke/ui";
+} from "@repo/host/contract";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { ProviderMark, SettingsPage } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

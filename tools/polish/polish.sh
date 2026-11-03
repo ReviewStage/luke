@@ -47,9 +47,9 @@ fi
 
 # The desktop runs as `pnpm start` does: the native helpers on the Mac, then the bundle.
 if [[ $(uname -s) == Darwin ]]; then
-    pnpm --filter @luke/desktop build:native
+    pnpm --filter @repo/desktop build:native
 fi
-pnpm --filter @luke/desktop build
+pnpm --filter @repo/desktop build
 # A Linux install skips Electron's binary (scripts/bootstrap.sh), so it is fetched here.
 (cd "$APP_DESKTOP_APP_ROOT" && node node_modules/electron/install.js)
 ELECTRON=$(cd "$APP_DESKTOP_APP_ROOT" && node -p 'require("electron")')

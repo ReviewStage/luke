@@ -1,5 +1,5 @@
-import { githubAutomationsOn, recordAutomationRun } from "@luke/database/models/automation-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
+import { githubAutomationsOn, recordAutomationRun } from "@repo/database/models/automation-store";
+import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
@@ -13,9 +13,9 @@ import {
   PULL_REQUEST_DEFAULT_MOMENTS,
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
-} from "@luke/features/automation-wire";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/automation-wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { isAgentBranch } from "../agents/coder-host/bounds.js";
 

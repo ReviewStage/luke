@@ -1,4 +1,4 @@
-import type { InboxAnswers, InboxMessageAuthor, InboxReadAsk } from "@luke/features/inbox-wire";
+import type { InboxAnswers, InboxMessageAuthor, InboxReadAsk } from "@repo/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";

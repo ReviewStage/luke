@@ -18,7 +18,7 @@ import {
   AGENT_CALL_FAILURE,
   type AgentInboxScope,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
@@ -27,8 +27,8 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import { AGENT_INBOX_ACT_KIND, type PortActKind } from "../contract/index.js";
 import {

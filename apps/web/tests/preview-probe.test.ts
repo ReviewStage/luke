@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Option } from "effect";
 import {
   PROBE_DOOR,

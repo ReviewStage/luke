@@ -1,4 +1,4 @@
-import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@luke/wire/testing";
+import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@repo/wire/testing";
 import type { Schema } from "effect";
 import { test } from "vitest";
 import {

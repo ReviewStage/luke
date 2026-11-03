@@ -1,4 +1,4 @@
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import React from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.

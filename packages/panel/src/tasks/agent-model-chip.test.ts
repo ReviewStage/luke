@@ -7,8 +7,8 @@ import {
   type AgentPayer,
   type AgentRuntime,
   type AgentUsage,
-} from "@luke/features/agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

@@ -7,9 +7,9 @@ import {
   type TerminalConnection,
   type TerminalPortOutbound,
   type TerminalPortTicket,
-} from "@luke/features/terminal-acts";
-import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/terminal-acts";
+import { SANDBOX_STATE } from "@repo/features/terminal-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Deferred, Effect, Fiber } from "effect";
 import { ACT_KIND } from "../acts.js";
 import type { HostOperator } from "../host-operator.js";

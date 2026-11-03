@@ -9,12 +9,12 @@
  * nothing is read from an account.
  */
 
-import { PAGE_SHOWER, type PageVersion } from "@luke/features/page-wire";
+import { PAGE_SHOWER, type PageVersion } from "@repo/features/page-wire";
 import {
   TASK_CALL_FAILURE,
   type TasksPageAnswer,
   type TasksPageParams,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 
 /** The fixture's workspace, its task, the task's coding agent, and the page that agent showed on it, by the ids every window names them by. */
 export const FIXTURE_IDS = {

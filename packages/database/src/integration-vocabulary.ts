@@ -1,11 +1,11 @@
 /**
  * integration-vocabulary.ts -- the status words of an integration row, declared on the wire below this package
- * (`@luke/features/integration-row-wire`) because the admin pages draw them too.
+ * (`@repo/features/integration-row-wire`) because the admin pages draw them too.
  */
 export {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
-} from "@luke/features/integration-row-wire";
+} from "@repo/features/integration-row-wire";
 
 /**
  * Where an integration's installation on a workspace stands, as its

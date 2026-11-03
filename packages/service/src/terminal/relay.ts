@@ -34,7 +34,7 @@
  * which the shell attaches at once.
  *
  * How the connection ended is the close code the panel's host reads as the
- * tab's state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
+ * tab's state (`@repo/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
  */
 
 import {
@@ -42,8 +42,8 @@ import {
   TERMINAL_RELAY_CLOSE,
   TERMINAL_RELAY_FRAME,
   terminalRelayResizeSchema,
-} from "@luke/features/terminal-wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/terminal-wire";
+import { readEither } from "@repo/wire/effect";
 import {
   type Cause,
   Clock,

@@ -20,7 +20,7 @@
  * (`joinedWindowRows`).
  */
 
-import { isRecord, LEGACY_APP_WORD, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
+import { isRecord, LEGACY_APP_WORD, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@repo/wire";
 import { Schema } from "effect";
 import {
   AGENT_SENDER,

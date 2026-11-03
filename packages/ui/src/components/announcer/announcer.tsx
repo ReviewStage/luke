@@ -26,7 +26,7 @@ import { VISUALLY_HIDDEN_ELEMENT, VisuallyHidden } from "../visually-hidden/visu
  * region never holds a refusal a retry answered.
  *
  * The words are text drawn like any other, so session replay masks them
- * with the rest (`@luke/panel`'s `session-replay.ts`).
+ * with the rest (`@repo/panel`'s `session-replay.ts`).
  */
 
 /** How loudly words are said: politely once the reader is free, or as an alert at once. */

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type CookieOriginGuard, cookieOriginGuard } from "./origin-guard.js";

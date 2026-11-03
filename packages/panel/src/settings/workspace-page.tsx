@@ -1,20 +1,20 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
-} from "@luke/features/sentry-install-wire";
-import type { FailureSurface } from "@luke/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { dayAndTimeText } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+} from "@repo/features/sentry-install-wire";
+import type { FailureSurface } from "@repo/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { dayAndTimeText } from "@repo/features/time-format";
+import { readingWords } from "@repo/features/words";
 import {
   INVITATION_ROLE,
   isInvitableEmail,
   type WorkspaceInvitation,
-} from "@luke/features/workspace-invitation-wire";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/features/workspace-invitation-wire";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
@@ -24,10 +24,10 @@ import {
   type WorkspaceGithubInstallation,
   type WorkspaceMember,
   workspacePhotoOfDataUrl,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -74,8 +74,8 @@ import {
   useFilePicker,
   useMenu,
   wholeWordsHint,
-} from "@luke/ui";
-import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
 import {
   CrownIcon,
   ExternalLinkIcon,
@@ -86,10 +86,10 @@ import {
   UserMinusIcon,
   UserRoundIcon,
   XIcon,
-} from "@luke/ui/icons";
-import { inputProblem } from "@luke/ui/reported-failure";
-import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/icons";
+import { inputProblem } from "@repo/ui/reported-failure";
+import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -459,7 +459,7 @@ function useMembersRead(workspace: Workspace) {
  * the other; Make owner and Remove from workspace ask first. A role change
  * refused is said under the row. A row with no ⋯ in a list where others
  * have one keeps the ⋯'s room, so every role ends in the same place. The
- * row is `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * row is `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -945,7 +945,7 @@ function TeamMembers({
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
- * It is `@luke/ui`'s field `Chip`, its one width its container's.
+ * It is `@repo/ui`'s field `Chip`, its one width its container's.
  */
 function RoleChip({
   value,
@@ -1005,7 +1005,7 @@ function RoleChip({
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * first in the accent rather than red: inviting the address again undoes it,
  * but the link already sent to the invitee stops working. A refusal is
- * said under the form. The form is `@luke/ui`'s `TextField`, the role's
+ * said under the form. The form is `@repo/ui`'s `TextField`, the role's
  * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
  * led by the face, through `MenuRow`, Copy link its outline `Button`.
  */
@@ -1298,7 +1298,7 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
  * GitHub, an organization's logo or a person's avatar, its login, and under
  * it Connected, or that GitHub suspended or removed its installation. The
  * tile is a workspace's, keyed by the login, so the login's letter stands
- * until the picture loads and wherever it fails to. It is `@luke/ui`'s
+ * until the picture loads and wherever it fails to. It is `@repo/ui`'s
  * `SettingsRow`, indented to GitHub's words.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
@@ -1343,7 +1343,7 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
  * configure one it is on, so one door does both. Either press opens the
  * browser through the one connect, whose return to the app adds the
  * installation to this workspace; a page that could not be opened says why
- * under the row. The row is `@luke/ui`'s `SettingsRow` led by GitHub's mark,
+ * under the row. The row is `@repo/ui`'s `SettingsRow` led by GitHub's mark,
  * its press the outline `Button`.
  */
 function ManagedGitHub({
@@ -1681,7 +1681,7 @@ function identityLine(workspace: Workspace): string {
  * square; Remove photo, where one is set, asks first. The new name or photo
  * arrives with the workspaces the host reads again after it; a refusal, or a
  * file that cannot be a photo, is said under the row until the next try.
- * The row is `@luke/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
+ * The row is `@repo/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
  * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {

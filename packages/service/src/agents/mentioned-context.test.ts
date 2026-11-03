@@ -3,18 +3,18 @@ import {
   lineParts,
   MENTIONED_HEADING,
   receivedPartsOf,
-} from "@luke/database/models/attached-file-parts";
-import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   encodeMention,
   MENTION_KIND,
   type MentionPlace,
   mentionMarkdown,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import type { Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/mention-link";
+import type { Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage, senderLabel } from "./attached-files.js";
 import {

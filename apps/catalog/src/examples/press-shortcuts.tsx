@@ -21,7 +21,7 @@ import {
   Text,
   useAnnounce,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

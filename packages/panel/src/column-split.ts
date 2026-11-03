@@ -9,7 +9,7 @@
  * with.
  */
 
-import { RESIZE_EDGE_SIDE, type ResizeEdgeHandle, useResizeEdge } from "@luke/ui";
+import { RESIZE_EDGE_SIDE, type ResizeEdgeHandle, useResizeEdge } from "@repo/ui";
 import { type RefObject, useCallback, useState } from "react";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";

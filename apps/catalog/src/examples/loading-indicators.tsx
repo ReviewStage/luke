@@ -10,7 +10,7 @@ import {
   TEXT_TONE,
   Text,
   WorkingMark,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

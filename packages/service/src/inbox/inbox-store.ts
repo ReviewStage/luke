@@ -5,16 +5,16 @@ import {
   liveLatest,
   liveSelection,
   liveStatementOf,
-} from "@luke/database/core/live-statement";
+} from "@repo/database/core/live-statement";
 import {
   Database,
   type DatabaseServices,
   type QueryError,
   queryBuilder,
-} from "@luke/database/core/query";
-import { agentAutomationNameSql } from "@luke/database/models/agent-name";
-import { automationReadableBy } from "@luke/database/models/automation-store";
-import { InstantColumnSchema } from "@luke/database/models/columns";
+} from "@repo/database/core/query";
+import { agentAutomationNameSql } from "@repo/database/models/agent-name";
+import { automationReadableBy } from "@repo/database/models/automation-store";
+import { InstantColumnSchema } from "@repo/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -23,33 +23,33 @@ import {
   isWorkspaceMember,
   taskReachableBy,
   workspaceReachableBy,
-} from "@luke/database/models/workspace-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { attachment } from "@luke/database/schemas/attachment";
-import { organization, user } from "@luke/database/schemas/auth";
-import { automation } from "@luke/database/schemas/automation";
-import { channel, channelLook } from "@luke/database/schemas/channel";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
-import { inboxMessage } from "@luke/database/schemas/inbox-message";
-import { task } from "@luke/database/schemas/task";
-import { INBOX_ATTACHMENT_KIND } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { attachment } from "@repo/database/schemas/attachment";
+import { organization, user } from "@repo/database/schemas/auth";
+import { automation } from "@repo/database/schemas/automation";
+import { channel, channelLook } from "@repo/database/schemas/channel";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { inboxItemRead } from "@repo/database/schemas/inbox-item-read";
+import { inboxMessage } from "@repo/database/schemas/inbox-message";
+import { task } from "@repo/database/schemas/task";
+import { INBOX_ATTACHMENT_KIND } from "@repo/database/storage-vocabulary";
 import type {
   AccountInboxAgent,
   AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxTask,
   AccountTasklessEntry,
-} from "@luke/features/account-inbox-wire";
-import type { AgentAttachment } from "@luke/features/agent-wire";
-import type { ChannelThreadAgent } from "@luke/features/channel-wire";
-import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
+} from "@repo/features/account-inbox-wire";
+import type { AgentAttachment } from "@repo/features/agent-wire";
+import type { ChannelThreadAgent } from "@repo/features/channel-wire";
+import type { ConversationMediaType } from "@repo/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   type InboxItemPlace,
   inboxAttachmentAddress,
   inboxPictureDestination,
-} from "@luke/features/inbox-attachment-link";
+} from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK_STATUS,
   INBOX_BOUNDS,
@@ -68,9 +68,9 @@ import {
   inboxReadAskSchema,
   knownAsk,
   standingAsk,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { insideCode } from "@luke/features/mention-link";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { insideCode } from "@repo/features/mention-link";
 import {
   and,
   count,
@@ -119,7 +119,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * its words its message. An image block is posted by a path and kept by an
  * attachment: the caller reads the file's bytes from the agent's sandbox
  * and hands them in beside the post, and the post writes each as a file of
- * its message (`@luke/database/schemas/attachment`) under an id minted
+ * its message (`@repo/database/schemas/attachment`) under an id minted
  * here, which the block kept on the item names in the path's place; the
  * item's own files from before version 5 go with the same write. A post
  * counts the agent's open items against the bound
@@ -155,7 +155,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * the account, every open item on its tasks, is read on
  * its own index, so a desktop can hold that read whichever task is open.
  * Every read of an item says whether it is unread for the member reading
- * it, by that member's own marker (`@luke/database/schemas/inbox-item-read`):
+ * it, by that member's own marker (`@repo/database/schemas/inbox-item-read`):
  * an item is unread while it changed after the last change they read
  * through, or while they marked it unread and have not read it since. A
  * member's own answer or message marks it read for them in the same write,

@@ -20,10 +20,10 @@
  * showed, or a refusal of the page's policy, is kept for it, a few at most, and sent once it stands.
  */
 
-import { type EarlyReports, reportsOnceStarted } from "@luke/features/sentry-early-reports";
-import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
-import type { ShownFailureSent } from "@luke/features/shown-failure";
-import type { ShownFailureReporter } from "@luke/panel/failure-report";
+import { type EarlyReports, reportsOnceStarted } from "@repo/features/sentry-early-reports";
+import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
+import type { ShownFailureSent } from "@repo/features/shown-failure";
+import type { ShownFailureReporter } from "@repo/panel/failure-report";
 import type { Layer } from "effect";
 
 /** What the build says about where the tab reports. */
@@ -40,7 +40,7 @@ export interface WebSentryBuild {
 export interface WebSentry {
   /** Reports a tab whose host could not stand or whose state could not be read, so nothing is drawn. */
   readonly reportBlankTab: (error: Error) => void;
-  /** Captures a failure an Effect boundary of the tab's runtime reported (`@luke/features/sentry-reporting`). */
+  /** Captures a failure an Effect boundary of the tab's runtime reported (`@repo/features/sentry-reporting`). */
   readonly captureException: SentryCapture["captureException"];
   /** Sends one kind of request the page's policy refused, by its directive and the origin it was refused. */
   readonly reportRefusal: (directive: string, origin: string) => void;

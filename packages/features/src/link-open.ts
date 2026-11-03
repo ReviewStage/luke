@@ -1,4 +1,4 @@
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 import { openTargetOf } from "./open-address.js";
 import { parsedUrl } from "./parsed-url.js";
@@ -9,7 +9,7 @@ import { PRODUCT_NAME } from "./product-name.js";
  *
  * As Linear's "Open links in the desktop app" does, an account chooses
  * whether a link of ours opened in a browser stays there or goes to the Mac
- * app. The choice is the account's (`@luke/settings`' `linkOpen`, its own
+ * app. The choice is the account's (`@repo/settings`' `linkOpen`, its own
  * part of the preferences snapshot), so the web reads it on a signed-in
  * load and decides here. The hand-off is the web app's "Open in the Mac
  * app" link (`open-address.ts`): the place the address names, written again in the

@@ -3,10 +3,10 @@ import { createOpenAI } from "@ai-sdk/openai";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   type PullRequestChaptersFailure,
-} from "@luke/database/pull-request-chapters-vocabulary";
-import type { AgentChangedFile } from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@luke/features/chapters-model-choice";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/database/pull-request-chapters-vocabulary";
+import type { AgentChangedFile } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -20,10 +20,10 @@ import {
   otherChangesChapter,
   unescapeLiteralNewlines,
   validLineRefs,
-} from "@luke/features/pull-request-chapters";
-import { failureKind } from "@luke/runtime/effect";
-import { jsonRoundTrip } from "@luke/wire";
-import { describeWire, emitJsonSchema } from "@luke/wire/effect";
+} from "@repo/features/pull-request-chapters";
+import { failureKind } from "@repo/runtime/effect";
+import { jsonRoundTrip } from "@repo/wire";
+import { describeWire, emitJsonSchema } from "@repo/wire/effect";
 import {
   generateText,
   jsonSchema,
@@ -76,7 +76,7 @@ import {
  * production reaches the provider on the API key the member who pressed
  * Generate saved, never ours: on the Claude model they chose in Settings,
  * Haiku unless they changed it (`chaptersModelOf`,
- * `@luke/features/chapters-model-choice`), where they saved an Anthropic
+ * `@repo/features/chapters-model-choice`), where they saved an Anthropic
  * key, and on OpenAI's model of the same tier where they saved only an
  * OpenAI key; a test hands in a scripted model. The whole generation is bounded in time
  * (`CHAPTERS_BOUNDS.TIMEOUT`), and every way it fails is one of the store's

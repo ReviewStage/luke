@@ -1,5 +1,5 @@
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import type { TaskAgentLine, TaskSummary } from "@repo/features/task-wire";
 import { createdByOnly, TASK_ORDER, taskTime } from "./task-list-model.js";
 
 /**

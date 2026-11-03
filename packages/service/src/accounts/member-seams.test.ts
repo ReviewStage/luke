@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { OrganizationRefused } from "@luke/database/models/workspace-seams";
-import { organization } from "@luke/database/schemas/auth";
+import { Database } from "@repo/database/core/query";
+import { OrganizationRefused } from "@repo/database/models/workspace-seams";
+import { organization } from "@repo/database/schemas/auth";
 import { eq } from "drizzle-orm";
 import { Effect, Exit, Option } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";

@@ -1,12 +1,12 @@
-import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
+import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@luke/features/models-wire";
-import { FAST_ACCESS, type FastAccess } from "@luke/features/provider-key-wire";
+} from "@repo/features/models-wire";
+import { FAST_ACCESS, type FastAccess } from "@repo/features/provider-key-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Ref, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -104,7 +104,7 @@ export interface PricedTokens {
 }
 
 /**
- * One model as the service offers it: the wire's model (`@luke/features/models-wire`),
+ * One model as the service offers it: the wire's model (`@repo/features/models-wire`),
  * which `/api/models` answers and a Start is checked against, and beside it
  * what the catalog lists and the wire does not carry: the model's whole
  * context window, which a session on a model with one window is told, and

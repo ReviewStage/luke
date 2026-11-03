@@ -1,4 +1,4 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type {
   ComponentType,
   FocusEventHandler,

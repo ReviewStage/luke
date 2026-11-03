@@ -9,7 +9,7 @@ import { cn } from "../cn.js";
  * changes: the root is an inline grid that centres what stands in it, set
  * in the emphasis weight of the window's face, with an `::after` laid over it to carry an
  * edge, and with no size, type size, line, corner, ground, ink, or edge of
- * its own, because `@luke/ui`'s `Avatar` (`components/avatar/`) picks each
+ * its own, because `@repo/ui`'s `Avatar` (`components/avatar/`) picks each
  * for each disc and `cn`'s merge knows none of their theme names to settle
  * a clash between the two (the line, `leading-none`, is set after the type
  * size, which the merge would otherwise drop it for); no `size` prop, since

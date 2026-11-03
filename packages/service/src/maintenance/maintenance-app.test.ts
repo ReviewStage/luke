@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { createAutomation } from "@luke/database/models/automation-store";
-import { deleteTask } from "@luke/database/models/task-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { createAutomation } from "@repo/database/models/automation-store";
+import { deleteTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { conversations } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/features/automation-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";

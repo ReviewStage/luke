@@ -9,12 +9,12 @@ import { cn } from "../cn.js";
  * swapped for our ring, a `span` drawn as an arc in the ink around it
  * (`border-t-current`) over a faint track of that ink, its stroke the one
  * `spinner.css` reads from `--ui-spinner-stroke`; the ring fills the box it stands in (`size-full`)
- * rather than taking shadcn's `size-4`, because `@luke/ui`'s `Spinner` sizes
+ * rather than taking shadcn's `size-4`, because `@repo/ui`'s `Spinner` sizes
  * the box; it turns on `spinner.css`'s `ui-spinner-ring` rule rather than
  * `animate-spin`, because that turn holds still on `--ui-loop-motion`
  * under reduced motion and a capture run, at the ring's own 900ms; and it
  * is hidden from a reader rather than a `role="status"` named "Loading",
- * because what a wait says is said by the status line `@luke/ui`'s
+ * because what a wait says is said by the status line `@repo/ui`'s
  * `Spinner` stands beside it (`components/spinner/spinner.tsx`), which is
  * what an app draws; this is its inside.
  */

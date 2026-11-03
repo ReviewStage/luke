@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ShownLink } from "@luke/features/link-grammar";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
+import type { ShownLink } from "@repo/features/link-grammar";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { browserHistory, savedEntry } from "../src/app/browser-history";

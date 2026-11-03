@@ -15,7 +15,7 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-} from "@luke/credentials/snapshot";
+} from "@repo/credentials/snapshot";
 import { Option, Schema } from "effect";
 import { useEffect, useState } from "react";
 import { readKeptOption, writeKept } from "./kept-storage.js";

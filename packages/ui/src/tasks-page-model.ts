@@ -7,7 +7,7 @@ import {
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { TASK_ORDER, taskTime } from "./task-list-model.js";
 
 /**

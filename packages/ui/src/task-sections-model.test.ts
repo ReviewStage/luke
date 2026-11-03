@@ -5,8 +5,8 @@ import {
   TASK_SECTION_WRITE,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
-import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
+} from "@repo/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@repo/features/task-section-writes";
 import { describe, it } from "vitest";
 import {
   entryMoveWrites,

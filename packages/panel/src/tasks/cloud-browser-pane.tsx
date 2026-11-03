@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentBrowserTab, BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
-import { browserAddressOf, chordIsWindows } from "@luke/features/browser-acts";
+import type { AgentBrowserTab, BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
+import { browserAddressOf, chordIsWindows } from "@repo/features/browser-acts";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_REASON,
@@ -10,11 +10,11 @@ import {
   BROWSER_LIVE_MOUSE_ACTION,
   BROWSER_LIVE_MOUSE_BUTTON,
   type BrowserLiveHistory,
-} from "@luke/features/browser-live-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { surfaceKeepsPress } from "@luke/settings/shortcuts";
+} from "@repo/features/browser-live-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { surfaceKeepsPress } from "@repo/settings/shortcuts";
 import {
   AddressField,
   ANNOUNCE,
@@ -40,8 +40,8 @@ import {
   Text,
   Tooltip,
   useAnnounce,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

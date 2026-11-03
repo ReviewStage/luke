@@ -5,17 +5,17 @@ import {
   createAgent,
   dispatchMentioningServers,
   updateAgentServers,
-} from "@luke/database/models/agent-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
+} from "@repo/database/models/agent-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
 import {
   INTEGRATION_LABEL_MAX,
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/features/integration-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Effect, Layer, Option, Result } from "effect";
 import { GitHubApp } from "../../github/github-app.js";
 import {

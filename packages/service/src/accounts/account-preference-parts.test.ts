@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
   writeAccountPreferences,
-} from "@luke/database/models/account-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { LINK_OPEN } from "@luke/features/link-open";
-import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/database/models/account-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { LINK_OPEN } from "@repo/features/link-open";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import { EXPERIMENT } from "@repo/settings";
 import {
   HTTP_METHOD,
   isRecord,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Clock, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";

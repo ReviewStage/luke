@@ -1,9 +1,9 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { type MentionPlace, sectionAnchors } from "@luke/features/mention-link";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { planSections } from "@luke/features/plan-document";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { planSections } from "@repo/features/plan-document";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   createContext,
   type ReactNode,

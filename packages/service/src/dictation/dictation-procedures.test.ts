@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { Database } from "@repo/database/core/query";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import {
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Cause, type Context, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { formatCount } from "@luke/features/number-format";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { formatCount } from "@repo/features/number-format";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -14,12 +14,12 @@ import {
   type PlanCommentStartRequest,
   type PlanCommentThread,
   type PlanCommentWriter,
-} from "@luke/features/plan-comment-wire";
-import type { Task } from "@luke/features/task-wire";
-import { pasteCutWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
-import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+} from "@repo/features/plan-comment-wire";
+import type { Task } from "@repo/features/task-wire";
+import { pasteCutWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

@@ -38,7 +38,7 @@ import {
   type DevicePlatform,
   deviceSetupSchema,
   hostUpdateSchema,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { and, asc, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

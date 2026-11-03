@@ -13,10 +13,10 @@ import { cn } from "../cn.js";
  * container's sheet may restyle (`components/button/button.css`), so the
  * fill and ink are drawn there and only the edge is read here; none of
  * shadcn's outline or ring utilities, because the window's own focus ring
- * (`@luke/panel`'s base.css) draws the keyboard's ring and a utility would
+ * (`@repo/panel`'s base.css) draws the keyboard's ring and a utility would
  * outrank it (`anti-slop/no-shadcn-focus-ring`); none of its press translate, which
  * our button answers by its face (`button.css`); and the desktop's arrow
- * cursor. `@luke/ui`'s `Button` and `IconButton`
+ * cursor. `@repo/ui`'s `Button` and `IconButton`
  * (`components/button/button.tsx`) are what an app draws; this is their
  * inside, and `buttonVariants` dresses a link as a button, as shadcn's does.
  */

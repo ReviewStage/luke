@@ -1,4 +1,4 @@
-# `@luke/gateway`
+# `@repo/gateway`
 
 ## The vocabulary is the contract
 

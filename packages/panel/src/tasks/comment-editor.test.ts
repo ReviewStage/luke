@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import { PULL_REQUEST_WRITE_BOUNDS } from "@repo/features/pull-request-write-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";

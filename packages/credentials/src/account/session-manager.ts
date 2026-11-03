@@ -1,7 +1,7 @@
-import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
-import { singleFlightEffect } from "@luke/runtime/effect";
+import { desktopSessionPageUrl } from "@repo/features/desktop-session-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
+import { singleFlightEffect } from "@repo/runtime/effect";
 import {
   Cause,
   Data,
@@ -152,7 +152,7 @@ interface AccountSessionManagerOptions {
   openExternal: (url: string) => Promise<void>;
   /**
    * Stands up each consent trip: the desktop's loopback
-   * (`@luke/credentials/node`), handed in so this manager reaches no Node.
+   * (`@repo/credentials/node`), handed in so this manager reaches no Node.
    */
   openConsent: OpenConsent;
   /** Where a step's failure that is never held against the sign-out is written down. */

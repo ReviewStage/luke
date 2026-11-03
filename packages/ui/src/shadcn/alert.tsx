@@ -34,7 +34,7 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  *   tailwind-merge reads `text-body` (a size) and `text-body-foreground` (a
  *   colour) as one group and would keep only the last.
  *
- * `@luke/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
+ * `@repo/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
  * draws; this is its inside.
  */
 

@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@repo/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
 import { webPlatform } from "../src/app/web-platform";
 
 /**
  * The web app records what the desktop's panel window records, through the
- * same controller and the same masking (`@luke/panel/session-replay`). This
+ * same controller and the same masking (`@repo/panel/session-replay`). This
  * runs the library's own client and recorder over a page of words, through
  * the tab's platform door as the panel calls it, and reads the client's
  * configuration and what the recording would send.

@@ -1,5 +1,5 @@
-import type { ClientSettingSideEffects } from "@luke/host/act-port";
-import { SETTING_SIDE_EFFECT } from "@luke/settings";
+import type { ClientSettingSideEffects } from "@repo/host/act-port";
+import { SETTING_SIDE_EFFECT } from "@repo/settings";
 
 /** An effect this side has nothing to do about, whichever side owns it. */
 const noClientSettingSideEffect = () => {};

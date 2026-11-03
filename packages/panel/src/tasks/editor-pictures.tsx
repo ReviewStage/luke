@@ -1,9 +1,9 @@
-import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
-import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
+import { planAttachmentAddress, planAttachmentOf } from "@repo/features/plan-attachment-link";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { PICTURE_KEEP_FAILURE } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   CARD_CORNER,
@@ -20,9 +20,9 @@ import {
   Spinner,
   TextField,
   useFilePicker,
-} from "@luke/ui";
-import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@luke/ui/icons";
-import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/ui";
+import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@repo/ui/icons";
+import { keepPictureRead, PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
@@ -55,7 +55,7 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
  * its caption will stand, and keeps it on the plan (`planning.pictureKeep`).
  * Kept, the picture takes its address and the text writes its line; until
  * then the text writes nothing of it. A keep that fails says so in the same
- * place, as every failure is said (`@luke/ui`'s `ErrorState`): its sentence, then
+ * place, as every failure is said (`@repo/ui`'s `ErrorState`): its sentence, then
  * Retry and Remove. A picture of another plan pasted in is read as that
  * plan's and kept again on this one, so this plan's readers can see it; a
  * video an agent recorded is carried across as it is, and waits as a quiet

@@ -12,7 +12,7 @@
  * task's id.
  */
 
-import { listRepositoryPins, setRepositoryPin } from "@luke/database/models/repository-pin-store";
+import { listRepositoryPins, setRepositoryPin } from "@repo/database/models/repository-pin-store";
 import { Effect, Option } from "effect";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {

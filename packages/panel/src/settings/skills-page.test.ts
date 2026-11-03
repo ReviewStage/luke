@@ -8,15 +8,15 @@ import {
   type InstalledSkillPreview,
   type InstalledSkillSummary,
   SKILL_AUDIT_RISK,
-} from "@luke/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { formatCount } from "@luke/features/number-format";
-import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind } from "@luke/host/contract";
+} from "@repo/features/installed-skill-route-wire";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { formatCount } from "@repo/features/number-format";
+import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind } from "@repo/host/contract";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

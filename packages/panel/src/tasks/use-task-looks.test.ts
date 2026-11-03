@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
   type Task,
   type TaskAgentsSummary,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
-import { DMG_WINDOW } from "@luke/brand/dmg-window";
+import { BRAND_ASSETS_DIRECTORY } from "@repo/brand/assets-directory";
+import { DMG_WINDOW } from "@repo/brand/dmg-window";
 import { buildAppIcon } from "./app-icon.mjs";
 import { LICENSE_RESOURCE_NAME, NOTICE_RESOURCE_NAME } from "./package-config.mjs";
 import { LIQUID_GLASS_ADDON, NATIVE_HELPERS } from "./package-layout.mjs";

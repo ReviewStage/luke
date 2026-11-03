@@ -2,7 +2,7 @@
  * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, and the report to the agent's starter.
  *
  * The writer tells its `SettledTurnListener` once the settle's transaction
- * is done (`@luke/database/models/writer`), whichever path settled the turn:
+ * is done (`@repo/database/models/writer`), whichever path settled the turn:
  * the relay's or a runner's own end, a Stop, a lost session's, or the
  * sweep's abandon. This is the one listener the deployment provides
  * (`../../runtime.ts`), and it does two things with each turn: counts it
@@ -15,8 +15,8 @@
  * no transaction open over eve.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/models/writer";
 import { Context, Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";

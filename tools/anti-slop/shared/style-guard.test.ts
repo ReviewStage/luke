@@ -129,7 +129,7 @@ describe("a stylesheet", () => {
     expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
   });
 
-  it("refuses a literal width on a picker's, popover's or menu's box, outside @luke/ui, and passes a token, a share, and a glyph in one", () => {
+  it("refuses a literal width on a picker's, popover's or menu's box, outside @repo/ui, and passes a token, a share, and a glyph in one", () => {
     const panel = "packages/panel/src/styles/tasks.css";
     const css = `.mention-menu { width: 360px; max-width: 100%; }
       .composer .skill-menu { min-width: 20rem; }
@@ -297,7 +297,7 @@ describe("a module's class strings", () => {
     ]);
   });
 
-  it("passes the utilities @luke/ui's theme maps onto tokens", () => {
+  it("passes the utilities @repo/ui's theme maps onto tokens", () => {
     const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--ui-duration-quick) \${x}\`);`;
     expect(classRules(source)).toEqual([]);
   });

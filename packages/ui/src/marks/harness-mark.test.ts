@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

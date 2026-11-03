@@ -30,7 +30,7 @@ import {
   sameTab,
   type ViewedAt,
   viewedAtOf,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { Clock, Duration, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";

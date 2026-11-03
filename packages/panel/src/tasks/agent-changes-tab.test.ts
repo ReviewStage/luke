@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
   type AgentPullRequestViewedAnswerView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentChangedFile,
@@ -13,26 +13,26 @@ import {
   CHANGED_FILE_STATUS,
   DIFF_SIDE,
   PATCH_OMITTED,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
-} from "@luke/features/pull-request-write-wire";
-import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
-import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
-import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+} from "@repo/features/pull-request-write-wire";
+import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACT_ERROR, SETTINGS_ACT_KIND } from "@repo/host/contract";
+import { DIFF_LAYOUT } from "@repo/settings/diff-view";
 import {
   APP_COMMAND,
   FILES_CHANGED_KEYS,
   FILES_CHANGED_SHORTCUTS,
   type ShortcutChord,
-} from "@luke/settings/shortcuts";
-import { DisclosureFind } from "@luke/ui";
+} from "@repo/settings/shortcuts";
+import { DisclosureFind } from "@repo/ui";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

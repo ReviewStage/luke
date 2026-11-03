@@ -1,4 +1,4 @@
-import { BRAND_PALETTE } from "@luke/brand";
+import { BRAND_PALETTE } from "@repo/brand";
 import { expect, test } from "vitest";
 
 /**

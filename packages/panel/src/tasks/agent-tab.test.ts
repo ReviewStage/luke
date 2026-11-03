@@ -6,15 +6,15 @@ import {
   type AgentSummary,
   type AgentTranscriptMessage,
   agentMessageReplyLine,
-} from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanMention } from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { ProviderMark } from "@luke/ui";
-import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { PlanMention } from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { ProviderMark } from "@repo/ui";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

@@ -8,20 +8,20 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
-import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
-import { installAppPlatform } from "@luke/panel/app-platform";
-import { installShownFailureReporter } from "@luke/panel/failure-report";
+import { ACT_PORT, type PreloadBridge } from "@repo/host/bridge";
+import { actPort, installActPort, installAppBridge, openPushStream } from "@repo/panel/app-bridge";
+import { installAppPlatform } from "@repo/panel/app-platform";
+import { installShownFailureReporter } from "@repo/panel/failure-report";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
   leaveWindowSpan,
   markWindowStart,
   PANEL_SPAN,
-} from "@luke/panel/panel-spans";
-import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
-import { ReloadState } from "@luke/ui/error-boundary";
+} from "@repo/panel/panel-spans";
+import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
+import { ReloadState } from "@repo/ui/error-boundary";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";

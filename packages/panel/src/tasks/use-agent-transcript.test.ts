@@ -8,13 +8,13 @@ import {
   type AgentTranscriptOlderParams,
   type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentStatus,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";

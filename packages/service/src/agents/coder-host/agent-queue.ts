@@ -2,7 +2,7 @@
  * agent-queue.ts -- a coding agent's queue as the service runs it: the queue as a transcript carries it, and its messages handed on, one a turn, once the agent's turn is over.
  *
  * A message queued behind the agent's turn waits in the store, unsent
- * (`@luke/database/models/agent-queue-store`, whose header writes down the
+ * (`@repo/database/models/agent-queue-store`, whose header writes down the
  * states a message moves through). Once the agent stands idle, the first one
  * is claimed, which takes it off every window's queue and out of reach of a
  * member's change, and then sent as its member's own message, under its own
@@ -22,7 +22,7 @@
  * (`sendClaimed`), which no answer waits on.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type AgentQueueRead,
   agentQueueNow,
@@ -33,15 +33,15 @@ import {
   type QueuedMessageRow,
   refuseQueuedMessage,
   unpausedQueues,
-} from "@luke/database/models/agent-queue-store";
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
-import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/message-reads";
-import { storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import type { HostedApiError } from "@luke/features";
-import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
-import { AGENT_MACHINE, AGENT_STATUS } from "@luke/features/agent-wire";
-import { TURN_STATUS } from "@luke/wire";
+} from "@repo/database/models/agent-queue-store";
+import { type Agent, readAgent } from "@repo/database/models/agent-store";
+import { awaitingLinesOfReached, latestTurnsOfReached } from "@repo/database/models/message-reads";
+import { storeWriter } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import type { HostedApiError } from "@repo/features";
+import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@repo/features/agent-queue-wire";
+import { AGENT_MACHINE, AGENT_STATUS } from "@repo/features/agent-wire";
+import { TURN_STATUS } from "@repo/wire";
 import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";

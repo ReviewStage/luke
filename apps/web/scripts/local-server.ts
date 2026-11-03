@@ -3,16 +3,16 @@
  *
  *   DATABASE_URL=postgres://…@127.0.0.1:5432/luke DATABASE_URL_UNPOOLED=… \
  *   BETTER_AUTH_SECRET=… CRON_SECRET=… \
- *     pnpm --filter @luke/web local-server --port 5173
+ *     pnpm --filter @repo/web local-server --port 5173
  *
  * It refuses to start beside any `VERCEL*` variable or over a database off
- * this machine's loopback (`@luke/service/local/local-server-guard`), and it
+ * this machine's loopback (`@repo/service/local/local-server-guard`), and it
  * imports no route until it has, because the auth service reads the
- * environment as it loads (`@luke/service/auth/auth`). Where
+ * environment as it loads (`@repo/service/auth/auth`). Where
  * `BETTER_AUTH_URL` names no address, the server names its own there first,
  * so Better Auth's base URL and the cookie origin guard both call it by the
  * address it listens at. It turns the local demo on for the routes it mounts
- * (`@luke/service/local/local-demo`), which the service honours only behind
+ * (`@repo/service/local/local-demo`), which the service honours only behind
  * the same guard.
  *
  * Every path a rewrite of the committed table takes is the deployment's,
@@ -36,15 +36,15 @@ import { registerHooks } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeHttpServerRequest, NodeRuntime } from "@effect/platform-node";
-import { AUTH_DEPLOYMENT_ENVIRONMENT } from "@luke/service/auth/auth-deployment";
-import { LOCAL_DEMO_ENVIRONMENT, LOCAL_DEMO_ON } from "@luke/service/local/local-demo";
-import { localServerRefusal } from "@luke/service/local/local-server-guard";
+import { AUTH_DEPLOYMENT_ENVIRONMENT } from "@repo/service/auth/auth-deployment";
+import { LOCAL_DEMO_ENVIRONMENT, LOCAL_DEMO_ON } from "@repo/service/local/local-demo";
+import { localServerRefusal } from "@repo/service/local/local-server-guard";
 import {
   CRON_ENVIRONMENT,
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
-} from "@luke/service/maintenance/maintenance-bounds";
-import type { Route } from "@luke/service/route";
+} from "@repo/service/maintenance/maintenance-bounds";
+import type { Route } from "@repo/service/route";
 import {
   Config,
   ConfigProvider,
@@ -137,8 +137,8 @@ function answerRawImports(): void {
  */
 async function localRoutes(): Promise<ReadonlyMap<string, Route>> {
   const [{ auth }, { DEMO_DEAN }, { LOCAL_SIGN_IN_PATH, localSignIn }] = await Promise.all([
-    import("@luke/service/auth/auth"),
-    import("@luke/service/demo/demo-seed"),
+    import("@repo/service/auth/auth"),
+    import("@repo/service/demo/demo-seed"),
     import("../server/local-sign-in.js"),
   ]);
   return new Map([[LOCAL_SIGN_IN_PATH, localSignIn(auth, DEMO_DEAN.id)]]);

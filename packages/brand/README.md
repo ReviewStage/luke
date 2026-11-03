@@ -11,7 +11,7 @@ the disc is 1.3 times the cap height, centred on it, a third of the disc from
 the word.
 
 The colours are the brand's: `scripts/brand-palette.mjs` is the one table
-both generators read, so `@luke/ui`'s palette (`tokens/brand.css`) and the
+both generators read, so `@repo/ui`'s palette (`tokens/brand.css`) and the
 artwork here are cut from the same values. A rebrand, or a second theme, is a
 change of that table.
 
@@ -20,7 +20,7 @@ Everything here is generated. Do not hand-edit the SVGs; change the constants in
 `scripts/brand-palette.mjs` (the colours), and re-run:
 
 ```sh
-pnpm --filter @luke/brand generate
+pnpm --filter @repo/brand generate
 ```
 
 PNG derivatives are rasterized from the SVGs with any SVG renderer; these were
@@ -70,7 +70,7 @@ for s in 16 32 48; do rsvg-convert -w $s -h $s icon/favicon.svg -o /tmp/favicon-
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes; the packaged `.icns` is cut from the dark set.
 
-The window draws the mark itself, with `@luke/ui`'s `ProductMark`, rather than
+The window draws the mark itself, with `@repo/ui`'s `ProductMark`, rather than
 loading these SVGs, so it takes its holder's ink through `currentColor`. Its
 geometry comes from this package as a generated file:
 

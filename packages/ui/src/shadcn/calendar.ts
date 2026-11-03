@@ -6,7 +6,7 @@
  * a day's cell and button, a range's start, middle, and end, today, and a
  * neighbouring month's days, each a class string here, so a later `shadcn
  * add calendar` reads as a small diff against them. react-day-picker and
- * date-fns are left out, because `@luke/ui`'s `Calendar` is controlled on
+ * date-fns are left out, because `@repo/ui`'s `Calendar` is controlled on
  * `YYYY-MM-DD` days read in UTC, pages through the four-digit years alone,
  * and steps the keyboard into a month its caller shows renders later
  * (`components/calendar/calendar.tsx`), none of which react-day-picker's

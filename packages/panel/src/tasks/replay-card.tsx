@@ -1,8 +1,8 @@
-import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@luke/features/agent-replay";
-import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
-import type { AgentPullRequest, AgentSummary, AgentTodos } from "@luke/features/agent-wire";
-import { AGENT_SENDER } from "@luke/features/agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@repo/features/agent-replay";
+import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
+import type { AgentPullRequest, AgentSummary, AgentTodos } from "@repo/features/agent-wire";
+import { AGENT_SENDER } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   BUTTON_VARIANT,
   Button,
@@ -20,11 +20,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
-import { ICON_SIZE } from "@luke/ui/icons";
-import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
+import { ICON_SIZE } from "@repo/ui/icons";
+import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";

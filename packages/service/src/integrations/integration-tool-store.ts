@@ -20,10 +20,10 @@
  * the row and the list with it.
  */
 
-import { Database } from "@luke/database/core/query";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { InstantColumnSchema } from "@luke/database/models/columns";
-import { integrationConnection } from "@luke/database/schemas/integration";
+import { Database } from "@repo/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { InstantColumnSchema } from "@repo/database/models/columns";
+import { integrationConnection } from "@repo/database/schemas/integration";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

@@ -6,8 +6,8 @@ import {
   type Mention,
   type MentionLines,
   mentionMarkdown,
-} from "@luke/features/mention-link";
-import type { Task } from "@luke/features/task-wire";
+} from "@repo/features/mention-link";
+import type { Task } from "@repo/features/task-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import { it } from "@effect/vitest";
-import { SIGN_IN_FAILURE } from "@luke/features/words";
+import { SIGN_IN_FAILURE } from "@repo/features/words";
 import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";

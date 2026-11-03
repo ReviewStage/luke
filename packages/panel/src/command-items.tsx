@@ -6,7 +6,7 @@
  * row that already names its thing says the verb alone ("Pin", "Permanently
  * delete"), and ⌘K, whose row names nothing, says the verb and the noun
  * ("Pin task", "Permanently delete task"). A command a chord reaches takes
- * its words from the shortcuts table (`@luke/settings/shortcuts`), whose
+ * its words from the shortcuts table (`@repo/settings/shortcuts`), whose
  * label is its verb and noun, so the menu bar, the Keyboard shortcuts page,
  * ⌘K, and the menus never word it apart; a command no chord reaches is
  * worded here alone. A chord that acts on whichever thing is focused, as
@@ -14,19 +14,19 @@
  * agent, keeps its own words in the table, which ⌘K and the menu bar say,
  * and each thing's item says its own verb (`keyedAs`).
  *
- * Note that the item is no `@luke/ui/command` `CommandItem`, which is one row
+ * Note that the item is no `@repo/ui/command` `CommandItem`, which is one row
  * of the dialog, its words to search and what choosing it does: a place
  * draws its row from a `PanelCommand` and says what choosing it does there.
  */
 
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   APP_COMMAND,
   type AppCommand,
   appCommandLabel,
   type KeyedCommand,
-} from "@luke/settings/shortcuts";
-import { TaskStatusMark } from "@luke/ui";
+} from "@repo/settings/shortcuts";
+import { TaskStatusMark } from "@repo/ui";
 import {
   ClockIcon,
   GLYPH,
@@ -39,7 +39,7 @@ import {
   ScrollTextIcon,
   UnlinkIcon,
   UserCheckIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import type { MenuAction } from "./desktop/action-menu.js";
 
 /** Where a command is offered: a menu on a row that names its thing, or ⌘K, whose row names nothing. */

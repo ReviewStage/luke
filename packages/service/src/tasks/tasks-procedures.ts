@@ -32,13 +32,13 @@
  * as Linear's blocked-by and blocks are: the other task, of the plan's own
  * workspace and one the caller reaches, waits on it or is waited on, and a
  * block that would close a cycle is refused
- * (`@luke/database/models/task-block-store`).
+ * (`@repo/database/models/task-block-store`).
  *
  * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
  * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
  * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's
- * (`@luke/database/models/plan-revisions`).
+ * (`@repo/database/models/plan-revisions`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -50,11 +50,11 @@
  * none; either way the plan belongs to that workspace from then on.
  */
 
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import { accountExperimentOn } from "@luke/database/models/account-store";
-import { listAgents, readAgentByKey } from "@luke/database/models/agent-store";
-import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { accountExperimentOn } from "@repo/database/models/account-store";
+import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
+import { listRevisions, readRevision } from "@repo/database/models/plan-revisions";
+import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   addTaskBlock,
   removeTaskBlock,
@@ -64,7 +64,7 @@ import {
   type TaskBlockPair,
   type TaskBlockSelf,
   type TaskBlockWritten,
-} from "@luke/database/models/task-block-store";
+} from "@repo/database/models/task-block-store";
 import {
   checkTreeRepository,
   deleteTaskCommitted,
@@ -76,14 +76,14 @@ import {
   type TaskHeader,
   type TaskRunsOnWrite,
   updateTaskCommitted,
-} from "@luke/database/models/task-store";
-import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
-import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
-import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { AGENT_ARCHIVER, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
-import { TASK_START_STATUS } from "@luke/features/contract";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
+} from "@repo/database/models/task-store";
+import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
+import { ensurePersonalWorkspace, isWorkspaceMember } from "@repo/database/models/workspace-store";
+import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
+import { AGENT_ARCHIVER, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@repo/features/agent-wire";
+import { TASK_START_STATUS } from "@repo/features/contract";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { PLAN_EDIT_REFUSAL } from "@repo/features/plan-edit";
 import {
   startRelationsOf,
   TASK_BLOCK_CHANGE,
@@ -97,8 +97,8 @@ import {
   type TaskMode,
   type TaskRunsOnRequest,
   type TaskStartAnswer,
-} from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";

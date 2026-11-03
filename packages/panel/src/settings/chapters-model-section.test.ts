@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@luke/features/chapters-model-choice";
-import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@repo/features/pull-request-chapters-view";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

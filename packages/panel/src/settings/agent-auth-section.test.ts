@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -11,13 +11,13 @@ import {
   type ProviderKeySummary,
   type ProviderKeysAnswer,
   type SubscriptionKeySummary,
-} from "@luke/features/provider-key-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { BUTTON_VARIANT, SETTINGS_ROW_STATE } from "@luke/ui";
+} from "@repo/features/provider-key-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@repo/settings/settings-views";
+import { BUTTON_VARIANT, SETTINGS_ROW_STATE } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

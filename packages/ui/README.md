@@ -1,4 +1,4 @@
-# `@luke/ui`
+# `@repo/ui`
 
 Vespin's design system: the tokens, components, and page patterns the desktop
 window and the site both draw with, plus the product's mark, glyphs, provider marks, and
@@ -25,8 +25,8 @@ theme, density?)`, whose types refuse `system` and a density on the desktop.
 An app imports the sheets after its reset and before its utilities:
 
 ```css
-@import "@luke/ui/tokens.css"; /* scale, profiles, palettes, display, motion */
-@import "@luke/ui/styles.css"; /* every component, in the `components` layer */
+@import "@repo/ui/tokens.css"; /* scale, profiles, palettes, display, motion */
+@import "@repo/ui/styles.css"; /* every component, in the `components` layer */
 ```
 
 ## Tokens
@@ -110,13 +110,13 @@ Every token is a `--ui-*` custom property under `src/tokens/`.
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
   `danger*`, `focus-ring`, …), set by both profiles in both themes. The
   brand's own colours among them (the grounds, the inks, the accent, the status
-  inks) are `brand.css`, generated from the brand table in `@luke/brand`'s
+  inks) are `brand.css`, generated from the brand table in `@repo/brand`'s
   `scripts/brand-palette.mjs`, so a rebrand or a second theme is that table;
   `tokens/brand-contrast.test.ts` holds its inks to WCAG AA.
 - **Display** (`display.css`): the site's marketing styles, `--ui-display-*`,
   set under the web profile only; the window has no display type.
-- **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
-  `pnpm --filter @luke/brand generate`; `motion.css`): `--ui-duration-*`,
+- **Motion** (`motion-tokens.css`, generated from `@repo/brand`'s tables by
+  `pnpm --filter @repo/brand generate`; `motion.css`): `--ui-duration-*`,
   `--ui-duration-shape`, `--ui-spring`, `--ui-spring-fast`, `--ui-motion-exit|pane`,
   `--ui-row-stagger`, `--ui-hint-delay`, `--ui-late-delay`,
   `--ui-confirm-delay` (how long a `SavedTick` stands, which reduced motion
@@ -130,7 +130,7 @@ Every token is a `--ui-*` custom property under `src/tokens/`.
   `border-border`, `bg-switch-on`, …), each name an alias of a `--ui-*`
   role. An app's Tailwind entry imports both after Tailwind's own theme and
   utilities, as the desktop's `tailwind.css`, the web's `app.css`, and the
-  catalog's `catalog.css` do, so the utilities `@luke/ui`'s components spell
+  catalog's `catalog.css` do, so the utilities `@repo/ui`'s components spell
   are compiled.
 - **Placement hooks**: the few properties an app may set on a component's
   container, each the one way a measurement of the app's reaches inside.
@@ -144,11 +144,11 @@ Every token is a `--ui-*` custom property under `src/tokens/`.
 
 ## Built on shadcn/ui
 
-`@luke/ui`'s controls are moving onto shadcn/ui over Base UI, one component
+`@repo/ui`'s controls are moving onto shadcn/ui over Base UI, one component
 at a time, each behind the props it already has, so no call site changes
 as it moves. A vendored shadcn component lives in `src/shadcn/`, generated
 by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
-theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
+theme above; the `@repo/ui` component an app imports wraps it. Moved so far:
 `Switch`; `Menu` and its submenus, on Base UI's menu (`useMenu`'s
 `contextMenu` stays a spread, the same menu hung at the pointer); and
 `Combobox` and `Calendar`, drawn in shadcn's combobox and calendar classes
@@ -198,7 +198,7 @@ The feedback and display components are drawn the same way: `Badge`,
 table) wrap their vendored sources. `Chip` and `Toast` are drawn in the
 theme's utilities with no shadcn base: a chip is a press shadcn's badge does
 not take, and a toast's holds, stack, and timing stay the panel's on Effect's
-`Clock` (`@luke/panel`'s `toast.tsx`), which Sonner's own timers would not
+`Clock` (`@repo/panel`'s `toast.tsx`), which Sonner's own timers would not
 keep. `ScrollArea` keeps the platform's own scroller rather than Base UI's
 viewport and bars, so its scrolling, keys, and the refs callers hold on it
 are what they were. A component's sheet keeps only what a utility cannot
@@ -265,9 +265,9 @@ skeleton's boxes, whose classes name themselves a skeleton's.
 
 ## Icons
 
-Every icon is imported through one door, `@luke/ui/icons`, built on Lucide
+Every icon is imported through one door, `@repo/ui/icons`, built on Lucide
 (`src/icons/`): Lucide's glyphs by Lucide's own names, `GLYPH`, and
-`ICON_SIZE`. Nothing outside `@luke/ui` imports `lucide-react` directly:
+`ICON_SIZE`. Nothing outside `@repo/ui` imports `lucide-react` directly:
 `anti-slop/no-lucide-outside-door` refuses it from a baseline,
 `tools/anti-slop/lucide-baseline.json` (each file still importing it, with its
 count), which only shrinks. A file that holds fewer imports than its row fails
@@ -300,7 +300,7 @@ rule takes no suppression.
 Import from the barrel:
 
 ```tsx
-import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
 
 <Inline gap={GAP.CONTROL}>
   <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>Workspace</Text>
@@ -358,8 +358,8 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   and settings; `panels` makes it a tablist over the views it switches, and
   without them it is a radio group setting a value. A count is words or
   `CountPart`s, and a diff's lines are `linesCount`'s, always green and red.
-- **Heavy dependencies stay off the barrel.** The chart is `@luke/ui/chart`;
-  each view model is its own subpath (`@luke/ui/<name>`, see `package.json`).
+- **Heavy dependencies stay off the barrel.** The chart is `@repo/ui/chart`;
+  each view model is its own subpath (`@repo/ui/<name>`, see `package.json`).
 
 What the barrel holds (`src/index.ts`):
 
@@ -410,7 +410,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade))`, as `Chip` and `ListRow` do |
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--ui-duration-*`, `--ui-*-delay`). An endless loop whose `animation-play-state` answers `--ui-loop-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--ui-spring`, `--ui-spring-fast`, `--ui-motion-exit`, or `--ui-motion-pane`; a hover's `ease` is the default, so drop it |
-| `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
+| `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@repo/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
 | `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-ui-profile` selector or variant | A control reads `cursor-press` (`--ui-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--ui-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--ui-list-gap`, `--ui-tight-gap`, `--ui-control-gap`, `--ui-row-inset`, `--ui-section-gap`, `--ui-page-section-gap`) or, where no role fits, a `--ui-space-*` step |
 | `crumb-width` | A `min-width` above zero on a path's crumb (`.ui-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
@@ -473,6 +473,6 @@ The address is the whole view:
 for the site's compact surface.
 
 ```sh
-pnpm --filter @luke/catalog dev     # serve it with Vite
-pnpm --filter @luke/catalog build   # a static folder under apps/catalog/dist
+pnpm --filter @repo/catalog dev     # serve it with Vite
+pnpm --filter @repo/catalog build   # a static folder under apps/catalog/dist
 ```

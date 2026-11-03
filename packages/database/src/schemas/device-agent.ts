@@ -3,7 +3,7 @@ import type {
   DeviceAgentObject,
   DeviceAgentRequestKind,
   DeviceLaunchStep,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { bytea, createdAt, timestamptz } from "./_helpers.js";

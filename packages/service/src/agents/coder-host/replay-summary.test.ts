@@ -8,7 +8,7 @@ import {
   stepsBytes,
   summaryBytes,
   toolStep,
-} from "@luke/features/agent-replay";
+} from "@repo/features/agent-replay";
 import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";

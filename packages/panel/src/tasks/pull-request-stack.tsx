@@ -2,11 +2,11 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestStackEntry,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
-import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
+import { ACT_KIND } from "@repo/host/acts";
+import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@repo/ui";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { LayersIcon } from "lucide-react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";

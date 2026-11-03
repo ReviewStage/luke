@@ -10,11 +10,11 @@ app_require_node
 app_ensure_dependencies
 
 # The instance `--demo` launches, the one folder of its profile a run keeps
-# (the CLIs the run's host fetched for its agents, `@luke/host`'s
+# (the CLIs the run's host fetched for its agents, `@repo/host`'s
 # local-agent-tools.ts), how long its local server may take to answer, and
 # the link the app opens once signed in: acme's Inbox, by the slug the
 # seed's workspace name takes in a fresh database
-# (`@luke/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
+# (`@repo/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
 DEMO_INSTANCE=demo
 DEMO_KEPT_FOLDER=agent-tools
 DEMO_SERVER_WAIT_SECONDS=120
@@ -261,10 +261,10 @@ demo_origin="http://127.0.0.1:$demo_port"
     if [[ -n $demo_anthropic_api_key ]]; then
         export APP_DEMO_ANTHROPIC_API_KEY="$demo_anthropic_api_key"
     fi
-    exec pnpm --filter @luke/web demo:seed
+    exec pnpm --filter @repo/web demo:seed
 )
 
-# Note that node runs the server itself rather than `pnpm --filter @luke/web
+# Note that node runs the server itself rather than `pnpm --filter @repo/web
 # local-server`, because a pnpm that hands the run to the version the
 # repository pins waits on it without passing a stop on, so the trap's stop
 # would never reach the server.
@@ -297,7 +297,7 @@ printf 'demo: serving %s, its log at %s\n' "$demo_origin" "$demo_folder/server.l
 # handed: its agents run on the one saved as Dean's. The first run fetches
 # its agents' CLIs into the kept folder, and the host reads as getting ready
 # in Settings › Hosts until it has them.
-pnpm --filter @luke/host-daemon --filter @luke/agent-runner build >"$demo_folder/host-build.log" 2>&1 || {
+pnpm --filter @repo/host-daemon --filter @repo/agent-runner build >"$demo_folder/host-build.log" 2>&1 || {
     printf 'error: the demo host did not build; it printed:\n' >&2
     cat "$demo_folder/host-build.log" >&2
     exit 1
@@ -311,7 +311,7 @@ printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/h
 
 # Note that the app is handed acme's link, because a cleared profile opens
 # the member's own workspace, which the seed leaves empty; the app holds the
-# link until it is signed in (`@luke/features/app-links`), and a link among
+# link until it is signed in (`@repo/features/app-links`), and a link among
 # the arguments forwarded, the last, opens in its place.
 export APP_ACCOUNT_BASE_URL="$demo_origin/api/auth"
 pnpm start -- "$DEMO_LINK" "$@"

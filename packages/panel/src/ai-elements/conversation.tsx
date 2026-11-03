@@ -7,9 +7,9 @@ import {
   type ScrollFade,
   type ScrollFadeInset,
   Tooltip,
-} from "@luke/ui";
-import { scrollAsked } from "@luke/ui/scroll-asked";
-import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
+} from "@repo/ui";
+import { scrollAsked } from "@repo/ui/scroll-asked";
+import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -41,7 +41,7 @@ import {
  * the button that takes them there. The context the children read is the
  * registry's: whether the log is at its bottom, and a way to go there.
  *
- * The log scrolls in `@luke/ui`'s `ScrollArea`, which fades its edges as
+ * The log scrolls in `@repo/ui`'s `ScrollArea`, which fades its edges as
  * the caller asks, and holds its lines in one block of its own inside it
  * (`.conversation-log`), which carries the log's padding. That block is
  * not a flex column. A flex item of a container with a definite height has
@@ -252,7 +252,7 @@ export function Conversation({
     const count = lines?.childElementCount ?? 0;
     const first = lines?.firstElementChild instanceof HTMLElement ? lines.firstElementChild : null;
     const last = lines?.lastElementChild ?? null;
-    // A virtualized run (`@luke/ui/virtual-rows`) says on its block which rows it holds, and keeps the reader's place itself as rows land before them.
+    // A virtualized run (`@repo/ui/virtual-rows`) says on its block which rows it holds, and keeps the reader's place itself as rows land before them.
     const rows = first?.getAttribute(VIRTUAL_ROWS_ATTRIBUTE) ?? null;
     const held = observed.current;
     if (
@@ -389,7 +389,7 @@ export function ConversationContent({
 
 /**
  * A long run of the log's lines drawn only near the view
- * (`@luke/ui/virtual-rows`), in the log's own scroll box, as one line of
+ * (`@repo/ui/virtual-rows`), in the log's own scroll box, as one line of
  * the log: lines after it, a working line's, stand after the run. The log
  * goes on following its newest line as it does, the run leaving it at its
  * end while it does, and the run keeps the reader's place as lines land

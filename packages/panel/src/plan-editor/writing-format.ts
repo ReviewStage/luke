@@ -18,9 +18,9 @@ import {
   WRITING_MARK,
   type WritingBlock,
   type WritingMark,
-} from "@luke/settings/shortcuts";
-import { clipsAround, cutTo } from "@luke/ui/clip-room";
-import { visibleViewport } from "@luke/ui/visible-viewport";
+} from "@repo/settings/shortcuts";
+import { clipsAround, cutTo } from "@repo/ui/clip-room";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { type AnyExtension, type ChainedCommands, type Editor, Extension } from "@tiptap/core";
 import { keydownHandler } from "@tiptap/pm/keymap";
 import type { ResolvedPos } from "@tiptap/pm/model";

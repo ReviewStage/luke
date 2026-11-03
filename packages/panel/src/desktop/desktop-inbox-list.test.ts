@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -9,10 +9,10 @@ import {
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, onTestFinished, test } from "vitest";

@@ -9,9 +9,9 @@ import {
   type AgentPullRequest,
   CONTEXT_WINDOW,
   type ContextWindow,
-} from "@luke/features/agent-wire";
-import type { AutomationFiring } from "@luke/features/automation-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-wire";
+import type { AutomationFiring } from "@repo/features/automation-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -363,7 +363,7 @@ export const agentTable = pgTable(
  * One delegation of a coding agent's: the model and effort the agent chose
  * for the worker, keyed by the child conversation the worker's session is
  * recorded in, which is a function of the agent's conversation and the call
- * that started the worker (`@luke/database/models/ids`). The worker's own steps
+ * that started the worker (`@repo/database/models/ids`). The worker's own steps
  * read the pair here, since eve hands a child's resolvers no lineage and the
  * pair is per call rather than per agent. The call's own id is kept beside
  * it, since the child's id is a digest no reader can turn back into the

@@ -10,7 +10,7 @@
  * section without its rows.
  *
  * A pin, or a drag's or a menu's section writes, is drawn at once, as the
- * service will keep it (`@luke/features/task-section-writes`), and stands
+ * service will keep it (`@repo/features/task-section-writes`), and stands
  * while it is written: kept once the followed sidebar has its transaction,
  * and taken back where the service refused it. Where the follow hands no
  * wait yet, as before Sync first woke it, the service's own answer is
@@ -26,7 +26,7 @@
  * before the write settles.
  */
 
-import type { SidebarRead, SidebarRows } from "@luke/features/sidebar-live";
+import type { SidebarRead, SidebarRows } from "@repo/features/sidebar-live";
 import type {
   AgentSectionEntry,
   TaskSection,
@@ -34,9 +34,9 @@ import type {
   TaskSections,
   TaskSectionsWritten,
   TaskSectionWrite,
-} from "@luke/features/task-section-wire";
-import { applySectionWrite } from "@luke/features/task-section-writes";
-import type { RepositoryPin, RepositoryPinsWritten } from "@luke/features/task-wire";
+} from "@repo/features/task-section-wire";
+import { applySectionWrite } from "@repo/features/task-section-writes";
+import type { RepositoryPin, RepositoryPinsWritten } from "@repo/features/task-wire";
 import { createLiveQueryCollection } from "@tanstack/db";
 import { Data, Deferred, Effect, type Scope } from "effect";
 import {

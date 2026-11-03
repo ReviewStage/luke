@@ -1,4 +1,4 @@
-import { LEGACY_APP_WORD } from "@luke/wire";
+import { LEGACY_APP_WORD } from "@repo/wire";
 import { Schema as EffectSchema, Option } from "effect";
 import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
 import { WEBM_TYPE } from "./video-signature.js";

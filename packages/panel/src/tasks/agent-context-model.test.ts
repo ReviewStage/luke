@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AGENT_BRIEF, type AgentContext } from "@luke/features/agent-wire";
+import { AGENT_BRIEF, type AgentContext } from "@repo/features/agent-wire";
 import { test } from "vitest";
 import {
   contextFullLine,

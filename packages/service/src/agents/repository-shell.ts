@@ -2,8 +2,8 @@ import {
   CHECKOUT_IDENTITY_SCRIPT,
   type CheckoutIdentity,
   checkoutIdentityEnv,
-} from "@luke/features/checkout-identity";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/checkout-identity";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Data, Duration, Effect, Redacted } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";

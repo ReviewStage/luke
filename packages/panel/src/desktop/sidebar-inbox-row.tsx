@@ -1,4 +1,4 @@
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   BUTTON_SIZE,
   commandKeyshortcuts,
@@ -9,8 +9,8 @@ import {
   Shortcut,
   STATUS_TONE,
   useMenu,
-} from "@luke/ui";
-import { InboxIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { InboxIcon } from "@repo/ui/icons";
 import { useRef } from "react";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import type { InboxChannels } from "./sidebar-channels.js";

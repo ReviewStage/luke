@@ -1,7 +1,7 @@
 /**
  * section-icon-model.ts -- what a sidebar section's icon picker offers and finds: every Lucide glyph by its kebab-case name, every emoji by category, and the words a search finds each by.
  *
- * A glyph travels by its kebab-case name (`@luke/features/task-section-wire`)
+ * A glyph travels by its kebab-case name (`@repo/features/task-section-wire`)
  * and is drawn from Lucide's `icons` map, whose keys are the same name in
  * PascalCase, so the two spellings are turned into each other here and
  * nowhere else. Note that the name a glyph is stored under is the one
@@ -20,7 +20,7 @@ import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
   type TaskSectionIcon,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /** The newest emoji version offered: one newer is not yet drawn by every macOS a Mac may run. */

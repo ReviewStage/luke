@@ -8,7 +8,7 @@
  * second. A definition names the read by its procedure, the params the
  * procedure binds once it has admitted the caller, the tables the read's
  * statements read, each a synced table's declaration
- * (`@luke/database/sync/sync-table`), so a read can't wait on a table nothing
+ * (`@repo/database/sync/sync-table`), so a read can't wait on a table nothing
  * captures, the topics those params wake it on, and the statements
  * themselves, built as the read's builder always built them. A read whose
  * topics its params don't name, such as the reader's workspaces, looks them
@@ -27,11 +27,11 @@
  * registered definition's statements, past a cursor too, to the tables it
  * names and to no column those tables ignore.
  */
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import type { SyncTopic } from "@luke/database/sync/notification";
-import type { SyncTable } from "@luke/database/sync/sync-table";
-import type { hostedContract } from "@luke/features/contract";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import type { SyncTopic } from "@repo/database/sync/notification";
+import type { SyncTable } from "@repo/database/sync/sync-table";
+import type { hostedContract } from "@repo/features/contract";
 import type { Effect, Option } from "effect";
 
 /** How a live read answers a wake: run again and answered whole where its rows moved, or its cursor parts answered past the reader's cursor. */

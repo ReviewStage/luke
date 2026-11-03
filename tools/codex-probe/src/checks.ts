@@ -17,7 +17,7 @@ import {
   valueFromJsonText,
   type WireRecord,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 import { METHOD, PROBE_MCP } from "./app-server.js";
 import { SCAN_MARKER } from "./sandbox-scripts.js";
 

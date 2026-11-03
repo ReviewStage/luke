@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -7,12 +7,12 @@ import {
   readPlanCommentThreads,
   startPlanCommentThread,
   withdrawPlanCommentAsk,
-} from "@luke/database/models/plan-comments";
-import { readPageById } from "@luke/database/models/plan-pages";
-import { readTaskHeader, readTaskWorkspace } from "@luke/database/models/task-store";
-import { TOPIC } from "@luke/database/sync/notification";
-import { askedInWords } from "@luke/features/mention-link";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+} from "@repo/database/models/plan-comments";
+import { readPageById } from "@repo/database/models/plan-pages";
+import { readTaskHeader, readTaskWorkspace } from "@repo/database/models/task-store";
+import { TOPIC } from "@repo/database/sync/notification";
+import { askedInWords } from "@repo/features/mention-link";
+import { PAGE_SHOWER } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -22,7 +22,7 @@ import {
   type PlanCommentsAnswer,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
@@ -53,7 +53,7 @@ import {
  * Inbox is read, and woken by Sync on the plan's topic, so a window
  * hears a teammate's or an agent's comment the moment it lands; `POST`
  * starts a thread with its first comment, anchored to words of the plan's
- * text (`@luke/database/models/plan-comments`).
+ * text (`@repo/database/models/plan-comments`).
  * `POST /api/plans/{id}/comments/{thread}` is one thing done to a thread,
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,

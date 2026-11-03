@@ -16,10 +16,10 @@
  * does. Every name, address, and line here is invented.
  */
 
-import type { AgentTranscriptPage } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
+import type { AgentTranscriptPage } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { AsyncIteratorClass } from "@orpc/client";
 import { rendererPause } from "../renderer-runtime.js";
 

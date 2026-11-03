@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { deleteAccount } from "@luke/database/models/account-store";
-import { organization, user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { AGENT_KIND } from "@luke/features/agent-wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { deleteAccount } from "@repo/database/models/account-store";
+import { organization, user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { AGENT_KIND } from "@repo/features/agent-wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";

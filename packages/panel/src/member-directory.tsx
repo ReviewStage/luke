@@ -1,7 +1,7 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { TaskSummary } from "@luke/features/task-wire";
-import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { TaskSummary } from "@repo/features/task-wire";
+import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { type Actor, accountActor, creatorActor, personActor } from "@repo/ui/actor-model";
 import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
 import { useFormerMembersRead, useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
@@ -12,7 +12,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * The wire names a person by `{userId, name}` alone, so a byline, the Call
  * tab, an agent's card, and an Inbox answer each read the person against the
  * workspace's members for their picture, email, and role, and the reader's
- * own id to say You (`@luke/ui/actor-model`'s `personActor`), and someone
+ * own id to say You (`@repo/ui/actor-model`'s `personActor`), and someone
  * who left keeps their picture, grayed, from who the read says left. The plan reads
  * the members once, here, rather than once for every line naming someone,
  * and again whenever the workspace's count changes. Outside a directory, or

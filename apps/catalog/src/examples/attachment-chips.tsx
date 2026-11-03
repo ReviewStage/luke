@@ -8,7 +8,7 @@ import {
   ListMotion,
   motionRows,
   useLeaving,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type RefObject, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -1,6 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import type { LanguageModel } from "ai";
 import { Redacted } from "effect";
 

@@ -50,7 +50,7 @@ export const PAGE_RESPONSE_HEADERS = {
 
 /**
  * The headers a page is answered with on the web, from the sandbox's own
- * site (`@luke/features/page-frame`): every page's, framed by the app's own
+ * site (`@repo/features/page-frame`): every page's, framed by the app's own
  * origins alone, so no other site's page draws one as its own, and kept by
  * no shared cache, since the address it answers is a link minted for one
  * account. A deployment that names no origin of its own lets no page frame

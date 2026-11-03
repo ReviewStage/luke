@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { DEVICE_AGENT_REQUEST_KIND, deviceAgentLayout } from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { DEVICE_AGENT_REQUEST_KIND, deviceAgentLayout } from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";

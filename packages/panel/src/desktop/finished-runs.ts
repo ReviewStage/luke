@@ -1,6 +1,6 @@
-import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/agent-wire";
-import { automationRun } from "@luke/features/model-label";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
+import { automationRun } from "@repo/features/model-label";
+import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { waitsOnReader } from "../tasks/inbox-model.js";
 
 /**

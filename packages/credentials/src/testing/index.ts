@@ -11,7 +11,7 @@ import {
   type RecordedRequest,
   type RecordingHttpClient,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Effect } from "effect";
 import { CHATGPT_SIGN_IN } from "../chatgpt-sign-in.js";
 

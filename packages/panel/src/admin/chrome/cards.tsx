@@ -1,5 +1,5 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@repo/ui";
 import { unreadShown } from "../../failure-report.js";
 
 /**

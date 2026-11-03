@@ -1,9 +1,9 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_ENDPOINT } from "@luke/host/update-service";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import type { UpdateControl } from "@luke/settings/settings-controls";
-import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@luke/settings/update-row";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
+import { UPDATE_ENDPOINT } from "@repo/host/update-service";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
+import type { UpdateControl } from "@repo/settings/settings-controls";
+import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@repo/settings/update-row";
 import {
   BUTTON_VARIANT,
   Button,
@@ -16,7 +16,7 @@ import {
   Progress,
   SettingsRow,
   SettingsSection,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useAct } from "../act.js";
 import { failureShown } from "../failure-report.js";
 
@@ -75,7 +75,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
  * About page's one group, while the sidebar's update row carries the news
  * outside. A platform that offers no updates draws the changelog alone.
  *
- * The group is `@luke/ui`'s `SettingsSection` and each line its
+ * The group is `@repo/ui`'s `SettingsSection` and each line its
  * `SettingsRow`, every act the outline `Button` or, where it opens a page, `ButtonLink`. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.

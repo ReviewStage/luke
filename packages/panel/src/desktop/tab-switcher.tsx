@@ -45,13 +45,13 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import type { TaskSummary } from "@luke/features/task-wire";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
-import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import type { TaskSummary } from "@repo/features/task-wire";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
+import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import {
   isAgentTab,
   isChangesTab,
@@ -62,7 +62,7 @@ import {
   isTerminalTab,
   sameTab,
   TAB_WORDS,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";

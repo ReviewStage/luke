@@ -1,5 +1,5 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { FailureNote } from "@luke/ui";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { FailureNote } from "@repo/ui";
 import { createContext, type ReactNode, useContext } from "react";
 import { failureShown } from "../failure-report.js";
 

@@ -12,15 +12,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, openInstallationWorkspace } from "@luke/database/testing";
-import { GITHUB_REPOSITORIES_QUERY } from "@luke/features";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, openInstallationWorkspace } from "@repo/database/testing";
+import { GITHUB_REPOSITORIES_QUERY } from "@repo/features";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/pull-request-write-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { pullRequestChaptersProcedures } from "../chapters/pull-request-chapters-procedures.js";

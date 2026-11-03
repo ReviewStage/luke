@@ -2,9 +2,9 @@ import type {
   AgentPullRequest,
   AgentStatus,
   AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import type { PlanEditor } from "@luke/features/task-wire";
+} from "@repo/features/agent-wire";
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
+import type { PlanEditor } from "@repo/features/task-wire";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -14,9 +14,9 @@ import {
   Time,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import {
   ACTOR_SIZE,
   ActorMark,
@@ -44,7 +44,7 @@ import { WorkingTime } from "./working-time.js";
 /**
  * agent-tab-card.tsx -- the card an agent's or a subagent's tab hangs while the pointer rests on it: its whole name, when it last moved, and one line of what it last did.
  *
- * The card stands in the tab's hint's place (`@luke/ui`'s `Tooltip`), so it waits,
+ * The card stands in the tab's hint's place (`@repo/ui`'s `Tooltip`), so it waits,
  * warms, and goes as a hint does, and an agent's and a subagent's are laid
  * out alike. Its head is the name, wrapped to two lines, or, for a subagent
  * not yet titled, its task on one line faded where it is cut short, as a

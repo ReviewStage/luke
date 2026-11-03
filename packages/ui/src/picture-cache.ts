@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION } from "@repo/features/shown-failure";
 import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
 import type { ReportedFailure } from "./reported-failure.js";
 

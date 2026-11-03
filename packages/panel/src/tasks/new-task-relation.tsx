@@ -4,8 +4,8 @@ import {
   type TaskCreateRelation,
   type TaskCreateRelationKind,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
+} from "@repo/features/task-wire";
+import { taskKey } from "@repo/features/workspace-key";
 import {
   BUTTON_SIZE,
   type FootRow,
@@ -22,9 +22,9 @@ import {
   TaskRows,
   TaskStatusMark,
   VisuallyHidden,
-} from "@luke/ui";
-import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useState } from "react";
 import { RelationKindPill } from "./relation-kind-pill.js";
 import { TASK_RELATION_MENU } from "./task-relation-menu.js";

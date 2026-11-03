@@ -7,7 +7,7 @@ import {
   DIFF_LAYOUT,
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
-} from "@luke/settings/diff-view";
+} from "@repo/settings/diff-view";
 import { getSharedHighlighter } from "@pierre/diffs";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

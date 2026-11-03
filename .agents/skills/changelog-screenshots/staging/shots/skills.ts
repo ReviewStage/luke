@@ -15,17 +15,17 @@
  * (an `input` event React hears as `onChange`), so no shared file changes.
  */
 
-import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import type { TaskSkillsAnswer } from "@luke/features/plan-wire";
+import type { CodingAgentMessagesAnswerView } from "@repo/features/coding-agent-view";
+import type { CodingAgentMessage } from "@repo/features/coding-agent-wire";
+import type { TaskSkillsAnswer } from "@repo/features/plan-wire";
 import type {
   CodeLines,
   CodeToken,
   TasksFileAnswer,
   TasksTreeAnswer,
-} from "@luke/features/planning-view";
-import type { WireRecord, WireValue } from "@luke/wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/planning-view";
+import type { WireRecord, WireValue } from "@repo/wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers, MODEL, shotAgents } from "./coding-agent";

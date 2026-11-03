@@ -46,7 +46,7 @@ const PAGE_SWIPE = {
 const SWIPE_ATTRIBUTE = "data-ui-page-swipe";
 const OFFSET_PROPERTY = "--ui-page-swipe-offset";
 
-/** The boxes that take a sideways drag of their own: a field, and a slider, whose thumb and track are no field (`@luke/ui`'s Slider, as a video's scrubber). */
+/** The boxes that take a sideways drag of their own: a field, and a slider, whose thumb and track are no field (`@repo/ui`'s Slider, as a video's scrubber). */
 const DRAGGED_ITSELF = 'input, textarea, [role="slider"], [data-slot="slider"]';
 
 /** What a sideways overflow says where a box scrolls along it. */

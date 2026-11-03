@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import { Database } from "@repo/database/core/query";
+import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   archiveAgent,
   createAgent,
@@ -10,7 +10,7 @@ import {
   readAgent,
   recordAgentPublished,
   takeAgentMentionedServers,
-} from "@luke/database/models/agent-store";
+} from "@repo/database/models/agent-store";
 import {
   type Automation,
   type AutomationRun,
@@ -22,23 +22,23 @@ import {
   readAutomationToRun,
   recordAutomationRun,
   updateAutomation,
-} from "@luke/database/models/automation-store";
-import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
-import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
-import { turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
+} from "@repo/database/models/automation-store";
+import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
+import { readMessageByClientId, sentLineStands } from "@repo/database/models/message-reads";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { createTask } from "@repo/database/models/task-store";
+import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
+import { turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@repo/database/testing";
 import {
   AGENT_BOUNDS,
   AGENT_PAYER,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -51,14 +51,14 @@ import {
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
-} from "@luke/features/automation-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_ASK } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
-import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/automation-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { INBOX_ASK } from "@repo/features/inbox-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";

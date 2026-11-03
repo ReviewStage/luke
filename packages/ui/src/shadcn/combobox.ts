@@ -7,7 +7,7 @@
  * spell, so a later `shadcn add combobox` reads as a small diff against
  * them. Its Base UI parts are left out, because Base UI's combobox owns
  * whether the list is open, what it filters, and which item is lit, and
- * every caller of `@luke/ui`'s `Combobox` owns all three
+ * every caller of `@repo/ui`'s `Combobox` owns all three
  * (`components/combobox/use-combobox-field.ts`), a list engine of the app's
  * (cmdk) among them; and its input, trigger, clear, chips, and popup are
  * left out, because the field is the text field's own and the list stands
@@ -21,7 +21,7 @@
  * (`--ui-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
  * to leave off, the active option marking it); the label is the muted caption; and the empty
  * line is a row or two tall, so a list with nothing never falls to a sliver.
- * `@luke/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
+ * `@repo/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
  * app draws; these are its inside.
  */
 

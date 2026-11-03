@@ -2,7 +2,7 @@
  * inbox-arrivals.ts -- says what lands in the Inbox on screen, politely, once: one item by its title, several that landed together by their count.
  *
  * Main tells the window nothing of an item that opens while it is focused
- * (`@luke/host/agent-notices`), since a sighted reader sees it land in the
+ * (`@repo/host/agent-notices`), since a sighted reader sees it land in the
  * list, and elsewhere the Inbox's count says it. So a screen reader hears
  * the Inbox on screen from here: the items a push
  * of it holds that the one before did not, said together. The first push
@@ -14,9 +14,9 @@
  * revision whichever of them said it first.
  */
 
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { inboxArrivalWords } from "@luke/features/words";
-import { ANNOUNCE, announce } from "@luke/ui";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { inboxArrivalWords } from "@repo/features/words";
+import { ANNOUNCE, announce } from "@repo/ui";
 import { useEffect, useRef } from "react";
 
 /**

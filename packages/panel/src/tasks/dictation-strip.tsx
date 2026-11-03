@@ -1,4 +1,4 @@
-import { playheadText } from "@luke/features/time-format";
+import { playheadText } from "@repo/features/time-format";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
@@ -11,8 +11,8 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-} from "@luke/ui";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
+} from "@repo/ui";
+import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useMotionHeld } from "../use-motion-held.js";

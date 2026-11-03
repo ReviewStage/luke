@@ -6,7 +6,7 @@ import {
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Effect, Fiber, Random } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer, CALL_FAULT, type CallCredential } from "./account-call.js";

@@ -6,7 +6,7 @@
  * the columns of one already synced, carries the capture this writes:
  *
  *     pnpm db:generate --custom --name=sync_<what>      (or a plain generate)
- *     pnpm --filter @luke/database sync:render <migration folder> <table>…
+ *     pnpm --filter @repo/database sync:render <migration folder> <table>…
  *
  * The tables' triggers are dropped before the migration's own statements and
  * created after them, so a column a trigger's `WHEN` names can be dropped or

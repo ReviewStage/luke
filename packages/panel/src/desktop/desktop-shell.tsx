@@ -1,9 +1,9 @@
-import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import type { Task } from "@luke/features/task-wire";
-import { readingWords } from "@luke/features/words";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
+import type { Task } from "@repo/features/task-wire";
+import { readingWords } from "@repo/features/words";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BACK_BUTTON_LOOK,
   BackButton,
@@ -24,8 +24,8 @@ import {
   Toolbar,
   Tooltip,
   useDrawerSwipe,
-} from "@luke/ui";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/ui";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";

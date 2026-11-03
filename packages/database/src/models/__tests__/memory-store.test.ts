@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
+import { MEMORY_BOUNDS } from "@repo/features/memory-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";

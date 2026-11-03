@@ -1,5 +1,5 @@
-import { formatCount } from "@luke/features/number-format";
-import { formatDayTick } from "@luke/features/time-format";
+import { formatCount } from "@repo/features/number-format";
+import { formatDayTick } from "@repo/features/time-format";
 import {
   Badge,
   DATA_TABLE_COLUMN_KIND,
@@ -18,8 +18,8 @@ import {
   TextButton,
   TextLink,
   Tooltip,
-} from "@luke/ui";
-import { accountLabel } from "@luke/ui/account-initials";
+} from "@repo/ui";
+import { accountLabel } from "@repo/ui/account-initials";
 import {
   ACCOUNTS_SORT_KEY,
   type AccountsDetailColumn,
@@ -28,8 +28,8 @@ import {
   type AccountsTableRow,
   nextSort,
   sortAccountsRows,
-} from "@luke/ui/accounts-sort";
-import { StarIcon } from "@luke/ui/icons";
+} from "@repo/ui/accounts-sort";
+import { StarIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";

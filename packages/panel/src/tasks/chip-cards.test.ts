@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
+} from "@repo/features/automation-wire";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -19,20 +19,20 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@luke/host/app-state";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";

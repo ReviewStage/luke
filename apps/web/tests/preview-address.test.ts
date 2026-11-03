@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { type TestContext, test } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -16,7 +16,7 @@ const SCRIPTS = [
 const WORKSPACE = {
   "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',
   "vercel.json": `${JSON.stringify({ services: { web: { root: "apps/web" } } })}\n`,
-  "apps/web/package.json": `${JSON.stringify({ name: "@luke/web" })}\n`,
+  "apps/web/package.json": `${JSON.stringify({ name: "@repo/web" })}\n`,
 } as const;
 const REPOSITORY = "acme/web";
 const BRANCH = "agent/rebased";

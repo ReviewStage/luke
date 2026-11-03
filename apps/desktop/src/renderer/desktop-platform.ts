@@ -2,12 +2,12 @@
  * desktop-platform.ts -- what the desktop's shell answers for the panel: each capability as the act or the preload event main already serves.
  */
 
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { ACT_KIND } from "@luke/host/acts";
-import { askAct, pressAct, tellAct } from "@luke/panel/act";
-import { appBridge } from "@luke/panel/app-bridge";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { openBrowserLiveOverPort } from "@luke/panel/browser-live-port";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { ACT_KIND } from "@repo/host/acts";
+import { askAct, pressAct, tellAct } from "@repo/panel/act";
+import { appBridge } from "@repo/panel/app-bridge";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { openBrowserLiveOverPort } from "@repo/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
 /** What of this window's work is unsaved: a page's, which stands an ask, and a plan's words. */

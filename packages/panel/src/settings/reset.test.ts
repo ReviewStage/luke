@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_SETTING_DEFAULTS, HOST_CAPABILITY, type HostCapability, THEME } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { APP_SETTING_DEFAULTS, HOST_CAPABILITY, type HostCapability, THEME } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

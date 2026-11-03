@@ -1,19 +1,19 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { WorkspaceChannels } from "@luke/features/channel-live";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { PAGE_OWNER, type PageLine } from "@luke/features/page-wire";
-import type { TasksView } from "@luke/features/tasks-view";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphone";
-import type { NotificationsStatus } from "@luke/settings/settings-controls";
-import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
-import type { AppSettings } from "@luke/settings/wire";
-import { EXCESS_KEYS, keepIdentity, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { WorkspaceChannels } from "@repo/features/channel-live";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { TasksView } from "@repo/features/tasks-view";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import type { MicrophoneRoute, MicrophoneStatus } from "@repo/settings/microphone";
+import type { NotificationsStatus } from "@repo/settings/settings-controls";
+import type { BuildCommit, UpdateSnapshot } from "@repo/settings/update";
+import type { AppSettings } from "@repo/settings/wire";
+import { EXCESS_KEYS, keepIdentity, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Equal, Result, Schema } from "effect";
 import type { MacCommandAsk } from "./mac-command-ask.js";
 
@@ -231,7 +231,7 @@ export type AppInboxAgentHolding = Pick<
 
 /**
  * What waits on the developer across the account's tasks, as main's own
- * read of it last answered (`@luke/host/agent-notices`): each task with an
+ * read of it last answered (`@repo/host/agent-notices`): each task with an
  * open inbox item, the task whose item changed latest first. What the
  * sidebar's Inbox counts. Main's, because main holds that read whichever task is
  * open, and empty while nobody is signed in.

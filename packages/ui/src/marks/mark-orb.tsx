@@ -1,4 +1,4 @@
-import { MARK_ART } from "@luke/brand";
+import { MARK_ART } from "@repo/brand";
 import { useEffect, useRef } from "react";
 import { fitCanvas, paintLoop, roleChannels } from "../components/landing/landing-paint.js";
 

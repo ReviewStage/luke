@@ -1,13 +1,13 @@
-import { SIGN_IN } from "@luke/features/integration-sign-in";
-import type { IntegrationConnectView } from "@luke/features/integration-view";
-import { INTEGRATION_CALL_FAILURE } from "@luke/features/integration-view";
+import { SIGN_IN } from "@repo/features/integration-sign-in";
+import type { IntegrationConnectView } from "@repo/features/integration-view";
+import { INTEGRATION_CALL_FAILURE } from "@repo/features/integration-view";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   type IntegrationProvider,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback } from "react";
 import { useAct } from "./act.js";
 import { useGitHubConnection } from "./github-connect.js";

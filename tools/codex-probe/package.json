@@ -1,5 +1,5 @@
 {
-  "name": "@luke/codex-probe",
+  "name": "@repo/codex-probe",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/credentials": "workspace:*",
-    "@luke/service": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/credentials": "workspace:*",
+    "@repo/service": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@vercel/sandbox": "3.8.0"
   },
   "devDependencies": {

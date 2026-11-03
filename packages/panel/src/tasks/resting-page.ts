@@ -1,4 +1,4 @@
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { waitsOnReader } from "./inbox-model.js";
 
 /**

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { noDatabase } from "@luke/database/testing/no-database";
+import { noDatabase } from "@repo/database/testing/no-database";
 import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";

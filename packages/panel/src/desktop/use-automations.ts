@@ -5,9 +5,9 @@ import {
   type AutomationCreateParams,
   type AutomationDeletedView,
   type AutomationView,
-} from "@luke/features/automation-view";
-import type { AutomationSummary } from "@luke/features/automation-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/automation-view";
+import type { AutomationSummary } from "@repo/features/automation-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useState } from "react";
 import { unreachedAs, useAct } from "../act.js";
 import { useFollowedAutomations } from "./use-followed-automations.js";
@@ -18,7 +18,7 @@ import { useFollowedAutomations } from "./use-followed-automations.js";
  * Nothing is held past the pages. The list is followed while they stand
  * (`use-followed-automations.ts`), so a schedule's next run, a run's agent,
  * and what changed elsewhere reach it without a press or a clock here. A
- * write is drawn on the list the host pushes (`@luke/host`'s
+ * write is drawn on the list the host pushes (`@repo/host`'s
  * `automation-collections.ts`), a change or a deletion the moment it is
  * asked and a new automation once the service made it, and pushed before
  * the write answers, so nothing here holds a write's answer over the list.

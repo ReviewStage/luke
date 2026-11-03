@@ -14,8 +14,8 @@ import {
   TASK_WORK_STATE,
   TASK_WORK_TOOL,
   type TasksTreeAnswer,
-} from "@luke/features/planning-view";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/planning-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

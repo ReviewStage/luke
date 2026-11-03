@@ -1,18 +1,18 @@
-import { AGENT_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   connectionHealth,
   type IntegrationTool,
   toolsCount,
-} from "@luke/features/integration-health";
-import { SIGN_IN_ACTION } from "@luke/features/integration-sign-in";
-import { byName, toolTitle } from "@luke/features/integration-tool-model";
+} from "@repo/features/integration-health";
+import { SIGN_IN_ACTION } from "@repo/features/integration-sign-in";
+import { byName, toolTitle } from "@repo/features/integration-tool-model";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   RUN_ON_MAC_DESCRIPTION,
   RUN_ON_MAC_REASON,
@@ -22,8 +22,8 @@ import {
   type WorkspaceToolRow,
   workspaceToolSections,
   workspaceToolSummary,
-} from "@luke/features/workspace-tools-model";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+} from "@repo/features/workspace-tools-model";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   AccountWords,
   AnchoredPopover,
@@ -74,7 +74,7 @@ import {
   Tooltip,
   VisuallyHidden,
   wholeWordsHint,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   namedServers,
   opensTools,
@@ -89,10 +89,10 @@ import {
   serversOnWords,
   switchedServers,
   type ToolHit,
-} from "@luke/ui/agent-servers-model";
-import { CircleAlertIcon, ICON_SIZE } from "@luke/ui/icons";
-import { matchIntegration, shownTools } from "@luke/ui/integration-search";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+} from "@repo/ui/agent-servers-model";
+import { CircleAlertIcon, ICON_SIZE } from "@repo/ui/icons";
+import { matchIntegration, shownTools } from "@repo/ui/integration-search";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import {
   cloneElement,
   createContext,
@@ -124,14 +124,14 @@ import { ServerCard } from "./server-card.js";
  * agent-servers.tsx -- the Integrations row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
  * The agent box's + opens a menu whose Integrations row opens the popover
- * beside the menu as its submenu (`serversMenuPanel`, `@luke/ui`'s
+ * beside the menu as its submenu (`serversMenuPanel`, `@repo/ui`'s
  * `MenuPanel`), the menu standing behind it; an automation's form opens the
  * same popover from its field's chip, hung from the chip's trailing edge
- * (`AgentServersButton`, `@luke/ui`'s `AnchoredPopover`). Either way it is
+ * (`AgentServersButton`, `@repo/ui`'s `AnchoredPopover`). Either way it is
  * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search field first, then, for a
  * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
- * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
+ * (`agent-servers-model.ts`), each section under `@repo/ui`'s `MenuSection`,
  * and Manage in Settings pinned at the foot. The app's row is its mark, its
  * name, how many of its tools the agent is offered (`agent-workspace-tools.ts`),
  * `run_on_mac off` in the attention tone where it is, and Always on in a
@@ -175,7 +175,7 @@ import { ServerCard } from "./server-card.js";
  * open; Manage in Settings closes the + menu with it. A second press of the
  * chip, and focus leaving it for another part of the window, close it too.
  * The chip, the back, a row's switch and its Connect, Reopen, Cancel or
- * Retry are `@luke/ui`'s, each pressed without taking the focus from the field.
+ * Retry are `@repo/ui`'s, each pressed without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */

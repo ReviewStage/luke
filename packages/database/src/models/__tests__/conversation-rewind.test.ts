@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Duration, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";

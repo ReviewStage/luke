@@ -33,7 +33,7 @@ export interface ClaudeCodeShape {
 }
 
 export class ClaudeCode extends Context.Service<ClaudeCode, ClaudeCodeShape>()(
-  "@luke/agent-runner/ClaudeCode",
+  "@repo/agent-runner/ClaudeCode",
 ) {}
 
 /** The CLI itself, through the pinned SDK. */

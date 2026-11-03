@@ -1,4 +1,4 @@
-import { textChange } from "@luke/features/plan-comment-anchor";
+import { textChange } from "@repo/features/plan-comment-anchor";
 import { type Editor, Mark } from "@tiptap/core";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import type { EditorAnchor, EditorAnchors } from "./contract.js";
@@ -7,7 +7,7 @@ import type { EditorAnchor, EditorAnchors } from "./contract.js";
  * comment-anchors.ts -- the words a comment thread is on, carried in the open editor as a mark, so they move with their words and come back with them on undo.
  *
  * The service keeps a thread's anchor as offsets into the plan's Markdown
- * (`@luke/features/plan-comment-anchor`); the editor holds its words as a
+ * (`@repo/features/plan-comment-anchor`); the editor holds its words as a
  * mark naming the thread, laid on as the editor opens, or as a thread opens
  * or closes while it stands, outside the developer's undo, so no undo takes
  * them off. From then on the mark is part

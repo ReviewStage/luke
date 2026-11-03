@@ -11,7 +11,7 @@ import type {
   AutomationRunsView,
   AutomationRunView,
   AutomationView,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AUTOMATION_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";

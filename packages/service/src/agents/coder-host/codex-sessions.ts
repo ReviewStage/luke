@@ -8,7 +8,7 @@
  * - The runner's config names the image's `codex` and carries our coder
  *   instructions as the thread's `developer_instructions`, with the events
  *   and MCP URLs; the runner itself writes OpenAI's documented ChatGPT-plan
- *   provider into app-server's argv (`@luke/agent-runner`'s `codex.ts`). A
+ *   provider into app-server's argv (`@repo/agent-runner`'s `codex.ts`). A
  *   relaunch names the conversation's `native_session`, Codex's thread id
  *   as the events route records it, for `thread/resume`.
  * - The launch's environment carries `CODEX_HOME`, on the sandbox's
@@ -34,7 +34,7 @@
  *   ahead of every message, as on Claude Code.
  * - A local agent runs the Codex its Mac checked against the pin, in its
  *   folder there, its commands under Codex's own sandbox writing that
- *   folder (`@luke/agent-runner`'s `codex.ts`), and `CODEX_HOME` left as
+ *   folder (`@repo/agent-runner`'s `codex.ts`), and `CODEX_HOME` left as
  *   the developer's. Where its Mac said Codex holds a sign-in of its own,
  *   the launch hands it nothing of the account's and Codex runs and
  *   refreshes that sign-in itself; otherwise it runs on the account's saved
@@ -42,7 +42,7 @@
  *   over HTTPS, so no token ever travels through the Mac's queue.
  */
 
-import { CODEX_PIN } from "@luke/agent-runner/pins";
+import { CODEX_PIN } from "@repo/agent-runner/pins";
 import {
   CODEX_EFFORT,
   type CodexConfig,
@@ -51,16 +51,16 @@ import {
   type InputLine,
   RUNNER_ENV,
   RUNNER_HARNESS,
-} from "@luke/agent-runner/protocol";
-import { type Agent, readAgentRouting } from "@luke/database/models/agent-store";
-import { deviceLayout } from "@luke/database/models/device-store";
-import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
-import type { DeviceSignedIn } from "@luke/features/device-agent-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+} from "@repo/agent-runner/protocol";
+import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
+import { deviceLayout } from "@repo/database/models/device-store";
+import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import type { DeviceSignedIn } from "@repo/features/device-agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";

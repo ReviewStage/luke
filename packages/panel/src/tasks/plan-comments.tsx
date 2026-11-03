@@ -1,8 +1,8 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@luke/features/agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { FrameBox, PagePicked } from "@luke/features/page-pick";
-import { textChange } from "@luke/features/plan-comment-anchor";
+import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { FrameBox, PagePicked } from "@repo/features/page-pick";
+import { textChange } from "@repo/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -14,11 +14,11 @@ import {
   type PlanCommentStart,
   type PlanCommentThread,
   type PlanCommentWriter,
-} from "@luke/features/plan-comment-wire";
-import type { PlanSection } from "@luke/features/plan-document";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS, pasteCutWords } from "@luke/features/words";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/plan-comment-wire";
+import type { PlanSection } from "@repo/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS, pasteCutWords } from "@repo/features/words";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -88,8 +88,8 @@ import {
   useMinute,
   usePressAway,
   VisuallyHidden,
-} from "@luke/ui";
-import { type Actor, APP_ACTOR } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { type Actor, APP_ACTOR } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleCheckIcon,
@@ -97,7 +97,7 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
   RotateCcwIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import {
   hungTop,
   type MarginView,
@@ -107,13 +107,13 @@ import {
   type PendingThread,
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
-} from "@luke/ui/plan-comments";
-import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@luke/ui/reply-quote";
-import { UNREPORTED } from "@luke/ui/reported-failure";
-import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import { visibleViewport } from "@luke/ui/visible-viewport";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui/plan-comments";
+import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@repo/ui/reply-quote";
+import { UNREPORTED } from "@repo/ui/reported-failure";
+import { writeWithheldSheet } from "@repo/ui/session-replay-marks";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import { visibleViewport } from "@repo/ui/visible-viewport";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Equal, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
@@ -191,7 +191,7 @@ import {
  * draws them through `markdown-message.tsx`'s comment marks), each mark
  * naming its thread, and the margin stands each card level with its mark,
  * the open one exactly so and the rest stepped aside so none overlap
- * (`@luke/ui/plan-comments`'s `marginTops`). A thread whose words were
+ * (`@repo/ui/plan-comments`'s `marginTops`). A thread whose words were
  * deleted stands at the top of the section they stood in, saying so over
  * its quote. Where the document's column is narrower than the plan's
  * reading width, a margin, and the gap between them, the margin folds: each
@@ -211,7 +211,7 @@ import {
  * the read view open the editor on them (`clickPlacement`), so the bubble
  * stands there only until the press ends. Its words are
  * measured in the plan's Markdown by laying the words drawn over the
- * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
+ * section's source (`@repo/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
  * agent anything.
  *
@@ -1947,7 +1947,7 @@ function blockAt(
  * The sheet naming the open thread's words in the editor, built once; a
  * constructed sheet, since the window's policy takes no inline style. It
  * names the thread's id, so it is written withheld from the screen
- * recording (`@luke/ui/session-replay-marks`), from before it is adopted.
+ * recording (`@repo/ui/session-replay-marks`), from before it is adopted.
  */
 let openThreadSheet: CSSStyleSheet | undefined;
 

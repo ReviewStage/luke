@@ -1,4 +1,4 @@
-import { literalsReadingLegacy } from "@luke/wire";
+import { literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { AGENT_FAILURE, AGENT_STATUS, disabledServersSchema } from "./agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";

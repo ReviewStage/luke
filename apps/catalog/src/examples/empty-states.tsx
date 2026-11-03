@@ -1,4 +1,4 @@
-import { EMPTY_STATE_ACTION_LOOK, EmptyState, SearchIcon, UserIcon } from "@luke/ui";
+import { EMPTY_STATE_ACTION_LOOK, EmptyState, SearchIcon, UserIcon } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

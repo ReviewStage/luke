@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Channel } from "@luke/features/channel-wire";
+import type { Channel } from "@repo/features/channel-wire";
 import { test } from "vitest";
 import { CHANNEL_SHOWN, channelShown, channelSlug, channelUnread } from "./channels-model.js";
 

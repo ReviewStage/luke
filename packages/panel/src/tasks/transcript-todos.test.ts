@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TODO_STATUS, type AgentTodos } from "@luke/features/agent-wire";
+import { AGENT_TODO_STATUS, type AgentTodos } from "@repo/features/agent-wire";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

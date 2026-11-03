@@ -1,7 +1,7 @@
 // provider-keys-app.test.ts -- the rotation's rewrap route under the bearer a maintainer asks it with.
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { noDatabase } from "@luke/database/testing/no-database";
+import { noDatabase } from "@repo/database/testing/no-database";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";

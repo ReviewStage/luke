@@ -1,25 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentAgentAnswer } from "@luke/features/agent-view";
+import type { AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_STATUS,
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { ACT_KIND } from "@luke/host/acts";
-import { SERVER_MENTION_NOTE } from "@luke/ui/agent-servers-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/integration-wire";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
+import { ACT_KIND } from "@repo/host/acts";
+import { SERVER_MENTION_NOTE } from "@repo/ui/agent-servers-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";

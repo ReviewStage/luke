@@ -1,5 +1,5 @@
-import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
-import { decodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
+import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
+import { decodeMention, MENTION_KIND, type MentionLines } from "@repo/features/mention-link";
 import {
   type OpenedPullRequest,
   pullRequestAgentOf,

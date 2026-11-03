@@ -1,5 +1,5 @@
-import { readingWords } from "@luke/features/words";
-import { ComposerFootSkeleton, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
+import { readingWords } from "@repo/features/words";
+import { ComposerFootSkeleton, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@repo/ui";
 import { PromptInputCard } from "../ai-elements/prompt-input.js";
 import { ComposerActions, ComposerAttach, ComposerCard } from "./agent-composer.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";

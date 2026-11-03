@@ -1,16 +1,16 @@
-import type { MemorySummary } from "@luke/features/memory-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { MemorySummary } from "@repo/features/memory-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   countWords,
   readFailedWords,
   readingWords,
   SIGNED_OUT_WORDS,
   TERM,
-} from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+} from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -50,12 +50,12 @@ import {
   useLeaving,
   useMenu,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import { GLYPH, ListFilterIcon } from "@luke/ui/icons";
-import { markdownTree } from "@luke/ui/markdown-words";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
+import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
+import { markdownTree } from "@repo/ui/markdown-words";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";

@@ -27,7 +27,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { Fragment } from "react";
 
 /**

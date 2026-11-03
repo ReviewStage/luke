@@ -1,10 +1,10 @@
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   EXPERIMENT,
   SETTINGS_PAGE as SETTINGS_VIEW,
   type SettingsPage as SettingsView,
-} from "@luke/settings";
-import { EXPERIMENT_ANCHOR, SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+} from "@repo/settings";
+import { EXPERIMENT_ANCHOR, SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 
 export type { SettingsView };
 /**

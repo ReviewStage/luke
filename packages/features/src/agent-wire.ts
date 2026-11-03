@@ -5,8 +5,8 @@ import {
   MESSAGE_ROLE,
   TURN_ORIGIN,
   WireValueSchema,
-} from "@luke/wire";
-import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither, verbatimJsonSchema, wireKeys } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
@@ -191,7 +191,7 @@ export const agentPayerSchema = literalsReadingLegacy(
  * records it: eve, as every agent ran before the native harnesses, or the
  * provider's own harness, Claude Code or Codex, which we launch in the
  * agent's sandbox. The store's own vocabulary spells the same words
- * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
+ * (`@repo/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
 export const AGENT_RUNTIME = {
   EVE: "eve",
@@ -222,7 +222,7 @@ export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
  * agent from before the column does, or one of the starter's devices, which
- * takes its work as rows it follows (`@luke/features/device-agent-wire`).
+ * takes its work as rows it follows (`@repo/features/device-agent-wire`).
  */
 export const AGENT_MACHINE = {
   VERCEL: "vercel",
@@ -2193,7 +2193,7 @@ const agentTranscriptMessageSchema = EffectSchema.Struct({
   sentBy: EffectSchema.optionalKey(agentSenderSchema),
   /**
    * The id one of the developer's lines was written under, which a line a
-   * window sent is its send key's (`sentLineId` of `@luke/wire/host-ids`), so
+   * window sent is its send key's (`sentLineId` of `@repo/wire/host-ids`), so
    * the window that sent it knows the row as it lands and draws it in the
    * place of the line it drew at once; absent on every other row, and from a
    * service older than it.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { temporaryDirectory } from "@luke/runtime/testing";
+import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
 import { checkApiCallers, PATHS_MODULE, RESOLUTION } from "../server/api-callers";
 

@@ -5,17 +5,17 @@ import {
   type MentionPlace,
   type PlanMention,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import { type PlanSection, planSections } from "@luke/features/plan-document";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+} from "@repo/features/mention-link";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import { type PlanSection, planSections } from "@repo/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
   type Task,
-} from "@luke/features/task-wire";
-import { agoText, momentText, sinceText } from "@luke/features/time-format";
+} from "@repo/features/task-wire";
+import { agoText, momentText, sinceText } from "@repo/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
@@ -29,11 +29,11 @@ import {
   Tooltip,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
-import type { MarkdownTaskToggler } from "@luke/ui/markdown";
-import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
+import type { MarkdownTaskToggler } from "@repo/ui/markdown";
+import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { diffArrays } from "diff";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
@@ -118,7 +118,7 @@ import {
  *
  * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address
- * (`@luke/features/mention-link`), which a transcript or the plan draws as
+ * (`@repo/features/mention-link`), which a transcript or the plan draws as
  * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,

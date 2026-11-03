@@ -14,9 +14,9 @@
  * (`deploymentLifecycle`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { AgentMachineKind } from "@luke/features/agent-wire";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { AgentMachineKind } from "@repo/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import {

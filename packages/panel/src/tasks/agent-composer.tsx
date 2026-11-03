@@ -9,17 +9,17 @@ import {
   type AgentStatus,
   type AgentUsage,
   hasWordsOrFiles,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
   remedyLabel,
   retriesBesideRemedy,
-} from "@luke/features/failure-remedy";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { pasteCutWords } from "@luke/features/words";
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+} from "@repo/features/failure-remedy";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pasteCutWords } from "@repo/features/words";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import {
   ComposerBody,
   ComposerFoot,
@@ -29,11 +29,11 @@ import {
   PlusIcon,
   riseAboveEnd,
   useMenu,
-} from "@luke/ui";
-import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { GLYPH } from "@luke/ui/icons";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
-import { type ReportedFailure, UNREPORTED, type Unreported } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { lapsedServer, SERVER_HANDED } from "@repo/ui/agent-servers-model";
+import { GLYPH } from "@repo/ui/icons";
+import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
+import { type ReportedFailure, UNREPORTED, type Unreported } from "@repo/ui/reported-failure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -76,7 +76,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type, its files over its words and its foot as every message
- * box's (`@luke/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
+ * box's (`@repo/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+", which raises a
  * menu of Attachment, which attaches files, and MCP servers, which opens
  * the servers popover beside the menu as its submenu, where the agent is
@@ -104,7 +104,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
  * one Stop the tab has. A message that did not go stays in the box with why under the foot's
- * bar and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
+ * bar and what mends it (`@repo/ui`'s `ErrorState`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
  * (`repository-remedy.tsx`), a move of the task sending it again by itself

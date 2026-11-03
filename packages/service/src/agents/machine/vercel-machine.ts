@@ -47,11 +47,11 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
-import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
+import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Brand, Duration, Effect, Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";

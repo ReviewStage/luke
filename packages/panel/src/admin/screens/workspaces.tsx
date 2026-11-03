@@ -2,17 +2,17 @@ import type {
   AdminWorkspaceInstallation,
   AdminWorkspaceList,
   AdminWorkspaceRow,
-} from "@luke/features/admin-answer-wire";
-import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { formatDate } from "@luke/features/time-format";
+} from "@repo/features/admin-answer-wire";
+import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@repo/features/admin-wire";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { formatDate } from "@repo/features/time-format";
 import {
   type Noun,
   noMatchWords,
   noneYetWords,
   readFailedWords,
   readingWords,
-} from "@luke/features/words";
+} from "@repo/features/words";
 import {
   Badge,
   COLLECTION_STATE,
@@ -29,8 +29,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+} from "@repo/ui";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";

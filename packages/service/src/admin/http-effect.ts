@@ -1,9 +1,9 @@
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS, type AdminError } from "@luke/features/admin-wire";
+import { ADMIN_ERROR, ADMIN_HTTP_STATUS, type AdminError } from "@repo/features/admin-wire";
 
 /**
  * The admin refusals as the dashboard's procedures fail with them, and the
  * status each is answered with. They stay the admin's own rather than the
- * hosted tier's for the reason `@luke/features/admin-wire` gives: these slugs
+ * hosted tier's for the reason `@repo/features/admin-wire` gives: these slugs
  * are a browser's, not the desktop wire contract's. The hosted oRPC handler
  * answers each one as `{ error: slug }` under its status
  * (`packages/service/src/orpc/errors.ts`), as the old group's responses did.

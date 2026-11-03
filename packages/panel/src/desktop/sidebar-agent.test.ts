@@ -6,9 +6,9 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";

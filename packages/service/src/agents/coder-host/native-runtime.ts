@@ -11,7 +11,7 @@
  * router that reads it (`runtime-sessions.ts`) bundles no harness with it.
  */
 
-import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 
 /** A runtime other than eve: a harness we launch in the agent's sandbox. */
 export type NativeRuntime = Exclude<ConversationRuntime, typeof CONVERSATION_RUNTIME.EVE>;

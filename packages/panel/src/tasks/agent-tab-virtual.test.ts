@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
+import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";

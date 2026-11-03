@@ -1,22 +1,22 @@
-import { githubUserAvatarUrl } from "@luke/features/account-picture";
-import type { GitHubPerson } from "@luke/features/agent-wire";
-import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import type { ModelProvider } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { githubUserAvatarUrl } from "@repo/features/account-picture";
+import type { GitHubPerson } from "@repo/features/agent-wire";
+import type { AutomationFiring, AutomationTrigger } from "@repo/features/automation-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PLAN_ACTOR,
   type PlanEditor,
   type PlanLastEdit,
   type PlanSectionEdit,
   type TaskOrigin,
-} from "@luke/features/task-wire";
-import { andList } from "@luke/features/words";
+} from "@repo/features/task-wire";
+import { andList } from "@repo/features/words";
 import {
   type FormerMember,
   WORKSPACE_ROLE,
   type WorkspaceMember,
   type WorkspaceRole,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import { TAB_WORDS } from "./tab-strip-model.js";
 
 /**

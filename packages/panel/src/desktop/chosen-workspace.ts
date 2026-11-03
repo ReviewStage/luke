@@ -1,4 +1,4 @@
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
 import { Schema } from "effect";
 import { useState } from "react";
 import { keptKey, useKept } from "../use-kept.js";

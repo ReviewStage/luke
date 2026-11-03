@@ -36,7 +36,7 @@
  */
 
 import { gzipSync } from "node:zlib";
-import { readEither } from "@luke/wire/effect";
+import { readEither } from "@repo/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";

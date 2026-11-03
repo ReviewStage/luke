@@ -22,7 +22,7 @@ import {
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine } from "@luke/features";
+import type { DeviceAgentClaimedLine } from "@repo/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -30,9 +30,9 @@ import {
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";

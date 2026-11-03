@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
+import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -10,14 +10,14 @@ import {
   BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
-} from "@luke/features/browser-live-wire";
+} from "@repo/features/browser-live-wire";
 import {
   BROWSER_TAB_OPEN_FAILURE,
   type TasksBrowserTabOpenParams,
-} from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import { COMMAND_KEY } from "@luke/settings/shortcuts";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import { COMMAND_KEY } from "@repo/settings/shortcuts";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

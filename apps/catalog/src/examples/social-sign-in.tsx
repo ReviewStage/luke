@@ -1,5 +1,5 @@
-import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
-import { GAP, SocialProviderButton, SocialSignInChoices, Stack } from "@luke/ui";
+import { SOCIAL_PROVIDER } from "@repo/features/sign-in-provider";
+import { GAP, SocialProviderButton, SocialSignInChoices, Stack } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

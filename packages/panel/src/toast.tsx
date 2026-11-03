@@ -1,5 +1,5 @@
 /**
- * toast.tsx -- the window's passing notices, as state: what stands, for how long, and what pushes what out; `@luke/ui`'s `Toast`, `ToastStack`, and `ToastActions` draw them.
+ * toast.tsx -- the window's passing notices, as state: what stands, for how long, and what pushes what out; `@repo/ui`'s `Toast`, `ToastStack`, and `ToastActions` draw them.
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
@@ -52,14 +52,14 @@
  * tokens.
  *
  * What each says reaches assistive tech through two regions mounted with
- * the window rather than with the toast (`@luke/ui`'s `ToastStack`), because a live region drawn
+ * the window rather than with the toast (`@repo/ui`'s `ToastStack`), because a live region drawn
  * already holding its words is one a screen reader may never read: a polite
  * one for what was done or is asked, and an alert for what was refused. The words are
  * text like any other, so the session recording masks them with the rest.
  */
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   STATUS_TONE,
   TOAST_HOLD,
@@ -68,8 +68,8 @@ import {
   type ToastCopy,
   ToastStack,
   type ToastTone,
-} from "@luke/ui";
-import { visibleViewport } from "@luke/ui/visible-viewport";
+} from "@repo/ui";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
@@ -88,7 +88,7 @@ const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
-/** How long a toast stands, by what it reports: `@luke/ui`'s, which a copy button's check reads too. */
+/** How long a toast stands, by what it reports: `@repo/ui`'s, which a copy button's check reads too. */
 export { TOAST_HOLD };
 
 /** What a toast's action says when it takes back what the toast reports. */

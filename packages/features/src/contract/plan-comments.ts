@@ -10,7 +10,7 @@
  * body of each write is exactly its wire request, read apart from them.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";

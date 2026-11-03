@@ -2,7 +2,7 @@ import { parseSync } from "oxc-parser";
 
 /**
  * The design system's style guard: what a stylesheet or a Tailwind class
- * string may spell outside `@luke/ui`'s tokens. docs/DESIGN.md and
+ * string may spell outside `@repo/ui`'s tokens. docs/DESIGN.md and
  * `packages/ui/README.md` state each rule in prose; this holds them as data,
  * read by `style-guard.ts`, which `pnpm lint` runs after oxlint, since
  * oxlint reads no CSS. A rule with places left to fix starts from a baseline
@@ -103,7 +103,7 @@ const TOKEN_SHEETS = ["packages/ui/src/tokens/", "packages/ui/src/tailwind/theme
 const TOOLING = [".agents/", ".claude/"];
 
 /**
- * Folders one rule passes whole: `@luke/ui` is where a popover's width is
+ * Folders one rule passes whole: `@repo/ui` is where a popover's width is
  * drawn from its token, and the catalog's stage and rooms are its own
  * demonstration layout, not a picker.
  */
@@ -113,8 +113,8 @@ const RULE_EXEMPT_FOLDERS: Readonly<Partial<Record<StyleRule, readonly string[]>
 
 /**
  * Where one rule reads at all: spacing is held in the panel's own sheets,
- * where `@luke/ui`'s spacing roles are read, and a component sheet in
- * `@luke/ui` is where a role is drawn from its scale.
+ * where `@repo/ui`'s spacing roles are read, and a component sheet in
+ * `@repo/ui` is where a role is drawn from its scale.
  */
 const RULE_SCOPES: Readonly<Partial<Record<StyleRule, RegExp>>> = {
   [STYLE_RULE.SPACING]: /^packages\/panel\/src\/styles\/[^/]+\.css$/u,
@@ -478,7 +478,7 @@ function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
   return block.preludes.some((prelude) => PROFILE_PICK.test(prelude));
 }
 
-/** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
+/** A path's landmark, whose list items are its crumbs (`@repo/ui`'s `Breadcrumbs`). */
 const PATH_CLASS = /\.ui-breadcrumbs\b/u;
 
 /** A selector with what its brackets and parentheses hold taken out, so `:has(> .x)` splits as one compound. */
@@ -692,14 +692,14 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
 
 // ------------------------------------------------------- Tailwind classes
 
-/** The names `@luke/ui`'s Tailwind theme maps onto tokens, by namespace. */
+/** The names `@repo/ui`'s Tailwind theme maps onto tokens, by namespace. */
 export interface ThemeNames {
   readonly [namespace: string]: ReadonlySet<string>;
 }
 
 const THEME_NAMESPACES = ["color", "text", "radius", "ease", "animate", "font-weight"];
 
-/** The names each theme namespace maps, read from `@luke/ui`'s theme sheet. */
+/** The names each theme namespace maps, read from `@repo/ui`'s theme sheet. */
 export function themeNames(themeSheet: string): ThemeNames {
   const names: Record<string, Set<string>> = {};
   for (const namespace of THEME_NAMESPACES) names[namespace] = new Set();

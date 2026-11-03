@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
-import { actPort, appBridge } from "@luke/panel/app-bridge";
-import { appPlatform } from "@luke/panel/app-platform";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
+import { actPort, appBridge } from "@repo/panel/app-bridge";
+import { appPlatform } from "@repo/panel/app-platform";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";

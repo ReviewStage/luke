@@ -8,17 +8,17 @@ import {
   type AgentSender,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND } from "@repo/ui/actor-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

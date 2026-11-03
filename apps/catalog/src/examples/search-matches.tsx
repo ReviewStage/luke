@@ -1,4 +1,4 @@
-import { SearchMatch } from "@luke/ui";
+import { SearchMatch } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

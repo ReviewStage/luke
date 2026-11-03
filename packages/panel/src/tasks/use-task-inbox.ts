@@ -10,12 +10,12 @@ import {
   type AgentInboxScope,
   type AgentInboxStartParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
-import type { AgentAttachment } from "@luke/features/agent-wire";
-import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
-import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import type { AppInboxItems } from "@luke/host/app-state";
+} from "@repo/features/agent-view";
+import type { AgentAttachment } from "@repo/features/agent-wire";
+import { inboxAttachmentIdsIn } from "@repo/features/inbox-attachment-link";
+import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import type { AppInboxItems } from "@repo/host/app-state";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { afterPaint } from "../after-paint.js";
@@ -90,7 +90,7 @@ import {
  * its thread's open ask, which the reader pressed and attached: such a
  * reply goes through the same queue, so a plain reply sent after it
  * follows it, and settles the ask, which the host draws into every read
- * the window draws the item from the moment it is sent (`@luke/host`'s
+ * the window draws the item from the moment it is sent (`@repo/host`'s
  * `inbox-collections.ts`), so the item leaves what needs the developer at
  * once and no read behind it brings it back, and a refusal brings the item
  * back as it stood, its draft kept, the picks that went back in the box

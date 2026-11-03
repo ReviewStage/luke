@@ -19,7 +19,7 @@ import { isClassList } from "../shared/style-guard.ts";
 
 /**
  * What phase 2 retired stays retired: a class name in a class list, a glyph
- * imported from `@luke/ui/icons`, a JSX prop, or an import, each refused
+ * imported from `@repo/ui/icons`, a JSX prop, or an import, each refused
  * outside the paths its retired file allows, past the baseline that file
  * gives it. The list is data, one JSON file per kind under
  * `tools/anti-slop/retired/` (`shared/retired.ts` reads it and says how a

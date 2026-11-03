@@ -1,7 +1,7 @@
 /**
  * admin-answer-wire.ts -- what each admin read answers, as the service builds it and every page that draws it reads it.
  *
- * The service shapes these from its own rows (`@luke/service/admin/*`, each
+ * The service shapes these from its own rows (`@repo/service/admin/*`, each
  * read's builder beside its queries) and the dashboard draws them, the web's
  * `/admin` page and the app's Admin place alike. They are declared here,
  * below both, so a page reaches the shapes without a line of query code, and
@@ -25,7 +25,7 @@ import type { IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
 
-/* ----- The Overview's metrics (`@luke/service/admin/admin-metrics`) ----- */
+/* ----- The Overview's metrics (`@repo/service/admin/admin-metrics`) ----- */
 
 export interface AdminDailyUsage {
   /** The UTC day the count covers, as YYYY-MM-DD. */
@@ -106,7 +106,7 @@ export interface AdminMetrics {
   };
 }
 
-/* ----- The Overview (`@luke/service/admin/admin-overview`) ----- */
+/* ----- The Overview (`@repo/service/admin/admin-overview`) ----- */
 
 /** One UTC day of the activity chart: its key, and each feature's count that day. */
 export type AdminActivityDay = { day: string } & Record<ActivityFeature, number>;
@@ -193,7 +193,7 @@ export interface AdminOverview {
   };
 }
 
-/* ----- One account's page (`@luke/service/admin/admin-user`) ----- */
+/* ----- One account's page (`@repo/service/admin/admin-user`) ----- */
 
 /** The account the page names, from the service's own user row. */
 export interface AdminUserAccount {
@@ -246,7 +246,7 @@ export interface AdminUserDetail {
   support: AdminAccountSupport;
 }
 
-/* ----- The Users roster (`@luke/service/admin/admin-users`) ----- */
+/* ----- The Users roster (`@repo/service/admin/admin-users`) ----- */
 
 export interface AdminUserListRow {
   id: string;
@@ -292,7 +292,7 @@ export interface AdminSignIn {
   methods: AdminSignInMethods;
 }
 
-/* ----- One day opened (`@luke/service/admin/admin-day`) ----- */
+/* ----- One day opened (`@repo/service/admin/admin-day`) ----- */
 
 /** One account's share of the day, the same account fields the tables draw. */
 export interface AdminDayAccount {
@@ -322,7 +322,7 @@ export interface AdminDayDetail {
   accounts: AdminDayAccount[];
 }
 
-/* ----- System health (`@luke/service/admin/admin-health`) ----- */
+/* ----- System health (`@repo/service/admin/admin-health`) ----- */
 
 export interface AdminDatabaseHealth {
   reachable: boolean;
@@ -341,7 +341,7 @@ export interface AdminIntegration {
   configured: boolean;
 }
 
-/* ----- Reliability (`@luke/service/admin/admin-reliability`) ----- */
+/* ----- Reliability (`@repo/service/admin/admin-reliability`) ----- */
 
 /** Of some ended work, how much failed. */
 export interface AdminFailureCount {
@@ -429,7 +429,7 @@ export interface AdminReliability {
   };
 }
 
-/* ----- Workspaces (`@luke/service/admin/admin-workspaces`) ----- */
+/* ----- Workspaces (`@repo/service/admin/admin-workspaces`) ----- */
 
 /** The account a row names as its workspace's owner, the shared account cell's fields. */
 export interface AdminWorkspaceOwner {
@@ -503,7 +503,7 @@ export interface AdminWorkspaceList {
   rows: AdminWorkspaceRow[];
 }
 
-/* ----- One account's support sections (`@luke/service/admin/admin-account`) ----- */
+/* ----- One account's support sections (`@repo/service/admin/admin-account`) ----- */
 
 export interface AdminAccountProviderKey {
   provider: ProviderKeyProvider;

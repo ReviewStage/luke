@@ -7,8 +7,8 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+} from "@repo/features/inbox-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

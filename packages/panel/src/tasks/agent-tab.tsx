@@ -1,5 +1,5 @@
-import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { TRANSCRIPT_KIND } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
@@ -15,28 +15,28 @@ import {
   type AgentTranscriptMessage,
   agentMessageWords,
   QUEUE_CHANGE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
-import { threadLineWords } from "@luke/features/inbox-wire";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
-import type { KnownNames } from "@luke/features/place-chip-model";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type FailureReason, remedyLabel } from "@repo/features/failure-remedy";
+import { threadLineWords } from "@repo/features/inbox-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@repo/features/models-wire";
+import type { KnownNames } from "@repo/features/place-chip-model";
 import {
   FAILURE_CONDITION,
   FAILURE_SURFACE,
   type FailureAbout,
-} from "@luke/features/shown-failure";
-import type { TaskStatus } from "@luke/features/task-wire";
-import { workingTime } from "@luke/features/time-format";
+} from "@repo/features/shown-failure";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { workingTime } from "@repo/features/time-format";
 import {
   CALL_KIND,
   CALL_WORDS,
   isMadeCallKind,
   sameFieldsBy,
   sameShape,
-} from "@luke/features/turn-rows";
-import { replyFromWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { AGENT_ENTER } from "@luke/settings";
+} from "@repo/features/turn-rows";
+import { replyFromWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
   announce,
@@ -69,14 +69,14 @@ import {
   TEXT_VARIANT,
   Text,
   useAnnounce,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE } from "@luke/ui/icons";
-import { skillWord } from "@luke/ui/skill-mention";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
+import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { skillWord } from "@repo/ui/skill-mention";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
+import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,

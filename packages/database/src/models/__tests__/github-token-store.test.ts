@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";

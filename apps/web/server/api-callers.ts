@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, posix, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { hostedContract } from "@luke/features/contract";
+import { hostedContract } from "@repo/features/contract";
 import { getOpenAPIMeta } from "@orpc/openapi";
 import { walkProcedureContractsSync } from "@orpc/server";
 import { Predicate, Schema } from "effect";
@@ -33,7 +33,7 @@ import { ORPC_FALLBACK_SRC, type Rewrite, readApiRewritesTable } from "./functio
 const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
 const PACKAGES_ROOT = "packages";
 /**
- * The packages that are the callee rather than a client: `@luke/service`
+ * The packages that are the callee rather than a client: `@repo/service`
  * holds the route groups themselves, whose dispatcher keys spell `/api/`
  * paths that are not public routes.
  */

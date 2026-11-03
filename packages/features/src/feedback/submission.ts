@@ -1,4 +1,4 @@
-import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
+import { isRecord, isWireString, type UnparsedWireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { PICTURE_TYPE, type PictureType } from "../picture-wire.js";
 
@@ -77,7 +77,7 @@ export interface FeedbackSubmission {
   experiment?: string;
 }
 
-/** An experiment key's shape: lowercase words joined by hyphens, as `@luke/settings`'s `EXPERIMENT` spells them. */
+/** An experiment key's shape: lowercase words joined by hyphens, as `@repo/settings`'s `EXPERIMENT` spells them. */
 const EXPERIMENT_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
 /** What became of a submission: delivered, or why not, in the user's terms. */

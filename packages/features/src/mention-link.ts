@@ -1,4 +1,4 @@
-import { LEGACY_APP_WORD } from "@luke/wire";
+import { LEGACY_APP_WORD } from "@repo/wire";
 import { Schema as EffectSchema, Option } from "effect";
 import { dateLabel, isDateMoment, isDateRange } from "./date-mention.js";
 import {

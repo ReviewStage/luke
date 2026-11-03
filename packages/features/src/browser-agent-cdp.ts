@@ -42,8 +42,8 @@
  * is asked again for a moment before it fails.
  */
 
-import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import {
   Clock,
   Data,

@@ -1,4 +1,4 @@
-import type { Task } from "@luke/features/task-wire";
+import type { Task } from "@repo/features/task-wire";
 
 /**
  * document-task.ts -- a synthetic task, as a service answers one: its text, and no assumptions beside it.

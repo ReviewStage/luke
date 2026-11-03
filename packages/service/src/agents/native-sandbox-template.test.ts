@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";

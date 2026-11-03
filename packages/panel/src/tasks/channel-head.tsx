@@ -1,6 +1,6 @@
-import type { Channel } from "@luke/features/channel-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords } from "@luke/features/words";
+import type { Channel } from "@repo/features/channel-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords } from "@repo/features/words";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -8,7 +8,7 @@ import {
   NotFoundIcon,
   TOOLBAR_INSET,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { unreadShown } from "../failure-report.js";
 import type { InboxChannelHead } from "./inbox-list.js";

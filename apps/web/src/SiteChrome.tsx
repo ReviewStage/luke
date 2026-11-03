@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   IconButtonLink,
   MARK_PROVIDER,
@@ -13,7 +13,7 @@ import {
   Text,
   TextLink,
   type TextLinkCurrent,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { ReactNode } from "react";
 import { PANEL_PATH } from "./app/web-address";
 
@@ -26,7 +26,7 @@ export const WEB_APP_URL = PANEL_PATH;
 
 /**
  * The product's name beside the mark, in the web profile's wordmark display style
- * (`@luke/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
+ * (`@repo/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
  */
 export const WORDMARK =
   "font-brand text-(length:--ui-display-wordmark-size) font-(--ui-display-wordmark-weight) tracking-(--ui-display-wordmark-tracking)";

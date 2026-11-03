@@ -5,7 +5,7 @@
  * 0.3.304's `SDKMessage`), the fields the verdict reads and a few it does not.
  */
 
-import type { WireValue } from "@luke/wire";
+import type { WireValue } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
   CHECK,

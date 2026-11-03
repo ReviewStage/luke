@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { LANDING_TONE } from "@luke/features/landing-outcome";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

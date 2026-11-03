@@ -1,4 +1,4 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   CloseIcon,
   DisclosureFind,
@@ -10,9 +10,9 @@ import {
   SearchField,
   Tooltip,
   useDisclosureFinding,
-} from "@luke/ui";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,

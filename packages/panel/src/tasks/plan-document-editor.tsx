@@ -1,6 +1,6 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@luke/features/plan-edit-model";
-import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@repo/features/plan-edit-model";
+import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@repo/features/task-wire";
 import {
   ANNOUNCE,
   Button,
@@ -11,9 +11,9 @@ import {
   EditableHeading,
   PageHeader,
   RetryButton,
-} from "@luke/ui";
-import { markdownClass } from "@luke/ui/markdown-class";
-import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/ui";
+import { markdownClass } from "@repo/ui/markdown-class";
+import { openThread, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";

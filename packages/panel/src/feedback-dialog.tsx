@@ -27,19 +27,19 @@
  * person's screen and could carry another app's words.
  */
 
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import {
   FEEDBACK_KIND,
   FEEDBACK_LIMITS,
   type FeedbackImage,
   type FeedbackKind,
   type FeedbackSubmission,
-} from "@luke/features/feedback";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { pasteCutWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENTS, type Experiment } from "@luke/settings";
+} from "@repo/features/feedback";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pasteCutWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENTS, type Experiment } from "@repo/settings";
 import {
   ALIGN,
   AttachmentChip,
@@ -64,9 +64,9 @@ import {
   Tooltip,
   useFilePicker,
   useLeaving,
-} from "@luke/ui";
-import { UNREPORTED } from "@luke/ui/reported-failure";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
+} from "@repo/ui";
+import { UNREPORTED } from "@repo/ui/reported-failure";
+import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";

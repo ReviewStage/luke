@@ -1,4 +1,4 @@
-import { agentArchiverSchema } from "@luke/features/agent-wire";
+import { agentArchiverSchema } from "@repo/features/agent-wire";
 import { Schema, SchemaTransformation } from "effect";
 
 /** An optional field as its nullable column takes it. */

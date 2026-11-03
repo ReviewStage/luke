@@ -121,7 +121,7 @@ const TOKEN_COMMAND = {
   REFRESH_INTERVAL_MS: 300_000,
 } as const;
 
-/** The name our MCP server is registered under in Codex's config (`@luke/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
+/** The name our MCP server is registered under in Codex's config (`@repo/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
 const MCP_SERVER = "workspace";
 
 /**

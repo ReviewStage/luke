@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
+import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { test } from "vitest";
 import { RELAY_UPGRADE_STATUS } from "../http/relay-upgrade.js";
 import { admitRelayUpgrade } from "./service.js";

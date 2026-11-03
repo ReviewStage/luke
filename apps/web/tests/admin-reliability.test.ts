@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
-import type { AdminReliability } from "@luke/features/admin-answer-wire";
-import { ADMIN_ATTENTION_KIND } from "@luke/features/admin-wire";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { adminIntegrations } from "@luke/service/admin/admin-health";
+import type { AdminReliability } from "@repo/features/admin-answer-wire";
+import { ADMIN_ATTENTION_KIND } from "@repo/features/admin-wire";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
+import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { adminIntegrations } from "@repo/service/admin/admin-health";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";

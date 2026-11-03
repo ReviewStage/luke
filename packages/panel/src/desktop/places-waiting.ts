@@ -1,4 +1,4 @@
-import type { AppInboxTask, AppInboxTaskHolding, AppInboxWaitingItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxWaitingItem } from "@repo/host/app-state";
 import { useMemo } from "react";
 import { listedIn, waitsOnReader } from "../tasks/inbox-model.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -22,7 +22,7 @@ const NO_COUNTS: ReadonlyMap<string, number> = new Map();
  * How many questions wait on the developer on each task main lists, every
  * workspace's, since ⌘K's rows name another workspace's tasks: main's count
  * of each task's (`toDo`), which the host lowers the moment the reader
- * answers one (`@luke/host`'s `account-inbox-follow.ts`). A notice, a
+ * answers one (`@repo/host`'s `account-inbox-follow.ts`). A notice, a
  * teammate's question, and a settled item never count, read or not, as the
  * Dock's badge counts them. Where main carries no count of a task's to do,
  * from a service before it, its open items are counted, as before. A task
@@ -50,7 +50,7 @@ function toDoByTask(
  * them. Note that a notice counts until it is opened, because opening it
  * settles it as Got it does; a teammate's thread and a settled one never
  * count, and one the reader settles leaves main's read the moment it is
- * asked (`@luke/host`'s `account-inbox-follow.ts`).
+ * asked (`@repo/host`'s `account-inbox-follow.ts`).
  */
 function waitingThreads(tasks: TasksControl): readonly Pick<AppInboxWaitingItem, "channelId">[] {
   // Note that only the standing tasks are counted, as To do lists them, so a task not listed yet counts nowhere.

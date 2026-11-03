@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery, MacCommandAsk } from "@luke/host/app-state";
-import { MAC_COMMAND_DECISION, type MacCommandAnswer } from "@luke/host/contract";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery, MacCommandAsk } from "@repo/host/app-state";
+import { MAC_COMMAND_DECISION, type MacCommandAnswer } from "@repo/host/contract";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

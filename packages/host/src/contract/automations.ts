@@ -12,7 +12,7 @@ import {
   automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

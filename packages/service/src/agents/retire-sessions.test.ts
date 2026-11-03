@@ -1,10 +1,10 @@
 // retire-sessions.test.ts -- a delete's retires end within their budget, whatever the sessions do, so the delete behind them still runs.
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { StandingSession } from "@luke/database/models/recorded-session";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
-import { noNetwork } from "@luke/wire/testing";
+import type { StandingSession } from "@repo/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
+import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { EVE_RESET_OUTCOME } from "./eve-host/eve-sessions.js";

@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@luke/features/device-agent-wire";
-import type { Host } from "@luke/features/host-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { ThisMacHostRead } from "@luke/host/contract";
-import { timeRuntime } from "@luke/ui";
+import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
+import type { Host } from "@repo/features/host-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { ThisMacHostRead } from "@repo/host/contract";
+import { timeRuntime } from "@repo/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

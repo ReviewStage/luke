@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";

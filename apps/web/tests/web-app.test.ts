@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
-import { LINK_PLATFORM } from "@luke/features/link-open";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
+import { LINK_PLATFORM } from "@repo/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-service";

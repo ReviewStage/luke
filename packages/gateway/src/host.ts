@@ -9,7 +9,7 @@
  * code and message, and a handler that throws refuses that one call as
  * internal and nothing else.
  */
-import type { WireRecord, WireValue } from "@luke/wire";
+import type { WireRecord, WireValue } from "@repo/wire";
 import { Effect } from "effect";
 import type { GatewayMethodTable } from "./methods.js";
 import {

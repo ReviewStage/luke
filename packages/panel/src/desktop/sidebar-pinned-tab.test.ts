@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

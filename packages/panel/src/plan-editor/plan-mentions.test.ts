@@ -7,8 +7,8 @@ import {
   mentionMarkdown,
   mentionsIn,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import { planSections } from "@luke/features/plan-document";
+} from "@repo/features/mention-link";
+import { planSections } from "@repo/features/plan-document";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";

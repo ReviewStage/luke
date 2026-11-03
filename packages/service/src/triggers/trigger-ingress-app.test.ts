@@ -2,27 +2,27 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   createAutomation,
   listAutomationRuns,
   queuedAutomationRuns,
-} from "@luke/database/models/automation-store";
+} from "@repo/database/models/automation-store";
 import {
   activeInstallationWorkspace,
   linkIntegrationInstallation,
-} from "@luke/database/models/integration-installation-store";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
+} from "@repo/database/models/integration-installation-store";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
   type IntegrationTrigger,
-} from "@luke/features/automation-wire";
-import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/automation-wire";
+import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";

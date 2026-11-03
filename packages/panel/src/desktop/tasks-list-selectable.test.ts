@@ -5,12 +5,12 @@ import {
   TASK_STATUS,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW, TASKS_READ } from "@luke/features/tasks-view";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { selectableListBehaviour } from "@luke/ui/testing/selectable-list";
+} from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,7 +24,7 @@ import { TasksPage } from "./tasks-page.js";
 
 /**
  * tasks-list-selectable.test.ts -- the Tasks page's List chooses its tasks as
- * every selectable list does (`@luke/ui/testing/selectable-list`), across the
+ * every selectable list does (`@repo/ui/testing/selectable-list`), across the
  * groups its tasks stand in. The page over the tasks tab itself, five tasks
  * in three statuses; the key of each is its task's id.
  */

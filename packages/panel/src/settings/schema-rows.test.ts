@@ -2,15 +2,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { SETTINGS_ACT_KIND } from "@luke/host/contract";
+import { SETTINGS_ACT_KIND } from "@repo/host/contract";
 import {
   type AppSettingField,
   SETTING_SECTION,
   SETTINGS_PAGE,
   type SettingSection,
-} from "@luke/settings";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/settings";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

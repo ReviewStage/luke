@@ -1,42 +1,42 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/database/github-installation-vocabulary";
-import { createAgent } from "@luke/database/models/agent-store";
-import { createAutomation } from "@luke/database/models/automation-store";
-import { createTask, readTask } from "@luke/database/models/task-store";
+} from "@repo/database/github-installation-vocabulary";
+import { createAgent } from "@repo/database/models/agent-store";
+import { createAutomation } from "@repo/database/models/automation-store";
+import { createTask, readTask } from "@repo/database/models/task-store";
 import {
   type MemberSeams,
   OrganizationRefused,
   type WorkspaceSeams,
-} from "@luke/database/models/workspace-seams";
-import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { account, invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { task } from "@luke/database/schemas/task";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { joinWorkspace } from "@luke/database/testing";
-import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
+} from "@repo/database/models/workspace-seams";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { account, invitation, member, organization, user } from "@repo/database/schemas/auth";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { joinWorkspace } from "@repo/database/testing";
+import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationScope,
-} from "@luke/features/automation-wire";
-import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
+} from "@repo/features/automation-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
 import {
   workspaceInvitationAnswerSchema,
   workspaceInvitationsAnswerSchema,
-} from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/workspace-invitation-wire";
 import {
   workspaceInvitationsLiveRowsSchema,
   workspaceInvitationsOfLiveRows,
-} from "@luke/features/workspace-live";
+} from "@repo/features/workspace-live";
 import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
@@ -48,10 +48,10 @@ import {
   workspaceGithubConnectAnswerSchema,
   workspaceMembersAnswerSchema,
   workspacesAnswerSchema,
-} from "@luke/features/workspace-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { jsonResponse, recordingHttpClient } from "@luke/wire/testing";
+} from "@repo/features/workspace-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { jsonResponse, recordingHttpClient } from "@repo/wire/testing";
 import { and, eq } from "drizzle-orm";
 import {
   Cause,

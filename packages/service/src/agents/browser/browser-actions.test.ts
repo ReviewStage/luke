@@ -9,13 +9,13 @@ import {
   type BrowserAgentAction,
   type BrowserAgentStep,
   type BrowserCursorMove,
-} from "@luke/features/browser-agent-actions";
+} from "@repo/features/browser-agent-actions";
 import {
   BROWSER_CURSOR_BEAT,
   type BrowserCursor,
   runBrowserActions,
-} from "@luke/features/browser-agent-cdp";
-import type { CdpEvent, PageTarget } from "@luke/features/browser-cdp";
+} from "@repo/features/browser-agent-cdp";
+import type { CdpEvent, PageTarget } from "@repo/features/browser-cdp";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import {

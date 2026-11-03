@@ -25,8 +25,8 @@
  * own and travels in base64, which no name, title, or path can break.
  */
 
-import type { TerminalSummary } from "@luke/features/terminal-wire";
-import { readEither } from "@luke/wire/effect";
+import type { TerminalSummary } from "@repo/features/terminal-wire";
+import { readEither } from "@repo/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";

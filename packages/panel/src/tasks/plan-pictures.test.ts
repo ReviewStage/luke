@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { forgetPictures } from "@luke/ui/picture-cache";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { forgetPictures } from "@repo/ui/picture-cache";
+import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

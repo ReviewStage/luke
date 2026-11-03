@@ -1,6 +1,6 @@
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@luke/features/task-agents-model";
-import type { TaskAgentsSummary } from "@luke/features/task-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@repo/features/task-agents-model";
+import type { TaskAgentsSummary } from "@repo/features/task-wire";
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,

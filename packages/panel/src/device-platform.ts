@@ -1,4 +1,4 @@
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
 
 /**
  * device-platform.ts -- what a device is to the member, by its platform: the one reading every surface that names a device or draws its glyph takes.

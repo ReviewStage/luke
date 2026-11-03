@@ -14,10 +14,10 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { MemberSeams, WorkspaceSeams } from "@luke/database/models/workspace-seams";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { WORKSPACE_PHOTO_BOUNDS } from "@luke/features/workspace-wire";
-import { HTTP_METHOD } from "@luke/wire";
+import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { WORKSPACE_PHOTO_BOUNDS } from "@repo/features/workspace-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Context, Effect, Option } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";

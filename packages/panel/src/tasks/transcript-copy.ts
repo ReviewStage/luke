@@ -1,5 +1,5 @@
-import type { Replay } from "@luke/features/agent-replay";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import type { Replay } from "@repo/features/agent-replay";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_BOUNDS,
   AGENT_BRIEF,
@@ -8,8 +8,8 @@ import {
   type AgentTranscriptMessage,
   agentMessageWords,
   applyMessagesPage,
-} from "@luke/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineWords } from "@luke/features/inbox-wire";
+} from "@repo/features/agent-wire";
+import { THREAD_LINE_LEAD, threadLineWords } from "@repo/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -19,8 +19,8 @@ import {
   isCommandKind,
   TURN_ROW,
   type TurnRow,
-} from "@luke/features/turn-rows";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/turn-rows";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { unreachedAs } from "../act.js";
 import { blockSays, bodyWords, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {

@@ -11,8 +11,8 @@ import {
   type NodeCapabilityResult,
   type NodeRegistry,
   type RemoteNodeInvoker,
-} from "@luke/gateway";
-import { isWireString } from "@luke/wire";
+} from "@repo/gateway";
+import { isWireString } from "@repo/wire";
 import { Data, Effect, type Scope } from "effect";
 import { createHostOperator, type HostOperator } from "../host-operator.js";
 import {

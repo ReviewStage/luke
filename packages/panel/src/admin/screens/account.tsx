@@ -1,8 +1,8 @@
-import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
-import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
-import { formatCount } from "@luke/features/number-format";
-import { formatDate, formatDayTick, formatInstant } from "@luke/features/time-format";
-import { readFailedWords } from "@luke/features/words";
+import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
+import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import { formatCount } from "@repo/features/number-format";
+import { formatDate, formatDayTick, formatInstant } from "@repo/features/time-format";
+import { readFailedWords } from "@repo/features/words";
 import {
   AVATAR_SIZE,
   Badge,
@@ -16,9 +16,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { accountLabel } from "@luke/ui/account-initials";
-import { signInMethodLabel } from "@luke/ui/admin-format";
+} from "@repo/ui";
+import { accountLabel } from "@repo/ui/account-initials";
+import { signInMethodLabel } from "@repo/ui/admin-format";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

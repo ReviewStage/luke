@@ -1,4 +1,4 @@
-import type { ASSIGNABLE_ROLE, WorkspaceRole } from "@luke/features/workspace-wire";
+import type { ASSIGNABLE_ROLE, WorkspaceRole } from "@repo/features/workspace-wire";
 import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /**

@@ -8,7 +8,7 @@
  * no listener on a channel heard nothing.
  */
 
-import { WindowPushes } from "@luke/host/act-port";
+import { WindowPushes } from "@repo/host/act-port";
 import type { WebContents } from "electron";
 
 export const windowPushes = new WindowPushes<WebContents>();

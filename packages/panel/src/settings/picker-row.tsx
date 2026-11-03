@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   CHIP_LOOK,
   CHIP_WIDTH,
@@ -14,9 +14,9 @@ import {
   SettingsRow,
   type SettingsRowDensity,
   Tooltip,
-} from "@luke/ui";
-import type { ShownError } from "@luke/ui/reported-failure";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import type { ShownError } from "@repo/ui/reported-failure";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { SettingMarks } from "./marks.js";
 
@@ -30,13 +30,13 @@ import { SettingMarks } from "./marks.js";
  * page behind it stays still; it closes on a choice, on Escape (which stops
  * here, so it closes the menu and not Settings), and on focus leaving it,
  * and a close hands the keyboard back to the chip the way a native menu
- * returns it to its button. The menu hangs from the chip in `@luke/ui`'s
+ * returns it to its button. The menu hangs from the chip in `@repo/ui`'s
  * `SearchableMenu`, at its narrow width, above the chip or below it where
  * only there is room, within what is seen of the window.
  *
- * The chip is `@luke/ui`'s field `Chip`, at the column a settings row's
+ * The chip is `@repo/ui`'s field `Chip`, at the column a settings row's
  * pop-ups share unless its place names another width, and a `PickerRow`
- * stands it in `@luke/ui`'s `SettingsRow`. A place that is no form, a task's
+ * stands it in `@repo/ui`'s `SettingsRow`. A place that is no form, a task's
  * head, may draw it as a toolbar's chip instead, quiet until the pointer is
  * on it or its menu is open, and with no chevron.
  */
@@ -188,7 +188,7 @@ export function Picker({
 }
 
 /**
- * A settings row picking one value: `@luke/ui`'s `SettingsRow`, its name
+ * A settings row picking one value: `@repo/ui`'s `SettingsRow`, its name
  * and why, then the picker, and under both the refusal of its last write.
  * The why describes the chip, and a refusal marks it invalid and describes
  * it too.

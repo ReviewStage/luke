@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,9 +10,9 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
-} from "@luke/features/automation-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/automation-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

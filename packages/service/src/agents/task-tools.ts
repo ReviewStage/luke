@@ -1,10 +1,10 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { recordRevision } from "@luke/database/models/plan-revisions";
-import { createTaskOnce, readTask } from "@luke/database/models/task-store";
-import { AGENT_KIND } from "@luke/features/agent-wire";
-import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { recordRevision } from "@repo/database/models/plan-revisions";
+import { createTaskOnce, readTask } from "@repo/database/models/task-store";
+import { AGENT_KIND } from "@repo/features/agent-wire";
+import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
@@ -18,8 +18,8 @@ import {
   taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
-} from "@luke/features/task-wire";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/features/task-wire";
+import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {

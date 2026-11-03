@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { ReadLink } from "@luke/features/link-grammar";
-import type { CodeRef, TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { NO_EXPERIMENTS } from "@luke/settings";
+} from "@repo/features/inbox-wire";
+import type { ReadLink } from "@repo/features/link-grammar";
+import type { CodeRef, TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { NO_EXPERIMENTS } from "@repo/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";

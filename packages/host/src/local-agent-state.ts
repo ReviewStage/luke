@@ -1,4 +1,4 @@
-import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
+import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 

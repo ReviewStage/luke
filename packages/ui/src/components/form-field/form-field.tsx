@@ -1,4 +1,4 @@
-import { FIELD_WORDS } from "@luke/features/words";
+import { FIELD_WORDS } from "@repo/features/words";
 import { type ReactNode, useId } from "react";
 import type { ShownError } from "../../reported-failure.js";
 import { Field, FieldDescription, FieldLabel } from "../../shadcn/field.js";

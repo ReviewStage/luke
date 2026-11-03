@@ -7,7 +7,7 @@
  * answers a method and the client that calls it read the same words from one
  * contract. Nothing in this file performs anything.
  */
-import type { WireValue } from "@luke/wire";
+import type { WireValue } from "@repo/wire";
 import { Effect, Schema } from "effect";
 
 /** Every method the host answers, by the name a client calls it. */
@@ -398,7 +398,7 @@ export const GATEWAY_METHOD = {
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
   AGENTS_PART: "agents.part",
   /**
-   * A coding agent's terminals (`@luke/features/terminal-view`): its shells
+   * A coding agent's terminals (`@repo/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
    * developer's click; and a shell attached for one panel under a
    * connection id the desktop minted, typed into, resized, acked, woken
@@ -417,7 +417,7 @@ export const GATEWAY_METHOD = {
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
   /**
-   * A cloud Browser tab's live view (`@luke/features/browser-live-wire`),
+   * A cloud Browser tab's live view (`@repo/features/browser-live-wire`),
    * opened for one panel under a connection id the desktop minted, sent on,
    * and closed. The host only carries the socket's text frames each way;
    * what the service sends is heard as `BROWSER_LIVE_MESSAGE` events, and
@@ -431,9 +431,9 @@ export const GATEWAY_METHOD = {
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_RESET: "settings.reset",
-  /** The developer's answer to one command an agent asked to run on this Mac (`@luke/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
+  /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** The device This Mac's host's record names (`@luke/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */
+  /** The device This Mac's host's record names (`@repo/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */
   THIS_MAC_HOST_READ: "thisMacHost.read",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",

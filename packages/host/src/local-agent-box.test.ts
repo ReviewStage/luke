@@ -3,8 +3,8 @@
  */
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { agentFoldersMade } from "./local-agent-box.js";

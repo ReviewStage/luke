@@ -3,8 +3,8 @@ import {
   readAccountPreferences,
   readAccountRole,
   writeAccountPreferences,
-} from "@luke/database/models/account-store";
-import { standingSessionsOf } from "@luke/database/models/recorded-session";
+} from "@repo/database/models/account-store";
+import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";

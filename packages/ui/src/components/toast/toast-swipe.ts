@@ -1,4 +1,4 @@
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,

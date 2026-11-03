@@ -5,7 +5,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import { describe, it } from "vitest";
 import { type RunsHeld, withoutFinishedRuns } from "./finished-runs.js";
 

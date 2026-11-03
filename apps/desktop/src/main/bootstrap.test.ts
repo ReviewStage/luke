@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { appLinkInbox } from "@luke/features/app-links";
+import { appLinkInbox } from "@repo/features/app-links";
 import { test } from "vitest";
 import { type BootstrapApp, bootstrapDesktop } from "./bootstrap";
 

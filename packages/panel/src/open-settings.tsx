@@ -1,6 +1,6 @@
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import type { SettingsLink, SettingsView } from "@luke/settings/settings-views";
-import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import type { SettingsLink, SettingsView } from "@repo/settings/settings-views";
+import { TEXT_BUTTON_TONE, TextButton } from "@repo/ui";
 import { createContext, useContext } from "react";
 import { useLinkWorkspace } from "./copy-link-item.js";
 import { settingsPageOf } from "./settings/pages.js";

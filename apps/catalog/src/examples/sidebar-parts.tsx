@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -22,8 +22,8 @@ import {
   SidebarRule,
   STATUS_TONE,
   useDisclosureFold,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

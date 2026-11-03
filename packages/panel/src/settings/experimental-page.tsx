@@ -1,7 +1,7 @@
-import { SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { type ExperimentChoices, type ExperimentEntry, experimentOn } from "@luke/settings";
-import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
+import { SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { type ExperimentChoices, type ExperimentEntry, experimentOn } from "@repo/settings";
+import { EXPERIMENT_ANCHOR } from "@repo/settings/settings-anchors";
 import {
   EmptyState,
   SettingsSection,
@@ -10,7 +10,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
-} from "@luke/ui";
+} from "@repo/ui";
 import { FlaskConicalIcon } from "lucide-react";
 import { askActResult, useAct } from "../act.js";
 import { useOpenFeedback } from "../open-feedback.js";
@@ -32,7 +32,7 @@ import { SwitchRow } from "./switch-row.js";
  * Each experiment is a card of its own, holding its switch. The card wears
  * no title, since its switch already names the experiment.
  *
- * Each card is `@luke/ui`'s `SettingsSection` and the signed-out note its
+ * Each card is `@repo/ui`'s `SettingsSection` and the signed-out note its
  * caption `Text`; Send feedback stays a press among the row's detail words,
  * drawn as the links beside such words are.
  */

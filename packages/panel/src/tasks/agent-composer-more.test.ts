@@ -8,8 +8,8 @@ import {
   type AgentStatus,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";

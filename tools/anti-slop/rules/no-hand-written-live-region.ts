@@ -5,10 +5,10 @@ import { LIVE_ATTRIBUTE, LIVE_REGION_ROLES } from "../shared/live-region-guard.t
 import { isOutsideUi } from "../shared/press-guard.ts";
 
 /**
- * Outside `@luke/ui`, an intrinsic element is never a live region: no
+ * Outside `@repo/ui`, an intrinsic element is never a live region: no
  * `role="status"`, `role="alert"` or `role="log"`, and no `aria-live`. What a
  * reader should hear goes through `announce` and the one `Announcer`, and a
- * block that stands in the page keeps its words in a `@luke/ui` component
+ * block that stands in the page keeps its words in a `@repo/ui` component
  * (`ErrorState`, `FailureNote`, `EmptyState`, `NoteLine`) that owns its role.
  * Note that a role the rule cannot read as a literal is left alone, as is a
  * component's own `role` prop: it names no intrinsic element.
@@ -18,11 +18,11 @@ export const noHandWrittenLiveRegionRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow live regions on intrinsic elements outside @luke/ui; words read aloud go through announce.",
+        "Disallow live regions on intrinsic elements outside @repo/ui; words read aloud go through announce.",
     },
     messages: {
       liveRegion:
-        "`<{{tag}}>` is a hand-written live region ({{what}}). Say it with `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` from `@luke/ui`, or draw the words in `FailureNote`, `ErrorState`, `EmptyState` or `NoteLine`.",
+        "`<{{tag}}>` is a hand-written live region ({{what}}). Say it with `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` from `@repo/ui`, or draw the words in `FailureNote`, `ErrorState`, `EmptyState` or `NoteLine`.",
     },
   },
   createOnce(context) {

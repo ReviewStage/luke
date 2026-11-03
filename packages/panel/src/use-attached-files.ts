@@ -3,8 +3,8 @@ import {
   AGENT_BOUNDS,
   type AgentAttachment,
   base64Bytes,
-} from "@luke/features/agent-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+} from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { useRef, useState } from "react";
 import { reportShownFailure } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";

@@ -1,11 +1,11 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
   settingRowsForPage,
-} from "@luke/settings";
-import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/settings/settings-controls";
+} from "@repo/settings";
+import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@repo/settings/settings-controls";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,7 +14,7 @@ import {
   SettingsRow,
   SettingsRowStateLine,
   SettingsSection,
-} from "@luke/ui";
+} from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 

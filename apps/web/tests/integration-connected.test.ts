@@ -6,8 +6,8 @@ import {
   type IntegrationLandingStatus,
   type IntegrationProvider,
   integrationLandingPath,
-} from "@luke/features/integration-wire";
-import { APP_HOME_LINK } from "@luke/features/link-home";
+} from "@repo/features/integration-wire";
+import { APP_HOME_LINK } from "@repo/features/link-home";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";

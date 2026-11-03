@@ -4,7 +4,7 @@
  * A render that throws, or a chunk of code that could not be read, takes
  * down everything up to the nearest boundary above it, and with none, the
  * whole window, which React then leaves empty. So every window's root and
- * every surface drawn on demand (`@luke/panel`'s `lazyRoute`) stands under
+ * every surface drawn on demand (`@repo/panel`'s `lazyRoute`) stands under
  * one of these: what failed beneath it is replaced by the centred
  * `ErrorState`, its sentence and Reload, and the rest of the window keeps
  * going. Reload runs `onReload` where one is given, the window's own reload
@@ -17,7 +17,7 @@
  * Note that it reports nothing itself, because the root it stands in hears
  * every error a boundary caught (`createRoot`'s `onCaughtError`), the one
  * place that knows where a window reports to. Note too that it is a door of
- * its own (`@luke/ui/error-boundary`), outside the barrel, because every
+ * its own (`@repo/ui/error-boundary`), outside the barrel, because every
  * window's root draws it, which would otherwise parse the whole barrel on its
  * way to its first paint.
  */

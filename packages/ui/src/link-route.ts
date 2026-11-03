@@ -1,10 +1,10 @@
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_VIEW,
   type SettingsLink,
-} from "@luke/settings/settings-views";
+} from "@repo/settings/settings-views";
 
 /**
  * link-route.ts -- where in the window an app link opens: Settings, the Plans tab, or nowhere for a place the reader may not open.

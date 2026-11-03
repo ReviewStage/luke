@@ -1,4 +1,4 @@
-import { FIELD_WORDS } from "@luke/features/words";
+import { FIELD_WORDS } from "@repo/features/words";
 import { type ReactNode, type Ref, useState } from "react";
 import { HideSecretIcon, ShowSecretIcon } from "../../icons/lucide-glyphs.js";
 import type { ShownError } from "../../reported-failure.js";

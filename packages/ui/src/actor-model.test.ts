@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PLAN_ACTOR, type PlanSectionEdit } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PLAN_ACTOR, type PlanSectionEdit } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { test } from "vitest";
 import {
   ACTOR_KIND,

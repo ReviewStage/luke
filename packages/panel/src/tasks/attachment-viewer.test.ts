@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { FileChip } from "@luke/features/attachment-model";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { IMAGE_OPENING, type ImageOpening } from "@luke/ui";
-import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
-import type { ImageView } from "@luke/ui/image-zoom";
+import type { FileChip } from "@repo/features/attachment-model";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { IMAGE_OPENING, type ImageOpening } from "@repo/ui";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
+import type { ImageView } from "@repo/ui/image-zoom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

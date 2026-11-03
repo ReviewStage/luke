@@ -9,15 +9,15 @@
  * loses nothing. A share of nobody draws an empty track and a dash.
  */
 
-import type { AdminFunnelStep, AdminOverview } from "@luke/features/admin-answer-wire";
+import type { AdminFunnelStep, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
   FUNNEL_STEP,
   type FunnelStep,
   REACH_FEATURE,
   type ReachFeature,
-} from "@luke/features/admin-overview-vocabulary";
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
+} from "@repo/features/admin-overview-vocabulary";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@repo/ui";
 import { AsideSkeleton, ChartEmpty, ChartFrame } from "./chart-frame.js";
 
 /** What each funnel step is called, in the words a maintainer reads it by. */

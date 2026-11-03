@@ -1,4 +1,4 @@
-import { ISSUE_STATE, type IssueState } from "@luke/features/github-repositories-wire";
+import { ISSUE_STATE, type IssueState } from "@repo/features/github-repositories-wire";
 import { CircleCheckIcon, CircleDotIcon, CircleSlashIcon } from "lucide-react";
 
 /**

@@ -43,13 +43,13 @@ import {
   type SyncListenerShape,
   type SyncListening,
   syncListenerOverUrl,
-} from "@luke/database/sync/listener";
+} from "@repo/database/sync/listener";
 import {
   type SyncChange,
   SyncNotificationSchema,
   type SyncTopic,
   type TopicKind,
-} from "@luke/database/sync/notification";
+} from "@repo/database/sync/notification";
 import {
   Clock,
   Data,

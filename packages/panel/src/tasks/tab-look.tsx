@@ -1,10 +1,10 @@
-import type { AgentPullRequest, AgentStatus } from "@luke/features/agent-wire";
-import type { ModelProvider } from "@luke/features/models-wire";
-import type { TaskStatus } from "@luke/features/task-wire";
-import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
+import type { AgentPullRequest, AgentStatus } from "@repo/features/agent-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { AppWindowIcon, BotIcon, GitPullRequestIcon, GlobeIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";

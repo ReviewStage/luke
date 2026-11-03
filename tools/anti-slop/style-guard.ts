@@ -24,7 +24,7 @@ import {
 
 /**
  * The style guard, run by `pnpm lint`: reads every stylesheet and every
- * Tailwind class string outside `@luke/ui`'s token sheets and fails on a
+ * Tailwind class string outside `@repo/ui`'s token sheets and fails on a
  * place a rule refuses beyond its baseline, on a baseline above what a file
  * still holds, and on a comment asking to silence it. `--shrink` lowers
  * each baseline to what the files now hold, and never raises one. It also

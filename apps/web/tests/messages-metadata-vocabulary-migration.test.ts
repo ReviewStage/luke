@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
 import {
   openInboxItem,
   openWorkspace,
   RENAME_AGENT_TABLES,
   unmigratedPgliteSqlClient,
-} from "@luke/database/testing";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readStoredUIMessages } from "@luke/wire/ui-messages";
+} from "@repo/database/testing";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readStoredUIMessages } from "@repo/wire/ui-messages";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

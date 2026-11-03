@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
-import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP } from "@repo/features/device-agent-wire";
+import { type MacOffer, MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   TASK_CREATE_RELATION_KIND,
   type TaskCreateRelation,
   type TaskRunsOnRequest,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

@@ -5,8 +5,8 @@ import {
   type DailyCount,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/features/admin-overview-vocabulary";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+} from "@repo/features/admin-overview-vocabulary";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
 import { test } from "vitest";
 import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
 

@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
-import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@repo/features";
+import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@repo/features/analytics";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayEventKind,
-} from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { SETTINGS_RESET_SCOPE, THEME } from "@luke/settings";
-import { isRecord, type WireValue } from "@luke/wire";
+} from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { SETTINGS_RESET_SCOPE, THEME } from "@repo/settings";
+import { isRecord, type WireValue } from "@repo/wire";
 import { ConfigProvider, Effect, Layer, Queue, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { composeSettings } from "./compose-settings.js";

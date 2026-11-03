@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { AdminWorkspaceList, AdminWorkspaceRow } from "@luke/features/admin-answer-wire";
-import { SEARCH_DEBOUNCE_MS } from "@luke/panel/admin/routing";
-import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+import type { AdminWorkspaceList, AdminWorkspaceRow } from "@repo/features/admin-answer-wire";
+import { SEARCH_DEBOUNCE_MS } from "@repo/panel/admin/routing";
+import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

@@ -30,14 +30,14 @@
  * schema, through its connection, untouched.
  */
 
-import type { IntegrationToolParameter } from "@luke/features/integration-wire";
+import type { IntegrationToolParameter } from "@repo/features/integration-wire";
 import {
   isRecord,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 
 /** The most arguments a tool keeps. */
 const MAX_PARAMETERS = 64;

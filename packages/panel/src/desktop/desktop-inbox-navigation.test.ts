@@ -5,30 +5,30 @@ import {
   AGENT_CALL_FAILURE,
   type AgentInboxStartParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/automation-wire";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
+import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppInboxTask,
   AppInboxTasklessItem,
   AppWorkspaceChannels,
-} from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";

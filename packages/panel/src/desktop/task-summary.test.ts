@@ -7,11 +7,11 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { TASK_STATUS, type Task } from "@luke/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-wire";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { TASK_STATUS, type Task } from "@repo/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

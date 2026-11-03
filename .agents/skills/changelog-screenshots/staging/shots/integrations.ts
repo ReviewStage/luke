@@ -11,8 +11,8 @@
 import type {
   IntegrationStatusesView,
   IntegrationToolsView,
-} from "@luke/features/integration-view";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { SETTINGS_VIEW } from "../settings-views";
 import { codingAgentAnswers } from "./coding-agent";

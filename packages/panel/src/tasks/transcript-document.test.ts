@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import type { TaskFileRequest } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import type { TaskFileRequest } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -4,12 +4,12 @@ import {
   automationRunLine,
   automationRunStanding,
   automationRunTitle,
-} from "@luke/features/automation-list-model";
-import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { momentText, sinceText } from "@luke/features/time-format";
-import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
+} from "@repo/features/automation-list-model";
+import { AUTOMATION_FIRING, type AutomationRunSummary } from "@repo/features/automation-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { momentText, sinceText } from "@repo/features/time-format";
+import { TRIGGER_CATALOG } from "@repo/features/trigger-catalog";
 import {
   BackButton,
   EmptyState,
@@ -37,8 +37,8 @@ import {
   Tooltip,
   useMinute,
   useResizeEdge,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";

@@ -16,10 +16,10 @@
 
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { agentSandboxImageFromTemplate } from "@luke/service/agents/agent-sandbox-image";
-import { nativeAgentSessionsLayer } from "@luke/service/agents/coder-host/native-agent-sessions";
-import { runnerBundleFromDirectory } from "@luke/service/agents/coder-host/runner-bundle";
-import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
+import { agentSandboxImageFromTemplate } from "@repo/service/agents/agent-sandbox-image";
+import { nativeAgentSessionsLayer } from "@repo/service/agents/coder-host/native-agent-sessions";
+import { runnerBundleFromDirectory } from "@repo/service/agents/coder-host/runner-bundle";
+import { deploymentOidcToken } from "@repo/service/agents/vercel-sandbox-api";
 import { Duration, Layer } from "effect";
 import { runWeb } from "./runtime.js";
 

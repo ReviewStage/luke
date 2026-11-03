@@ -5,17 +5,17 @@ import {
   AGENT_CALL_FAILURE,
   type AgentPartParams,
   type AgentPartView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
   PART_CUT_FIELD,
-} from "@luke/features/agent-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

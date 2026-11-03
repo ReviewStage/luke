@@ -7,7 +7,7 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";

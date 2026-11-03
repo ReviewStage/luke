@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@luke/features/plan-edit";
-import type { Task } from "@luke/features/task-wire";
+import type { PlanEditRequest } from "@repo/features/plan-edit";
+import type { Task } from "@repo/features/task-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";

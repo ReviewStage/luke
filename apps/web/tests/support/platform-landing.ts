@@ -7,7 +7,7 @@
  */
 
 import { join } from "node:path";
-import type { Route } from "@luke/service/route";
+import type { Route } from "@repo/service/route";
 import { dispatchRoutes } from "../../server/function-dispatch";
 import { type Rewrite, readApiRewritesTable } from "../../server/function-rewrites";
 import { landed, landingRule } from "../../server/platform-landing";

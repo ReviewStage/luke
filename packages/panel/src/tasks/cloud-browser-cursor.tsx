@@ -2,7 +2,7 @@
  * cloud-browser-cursor.tsx -- the agent's pointer over a cloud Browser tab's live view: an arrow the panel draws over the page, never in it, gliding to each point the agent clicks or types at.
  *
  * The agent's actions report each point a beat before their input lands
- * (`@luke/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
+ * (`@repo/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
  * CSS pixels of its visible area, and the tab's live read carries the last
  * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
  * the drawn page, and glides there over `--ui-duration-fast` on
@@ -25,8 +25,8 @@
  */
 
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentBrowserTabCursor } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import type { AgentBrowserTabCursor } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { Clock, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type CSSProperties, useMemo } from "react";

@@ -16,11 +16,11 @@
  */
 
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { Database } from "@luke/database/core/query";
-import { saveGitHubToken } from "@luke/database/models/github-token-store";
-import { parseKeyRing, sealGitHubToken } from "@luke/database/models/provider-key-seal";
-import { account, user } from "@luke/database/schemas/auth";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { saveGitHubToken } from "@repo/database/models/github-token-store";
+import { parseKeyRing, sealGitHubToken } from "@repo/database/models/provider-key-seal";
+import { account, user } from "@repo/database/schemas/auth";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { Clock, Effect, Layer, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

@@ -1,11 +1,11 @@
-import { ACT_KIND } from "@luke/host/acts";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppSettingField,
   AppSettingValue,
   SettingsResetScope,
   SettingsUpdateResult,
-} from "@luke/settings/wire";
-import type { ActionResult } from "@luke/wire";
+} from "@repo/settings/wire";
+import type { ActionResult } from "@repo/wire";
 import { useMemo } from "react";
 import { askActResult, useAct } from "../act.js";
 

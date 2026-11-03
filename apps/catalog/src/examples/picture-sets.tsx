@@ -6,8 +6,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
+} from "@repo/ui";
+import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-cache";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

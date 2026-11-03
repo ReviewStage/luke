@@ -3,11 +3,11 @@ import {
   CHAPTERS_MODEL_LABEL,
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
-} from "@luke/features/chapters-model-choice";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+} from "@repo/features/chapters-model-choice";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
@@ -18,9 +18,9 @@ import {
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
-} from "@luke/ui";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { useSettingWrite } from "@repo/ui/use-setting-write";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
@@ -30,11 +30,11 @@ import { SettingMarks } from "./marks.js";
  * chapters-model-section.tsx -- Settings › Agents' Chapters group: the Claude model a Generate chapters the member presses runs on.
  *
  * The choice is the account's, kept on the service beside the default model
- * (`@luke/features/chapters-model-choice`), and read by the service when
+ * (`@repo/features/chapters-model-choice`), and read by the service when
  * the member presses Generate chapters; the chapters stay the workspace's.
  * Every model runs on the member's own API key: the Claude model chosen on
  * an Anthropic key, OpenAI's of its tier where they saved only an OpenAI key
- * (`@luke/service`'s `chaptersModelOf`), so the row offers Claude's alone,
+ * (`@repo/service`'s `chaptersModelOf`), so the row offers Claude's alone,
  * as a segmented control. The page reads the
  * choice afresh as it opens; a write is one ask of the service through
  * `useSettingWrite`, the control resting until it answers, a refusal worded

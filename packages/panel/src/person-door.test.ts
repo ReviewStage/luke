@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

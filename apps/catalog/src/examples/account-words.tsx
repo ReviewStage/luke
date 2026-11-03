@@ -1,4 +1,4 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   AccountWords,
   MoreButton,
@@ -9,7 +9,7 @@ import {
   SettingsRowStateLine,
   SettingsSection,
   TextButton,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

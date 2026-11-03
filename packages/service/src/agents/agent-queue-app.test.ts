@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   claimQueueHead,
   type QueuedMessageRow,
   readAgentQueue,
-} from "@luke/database/models/agent-queue-store";
-import { readAgent } from "@luke/database/models/agent-store";
-import { sentLineStands } from "@luke/database/models/message-reads";
-import { storeWriter } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace } from "@luke/database/testing";
-import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
+} from "@repo/database/models/agent-queue-store";
+import { readAgent } from "@repo/database/models/agent-store";
+import { sentLineStands } from "@repo/database/models/message-reads";
+import { storeWriter } from "@repo/database/models/writer";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace } from "@repo/database/testing";
+import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_KIND,
@@ -21,10 +21,10 @@ import {
   agentMessagesAnswerSchema,
   agentQueueAnswerSchema,
   QUEUE_CHANGE,
-} from "@luke/features/agent-wire";
-import type { WireBoundaryInput } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/features/agent-wire";
+import type { WireBoundaryInput } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
+import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {

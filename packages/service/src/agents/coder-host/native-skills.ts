@@ -18,9 +18,9 @@
  * eve's session keeps the ones it started with.
  */
 
-import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { SKILL_KEY } from "@luke/features/skill-file";
+import { INSTALLED_SKILLS } from "@repo/agent-runner/protocol";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { SKILL_KEY } from "@repo/features/skill-file";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { VercelSandboxApi } from "../vercel-sandbox-api.js";
 
@@ -44,7 +44,7 @@ const MANIFEST = {
 
 const encoder = new TextEncoder();
 
-/** The frontmatter's fences, as `@luke/features/skill-file` reads them. */
+/** The frontmatter's fences, as `@repo/features/skill-file` reads them. */
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
 
 /** A top-level key's line. */

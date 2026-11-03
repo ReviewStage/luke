@@ -26,7 +26,7 @@
  *   it is drawn inside a label or any other element that holds words alone,
  *   as a to-do's step is.
  *
- * Exported at `@luke/ui/markdown` alone, so the parser rides into no bundle
+ * Exported at `@repo/ui/markdown` alone, so the parser rides into no bundle
  * behind the barrel. Whatever a place knows better than this package, a
  * mention's chip, a coloured code block, a diagram, arrives as a component
  * or a step, so nothing here reaches an app.

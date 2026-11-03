@@ -4,7 +4,7 @@ import {
   type ConversationMediaType,
   conversationMediaTypeSchema,
   type KeptPicture,
-} from "@luke/features/conversation-picture-wire";
+} from "@repo/features/conversation-picture-wire";
 import { and, eq, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

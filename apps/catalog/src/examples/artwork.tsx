@@ -1,13 +1,13 @@
-import { harnessNameOf } from "@luke/features/agent-runtime-models";
+import { harnessNameOf } from "@repo/features/agent-runtime-models";
 import {
   AUTOMATION_FIRING,
   type AutomationFiring,
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
-} from "@luke/features/automation-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
-import * as ui from "@luke/ui";
+} from "@repo/features/automation-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import * as ui from "@repo/ui";
 import {
   FiringGlyph,
   HarnessMark,
@@ -15,7 +15,7 @@ import {
   PROVIDER_MARK_SIZE,
   ProductMark,
   ProviderMark,
-} from "@luke/ui";
+} from "@repo/ui";
 import codexOneX from "../../../../packages/panel/marks/codex-16.png";
 import codexTwoX from "../../../../packages/panel/marks/codex-32.png";
 import codexThreeX from "../../../../packages/panel/marks/codex-48.png";
@@ -23,7 +23,7 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * artwork.tsx -- the production artwork `@luke/ui` draws from `@luke/brand`'s
+ * artwork.tsx -- the production artwork `@repo/ui` draws from `@repo/brand`'s
  * generated sources: the product's mark, every glyph, every provider's
  * mark, and what fires an automation, each drawn from the package itself
  * rather than from a copy.
@@ -54,7 +54,7 @@ const FIRINGS = [
   { name: "Run now", of: { kind: AUTOMATION_FIRING.MANUAL } },
 ] as const satisfies readonly { name: string; of: AutomationFiring | AutomationTrigger }[];
 
-/** A glyph's name as `@luke/ui` exports it: every glyph ends in `Icon`, a heading's starts with `Heading`. */
+/** A glyph's name as `@repo/ui` exports it: every glyph ends in `Icon`, a heading's starts with `Heading`. */
 type GlyphName = Extract<keyof typeof ui, `${string}Icon` | `Heading${string}`>;
 
 /** Whether an export of the package is a glyph, by the name it is exported under. */

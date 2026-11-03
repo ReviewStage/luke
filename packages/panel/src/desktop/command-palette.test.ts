@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -17,20 +17,20 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
-import type { PortActResult } from "@luke/host/contract";
-import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
+import type { PortActResult } from "@repo/host/contract";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
+import { experimentsOn, settingsView } from "@repo/settings/testing";
+import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";

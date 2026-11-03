@@ -29,14 +29,14 @@ import {
   SECONDS_PER_MINUTE,
   type SecondsCostSource,
   type TokenCostSource,
-} from "@luke/features/admin-cost-wire";
+} from "@repo/features/admin-cost-wire";
 import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
   type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import { costOfTurns } from "../agents/coder-host/usage.js";
 import { DAY_MS } from "../core.js";

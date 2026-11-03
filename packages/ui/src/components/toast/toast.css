@@ -173,7 +173,7 @@
   /* A close takes a finger's press up and down alone on a coarse pointer,
      never sideways, because beside it stand the words it would close, and a
      tap meant for a toast's words that lands near its end must not close
-     it. This reaches into `@luke/ui`'s Button through its `ui-button`
+     it. This reaches into `@repo/ui`'s Button through its `ui-button`
      class, its contract with a sheet that restyles it. */
   @media (pointer: coarse) {
     .ui-toast-dismiss .ui-button::before {

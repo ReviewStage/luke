@@ -5,7 +5,7 @@ import {
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { expect, test } from "vitest";
 import {
   COMPLETED_WINDOW,

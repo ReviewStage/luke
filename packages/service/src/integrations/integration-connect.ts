@@ -32,13 +32,13 @@
  * (`accountIntegrationConnect`).
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import {
   ConnectError,
   ConnectorInstallationRequiredError,

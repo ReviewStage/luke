@@ -1,13 +1,13 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@luke/ui";
-import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
-import type { ActionResult } from "@luke/wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
+import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@repo/ui";
+import { useOptimisticSettingWrite } from "@repo/ui/use-setting-write";
+import type { ActionResult } from "@repo/wire";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { SettingMarks } from "./marks.js";
 
 /**
- * A settings switch: `@luke/ui`'s `SettingsRow` holding its `Switch`, the
+ * A settings switch: `@repo/ui`'s `SettingsRow` holding its `Switch`, the
  * row's name, optional why, and the thumb. The visible name is the switch's
  * own name and the why is its description, so a reader hears the words a
  * sighted hand clicks. The switch flips at once, from a local value, and the

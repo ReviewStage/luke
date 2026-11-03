@@ -1,4 +1,4 @@
-import type { PageShower } from "@luke/features/page-wire";
+import type { PageShower } from "@repo/features/page-wire";
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";

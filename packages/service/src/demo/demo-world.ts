@@ -1,12 +1,12 @@
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { INBOX_ASK, INBOX_FIELD, type InboxAsk } from "@luke/features/inbox-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { INBOX_ASK, INBOX_FIELD, type InboxAsk } from "@repo/features/inbox-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
 /**
  * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their plans, the comments on them, and its channels.

@@ -7,9 +7,9 @@ import {
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/task-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   DEFAULT_BOARD_DISPLAY,
   DEFAULT_LIST_DISPLAY,
@@ -18,7 +18,7 @@ import {
   TASKS_ORDER,
   type TasksDisplay,
   type TasksFilter,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

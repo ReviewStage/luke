@@ -1,5 +1,5 @@
-import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/features/admin-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   ErrorState,
   GAP,
@@ -10,7 +10,7 @@ import {
   Stack,
   Tooltip,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react";
 import { unreadShown } from "../../failure-report.js";
 

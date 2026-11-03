@@ -15,7 +15,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke/features";
+import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@repo/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -25,9 +25,9 @@ import {
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { ConfigProvider, Deferred, Effect, Exit, Layer, Option, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { composeLocalAgents } from "./compose-local-agents.js";

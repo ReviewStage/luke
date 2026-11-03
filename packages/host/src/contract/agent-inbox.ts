@@ -32,7 +32,7 @@ import {
   agentInboxScopeSchema,
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

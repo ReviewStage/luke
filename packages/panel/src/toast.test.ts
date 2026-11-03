@@ -6,8 +6,8 @@ import {
   FAILURE_SURFACE,
   type ShownFailureSentry,
   sendShownFailure,
-} from "@luke/features/shown-failure";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/shown-failure";
+import { STATUS_TONE } from "@repo/ui";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";

@@ -15,11 +15,11 @@
   text-size-adjust: 100%;
   background: transparent;
   /* The palette every shared component draws in, the inks, grounds, fills,
-     edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
+     edges, accent, states, and shadows, is `@repo/ui`'s desktop palette
      (`tokens/palettes.css`), keyed on the root's `data-ui-profile` and
      `data-ui-theme`: the desktop's theme is `system`, so it follows the
      Mac's appearance and the app's own Theme setting through it, and the web's
-     is the account's Theme setting resolved (`@luke/ui`'s
+     is the account's Theme setting resolved (`@repo/ui`'s
      `tokens/appearance.ts`). What stays here is the window's own: whose
      voice is live, the code's and the terminal's inks, a file icon's. Each
      colour of its own that differs by appearance is one `light-dark()` pair,
@@ -58,7 +58,7 @@
      each resolves to off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
   /* The well read through its brand role, so a change of brand
-     (`@luke/brand`'s `brand-palette.mjs`) recolours the screen with it. */
+     (`@repo/brand`'s `brand-palette.mjs`) recolours the screen with it. */
   --terminal-ground: var(--ui-color-well);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
@@ -106,7 +106,7 @@
   --file-icon-pink: light-dark(#d32a61, #ff678d);
   --file-icon-mauve: light-dark(#594c5b, #79697b);
 
-  /* Springs, durations, delays, and the row fan arrive from `@luke/ui`'s motion tokens,
+  /* Springs, durations, delays, and the row fan arrive from `@repo/ui`'s motion tokens,
      so no app ships a different vocabulary. One sampled damped spring drives every travel, at one
      duration: a real spring's motion is a property of the spring, not of how
      far it is asked to go, which is what makes every move read as the same
@@ -305,7 +305,7 @@ body,
 
 /* The product's mark --------------------------------------------------------- */
 
-/* The mark's ink is `@luke/ui`'s (`marks/product-mark.css`); its size where
+/* The mark's ink is `@repo/ui`'s (`marks/product-mark.css`); its size where
    nothing more particular lays it out is the window's, except where it is
    asked to fill its box (`fill`), which this unlayered size would otherwise
    beat. */

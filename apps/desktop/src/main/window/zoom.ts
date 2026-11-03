@@ -13,7 +13,7 @@
  * that memory has nothing to add to.
  */
 
-import { APP_SETTING_SCHEMA, type ZoomPercent, zoomFactor } from "@luke/settings";
+import { APP_SETTING_SCHEMA, type ZoomPercent, zoomFactor } from "@repo/settings";
 import { Context, Effect, MutableRef } from "effect";
 import type { Point, WebContents } from "electron";
 
@@ -44,7 +44,7 @@ export interface ZoomedWindow {
 export class PanelWindows extends Context.Service<
   PanelWindows,
   { standing(): readonly ZoomedWindow[] }
->()("@luke/desktop/PanelWindows") {}
+>()("@repo/desktop/PanelWindows") {}
 
 /** The stored size as a zoom factor, where an absent one is the schema's default. */
 export function zoomFactorOf(preference: ZoomPercent | undefined): number {

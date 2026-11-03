@@ -7,8 +7,8 @@ import {
   type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { taskKey } from "@luke/features/workspace-key";
+} from "@repo/features/task-wire";
+import { taskKey } from "@repo/features/workspace-key";
 import {
   type FootRow,
   type MenuPanel,
@@ -18,9 +18,9 @@ import {
   SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   TaskStatusMark,
-} from "@luke/ui";
-import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 
 /**

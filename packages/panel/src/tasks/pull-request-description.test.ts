@@ -8,15 +8,15 @@ import {
   CHECK_SUMMARY,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_REFUSAL,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
-} from "@luke/features/pull-request-write-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/pull-request-write-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

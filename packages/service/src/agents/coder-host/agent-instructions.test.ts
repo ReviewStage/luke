@@ -4,9 +4,9 @@
  */
 
 import assert from "node:assert/strict";
-import type { Agent } from "@luke/database/models/agent-store";
-import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import type { Agent } from "@repo/database/models/agent-store";
+import { AGENT_KIND, CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { test } from "vitest";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 

@@ -1,5 +1,5 @@
-import { isWireUuid } from "@luke/features";
-import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
+import { isWireUuid } from "@repo/features";
+import { MEMORY_BOUNDS } from "@repo/features/memory-wire";
 import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

@@ -1,4 +1,4 @@
-import { automationWebhookApp } from "@luke/service/automations/automation-webhook-app";
+import { automationWebhookApp } from "@repo/service/automations/automation-webhook-app";
 import { nativeAgents } from "../../native-agents.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 

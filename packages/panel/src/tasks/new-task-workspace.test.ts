@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

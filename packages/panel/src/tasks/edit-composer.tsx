@@ -2,8 +2,8 @@ import {
   AGENT_STATUS,
   type AgentAttachment,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+} from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -12,8 +12,8 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Equal } from "effect";
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import {

@@ -5,7 +5,7 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";

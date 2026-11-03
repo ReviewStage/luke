@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { it } from "@effect/vitest";
-import type { ChatGptCredentialsSaveRequest } from "@luke/features/provider-key-wire";
+import type { ChatGptCredentialsSaveRequest } from "@repo/features/provider-key-wire";
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { CHATGPT_SIGN_IN, CHATGPT_SIGN_IN_REASON, chatGptSignIn } from "./chatgpt-sign-in.js";
 import { LOOPBACK_CONSENT_CANCELLED } from "./consent.js";

@@ -35,36 +35,36 @@ if [[ -n "$engines_drift" ]]; then
 fi
 
 # The packages below the runtime (live, features) open
-# `@luke/runtime/vocabulary` precisely because it resolves no Node module
+# `@repo/runtime/vocabulary` precisely because it resolves no Node module
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host` and every door of it a browser loads are walked the same way:
+# `@repo/host` and every door of it a browser loads are walked the same way:
 # `/effect`, `/client`, `/act-port`, `/service-layer`, `/agent-notices` and
 # `/task-code`, which the web app runs the host in a tab through, and
 # `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
 # (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
-# `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
+# `electron`, no `@repo/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
-# `@luke/host/node`. The walk crosses into `@luke/credentials` through the
+# `@repo/host/node`. The walk crosses into `@repo/credentials` through the
 # doors the host names (its barrel and `/snapshot`), since the account's
 # sign-in lives there: the loopback consent sits behind
-# `@luke/credentials/node`, handed to the host as its `SignInConsent` seam.
+# `@repo/credentials/node`, handed to the host as its `SignInConsent` seam.
 # Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const doors = [
     {
-      name: "@luke/runtime/vocabulary",
+      name: "@repo/runtime/vocabulary",
       root: "packages/runtime/src",
       entries: ["vocabulary.ts"],
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host and the doors of it a browser loads",
+      name: "@repo/host and the doors of it a browser loads",
       root: "packages/host/src",
       entries: [
         "index.ts",
@@ -79,9 +79,9 @@ node --input-type=module -e '
         "contract/index.ts",
         "task-code.ts",
       ],
-      forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
+      forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@repo\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
-      follows: ["@luke/credentials"],
+      follows: ["@repo/credentials"],
     },
   ];
   const repository = process.argv[1];
@@ -90,7 +90,7 @@ node --input-type=module -e '
   const followed = async (door, specifier) => {
     const name = door.follows?.find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
     if (!name) return undefined;
-    const directory = path.join(repository, "packages", name.slice("@luke/".length));
+    const directory = path.join(repository, "packages", name.slice("@repo/".length));
     const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
     const target = manifest.exports[`.${specifier.slice(name.length)}`];
     return path.join(directory, target.replace(/\.js$/, ".ts"));
@@ -172,7 +172,7 @@ fi
 # The web functions are bundled from server/routes/ and server/orpc-route.ts
 # into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
-# `@luke/…` specifier is resolved by
+# `@repo/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
 # what apps/web/package.json declares, so a specifier the web app's sources name
 # without declaring resolves in a developer's hoisted tree, typechecks, and
@@ -182,11 +182,11 @@ undeclared_packages() {
     local manifest=$1
     shift
     local declared named named_name undeclared=""
-    declared=$(grep -oE '"@luke/[a-z-]+": "workspace:\*"' "$manifest" |
-        sed -E 's#"@luke/([a-z-]+)".*#\1#' | sort -u)
+    declared=$(grep -oE '"@repo/[a-z-]+": "workspace:\*"' "$manifest" |
+        sed -E 's#"@repo/([a-z-]+)".*#\1#' | sort -u)
     named=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-        '(from|import) "@luke/[a-z-]+(/[a-z-]+)*"' "$@" |
-        sed -E 's#.*"@luke/([a-z-]+).*"#\1#' | sort -u || true)
+        '(from|import) "@repo/[a-z-]+(/[a-z-]+)*"' "$@" |
+        sed -E 's#.*"@repo/([a-z-]+).*"#\1#' | sort -u || true)
     while IFS= read -r named_name; do
         [[ -z "$named_name" ]] && continue
         if ! grep -qx "$named_name" <<<"$declared"; then
@@ -198,13 +198,13 @@ undeclared_packages() {
 undeclared_web_packages=$(undeclared_packages "$APP_REPO_ROOT/apps/web/package.json" \
     "$APP_REPO_ROOT/apps/web/server" "$APP_REPO_ROOT/apps/web/src" "$APP_REPO_ROOT/apps/web/scripts")
 if [[ -n "$undeclared_web_packages" ]]; then
-    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @luke specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
+    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @repo specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
         "$undeclared_web_packages" >&2
     exit 1
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
+# through the preload bridge alone, so `@repo/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
@@ -338,10 +338,10 @@ node --input-type=module -e '
   import path from "node:path";
   const root = process.argv[1];
   const { turboInvocation } = await import(path.join(root, "scripts/lib/turbo.mjs"));
-  const TASK = "@luke/wire#typecheck";
+  const TASK = "@repo/wire#typecheck";
   const hashUnder = (platform) => {
     const { TURBO_TOKEN, ...env } = process.env;
-    const dry = execFileSync("pnpm", ["exec", "turbo", "run", "typecheck", "--filter=@luke/wire", "--dry=json"], {
+    const dry = execFileSync("pnpm", ["exec", "turbo", "run", "typecheck", "--filter=@repo/wire", "--dry=json"], {
       cwd: root,
       env: { ...env, APP_TURBO_PLATFORM: platform, TURBO_TELEMETRY_DISABLED: "1" },
       encoding: "utf8",
@@ -385,7 +385,7 @@ fi
 # pins against what is installed, the coding agent's tool files against its
 # registry and what eve can build of each, the probes' committed fixtures
 # against their own leak guards, the lint rules' baselines against the files
-# they name, the catalog against `@luke/ui`'s components, the panel's launch
+# they name, the catalog against `@repo/ui`'s components, the panel's launch
 # bundle, and the site's page heads and Tailwind entries. Each was a test that
 # read the repository, which root AGENTS.md's "Testing" leaves to a check
 # (`tools/anti-slop/repository-guard.ts`); several load the module whose

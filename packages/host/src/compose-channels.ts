@@ -1,5 +1,5 @@
-import type { HostedChannelClient } from "@luke/features";
-import type { ChannelListRow } from "@luke/features/channel-live";
+import type { HostedChannelClient } from "@repo/features";
+import type { ChannelListRow } from "@repo/features/channel-live";
 import {
   CHANNEL_CALL_FAILURE,
   type ChannelMoveView,
@@ -13,16 +13,16 @@ import {
   channelsFollowParamsSchema,
   channelThreadsParamsSchema,
   channelUnarchiveParamsSchema,
-} from "@luke/features/channel-view";
-import type { Channel } from "@luke/features/channel-wire";
+} from "@repo/features/channel-view";
+import type { Channel } from "@repo/features/channel-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   readParams,
-} from "@luke/gateway";
-import type { WireValue } from "@luke/wire";
+} from "@repo/gateway";
+import type { WireValue } from "@repo/wire";
 import { Effect, FiberMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AppWorkspaceChannels } from "./app-state.js";

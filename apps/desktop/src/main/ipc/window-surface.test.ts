@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import type { FeedbackSubmission } from "@luke/features/feedback";
-import type { ActSender } from "@luke/host/act-port";
-import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
-import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/settings/microphone";
+import type { FeedbackSubmission } from "@repo/features/feedback";
+import type { ActSender } from "@repo/host/act-port";
+import { type TestActPort, testActPort } from "@repo/host/act-port/testing";
+import { WINDOW_SURFACE_ACT_KIND } from "@repo/host/contract";
+import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@repo/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { windowSurfaceProcedures } from "./window-surface";

@@ -9,12 +9,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { DateTime, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { PRODUCT_EVENT, type WireValue } from "../core.js";

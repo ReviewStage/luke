@@ -1,4 +1,4 @@
-import { WORDMARK_ART } from "@luke/brand";
+import { WORDMARK_ART } from "@repo/brand";
 import { useEffect, useRef } from "react";
 import { bayerAt, fitCanvas, paintLoop } from "./landing-paint.js";
 

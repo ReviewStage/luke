@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { NO_EXPERIMENTS } from "@luke/settings";
-import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
+import { NO_EXPERIMENTS } from "@repo/settings";
+import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

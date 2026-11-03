@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@luke/features/provider-key-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { holdExits } from "@luke/ui/testing/held-exits";
+} from "@repo/features/provider-key-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

@@ -2,11 +2,11 @@ import {
   type LiveStatement,
   liveSelection,
   liveStatementOf,
-} from "@luke/database/core/live-statement";
-import { queryBuilder } from "@luke/database/core/query";
-import { AUTOMATION_COLUMNS, automationReadableBy } from "@luke/database/models/automation-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { automation, automationRun } from "@luke/database/schemas/automation";
+} from "@repo/database/core/live-statement";
+import { queryBuilder } from "@repo/database/core/query";
+import { AUTOMATION_COLUMNS, automationReadableBy } from "@repo/database/models/automation-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { automation, automationRun } from "@repo/database/schemas/automation";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Option } from "effect";
 import {
@@ -26,7 +26,7 @@ import {
  * run with the agent it started and what that agent's status is read from
  * (`agent-standing.ts`), in one statement apiece, so a run and its agent
  * move together. Every column stands under the key
- * `@luke/features/automation-live` reads it by and every instant as epoch
+ * `@repo/features/automation-live` reads it by and every instant as epoch
  * milliseconds. Nothing reads the clock: an agent's status, which turns on
  * it, is the reader's, and so is the order, since Realtime keeps none.
  */

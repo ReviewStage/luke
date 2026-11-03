@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { FAILURE_CONDITION } from "@luke/features/shown-failure";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { FAILURE_CONDITION } from "@repo/features/shown-failure";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -1,4 +1,4 @@
-import type { HostedIntegrationsClient } from "@luke/features";
+import type { HostedIntegrationsClient } from "@repo/features";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -9,8 +9,8 @@ import {
   type IntegrationToolsView,
   integrationProviderParamsSchema,
   integrationRenameParamsSchema,
-} from "@luke/features/integration-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@luke/gateway";
+} from "@repo/features/integration-view";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@repo/gateway";
 import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";

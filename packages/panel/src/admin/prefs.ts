@@ -1,5 +1,5 @@
-import { ACCOUNTS_SORT_KEY, type AccountsSort } from "@luke/ui/accounts-sort";
-import { SORT_DIRECTION } from "@luke/ui/sort-direction";
+import { ACCOUNTS_SORT_KEY, type AccountsSort } from "@repo/ui/accounts-sort";
+import { SORT_DIRECTION } from "@repo/ui/sort-direction";
 import { Option, Schema, SchemaTransformation } from "effect";
 import { forgetKept, readKeptOption, writeKept } from "../kept-storage.js";
 

@@ -28,7 +28,7 @@ import { cn } from "../cn.js";
  *   own; the window draws the one focus ring (`shadcn-focus.test.ts`).
  * - `ItemMedia` is centred beside the words whether or not they are
  *   described, with none of shadcn's `icon` and `image` variants: the
- *   mark's box is `@luke/ui`'s `SettingsRowMark`.
+ *   mark's box is `@repo/ui`'s `SettingsRowMark`.
  * - `ItemContent`, `ItemTitle`, and `ItemDescription` are drawn in our
  *   label and caption roles with no line clamp: a long name or word breaks
  *   rather than being cut, and `ItemTitle` stands only where the label
@@ -43,7 +43,7 @@ import { cn } from "../cn.js";
  *   selects for what a utility cannot say: the narrow container's rules, a
  *   finger's whole-row press, and the properties those rules undo.
  *
- * `@luke/ui`'s `SettingsRow` (`components/settings-row/settings-row.tsx`) is
+ * `@repo/ui`'s `SettingsRow` (`components/settings-row/settings-row.tsx`) is
  * what an app draws; this is its inside.
  */
 

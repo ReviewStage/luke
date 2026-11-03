@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { FEEDBACK_KIND } from "@luke/features/feedback";
-import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@luke/ui";
-import { recordedFailure } from "@luke/ui/testing/reported-failure";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { FEEDBACK_KIND } from "@repo/features/feedback";
+import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@repo/ui";
+import { recordedFailure } from "@repo/ui/testing/reported-failure";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

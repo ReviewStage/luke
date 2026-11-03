@@ -1,9 +1,9 @@
-import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
+import { memberSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
 import {
   openMigratedPglite,
   sqlClientOverPglite,
   syncListenerOverPglite,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 import { bearer, organization as organizationPlugin } from "better-auth/plugins";

@@ -1,6 +1,6 @@
-import { type IntegrationTool, toolsCount } from "@luke/features/integration-health";
-import { byName, toolBadge, toolSummary, toolTitle } from "@luke/features/integration-tool-model";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
+import { type IntegrationTool, toolsCount } from "@repo/features/integration-health";
+import { byName, toolBadge, toolSummary, toolTitle } from "@repo/features/integration-tool-model";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@repo/features/integration-wire";
 import {
   HoverCard,
   HoverCardHead,
@@ -11,14 +11,14 @@ import {
   ProviderMark,
   Tooltip,
   VisuallyHidden,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   SERVER_HANDED,
   SERVER_ROW,
   type ServerHanded,
   type ServerRow,
   serverMentionNote,
-} from "@luke/ui/agent-servers-model";
+} from "@repo/ui/agent-servers-model";
 import { createContext, type ReactNode, useContext } from "react";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useServerRows } from "./agent-servers.js";

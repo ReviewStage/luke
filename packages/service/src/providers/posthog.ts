@@ -13,8 +13,8 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import { HTTP_METHOD, positiveInteger, withoutTrailingSlash } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { HTTP_METHOD, positiveInteger, withoutTrailingSlash } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Data, Effect, type Layer, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, EXCESS_KEYS, fixedBearer, NO_CREDENTIAL } from "../core.js";

@@ -1,4 +1,4 @@
-import type { AgentNewestAnswer } from "@luke/features/agent-wire";
+import type { AgentNewestAnswer } from "@repo/features/agent-wire";
 import { Effect, Equal, Option, Ref } from "effect";
 
 /**

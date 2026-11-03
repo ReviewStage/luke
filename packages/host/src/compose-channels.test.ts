@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { WorkspaceChannelsLiveRows } from "@luke/features/channel-live";
-import { CHANNEL_CALL_FAILURE, type ChannelsView } from "@luke/features/channel-view";
-import type { Channel } from "@luke/features/channel-wire";
-import type { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import type { WorkspaceChannelsLiveRows } from "@repo/features/channel-live";
+import { CHANNEL_CALL_FAILURE, type ChannelsView } from "@repo/features/channel-view";
+import type { Channel } from "@repo/features/channel-wire";
+import type { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethod,
-} from "@luke/gateway";
-import type { WireRecord, WireValue } from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/gateway";
+import type { WireRecord, WireValue } from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppWorkspaceChannels } from "./app-state.js";

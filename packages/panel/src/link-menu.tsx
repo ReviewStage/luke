@@ -2,7 +2,7 @@
  * link-menu.tsx -- a right-click on any link in the window: Open link and Copy link, hung at the pointer.
  *
  * A link is an `<a href>`, or a control that opens an address and handed it
- * by its ref (`@luke/ui`'s `useLinkAddress`): a mention's chip, a pull
+ * by its ref (`@repo/ui`'s `useLinkAddress`): a mention's chip, a pull
  * request's row, a check's row. The window hears every right-click once, at the document, after
  * whatever was clicked heard it, so a row or a tab that hangs a menu of its
  * own keeps it; a right-click that lands on a link and nothing else's menu
@@ -18,7 +18,7 @@
  * does.
  */
 
-import { dropBelowStart, linkAddressOf, MENU_ALIGN, type MenuPlacement, useMenu } from "@luke/ui";
+import { dropBelowStart, linkAddressOf, MENU_ALIGN, type MenuPlacement, useMenu } from "@repo/ui";
 import { ExternalLinkIcon, LinkIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";

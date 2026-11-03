@@ -34,8 +34,8 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
-import { PAGE_OWNER, type PageOwner, pageVersionNumberSchema } from "@luke/features/page-wire";
+import { PAGE_SANDBOX_ORIGIN } from "@repo/features/page-frame";
+import { PAGE_OWNER, type PageOwner, pageVersionNumberSchema } from "@repo/features/page-wire";
 import { Context, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import {
   AUTH_DEPLOYMENT_ENVIRONMENT,

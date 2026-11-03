@@ -7,7 +7,7 @@ import {
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

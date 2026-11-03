@@ -1,8 +1,8 @@
 import { useAtomSet } from "@effect/atom-react";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@luke/ui";
-import { replyOf } from "@luke/ui/reply-quote";
-import { visibleViewport } from "@luke/ui/visible-viewport";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@repo/ui";
+import { replyOf } from "@repo/ui/reply-quote";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
@@ -29,7 +29,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * does not (`coarse-pointer.ts`). A press hands the words to the box
  * (`AgentComposer`'s `replyDoor`), whose editor lays them in (`insertQuote`), drawn here
  * (`ComposerQuoteView`), and sends them as a Markdown blockquote set apart
- * by a blank line (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
+ * by a blank line (`@repo/ui/reply-quote`). The press is drawn over the window, not inside
  * the transcript, so the log's own clipping never cuts it, follows the
  * selection as the log scrolls, and goes as the selection does. Note that
  * the press takes no focus and leaves the selection as it was until it is

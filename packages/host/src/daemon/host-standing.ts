@@ -1,7 +1,7 @@
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { HOST_WIRE, hostUpgradeCommand } from "@luke/features/host-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { HTTP_STATUS } from "@luke/wire";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { HOST_WIRE, hostUpgradeCommand } from "@repo/features/host-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { HTTP_STATUS } from "@repo/wire";
 import { Clock, Deferred, Duration, Effect, Ref } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

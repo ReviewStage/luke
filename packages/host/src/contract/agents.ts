@@ -59,14 +59,14 @@ import {
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   hostsAnswerViewSchema,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   hostPairingApproveViewSchema,
   hostPairingDenyViewSchema,
   hostPairingParamsSchema,
   hostPairingViewSchema,
-} from "@luke/features/host-pairing-view";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+} from "@repo/features/host-pairing-view";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

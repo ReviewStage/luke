@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanCommentActionRequest } from "@luke/features/plan-comment-wire";
+import type { PlanCommentActionRequest } from "@repo/features/plan-comment-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_BOUNDS,
@@ -9,8 +9,8 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+} from "@repo/features/plan-comment-wire";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

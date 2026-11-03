@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@luke/ui";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

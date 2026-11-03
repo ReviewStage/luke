@@ -5,7 +5,7 @@
  * since the updater is Electron's; a browser tab refuses every one.
  */
 
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { UPDATE_ACT_KIND } from "./kinds.js";

@@ -1,4 +1,4 @@
-import type { ActionResult } from "@luke/wire";
+import type { ActionResult } from "@repo/wire";
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isComposingKey } from "../../composing-key.js";

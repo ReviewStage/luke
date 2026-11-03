@@ -18,7 +18,7 @@
  * function's bundle may reach this module: the deploy's bundle step and
  * `tests/vercel-functions.test.ts` both refuse one that does. And each request
  * reads the environment again and is refused wherever the local server would
- * have refused to start (`@luke/service/local/local-server-guard`), so a copy
+ * have refused to start (`@repo/service/local/local-server-guard`), so a copy
  * mounted beside a Vercel deployment's variables, or over a database off this
  * machine, mints nothing.
  */
@@ -28,10 +28,10 @@ import {
   SOCIAL_PROVIDER,
   type SocialProvider,
   socialProviderFromState,
-} from "@luke/features/sign-in-provider";
-import { LOGIN_PAGE } from "@luke/service/auth/auth-policy";
-import { localServerRefusal } from "@luke/service/local/local-server-guard";
-import type { Route } from "@luke/service/route";
+} from "@repo/features/sign-in-provider";
+import { LOGIN_PAGE } from "@repo/service/auth/auth-policy";
+import { localServerRefusal } from "@repo/service/local/local-server-guard";
+import type { Route } from "@repo/service/route";
 import type { AuthContext } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 
@@ -109,7 +109,7 @@ async function resumedAuthorization(
  * `lastLoginMethod` plugin records a real one's: the provider the desktop's
  * card chose, read from its authorization's `state` as the real login page
  * reads it, or GitHub for a browser's own. The web app counts a session
- * signed in only where its account names one (`@luke/host`'s cookie account
+ * signed in only where its account names one (`@repo/host`'s cookie account
  * source), so a sign-in that left none would land on the sign-in card.
  */
 function loginMethod(resumed: URLSearchParams | undefined): SocialProvider {

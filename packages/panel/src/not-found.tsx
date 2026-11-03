@@ -1,4 +1,4 @@
-import { EmptyState, type EmptyStateAction } from "@luke/ui";
+import { EmptyState, type EmptyStateAction } from "@repo/ui";
 import { SearchXIcon } from "lucide-react";
 
 /**

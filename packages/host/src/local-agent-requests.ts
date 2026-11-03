@@ -5,7 +5,7 @@ import {
   type DeviceAgentLayout,
   type DeviceAgentRequest,
   deviceAgentReadArgsSchema,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { Effect, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { agentFolders } from "./local-agent-box.js";

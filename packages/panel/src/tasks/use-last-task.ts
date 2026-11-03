@@ -1,5 +1,5 @@
-import type { TaskSummary } from "@luke/features/task-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { keptKey, useKept } from "../use-kept.js";

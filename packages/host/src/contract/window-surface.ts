@@ -6,15 +6,15 @@
  * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
  */
 
-import { type FeedbackSubmission, feedbackSubmission } from "@luke/features/feedback";
-import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
+import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
+import { PLAN_MARKDOWN_MAX_CHARS } from "@repo/features/plan-markdown";
 import {
   LID_STATE,
   MICROPHONE_STATUS,
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
-} from "@luke/settings/microphone";
-import type { UnparsedWireValue } from "@luke/wire";
+} from "@repo/settings/microphone";
+import type { UnparsedWireValue } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WINDOW_SURFACE_ACT_KIND } from "./kinds.js";

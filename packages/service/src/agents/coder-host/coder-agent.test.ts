@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
+import { SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
 import {
   AGENT_BRIEF,
   AGENT_KIND,
   type AgentBrief,
   type AgentKind,
-} from "@luke/features/agent-wire";
-import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
+} from "@repo/features/agent-wire";
+import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { Schema } from "effect";
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./inbox.js";

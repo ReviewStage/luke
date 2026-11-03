@@ -14,7 +14,7 @@ import {
   Text,
   VIDEO_PLAYER_PLACE,
   VideoPlayer,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useEffect, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

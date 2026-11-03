@@ -20,12 +20,12 @@
  * every capability dropped (`sandbox-capabilities.ts`), since the pages the
  * browser loads are no one's we vouch for, which would make it read as
  * the agent's own work; it is told apart by its sessions' leaders instead
- * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
+ * (`@repo/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
  * sandbox up through a pause. Every value the script reads
  * is a constant of this module, handed to it as a positional argument.
  */
 
-import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
+import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 

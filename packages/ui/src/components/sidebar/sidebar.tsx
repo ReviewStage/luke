@@ -6,7 +6,7 @@ import type { DisclosureFold } from "../disclosure/disclosure.js";
  *
  * The panel's sidebar, Settings' page list, a version history's versions,
  * and the web's admin dashboard all stand these in the column the app's
- * shell lays (`@luke/panel`'s `shell.css`), so the four read as one product
+ * shell lays (`@repo/panel`'s `shell.css`), so the four read as one product
  * from one set of boxes rather than copies of them. The column itself, its
  * ground, insets, width, and slide, stays the shell's, and so does what
  * each part holds.

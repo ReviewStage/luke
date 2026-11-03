@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_SITE } from "@luke/features/link-site";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LINK_SITE } from "@repo/features/link-site";
 import React, { useId } from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.

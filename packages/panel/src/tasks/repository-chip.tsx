@@ -1,11 +1,11 @@
-import type { GitHubRepository } from "@luke/features";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import type { GitHubRepository } from "@repo/features";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@repo/features/tasks-view";
+import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@repo/features/words";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import {
   AVATAR_SIZE,
   BUTTON_VARIANT,
@@ -27,10 +27,10 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { repositoryFailureNote } from "@luke/ui/tasks-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { repositoryFailureNote } from "@repo/ui/tasks-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { failureShown } from "../failure-report.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";

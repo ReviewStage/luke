@@ -13,7 +13,7 @@
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
   type ConnectorService,

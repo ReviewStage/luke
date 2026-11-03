@@ -12,7 +12,7 @@
  * with a round trip that is a statement of the listening session itself:
  * where the session is given an idle timeout, a listener that keeps proving
  * it keeps it, and one whose process stopped is closed by Postgres. The
- * store's tests listen on their PGlite instead (`@luke/database/testing`).
+ * store's tests listen on their PGlite instead (`@repo/database/testing`).
  */
 import { PgConnection } from "@effect/sql-pg";
 import {
@@ -57,7 +57,7 @@ export interface SyncListenerShape {
 }
 
 export class SyncListener extends Context.Service<SyncListener, SyncListenerShape>()(
-  "@luke/database/SyncListener",
+  "@repo/database/SyncListener",
 ) {}
 
 export interface SyncListenerConnection {

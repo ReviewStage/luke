@@ -3,7 +3,7 @@
    on, eased in by a scroll timeline over registered lengths, and the depth of
    both read from the profile's `--ui-scroll-fade` and `--ui-scroll-band`,
    which an app may set (a pull request's band). The lengths and keyframes are
-   also what a transcript's table and a note's table fade with (`@luke/panel`'s
+   also what a transcript's table and a note's table fade with (`@repo/panel`'s
    tasks.css, `../prose/prose.css`). */
 
 /* Each edge's depth is a registered length, so a scroll timeline can ease
@@ -69,7 +69,7 @@
      dragged row past the edge would then scroll the area sideways. The axis
      stays keyed on `data-axis` here rather than in utilities, because the
      panel's sheet tests lay an area's markup by hand (`.ui-scroll-area`
-     with its `data-axis`, `@luke/panel`'s narrow-document.test.ts) and read
+     with its `data-axis`, `@repo/panel`'s narrow-document.test.ts) and read
      its overflow from this sheet. */
   .ui-scroll-area[data-axis="vertical"] {
     overflow-x: hidden;

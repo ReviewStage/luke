@@ -1,55 +1,55 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   createAgent,
   readAgent,
   readAgentByKey,
   readAgentRouting,
-} from "@luke/database/models/agent-store";
-import { deviceAgentLinesWaiting } from "@luke/database/models/device-agent-store";
-import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
-import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
-import { sentLineStands } from "@luke/database/models/message-reads";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/agent-store";
+import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
+import { type DeviceRegistration, registerDevice } from "@repo/database/models/device-store";
+import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
+import { sentLineStands } from "@repo/database/models/message-reads";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   saveProviderKey,
   setProviderKeyForAgents,
   setProviderKeyStatus,
-} from "@luke/database/models/provider-key-store";
+} from "@repo/database/models/provider-key-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { messages } from "@luke/database/schemas/storage";
-import { task as taskTable } from "@luke/database/schemas/task";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/recorded-session";
+import { createTask } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { messages } from "@repo/database/schemas/storage";
+import { task as taskTable } from "@repo/database/schemas/task";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   AGENT_MACHINE,
   AGENT_PAYER,
   type AgentPayer,
   LOCAL_AGENT_REFUSAL,
-} from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+} from "@repo/features/agent-wire";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_SETUP,
   deviceAgentLaunchPayloadSchema,
-} from "@luke/features/device-agent-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+} from "@repo/features/device-agent-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/provider-key-wire";
+import { MESSAGE_ROLE } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { ConfigProvider, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";

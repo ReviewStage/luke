@@ -1,5 +1,5 @@
-import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AuthMark,
   AuthPage,
@@ -12,7 +12,7 @@ import {
   SocialSignInCard,
   TEXT_FIELD_TYPE,
   TextField,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

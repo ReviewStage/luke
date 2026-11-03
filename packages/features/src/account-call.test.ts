@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import {
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Effect } from "effect";
 import {
   accountBearer,

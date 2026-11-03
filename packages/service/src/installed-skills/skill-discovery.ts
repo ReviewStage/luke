@@ -38,7 +38,7 @@
  * marketplace's where both name one.
  */
 
-import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
+import { INSTALLED_SKILL_MAIN_FILE } from "@repo/features/installed-skill-wire";
 import { Option, Schema } from "effect";
 
 /** How many folders deep a skills folder is walked (`DEFAULT_SKILL_CONTAINER_DEPTH`). */

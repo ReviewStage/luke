@@ -1,16 +1,16 @@
-import { AGENT_CALL_FAILURE, type AgentReviewOptionsAnswerView } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentReviewOptionsAnswerView } from "@repo/features/agent-view";
 import type {
   AgentReviewOptions,
   GitHubPerson,
   PullRequestLabel,
   PullRequestReviewTeam,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
   type PullRequestActionRequest,
   REVIEWER_KIND,
-} from "@luke/features/pull-request-write-wire";
+} from "@repo/features/pull-request-write-wire";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -19,16 +19,16 @@ import {
   dropBelowStart,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import {
   type PendingValues,
   pendingSettled,
   pendingValue,
   pendingWithout,
   type SameValue,
-} from "@luke/ui/pending-values";
+} from "@repo/ui/pending-values";
 import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
@@ -51,7 +51,7 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  * on GitHub as the member pressing it, on their own sign-in, and is drawn
  * at once, the face or the label from what the repository's read holds,
  * over what the pull request's read holds (`usePullRequestPicks`, over
- * `@luke/ui/pending-values` as a task's chips are), until that read carries
+ * `@repo/ui/pending-values` as a task's chips are), until that read carries
  * it; where GitHub refuses it, it goes back at once and GitHub's refusal
  * stands on the tab's line under the bar. While a change is out, and until
  * the read after it lands, the pickers stand disabled, so a second change
@@ -196,7 +196,7 @@ function pickedOver<T>(
  * One list's picks over what the read holds of it: the list drawn, and the
  * door that draws a pick at once and answers what lets go of it again.
  * Note that a pick stands until the read carries it, or answers otherwise,
- * or its time runs out (`@luke/ui/pending-values`), so one GitHub took
+ * or its time runs out (`@repo/ui/pending-values`), so one GitHub took
  * never flickers back while the pull request is read again.
  */
 function usePicks<T>(

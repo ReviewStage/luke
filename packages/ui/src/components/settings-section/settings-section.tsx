@@ -1,4 +1,4 @@
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import { type ReactNode, useId, useRef } from "react";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
 import { SettingsRow, SettingsRowValue } from "../settings-row/settings-row.js";

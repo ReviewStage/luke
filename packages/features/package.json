@@ -1,5 +1,5 @@
 {
-  "name": "@luke/features",
+  "name": "@repo/features",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -173,8 +173,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/runtime": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/runtime": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";

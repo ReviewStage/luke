@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { readFailedWords } from "@luke/features/words";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { readFailedWords } from "@repo/features/words";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";

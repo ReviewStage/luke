@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { test } from "vitest";
 import { AGENT_SENDER } from "./agent-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";

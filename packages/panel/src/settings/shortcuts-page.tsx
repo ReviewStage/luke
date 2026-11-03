@@ -1,5 +1,5 @@
-import type { ExperimentChoices, HostCapability } from "@luke/settings";
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import type { ExperimentChoices, HostCapability } from "@repo/settings";
+import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   APP_SHORTCUTS,
   CHAPTERS_GROUP_TITLE,
@@ -20,7 +20,7 @@ import {
   WRITING_SHORTCUTS,
   type WritingAction,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   SETTINGS_ROW_DENSITY,
   SettingsRow,
@@ -31,7 +31,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 
 /**
  * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts and the keys that answer in place, grouped by what they act on, listed to be found rather than changed.
@@ -51,7 +51,7 @@ const RUN_DASH = "–";
  * listed only while the account has its experiment on, and a platform
  * feature's only where the platform offers it.
  *
- * Each group is `@luke/ui`'s `SettingsSection` and each command its
+ * Each group is `@repo/ui`'s `SettingsSection` and each command its
  * `SettingsRow` at the list density, a reference's line rather than a
  * setting's, the chord in the row's controls. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no

@@ -1,4 +1,4 @@
-import { type WireValue, WireValueSchema } from "@luke/wire";
+import { type WireValue, WireValueSchema } from "@repo/wire";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

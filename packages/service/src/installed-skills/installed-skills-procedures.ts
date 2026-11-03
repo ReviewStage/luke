@@ -26,7 +26,7 @@
  * one, on the same rule as an install's scope.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type InstalledSkill,
   type InstalledSkillFilesRefused,
@@ -39,21 +39,21 @@ import {
   setInstalledSkillEnabled,
   shareInstalledSkill,
   updateInstalledSkill,
-} from "@luke/database/models/installed-skill-store";
-import type { TaskStoreFailure } from "@luke/database/models/task-store";
-import { listWorkspaces, personalWorkspaceOf } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/installed-skill-store";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import { listWorkspaces, personalWorkspaceOf } from "@repo/database/models/workspace-store";
 import type {
   InstalledSkillContent,
   InstalledSkillSummary,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_MAIN_FILE,
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
-} from "@luke/features/installed-skill-wire";
-import { parseSkillPaste } from "@luke/features/skill-paste";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/installed-skill-wire";
+import { parseSkillPaste } from "@repo/features/skill-paste";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { Data, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {

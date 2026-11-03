@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { HOST_PAIRING_POLL_STATUS } from "@luke/features/host-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { HOST_PAIRING_POLL_STATUS } from "@repo/features/host-wire";
 import { inArray } from "drizzle-orm";
 import { Clock, Effect, Exit, Option } from "effect";
 import { TestClock } from "effect/testing";

@@ -37,6 +37,6 @@ if (mode === MODE.WRITE) {
 
 if (await rewritesDrifted(WEB)) {
   console.error(`stale: ${API_REWRITES_FILE} or the /api/ routes of ${VERCEL_CONFIG_FILE}`);
-  console.error("run `pnpm --filter @luke/web functions:rewrites` to regenerate the rewrites");
+  console.error("run `pnpm --filter @repo/web functions:rewrites` to regenerate the rewrites");
   exit(1);
 }

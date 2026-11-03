@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import "@luke/panel/testing/match-media";
-import tokens from "@luke/ui/tokens.css?inline";
+import "@repo/panel/testing/match-media";
+import tokens from "@repo/ui/tokens.css?inline";
 import { afterEach, beforeEach, test, vi } from "vitest";
 
 /**

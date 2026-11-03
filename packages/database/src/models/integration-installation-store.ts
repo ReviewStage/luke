@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { TRIGGER_PROVIDER, type TriggerProvider } from "@luke/features/trigger-catalog";
+import { TRIGGER_PROVIDER, type TriggerProvider } from "@repo/features/trigger-catalog";
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

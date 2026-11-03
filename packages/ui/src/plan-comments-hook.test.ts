@@ -7,8 +7,8 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import { PLAN_COMMENT_CALL_FAILURE } from "@luke/features/tasks-view";
+} from "@repo/features/plan-comment-wire";
+import { PLAN_COMMENT_CALL_FAILURE } from "@repo/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";

@@ -1,12 +1,12 @@
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   PAGE_FIND_ACT,
   PAGE_FIND_KEY,
   PAGE_FIND_TYPE,
   type PageFindAsk,
   pageFindAnswerSchema,
-} from "@luke/features/page-find";
-import { pageLinkPressSchema } from "@luke/features/page-link";
+} from "@repo/features/page-find";
+import { pageLinkPressSchema } from "@repo/features/page-link";
 import {
   type FrameBox,
   PAGE_PICK_ACT,
@@ -15,13 +15,13 @@ import {
   type PagePickAsk,
   type PagePicked,
   pagePickAnswerSchema,
-} from "@luke/features/page-pick";
-import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@luke/features/plan-comment-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
-import { readingWords } from "@luke/features/words";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/page-pick";
+import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
+import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@repo/features/plan-comment-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view";
+import { readingWords } from "@repo/features/words";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -31,7 +31,7 @@ import {
   PaneBar,
   SpinnerRegion,
   Tooltip,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -40,8 +40,8 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
   RotateCwIcon,
-} from "@luke/ui/icons";
-import type { PlanCommentsControl } from "@luke/ui/plan-comments";
+} from "@repo/ui/icons";
+import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { Option, Schema } from "effect";
 import {
   type ReactNode,
@@ -97,7 +97,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * and the newest is followed until the developer steps back from it. A
  * link out of the page is not followed in the frame, which may draw nothing
  * but a page: the frame hands its press to the pane
- * (`@luke/features/page-link`), which opens it as any link of the window
+ * (`@repo/features/page-link`), which opens it as any link of the window
  * opens (`useOpenLink`), a site in the browser and a link of ours in the
  * window. Reload draws the page again. What the page draws is the
  * task's, so the pane is left out of the screen recording (`ph-no-capture`);
@@ -117,7 +117,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * ⌘F over the page itself finds in the frame: no find of this window reaches
  * the page's words, so the find bar asks the frame, whose page is served
- * with a find of our own ahead of it (`@luke/features/page-find`), and
+ * with a find of our own ahead of it (`@repo/features/page-find`), and
  * hears back its tally and its selection, from that frame alone and only
  * in the find's own shape.
  *
@@ -129,7 +129,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * words selected in the page offer Reply, which quotes them into the
  * comment being written, or starts one on the element holding them. The
  * frame does its part with a script of our own ahead of the page
- * (`@luke/features/page-pick`), saying where each pinned element and the
+ * (`@repo/features/page-pick`), saying where each pinned element and the
  * words selected stand as the page moves; the pane takes a pick only from
  * the frame it drew, only while it asked, and only while the window holds a
  * press of the developer's, as it takes a link. Comments opens every thread

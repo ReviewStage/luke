@@ -1,5 +1,5 @@
-import type { TaskSummary } from "@luke/features/task-wire";
-import { drawnTaskRows, type TaskRow, taskRow, taskRowName } from "@luke/ui/task-list-model";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { drawnTaskRows, type TaskRow, taskRow, taskRowName } from "@repo/ui/task-list-model";
 import { expect, test } from "vitest";
 import { movedBeside, nestsOf, siblingsAt, storedSlot } from "./nested-rows.js";
 

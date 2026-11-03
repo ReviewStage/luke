@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { USER_MESSAGE_METADATA } from "@luke/wire";
+import { USER_MESSAGE_METADATA } from "@repo/wire";
 import { Schema } from "effect";
 import { test } from "vitest";
 import {

@@ -1,4 +1,4 @@
-import { DIAGRAM_APPEARANCE, type DiagramAppearance } from "@luke/ui/diagram-contract";
+import { DIAGRAM_APPEARANCE, type DiagramAppearance } from "@repo/ui/diagram-contract";
 
 /**
  * diagram-theme.ts -- Mermaid's colours in an appearance, read off the window's palette as it draws them, as the terminal reads its own (`terminal/terminal-theme.ts`).
@@ -55,7 +55,7 @@ const MERMAID_ROLES = {
   clusterBorder: "groupEdge",
 } as const satisfies Record<string, DiagramRole>;
 
-/** The attributes a surface wears its roles and its palette in (`@luke/ui`'s `surfaceAttributes`). */
+/** The attributes a surface wears its roles and its palette in (`@repo/ui`'s `surfaceAttributes`). */
 const PROFILE_ATTRIBUTE = "data-ui-profile";
 const THEME_ATTRIBUTE = "data-ui-theme";
 

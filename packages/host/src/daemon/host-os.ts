@@ -7,14 +7,14 @@ import {
   CODEX_MAC_PIN,
   GH_LINUX_PINS,
   GH_MAC_PIN,
-} from "@luke/agent-runner/pins";
+} from "@repo/agent-runner/pins";
 import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   type DeviceArch,
   type DeviceMachine,
   type DevicePlatform,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import type { AgentCliPins } from "../local-agent-setup.js";
 import { macDeviceName } from "../node/mac-device-name.js";

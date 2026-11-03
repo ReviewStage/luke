@@ -1,5 +1,5 @@
-import type { ChartConfig } from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
+import type { ChartConfig } from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

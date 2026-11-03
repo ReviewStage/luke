@@ -1,7 +1,7 @@
-import { AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
-import type { Failure } from "@luke/features/failure-remedy";
-import { useSecond } from "@luke/ui";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
+import type { Failure } from "@repo/features/failure-remedy";
+import { useSecond } from "@repo/ui";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { AgentComposer } from "./agent-composer.js";

@@ -1,4 +1,4 @@
-import { Button, ComposerFoot } from "@luke/ui";
+import { Button, ComposerFoot } from "@repo/ui";
 import { useState } from "react";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 

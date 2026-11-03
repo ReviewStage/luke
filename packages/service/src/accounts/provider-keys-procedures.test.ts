@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, type KeyObject, randomUUID, sign } from "node:crypto";
 import { it } from "@effect/vitest";
-import { chatGptSignIn } from "@luke/credentials";
-import { loopbackConsent } from "@luke/credentials/node";
+import { chatGptSignIn } from "@repo/credentials";
+import { loopbackConsent } from "@repo/credentials/node";
 import {
   CHATGPT_FAKE,
   fakeChatGptAuthorizationServer,
   grantedCallback,
   returnToLoopback,
   signingKeysAnswer,
-} from "@luke/credentials/testing";
-import { Database } from "@luke/database/core/query";
-import { listProviderKeyRows, setPlanStatus } from "@luke/database/models/provider-key-store";
-import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+} from "@repo/credentials/testing";
+import { Database } from "@repo/database/core/query";
+import { listProviderKeyRows, setPlanStatus } from "@repo/database/models/provider-key-store";
+import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
 import {
   type ChatGptCredentialsSaveRequest,
   chatGptHostAnswerSchema,
@@ -26,15 +26,15 @@ import {
   type ProviderKeyProvider,
   type ProviderKeysAnswer,
   providerKeysAnswerSchema,
-} from "@luke/features/provider-key-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/provider-key-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import {
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import {
   Cause,

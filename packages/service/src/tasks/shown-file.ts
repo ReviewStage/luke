@@ -1,4 +1,4 @@
-import { isSecretFile, TASK_FILE_BOUNDS } from "@luke/features/task-wire";
+import { isSecretFile, TASK_FILE_BOUNDS } from "@repo/features/task-wire";
 
 /**
  * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by.

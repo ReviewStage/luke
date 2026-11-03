@@ -1,6 +1,6 @@
-import type { ReviewThread } from "@luke/features/agent-wire";
-import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import type { ReviewThread } from "@repo/features/agent-wire";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
+import { BUTTON_VARIANT, Button } from "@repo/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { type HeldBodies, heldBodies } from "./comment-drafts.js";

@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import { Fragment, type ReactNode } from "react";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 

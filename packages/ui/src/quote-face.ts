@@ -1,7 +1,7 @@
 /**
  * quote-face.ts -- the class every quoted block wears, wherever Markdown is drawn.
  *
- * A `>` quote is drawn by two renderers: `@luke/ui/markdown` in a
+ * A `>` quote is drawn by two renderers: `@repo/ui/markdown` in a
  * transcript, an Inbox item, a sent bubble, the plan, its versions, the app's
  * notes, and the captions; and TipTap in the plan's editor. Each hands its
  * quote this one class, which `components/prose/prose.css` draws,

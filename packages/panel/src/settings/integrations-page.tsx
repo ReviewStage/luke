@@ -4,16 +4,16 @@ import {
   connectionHealth,
   type IntegrationTool,
   toolsCount,
-} from "@luke/features/integration-health";
+} from "@repo/features/integration-health";
 import {
   SIGN_IN,
   SIGN_IN_ACTION,
   type SignIn,
   signInLine,
-} from "@luke/features/integration-sign-in";
-import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
-import { byName } from "@luke/features/integration-tool-model";
-import type { IntegrationStatusView } from "@luke/features/integration-view";
+} from "@repo/features/integration-sign-in";
+import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
+import { byName } from "@repo/features/integration-tool-model";
+import type { IntegrationStatusView } from "@repo/features/integration-view";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LABEL_MAX,
@@ -25,11 +25,11 @@ import {
   type IntegrationStatus,
   integrationAccountLabel,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+} from "@repo/features/integration-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AccountWords,
   ANNOUNCE,
@@ -74,17 +74,17 @@ import {
   Text,
   TextButton,
   useConfirmDialog,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   namedServers,
   type ServerRow,
   serverGroups,
   serverRows,
-} from "@luke/ui/agent-servers-model";
-import { GLYPH, PlusIcon, RefreshCwIcon } from "@luke/ui/icons";
-import { matchIntegration, shownTools } from "@luke/ui/integration-search";
-import { searchTokens } from "@luke/ui/search-tokens";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/agent-servers-model";
+import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
+import { matchIntegration, shownTools } from "@repo/ui/integration-search";
+import { searchTokens } from "@repo/ui/search-tokens";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -110,7 +110,7 @@ import { MenuRow } from "./menu-row.js";
  * account alone is named the same way where it carries a name, such as a
  * Google account's email: "Gmail · dean@example.com"), and one for
  * a provider where the account holds none, under Connected or Not connected as the MCP popover
- * sections its servers (`@luke/ui/agent-servers-model`), each section
+ * sections its servers (`@repo/ui/agent-servers-model`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
  * stands once that needs saying — connected with the count of its server's
  * tools, a sign-in under way, or one expired. A sign-in begun waits on the
@@ -165,7 +165,7 @@ import { MenuRow } from "./menu-row.js";
  * own search hands its query down when one of its results opens a row here
  * (`../desktop/desktop-settings.tsx`).
  *
- * The search is `@luke/ui`'s `SearchField`, each section its
+ * The search is `@repo/ui`'s `SearchField`, each section its
  * `SettingsSection`, and each row `MenuRow`'s `SettingsRow`, led by the
  * provider's mark, its line the row's description. A row's Connect,
  * Reconnect, Try again, and Cancel are the outline `Button`, and Reopen the
@@ -246,7 +246,7 @@ const LINE_STATE = {
 
 type LineState = (typeof LINE_STATE)[keyof typeof LINE_STATE];
 
-/** How `@luke/ui`'s state line stands for each line, a wait and a plain line alike unmarked. */
+/** How `@repo/ui`'s state line stands for each line, a wait and a plain line alike unmarked. */
 const ROW_STATE: Record<LineState, SettingsRowState> = {
   [LINE_STATE.CONNECTED]: SETTINGS_ROW_STATE.CONNECTED,
   [LINE_STATE.ATTENTION]: SETTINGS_ROW_STATE.ATTENTION,

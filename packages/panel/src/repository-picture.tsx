@@ -1,12 +1,12 @@
-import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarSize } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { repositoryOwnerPictureUrl } from "@luke/ui/tasks-model";
+import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarSize } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { repositoryOwnerPictureUrl } from "@repo/ui/tasks-model";
 import { useState } from "react";
 
 /**
  * repository-picture.tsx -- a repository drawn as its owner's picture on GitHub, wherever a repository is named or picked.
  *
- * It is a tile of `@luke/ui`'s Avatar, edged, blank until the picture has
+ * It is a tile of `@repo/ui`'s Avatar, edged, blank until the picture has
  * loaded. The owner's picture, an organization's logo or a person's avatar, is how
  * GitHub itself and every devtool beside it tells repositories apart at a
  * glance, so a repository's name is led by it: the sidebar's headers, the

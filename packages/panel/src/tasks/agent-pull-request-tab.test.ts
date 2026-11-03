@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentOverviewChecks,
@@ -33,8 +33,8 @@ import {
   REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/link-grammar";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@repo/features/link-grammar";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
@@ -44,13 +44,13 @@ import {
   REACTION,
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
-} from "@luke/features/pull-request-write-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { timeRuntime } from "@luke/ui";
+} from "@repo/features/pull-request-write-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { timeRuntime } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";

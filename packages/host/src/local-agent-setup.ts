@@ -1,4 +1,4 @@
-import type { AgentToolPin } from "@luke/agent-runner/pins";
+import type { AgentToolPin } from "@repo/agent-runner/pins";
 import { Effect, Option } from "effect";
 import { type LocalAgentClis, LocalAgentClisUnavailable } from "./effect/seams.js";
 import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
@@ -9,7 +9,7 @@ import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
  * Every host keeps its own copy of each CLI, a Linux host and a Mac's
  * `vespin-host` alike, This Mac's among them, at `agent-tools/` under its
  * state root (`localAgentTool`): the very releases the runner is built
- * against (`@luke/agent-runner/pins`), so nothing of the box's own, and
+ * against (`@repo/agent-runner/pins`), so nothing of the box's own, and
  * nothing the developer installed, is what an agent runs. A pin moved
  * fetches its new release at the next readiness step, and the old one goes
  * once the new one is kept.

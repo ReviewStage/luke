@@ -5,7 +5,7 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { test } from "vitest";
 import { commentAskMessage } from "./comment-ask.js";
 

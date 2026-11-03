@@ -1,7 +1,7 @@
 /**
  * runner-token-app.ts -- where a Codex runner on its starter's ChatGPT plan asks for the plan's access token, mid-turn included.
  *
- * App-server runs the runner's token command (`@luke/agent-runner`'s
+ * App-server runs the runner's token command (`@repo/agent-runner`'s
  * `codex-token.ts`) as it needs a bearer for OpenAI: as a turn's requests go
  * out, again once the one it holds is five minutes old, and after a 401. The
  * command posts here under the runner's bearer, and this answers the
@@ -21,7 +21,7 @@
  * answer's body alone, which no cache keeps.
  *
  * A device asks here too, for a GitHub token for one of its agents
- * (`@luke/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
+ * (`@repo/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
  * agents' VMs never reach a developer's git login: an enrolled machine on
  * its device secret, a Linux box and a Mac alike, read as a device caller
  * (`../../orpc/base.ts`'s `deviceCallerOf`, which refuses a released
@@ -37,29 +37,29 @@
  * Codex token.
  */
 
-import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { RunnerTokenAnswer } from "@repo/agent-runner/protocol";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   hasRepository,
   readAgent,
   readAgentHeaderOfConversation,
   readAgentRouting,
-} from "@luke/database/models/agent-store";
-import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
-import { deviceLayout } from "@luke/database/models/device-store";
-import { parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
+} from "@repo/database/models/agent-store";
+import { latestDeviceAgentLaunch } from "@repo/database/models/device-agent-store";
+import { deviceLayout } from "@repo/database/models/device-store";
+import { parseKeyRing } from "@repo/database/models/provider-key-seal";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import {
   DEVICE_ISOLATION,
   type DeviceIsolation,
   deviceAgentLaunchPayloadSchema,
-} from "@luke/features/device-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@repo/features/host-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";

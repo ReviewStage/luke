@@ -18,8 +18,8 @@
  * to the menu and from there to the same nothing.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { isWireString, type UnparsedWireValue } from "@repo/wire";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import { type Experiment, type ExperimentChoices, experimentOn } from "./experiments.js";
 
@@ -262,7 +262,7 @@ export type CommandKey = (typeof COMMAND_KEY)[keyof typeof COMMAND_KEY];
 
 /**
  * The window's command key, ⌘ until its shell installs another. Note that this
- * is module state, as `@luke/panel`'s platform door is, because every reader
+ * is module state, as `@repo/panel`'s platform door is, because every reader
  * (a press matched, a chord drawn or spelled for a reader) reads it at the
  * moment it reads, never at load, and the shell knows it before anything is
  * drawn.
@@ -336,7 +336,7 @@ function modifierGlyph(name: string): string {
  * `switching` chord is Control and its key without Command, ⌃Tab as every
  * browser's and editor's tab switcher has it: the switcher answers it
  * itself, from the press to the ⌃'s release (`tab-switcher.tsx` in
- * `@luke/panel`), so the keymap leaves it, as it leaves the layered Escape.
+ * `@repo/panel`), so the keymap leaves it, as it leaves the layered Escape.
  */
 export interface ShortcutChord {
   key: ShortcutKey;
@@ -408,7 +408,7 @@ export interface AppShortcut {
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_TASK]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
-  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@luke/panel`).
+  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.COPY_CONTENT]: {
     label: "Copy plan or transcript",
@@ -690,11 +690,11 @@ export interface InContextShortcut {
 /**
  * The keys that answer in place, each read where its place answers it: the
  * window's layered Escape, once for every layer it steps back from
- * (`app.tsx` in `@luke/panel`); an Inbox ask's options by their number
+ * (`app.tsx` in `@repo/panel`); an Inbox ask's options by their number
  * (`inbox-ask-controls.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
- * `@luke/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
+ * `@repo/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
  * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
- * `zoom-image.tsx` in `@luke/ui`); ⌘K over selected words for a link
+ * `zoom-image.tsx` in `@repo/ui`); ⌘K over selected words for a link
  * (`writing-format.ts`); and the `@` list's Tab and → (`mention-picker.tsx`).
  */
 export const IN_CONTEXT_SHORTCUTS = {
@@ -908,7 +908,7 @@ export const WRITING_KEYS_IN_CONTEXT: readonly InContextKey[] = [
  * What a key does in Files changed, the Pull request tab's view of its files.
  * Its keys are stage-cli's own, a letter alone each or ⇧ with one, and answer
  * only where the press lands inside the view and is not typing
- * (`changes-list.tsx` in `@luke/panel`), so none is an app command: the
+ * (`changes-list.tsx` in `@repo/panel`), so none is an app command: the
  * window's keymap never sees them, no menu item carries them, and J and K
  * keep the Inbox's meaning everywhere else.
  */
@@ -1019,7 +1019,7 @@ export const FILES_CHANGED_KEYS: readonly FilesChangedKey[] = Object.values(FILE
  * as ReviewStage's chapter navigator answers them: ← and → step to the
  * previous and the next chapter, and ⇧V marks every file of the chapter
  * viewed, or unmarks them all. They answer only where the press lands inside
- * the view and is not typing (`agent-chapters-tab.tsx` in `@luke/panel`),
+ * the view and is not typing (`agent-chapters-tab.tsx` in `@repo/panel`),
  * past the chapter's own Files changed list, whose keys come first and none
  * of which these share, so none is an app command.
  */
@@ -1109,7 +1109,7 @@ export interface WritingShortcut {
  * than ⌥⌘C, which copies the plan or a transcript, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap
- * (`writing-keys.ts` in `@luke/panel`).
+ * (`writing-keys.ts` in `@repo/panel`).
  */
 export const WRITING_SHORTCUTS = {
   [WRITING_MARK.BOLD]: {

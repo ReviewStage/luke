@@ -1,4 +1,4 @@
-import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@repo/features/task-wire";
 import {
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
@@ -7,7 +7,7 @@ import {
   TEXT_VARIANT,
   Text,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -25,7 +25,7 @@ import {
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import { Schema, SchemaTransformation } from "effect";
 import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";

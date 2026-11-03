@@ -38,7 +38,7 @@ import {
   scrubbedAttributes,
   scrubbedQueryParams,
   scrubbedUrl,
-} from "@luke/features/sentry-addresses";
+} from "@repo/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
 import {
   addBreadcrumb,

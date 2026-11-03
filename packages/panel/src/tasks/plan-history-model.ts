@@ -1,14 +1,14 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { type WordChange, wordChanges } from "@luke/features/plan-diff";
-import { type PlanSection, planSections } from "@luke/features/plan-document";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { type WordChange, wordChanges } from "@repo/features/plan-diff";
+import { type PlanSection, planSections } from "@repo/features/plan-document";
 import {
   PLAN_ACTOR,
   type PlanDocument,
   type PlanEditor,
   type PlanRevisionLine,
-} from "@luke/features/task-wire";
-import { dayAndTimeText } from "@luke/features/time-format";
-import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
+} from "@repo/features/task-wire";
+import { dayAndTimeText } from "@repo/features/time-format";
+import type { FormerMember, WorkspaceMember } from "@repo/features/workspace-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -18,8 +18,8 @@ import {
   type PersonActor,
   personActor,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/ui/actor-model";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message.js";
 import { providerOf } from "./agent-model.js";
@@ -28,7 +28,7 @@ import { providerOf } from "./agent-model.js";
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
  *
  * A revision is drawn under its writer the way the rest of the window draws
- * them (`@luke/ui/actor-model`): the app's face for the notetaker, the reader by their
+ * them (`@repo/ui/actor-model`): the app's face for the notetaker, the reader by their
  * account's picture as You, a teammate as the workspace's members list them,
  * a coding agent by its harness and title, and Earlier for the plan as it
  * stood before its history began. Its line says

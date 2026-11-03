@@ -3,12 +3,12 @@ import {
   type AgentAttachment,
   type AgentBrief,
   type AgentSummary,
-} from "@luke/features/agent-wire";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/features/agent-wire";
+import { TERMINAL_ASK } from "@repo/features/terminal-entry";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
 import { pressAct } from "../act.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";

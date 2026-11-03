@@ -1,7 +1,7 @@
-import { APP_COMMAND, APP_SHORTCUTS, SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, Button, Shortcut } from "@luke/ui";
-import { CommandDialog, type CommandGroup } from "@luke/ui/command";
-import { GLYPH } from "@luke/ui/icons";
+import { APP_COMMAND, APP_SHORTCUTS, SHORTCUT_KEY } from "@repo/settings/shortcuts";
+import { BUTTON_VARIANT, Button, Shortcut } from "@repo/ui";
+import { CommandDialog, type CommandGroup } from "@repo/ui/command";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { pinAgentCommitted } from "@luke/database/models/agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { createTask, updateTaskCommitted } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import { Database } from "@repo/database/core/query";
+import { pinAgentCommitted } from "@repo/database/models/agent-store";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { createTask, updateTaskCommitted } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   DEVICE_LAYOUT,
   expectTopicsFire,
@@ -17,7 +17,7 @@ import {
   leaveWorkspace,
   openTaskAgent,
   openWorkspace,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";

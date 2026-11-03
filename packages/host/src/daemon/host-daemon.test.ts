@@ -1,20 +1,20 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { HOST_TARGET } from "@luke/features/host-release";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@repo/features/device-agent-wire";
+import { HOST_TARGET } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   type HostPairingStartAnswer,
-} from "@luke/features/host-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+} from "@repo/features/host-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import {
   jsonResponse,
   type RecordedRequest,
   type RecordingHttpClient,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";

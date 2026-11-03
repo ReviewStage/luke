@@ -62,7 +62,7 @@ export function resolveSigningMode(env) {
 
 /**
  * The esbuild define telling the bundle whether it was built alongside
- * Developer ID packaging, read by `@luke/host`'s app-identity.ts to decide
+ * Developer ID packaging, read by `@repo/host`'s app-identity.ts to decide
  * which name — and so which state directory and Keychain entry — the run
  * answers to. Derived from the same environment `resolveSigningMode` reads so
  * the flag and the signature it stands for come from one place; only the fact
@@ -102,7 +102,7 @@ export function replayProjectKeyDefine(env) {
  * downloadUpdate path), so a bundle without one fails with ENOENT the moment
  * a newer build is found. electron-builder writes this file from the generic
  * publish config. The URL must equal `UPDATE_ENDPOINT.UPDATE_FEED_URL` in
- * `@luke/host`'s update-service.ts. The cache directory is a folder of the
+ * `@repo/host`'s update-service.ts. The cache directory is a folder of the
  * account's shared caches, which every app on the Mac writes beside, so it is
  * named by the bundle's identifier rather than a word another app could take.
  */

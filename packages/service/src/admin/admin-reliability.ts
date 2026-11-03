@@ -13,7 +13,7 @@
  * product analytics, which the answer links to.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminAttentionAccount,
   AdminAutomationCount,
@@ -21,7 +21,7 @@ import type {
   AdminFailureCount,
   AdminIntegration,
   AdminReliability,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsScope,
@@ -29,9 +29,9 @@ import {
   type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-} from "@luke/features/admin-wire";
-import type { AgentFailure } from "@luke/features/agent-wire";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
+} from "@repo/features/admin-wire";
+import type { AgentFailure } from "@repo/features/agent-wire";
+import type { AutomationRunReason } from "@repo/features/automation-wire";
 import { Clock, Effect } from "effect";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";

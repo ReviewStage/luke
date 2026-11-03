@@ -14,7 +14,7 @@
     "web": {
       "root": "apps/web",
       "framework": "vite",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
+      "installCommand": "pnpm install --frozen-lockfile --filter @repo/web...",
       "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
       "routes": [

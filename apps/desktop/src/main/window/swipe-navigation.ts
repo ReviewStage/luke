@@ -11,8 +11,8 @@
  * overlay holding the keyboard holds off as it holds off ⌘[ and ⌘].
  */
 
-import { PUSH } from "@luke/host/contract";
-import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
+import { PUSH } from "@repo/host/contract";
+import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
 import type { Event, WebContents } from "electron";
 import { windowPushes } from "./window-pushes";
 

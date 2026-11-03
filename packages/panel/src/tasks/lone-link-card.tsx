@@ -1,17 +1,17 @@
-import { CHECK_SUMMARY } from "@luke/features/agent-wire";
-import { INBOX_BLOCK } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { LONE_LINK, type LoneLink, loneLinkOf } from "@luke/features/lone-link";
+import { CHECK_SUMMARY } from "@repo/features/agent-wire";
+import { INBOX_BLOCK } from "@repo/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LONE_LINK, type LoneLink, loneLinkOf } from "@repo/features/lone-link";
 import {
   decodeMention,
   isBareLink,
   MENTION_KIND,
   type Mention,
   mentionName,
-} from "@luke/features/mention-link";
-import { placeChipLook } from "@luke/features/place-chip-model";
-import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@luke/ui";
+} from "@repo/features/mention-link";
+import { placeChipLook } from "@repo/features/place-chip-model";
+import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@repo/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { pullRequestStateWord } from "./agent-model.js";
@@ -28,7 +28,7 @@ import { useOpenLink } from "./use-open-link.js";
 /**
  * lone-link-card.tsx -- a link standing alone in its paragraph of words drawn as a document, as its one-line card: a pull request's, a page's, or the lines of a file at a commit as an inbox item's code card.
  *
- * What a link earns a card is the link's own (`@luke/features/lone-link`);
+ * What a link earns a card is the link's own (`@repo/features/lone-link`);
  * how each card is drawn is decided here. A pull request is a card of one
  * row as the agent's tab pins its own over the box (`agent-published.tsx`):
  * its mark for where it stands and its number and title, as the

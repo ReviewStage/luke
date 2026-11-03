@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { EXPERIMENT, HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
   KEYED_COMMANDS,
   shortcutAccelerator,
-} from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
 import {

@@ -1,4 +1,4 @@
-import type { AgentBrief, AgentContext } from "@luke/features/agent-wire";
+import type { AgentBrief, AgentContext } from "@repo/features/agent-wire";
 import {
   AnchoredPopover,
   Fact,
@@ -14,7 +14,7 @@ import {
   Stack,
   Tooltip,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useRef, useState } from "react";
 import {
   CONTEXT_LEVEL,
@@ -41,7 +41,7 @@ import {
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
- * stand at the foot's right (`@luke/ui`'s `AnchoredPopover` and
+ * stand at the foot's right (`@repo/ui`'s `AnchoredPopover` and
  * `PopoverPanel`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the

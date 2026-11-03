@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TaskSection, TaskSections } from "@luke/features/task-section-wire";
+import type { TaskSection, TaskSections } from "@repo/features/task-section-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@luke/features/tasks-view";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind } from "@luke/host/contract";
+} from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind } from "@repo/host/contract";
 import { Option, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";

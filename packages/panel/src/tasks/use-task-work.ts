@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { appStateDerivedAtom } from "../use-app-state.js";
 import { agentStillWriting } from "./agent-model.js";

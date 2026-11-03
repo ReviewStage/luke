@@ -1,7 +1,7 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
-import { agoText } from "@luke/features/time-format";
-import { useMinute } from "@luke/ui";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@repo/features/task-wire";
+import { agoText } from "@repo/features/time-format";
+import { useMinute } from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -15,7 +15,7 @@ import {
   type EditReader,
   editActor,
   latestActivity,
-} from "@luke/ui/actor-model";
+} from "@repo/ui/actor-model";
 import { useMemo } from "react";
 import { ActorRef, AppCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -27,7 +27,7 @@ import type { AgentsControl } from "./use-agents.js";
 /**
  * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
  *
- * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
+ * The writer is read through `@repo/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
  * they last did in the plan, and the app's when and what it wrote, both read

@@ -14,8 +14,8 @@ import {
   Inline,
   STATUS_TONE,
   StatusGlyph,
-} from "@luke/ui";
-import { FlaskConicalIcon, GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { FlaskConicalIcon, GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

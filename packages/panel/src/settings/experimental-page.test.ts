@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { SETTINGS_ACT_KIND } from "@luke/host/contract";
-import { EXPERIMENT, EXPERIMENTS, type Experiment, NO_EXPERIMENTS } from "@luke/settings";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { SETTINGS_ACT_KIND } from "@repo/host/contract";
+import { EXPERIMENT, EXPERIMENTS, type Experiment, NO_EXPERIMENTS } from "@repo/settings";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

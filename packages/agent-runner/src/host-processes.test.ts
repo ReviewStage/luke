@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { Effect } from "effect";
 import type { TestContext } from "vitest";
 import { hostProcessTable } from "./host-processes.js";

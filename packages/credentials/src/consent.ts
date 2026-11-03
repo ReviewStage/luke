@@ -3,11 +3,11 @@
  *
  * The account session manager words a trip — its pages, its reasons, the
  * authorization page's URL, the exchange — and hands it to an `OpenConsent`
- * it was given. The desktop's is the loopback in `@luke/credentials/node`,
+ * it was given. The desktop's is the loopback in `@repo/credentials/node`,
  * which reaches `node:http`; nothing here does, so the manager loads where
  * Node does not.
  */
-import type { SignInFailure } from "@luke/features/words";
+import type { SignInFailure } from "@repo/features/words";
 import type { Effect, Scope } from "effect";
 import type { LoopbackConnectionSource } from "./loopback-page.js";
 

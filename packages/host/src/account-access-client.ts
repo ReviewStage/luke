@@ -10,8 +10,8 @@
  * shape the wire declares, is read as nothing opened, so a doubt never
  * offers either.
  */
-import type { CallCredential } from "@luke/features";
-import { askHosted, type HostedClient, hostedClient } from "@luke/features/hosted-link";
+import type { CallCredential } from "@repo/features";
+import { askHosted, type HostedClient, hostedClient } from "@repo/features/hosted-link";
 import { Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

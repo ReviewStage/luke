@@ -3,11 +3,11 @@
  *
  * A task or a coding agent reached on its owner's own token is seen by
  * another member only where that member's own verified token reads its
- * repository (`@luke/database/models/workspace-store`). This is where the
+ * repository (`@repo/database/models/workspace-store`). This is where the
  * service asks: each repository of such a task or agent in the member's
  * workspaces that the member's token was not asked about within the hour is
  * read on that token (`GitHubApp`'s `memberRepositoryReadable`), and the
- * answers are kept (`@luke/database/models/github-repository-reads`), which
+ * answers are kept (`@repo/database/models/github-repository-reads`), which
  * every read of a task or an agent gates on. The sidebar's list asks first
  * (`plans.list`), so a teammate's token task shows there on the list after
  * it was made, and a repository the member's token gained or lost shows
@@ -18,10 +18,10 @@ import {
   type RepositoryRead,
   recordRepositoryReads,
   unaskedTokenRepositories,
-} from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { causeKind } from "@luke/runtime/effect";
+} from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { causeKind } from "@repo/runtime/effect";
 import { DateTime, Duration, Effect, Option } from "effect";
 import { GitHubApp } from "./github-app.js";
 

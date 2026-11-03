@@ -8,7 +8,7 @@
  * time or a call's row in a transcript, draws the same mark through the
  * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the
  * glyph stands as it does at rest, so a failed agent still shows the
- * harness it ran in, and `@luke/ui`'s failed mark stands at the end
+ * harness it ran in, and `@repo/ui`'s failed mark stands at the end
  * of its row or its tab (`stateEndMark`), before its time where it has
  * one, as an editor marks a file's tab with its problems; a call that
  * failed wears the same mark right after its label. Only a failure has an end
@@ -21,7 +21,7 @@
  * `glyphStateWords` gives.
  */
 
-import { FailedMark as FailedRowMark, Tooltip, WorkingMark } from "@luke/ui";
+import { FailedMark as FailedRowMark, Tooltip, WorkingMark } from "@repo/ui";
 import type { ReactNode } from "react";
 
 export const GLYPH_STATE = {

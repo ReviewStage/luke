@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { sectionAnchors } from "@luke/features/mention-link";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import { planSections } from "@luke/features/plan-document";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@luke/ui";
+import { sectionAnchors } from "@repo/features/mention-link";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import { planSections } from "@repo/features/plan-document";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

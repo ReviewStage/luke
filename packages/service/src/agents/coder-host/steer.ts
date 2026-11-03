@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { settleEndedSessionTurn } from "@repo/database/models/abandoned-turns";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -9,14 +9,14 @@ import {
   readAgent,
   readAgentRouting,
   taskNamesOf,
-} from "@luke/database/models/agent-store";
-import { sentLineStands } from "@luke/database/models/message-reads";
+} from "@repo/database/models/agent-store";
+import { sentLineStands } from "@repo/database/models/message-reads";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { readTaskPlan } from "@luke/database/models/task-store";
-import { readAccountNames } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/recorded-session";
+import { readTaskPlan } from "@repo/database/models/task-store";
+import { readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
   type ConversationTarget,
@@ -24,13 +24,13 @@ import {
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
-} from "@luke/database/models/writer";
-import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { AGENT_STATUS, type AgentAttachment } from "@luke/features/agent-wire";
-import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
-import { agentName } from "@luke/features/model-label";
-import { causeKind } from "@luke/runtime/effect";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/database/models/writer";
+import { type ConversationRuntime, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { AGENT_STATUS, type AgentAttachment } from "@repo/features/agent-wire";
+import { MENTION_KIND, withoutMemberLinks } from "@repo/features/mention-link";
+import { agentName } from "@repo/features/model-label";
+import { causeKind } from "@repo/runtime/effect";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_CHANNEL } from "../../core.js";
@@ -115,7 +115,7 @@ import { agentStatusOf } from "./status.js";
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
- * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
+ * (`@repo/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
  * no refusal: they open a fresh session over the same conversation, and so
  * does a message to an agent whose

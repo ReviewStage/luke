@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { EXPERIMENT, HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { EXPERIMENT, HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { shownSettingsView } from "./settings-rows.js";

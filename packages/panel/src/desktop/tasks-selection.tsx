@@ -1,5 +1,5 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { countWords, IRREVERSIBLE_WORDS, TERM } from "@luke/features/words";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { countWords, IRREVERSIBLE_WORDS, TERM } from "@repo/features/words";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -8,15 +8,15 @@ import {
   type SelectionAct,
   selectionMenu,
   useConfirmDialog,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import {
   placeAllWrites,
   sectionEntries,
   unplaceAllWrites,
   workspaceSections,
-} from "@luke/ui/task-sections-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/task-sections-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { createContext, useId, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";

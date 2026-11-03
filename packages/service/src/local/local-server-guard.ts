@@ -19,7 +19,7 @@ import { Config, ConfigProvider, Effect, Option } from "effect";
 /** The prefix every variable Vercel sets on a deployment, a build, or a pulled environment carries. */
 const VERCEL_PREFIX = "VERCEL";
 
-/** The variables a database is reached through (`@luke/service/db`): the pooled URL, which must be set, and the unpooled one, where it is. */
+/** The variables a database is reached through (`@repo/service/db`): the pooled URL, which must be set, and the unpooled one, where it is. */
 const DATABASE_VARIABLE = {
   URL: "DATABASE_URL",
   UNPOOLED_URL: "DATABASE_URL_UNPOOLED",

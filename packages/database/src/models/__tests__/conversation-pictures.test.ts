@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
-import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
+import { CONVERSATION_PICTURE_BOUNDS } from "@repo/features/conversation-picture-wire";
+import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { inArray } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";

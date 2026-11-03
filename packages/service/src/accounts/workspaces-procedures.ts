@@ -44,19 +44,19 @@
  * unauthenticated and an oversized body as too large whatever it carries.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { MemberSeams, WorkspaceSeams } from "@luke/database/models/workspace-seams";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import {
   createWorkspace,
   ensurePersonalWorkspace,
   listWorkspaces,
   workspaceOf,
-} from "@luke/database/models/workspace-store";
+} from "@repo/database/models/workspace-store";
 import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_ROLE,
   type WorkspaceRole,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
 import {
   recordServerEvent,

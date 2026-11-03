@@ -1,6 +1,6 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
-import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/settings/settings-controls";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { AgentNoticeDoorsSurface } from "@repo/host/agent-notices";
+import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@repo/settings/settings-controls";
 import { app, Notification } from "electron";
 
 /**

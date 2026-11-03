@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { HOST_LIVE, type HostLive, IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
+import { HOST_LIVE, type HostLive, IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

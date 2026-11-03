@@ -9,7 +9,7 @@
  * a window whose state could not be read or whose surface failed to render,
  * or a failure the panel showed, is kept for it, a few at most, and sent
  * once it stands
- * (`@luke/features/sentry-early-reports`).
+ * (`@repo/features/sentry-early-reports`).
  *
  * The SDK's tracing starts the window's page load at the document's own
  * start, and reads the page's web vitals from what the browser buffered,
@@ -18,10 +18,10 @@
  * which no global handler of its own was there to catch.
  */
 
-import { reportsOnceStarted } from "@luke/features/sentry-early-reports";
-import type { ShownFailureSent } from "@luke/features/shown-failure";
-import type { ShownFailureReporter } from "@luke/panel/failure-report";
-import type { PanelSpanRecorder } from "@luke/panel/panel-spans";
+import { reportsOnceStarted } from "@repo/features/sentry-early-reports";
+import type { ShownFailureSent } from "@repo/features/shown-failure";
+import type { ShownFailureReporter } from "@repo/panel/failure-report";
+import type { PanelSpanRecorder } from "@repo/panel/panel-spans";
 
 /** Why a window drew nothing: its state could not be read, or its surface failed to render. */
 export const BLANK_WINDOW = { FIRST_READ: "first_read", RENDER: "render" } as const;

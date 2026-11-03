@@ -1,8 +1,8 @@
-import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { launchFailureReported } from "@luke/features/sentry-reporting";
-import { reportToStderr, tolerateClosedStderr } from "@luke/host/node";
-import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
+import { appLinkInArguments, appLinkInbox } from "@repo/features/app-links";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { launchFailureReported } from "@repo/features/sentry-reporting";
+import { reportToStderr, tolerateClosedStderr } from "@repo/host/node";
+import { desktopQuit, QUIT_STAGE } from "@repo/host/quit";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
@@ -45,7 +45,7 @@ const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
 // A link of ours macOS hands the app (`tryluke://`) is heard from the first
 // moment, since the one that launched the app arrives before it is ready,
-// and held until a window can open it (`@luke/features/app-links`).
+// and held until a window can open it (`@repo/features/app-links`).
 const appLinks = appLinkInbox();
 app.on("open-url", (event, url) => {
   event.preventDefault();

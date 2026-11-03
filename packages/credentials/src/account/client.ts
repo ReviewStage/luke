@@ -1,7 +1,7 @@
-import { fixedBearer, HOSTED_API_ERROR } from "@luke/features";
-import { pinnedPictureUrl } from "@luke/features/account-picture";
-import { askHosted, type HostedFailure, hostedClient } from "@luke/features/hosted-link";
-import { onOwnFiber } from "@luke/runtime/effect";
+import { fixedBearer, HOSTED_API_ERROR } from "@repo/features";
+import { pinnedPictureUrl } from "@repo/features/account-picture";
+import { askHosted, type HostedFailure, hostedClient } from "@repo/features/hosted-link";
+import { onOwnFiber } from "@repo/runtime/effect";
 import {
   HTTP_STATUS,
   isRecord,
@@ -9,8 +9,8 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
-} from "@luke/wire";
-import { webResponseFromClientResponse } from "@luke/wire/effect";
+} from "@repo/wire";
+import { webResponseFromClientResponse } from "@repo/wire/effect";
 import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";
@@ -46,7 +46,7 @@ export interface AccountIdentity {
 
 /**
  * The account's picture, kept only where it is drawn from a host the
- * renderer's image policy allows (`@luke/features/account-picture`, the one
+ * renderer's image policy allows (`@repo/features/account-picture`, the one
  * rule the service's workspace read follows too).
  */
 function accountPictureUrl(value: UnparsedWireValue): string | undefined {

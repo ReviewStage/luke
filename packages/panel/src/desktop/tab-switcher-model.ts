@@ -24,7 +24,7 @@
  * cards show. Escape lets go of nothing.
  */
 
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { ARCHIVE_DRAWN } from "@luke/features/agent-view";
-import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@luke/features/agent-wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { ARCHIVE_DRAWN } from "@repo/features/agent-view";
+import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@repo/features/agent-wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

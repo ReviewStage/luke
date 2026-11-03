@@ -41,7 +41,7 @@ import { cn } from "../cn.js";
  * - `BreadcrumbEllipsis` is left out: a path's "…" is a crumb of its own,
  *   a press naming the folders it stands for.
  *
- * `@luke/ui`'s `Breadcrumbs` (`components/breadcrumbs/breadcrumbs.tsx`) is
+ * `@repo/ui`'s `Breadcrumbs` (`components/breadcrumbs/breadcrumbs.tsx`) is
  * what an app draws; this is its inside.
  */
 

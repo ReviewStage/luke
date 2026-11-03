@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-} from "@luke/ui/diagram-contract";
+} from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";

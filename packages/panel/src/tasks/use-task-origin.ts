@@ -1,9 +1,9 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { AgentStatus } from "@luke/features/agent-wire";
-import { agentName } from "@luke/features/model-label";
-import type { TaskSummary } from "@luke/features/task-wire";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { type Actor, type OriginAgent, originActor } from "@luke/ui/actor-model";
+import type { AgentStatus } from "@repo/features/agent-wire";
+import { agentName } from "@repo/features/model-label";
+import type { TaskSummary } from "@repo/features/task-wire";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { type Actor, type OriginAgent, originActor } from "@repo/ui/actor-model";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { appStateDerivedAtom } from "../use-app-state.js";

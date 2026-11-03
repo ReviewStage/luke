@@ -1,4 +1,4 @@
-import { ALIGN, Button, GAP, IconButton, ImageIcon, Stack, useFilePicker } from "@luke/ui";
+import { ALIGN, Button, GAP, IconButton, ImageIcon, Stack, useFilePicker } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

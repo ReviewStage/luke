@@ -1,8 +1,8 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { ChipWidth, SettingsRowDensity } from "@luke/ui";
-import type { ShownError } from "@luke/ui/reported-failure";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
-import type { ActionResult } from "@luke/wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { ChipWidth, SettingsRowDensity } from "@repo/ui";
+import type { ShownError } from "@repo/ui/reported-failure";
+import { useSettingWrite } from "@repo/ui/use-setting-write";
+import type { ActionResult } from "@repo/wire";
 import { refusalShown } from "../failure-report.js";
 import { PickerRow } from "./picker-row.js";
 

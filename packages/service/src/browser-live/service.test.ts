@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
 import { RELAY_UPGRADE_STATUS, type RelayCredential } from "../http/relay-upgrade.js";

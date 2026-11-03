@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { PROFILE } from "@luke/ui";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { PROFILE } from "@repo/ui";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

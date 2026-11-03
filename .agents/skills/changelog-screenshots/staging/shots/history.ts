@@ -10,13 +10,13 @@
  * inside it, so the list cannot show both.
  */
 
-import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@repo/features/plan-wire";
 import {
   TASK_CALL_FAILURE,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
-} from "@luke/features/planning-view";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/planning-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago, daysAgo, hoursAgo } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

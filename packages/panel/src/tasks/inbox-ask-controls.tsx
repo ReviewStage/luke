@@ -9,8 +9,8 @@ import {
   type InboxField,
   type InboxForm,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
-import { FIELD_WORDS } from "@luke/features/words";
+} from "@repo/features/inbox-wire";
+import { FIELD_WORDS } from "@repo/features/words";
 import {
   Badge,
   BUTTON_SIZE,
@@ -35,9 +35,9 @@ import {
   TEXT_VARIANT,
   Text,
   TextField,
-} from "@luke/ui";
-import { isComposingKey } from "@luke/ui/composing-key";
-import { CheckIcon, Undo2Icon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { isComposingKey } from "@repo/ui/composing-key";
+import { CheckIcon, Undo2Icon } from "@repo/ui/icons";
 import { MarkdownMessage } from "../markdown-message.js";
 import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -92,7 +92,7 @@ const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
 
-/** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
+/** A choice's options as `@repo/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
 ): ChoiceOption<string>[] {
@@ -243,7 +243,7 @@ function AnsweredText({
 /**
  * One field of a form, its name over its control and left-aligned as every
  * field is, "Optional" after the name of one that may be left empty: a
- * text field the caller's own or `@luke/ui`'s, a number a short field, a
+ * text field the caller's own or `@repo/ui`'s, a number a short field, a
  * select its options as pills that wrap, the one the agent recommends
  * wearing its badge, its pick taken back by pressing it again, since a
  * field left empty, required or not, is sent without it, and a yes or no a

@@ -22,7 +22,7 @@
  * Disconnect.
  */
 
-import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { CONNECTION_TOOL } from "@repo/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -30,9 +30,9 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
   integrationRemoteCallSchema,
-} from "@luke/features/integration-wire";
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+} from "@repo/features/integration-wire";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";

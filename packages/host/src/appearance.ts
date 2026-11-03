@@ -1,4 +1,4 @@
-import { APP_SETTING_SCHEMA, type Theme } from "@luke/settings";
+import { APP_SETTING_SCHEMA, type Theme } from "@repo/settings";
 import { Context, Effect } from "effect";
 
 /**
@@ -17,7 +17,7 @@ export interface NativeThemeSurface {
 }
 
 export class NativeTheme extends Context.Service<NativeTheme, NativeThemeSurface>()(
-  "@luke/desktop/NativeTheme",
+  "@repo/desktop/NativeTheme",
 ) {}
 
 /**

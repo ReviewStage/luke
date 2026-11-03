@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
-import { UsersScreen } from "@luke/panel/admin/screens/users";
+import type { AdminUserList, AdminUserListRow } from "@repo/features/admin-answer-wire";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@repo/features/admin-wire";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";

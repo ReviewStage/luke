@@ -6,7 +6,7 @@ import { THIS_MAC_HOST_ACT_KIND } from "./kinds.js";
  * this-mac-host.ts -- This Mac as the panel reads it, as a procedure: which machine it is and the device its host's record names, so every list of machines names This Mac.
  *
  * The host answers it (`compose-this-mac-host.ts`): the machine's id in the
- * keyed hash every host reports (`@luke/host/node`'s `machine-identity.ts`),
+ * keyed hash every host reports (`@repo/host/node`'s `machine-identity.ts`),
  * where it could be read, and the device of the record of the account
  * install on this Mac, where that install was enrolled with this app's
  * service. A browser tab has no This Mac, so it refuses the read.

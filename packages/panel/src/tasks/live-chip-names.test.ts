@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { type TaskSummary, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW, TASKS_READ } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { type TaskSummary, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

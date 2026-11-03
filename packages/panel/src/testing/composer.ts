@@ -1,4 +1,4 @@
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import type { Effect } from "effect";
 import { act } from "react";

@@ -3,7 +3,7 @@
  * recharts 3), vendored because no app here is shadcn-scaffolded: there is no
  * components.json for the CLI to install into, and the one shared utility the
  * registry file expects — `cn` from `@/lib/utils` — is this package's own
- * `cn`. Exported at `@luke/ui/chart` alone, so recharts rides into no bundle
+ * `cn`. Exported at `@repo/ui/chart` alone, so recharts rides into no bundle
  * behind the barrel. Its frame and tooltip are drawn by `chart.css` in the
  * shared `--ui-*` tokens, not the stock utilities, so the chart reads
  * alike whichever app mounts it; a caller's `className` on the container
@@ -13,7 +13,7 @@
  * time, never from anything observed.
  */
 
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
@@ -22,7 +22,7 @@ import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 // A dark series colour applies where the page is drawn in the dark theme
-// (`data-ui-theme`, `@luke/ui`'s `tokens/surface.ts`).
+// (`data-ui-theme`, `@repo/ui`'s `tokens/surface.ts`).
 const THEMES = { light: "", dark: '[data-ui-theme="dark"]' } as const;
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;

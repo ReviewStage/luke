@@ -58,7 +58,7 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
     panel('<span role={gone ? null : "status"} />'),
     panel("<Controls.button onClick={go} />"),
     panel("<example.Render />"),
-    // `@luke/ui` is where controls are built.
+    // `@repo/ui` is where controls are built.
     { code: "<button onClick={go} />", filename: UI_FILE },
     {
       code: '<div role="tab" tabIndex={0} onKeyDown={key} onPointerDown={go} />',

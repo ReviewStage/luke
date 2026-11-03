@@ -2,9 +2,9 @@
  * admin-format.ts -- how the admin page draws its trends and charts' days; its counts, shares, and dollars are `number-format.ts`'s and its days `time-format.ts`'s.
  */
 
-import { formatCount, formatPercent } from "@luke/features/number-format";
-import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-provider";
-import { formatDayTick } from "@luke/features/time-format";
+import { formatCount, formatPercent } from "@repo/features/number-format";
+import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@repo/features/sign-in-provider";
+import { formatDayTick } from "@repo/features/time-format";
 
 /**
  * The two runs a trend compares. The service's `AdminTrend` carries them, and

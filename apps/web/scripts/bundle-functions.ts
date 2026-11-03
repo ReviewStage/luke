@@ -1,6 +1,6 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { RUNNER_BUNDLE_FILE } from "@luke/service/agents/coder-host/runner-bundle";
+import { RUNNER_BUNDLE_FILE } from "@repo/service/agents/coder-host/runner-bundle";
 import { build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
@@ -42,7 +42,7 @@ import {
 const WEB = join(import.meta.dirname, "..");
 
 /**
- * The runner a native harness's sandbox runs, as `@luke/agent-runner`'s own
+ * The runner a native harness's sandbox runs, as `@repo/agent-runner`'s own
  * build leaves it, which the web build runs first; and the module that reads
  * it beside a function's entry. Every function whose bundle reaches that
  * module ships the runner in its `.func`, and a build without the runner
@@ -67,7 +67,7 @@ const SITE_DIRECTORY = "dist";
 
 const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
   throw new Error(
-    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @luke/agent-runner build\` first`,
+    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @repo/agent-runner build\` first`,
   );
 });
 

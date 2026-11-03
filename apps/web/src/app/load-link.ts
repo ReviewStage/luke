@@ -13,9 +13,9 @@
  * `/app`.
  */
 
-import { readShownLink, type ShownLink } from "@luke/features/link-grammar";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import type { AppBridge } from "@luke/host/bridge";
+import { readShownLink, type ShownLink } from "@repo/features/link-grammar";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import type { AppBridge } from "@repo/host/bridge";
 import { savedEntry } from "./browser-history";
 import { addressHere, PANEL_PATH } from "./web-address";
 

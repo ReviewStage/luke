@@ -1,4 +1,4 @@
-import type { Experiment } from "@luke/settings";
+import type { Experiment } from "@repo/settings";
 import { createContext, useContext } from "react";
 
 /**

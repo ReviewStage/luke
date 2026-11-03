@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Task } from "@luke/features/task-wire";
+import type { Task } from "@repo/features/task-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement } from "react";

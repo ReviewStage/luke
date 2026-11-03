@@ -1,5 +1,5 @@
-import type { Workspace } from "@luke/features/workspace-wire";
-import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@luke/ui";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@repo/ui";
 import type { ReactNode } from "react";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 

@@ -1,4 +1,4 @@
-import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
+import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@repo/features";
 import type {
   TasksWorkspaceAnswer,
   TasksWorkspaceCreateParams,
@@ -27,7 +27,7 @@ import type {
   WorkspaceInvitationsFollowed,
   WorkspacePeopleFollow,
   WorkspacePeopleFollowed,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { Effect, Option, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,

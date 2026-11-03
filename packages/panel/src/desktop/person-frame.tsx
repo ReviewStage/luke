@@ -12,7 +12,7 @@ import {
   Skeleton,
   SkeletonRegion,
   type StatusTone,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useRef } from "react";
 
 /**

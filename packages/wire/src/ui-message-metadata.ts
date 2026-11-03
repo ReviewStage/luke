@@ -18,7 +18,7 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  *
  * Every shape below is an Effect `Schema.Struct`, declared and exported
  * directly: a caller reads one with `readEither` and shows it with
- * `emitJsonSchema`, both from `@luke/wire/effect`.
+ * `emitJsonSchema`, both from `@repo/wire/effect`.
  */
 
 /** The roles a stored message may carry, as the SDK names them. */
@@ -142,7 +142,7 @@ export const GITHUB_LINE_BOUNDS = {
 /**
  * The most a comment line's metadata holds: a comment's words and the quote
  * of what its thread is on within the bounds a comment keeps them to
- * (`@luke/features/plan-comment-wire`'s `PLAN_COMMENT_BOUNDS`), which wire,
+ * (`@repo/features/plan-comment-wire`'s `PLAN_COMMENT_BOUNDS`), which wire,
  * beneath features, cannot read, and a page's title within a page's.
  */
 export const COMMENT_LINE_BOUNDS = {

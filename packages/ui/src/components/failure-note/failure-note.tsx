@@ -117,7 +117,7 @@ export function FailureNote({
   time?: FailureNoteTime;
   /** Retry's press; with none, the line says its words alone, and any `also`. */
   onRetry?: (() => void) | undefined;
-  /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
+  /** A second act after Retry, drawn by the caller as a `@repo/ui` control; with neither, the line says its words alone. */
   also?: ReactNode;
   /** The failure beneath the words, as the app reports it, or what names them as no failure of the app's. */
   failure: ReportedFailure | Unreported;

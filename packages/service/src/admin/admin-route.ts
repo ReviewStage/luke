@@ -1,5 +1,5 @@
-import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
-import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@repo/database/models/provider-key-seal";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import { Effect } from "effect";
 import {
   AUTH_SECRET_ENVIRONMENT,

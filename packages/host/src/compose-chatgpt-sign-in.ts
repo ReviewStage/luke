@@ -1,14 +1,14 @@
-import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@luke/credentials";
-import type { HostedAgentClient } from "@luke/features";
-import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@luke/features/agent-view";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@repo/credentials";
+import type { HostedAgentClient } from "@repo/features";
+import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@repo/features/agent-view";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_REJECTION,
   type ProviderKeyRejection,
   type ProviderKeysAnswer,
-} from "@luke/features/provider-key-wire";
-import { carried, GATEWAY_METHOD } from "@luke/gateway";
+} from "@repo/features/provider-key-wire";
+import { carried, GATEWAY_METHOD } from "@repo/gateway";
 import { Effect, Layer, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
@@ -21,7 +21,7 @@ import type { HostKernel } from "./host-kernel.js";
  *
  * A press in Settings asks the service for the account's host id, runs
  * OpenAI's open-source sign-in through the developer's browser and a
- * loopback on this Mac (`@luke/credentials`' `chatGptSignIn`), and posts what
+ * loopback on this Mac (`@repo/credentials`' `chatGptSignIn`), and posts what
  * it validated to the service, which keeps and renews it from then on. The
  * window hears the keys as the service then holds them, or why nothing was
  * kept: the tokens go from the exchange to the service and are held nowhere

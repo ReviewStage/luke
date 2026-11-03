@@ -1,3 +1,3 @@
 {
-  "packages/agent-runner/src/codex.ts": "The client name the runner gives Codex's app server; the runner's bundle reaches no `@luke/features`, so it cannot read `PRODUCT_NAME`."
+  "packages/agent-runner/src/codex.ts": "The client name the runner gives Codex's app server; the runner's bundle reaches no `@repo/features`, so it cannot read `PRODUCT_NAME`."
 }

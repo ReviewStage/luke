@@ -4,10 +4,10 @@
  * Only a panel opens one, so the procedure refuses any other window.
  */
 
-import { deviceAgentLayout } from "@luke/features/device-agent-wire";
-import type { ActSender } from "@luke/host/act-port";
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { MAC_TERMINAL_ACT_KIND } from "@luke/host/contract";
+import { deviceAgentLayout } from "@repo/features/device-agent-wire";
+import type { ActSender } from "@repo/host/act-port";
+import { actPortFor, type PlatformActProcedures } from "@repo/host/act-port";
+import { MAC_TERMINAL_ACT_KIND } from "@repo/host/contract";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 

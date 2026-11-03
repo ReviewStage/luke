@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { afterEach, vi } from "vitest";

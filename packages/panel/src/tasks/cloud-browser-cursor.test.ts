@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE_SERVER } from "@luke/features/browser-live-wire";
+import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_LIVE_SERVER } from "@repo/features/browser-live-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

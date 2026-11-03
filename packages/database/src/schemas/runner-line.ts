@@ -21,7 +21,7 @@ import { user } from "./auth.js";
  * keeps them committed in their `seq` order, so a runner that read up to one
  * never passes over a line below it. `launch` is the first event number of
  * the launch the line was written for. `text` is one input line as the
- * runner reads it (`@luke/agent-runner`'s `InputLineSchema`), carrying no
+ * runner reads it (`@repo/agent-runner`'s `InputLineSchema`), carrying no
  * secret. `line_id` is a message line's own id, the send's key, so a send
  * repeated under it queues once; null for every other kind. `accepted_at`
  * is when the runner said it took a message line (its ACCEPTED event); a

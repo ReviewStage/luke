@@ -5,9 +5,9 @@
  */
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

@@ -1,4 +1,4 @@
-import { githubAvatarAt } from "@luke/features/account-picture";
+import { githubAvatarAt } from "@repo/features/account-picture";
 import {
   AUTOMATION_RUN_STANDING,
   type AutomationRunStanding,
@@ -6,8 +6,8 @@ import {
   automationRunLine,
   automationRunStanding,
   automationTriggerText,
-} from "@luke/features/automation-list-model";
-import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
+} from "@repo/features/automation-list-model";
+import type { AutomationRunSummary, AutomationSummary } from "@repo/features/automation-wire";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -35,7 +35,7 @@ import {
   UnassignedAvatar,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -48,8 +48,8 @@ import {
   type PersonActor,
   ROLE_WORDS,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useAutomation } from "./automation-directory.js";

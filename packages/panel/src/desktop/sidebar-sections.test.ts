@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type TasklessAgent } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type TasklessAgent } from "@repo/features/agent-wire";
 import {
   TASK_SECTION_ICON_COLOR,
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
-import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
-import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { sectionOrder, sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
-import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+} from "@repo/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@repo/features/task-section-writes";
+import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { sectionOrder, sectionTaskIds, workspaceSections } from "@repo/ui/task-sections-model";
+import { type PinMove, TASK_MARK, type TaskMark } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

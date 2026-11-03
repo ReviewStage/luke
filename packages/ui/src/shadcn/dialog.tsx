@@ -30,7 +30,7 @@ import { cn } from "../cn.js";
  * out, because a dialog of ours draws its own head and foot
  * (`components/dialog/dialog.tsx`), as is its ring utility,
  * because the card holds focus for its controls and draws no ring. What an
- * app draws is `@luke/ui`'s `Dialog`; this is its inside.
+ * app draws is `@repo/ui`'s `Dialog`; this is its inside.
  */
 
 /**

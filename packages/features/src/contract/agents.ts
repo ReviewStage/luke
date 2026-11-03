@@ -18,8 +18,8 @@
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@luke/wire";
-import { wireKeys } from "@luke/wire/effect";
+import { HTTP_METHOD } from "@repo/wire";
+import { wireKeys } from "@repo/wire/effect";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {

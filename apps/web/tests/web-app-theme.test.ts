@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
-import { ACT_KIND } from "@luke/host/acts";
-import { askAct } from "@luke/panel/act";
-import { THEME } from "@luke/settings";
-import tokens from "@luke/ui/tokens.css?inline";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
+import { ACT_KIND } from "@repo/host/acts";
+import { askAct } from "@repo/panel/act";
+import { THEME } from "@repo/settings";
+import tokens from "@repo/ui/tokens.css?inline";
 import { afterAll, beforeAll, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
@@ -18,7 +18,7 @@ import { fakeService } from "./support/fake-service";
  * first frame. One mount, because the panel's state read is the tab's once.
  */
 
-/** The site palette's two grounds (`@luke/ui`'s `palettes.css`), which the chrome is tinted with. */
+/** The site palette's two grounds (`@repo/ui`'s `palettes.css`), which the chrome is tinted with. */
 const GROUND = { light: "#fffcfa", dark: "#0f0d0b" } as const;
 
 /** The query a machine's dark appearance answers. */

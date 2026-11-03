@@ -1,7 +1,7 @@
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { MENTION_KIND, memberMentionOf } from "@luke/features/mention-link";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { describeWire } from "@luke/wire/effect";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { MENTION_KIND, memberMentionOf } from "@repo/features/mention-link";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { describeWire } from "@repo/wire/effect";
 import { Schema } from "effect";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { writtenMention } from "./written-mentions.js";

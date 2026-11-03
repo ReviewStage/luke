@@ -1,4 +1,4 @@
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";

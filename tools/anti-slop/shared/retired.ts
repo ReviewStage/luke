@@ -10,7 +10,7 @@ import { scanCss } from "./style-guard.ts";
 /**
  * retired.ts -- the retired guard as data: what phase 2 took out of the code
  * and keeps out. Each JSON file under `tools/anti-slop/retired/` is one kind's
- * list of class names, `@luke/ui/icons` glyphs, and code patterns (a JSX prop
+ * list of class names, `@repo/ui/icons` glyphs, and code patterns (a JSX prop
  * or an import), each refused outside the paths it allows and each with an
  * optional baseline of what files still hold, which may only shrink. A kind
  * guards itself by adding its own file, never by editing another's, so its
@@ -35,7 +35,7 @@ const RETIRED_DIRECTORY = path.join(PLUGIN_DIRECTORY, "retired");
 const PREFIX_MARK = "*";
 
 /** The icon door, by its package name and by the folder a relative import reaches. */
-const ICON_DOOR_MODULE = "@luke/ui/icons";
+const ICON_DOOR_MODULE = "@repo/ui/icons";
 const ICON_DOOR_DIRECTORY = "packages/ui/src/icons/";
 
 /** The registry of concepts the door exports, `GLYPH.BACK` among them. */

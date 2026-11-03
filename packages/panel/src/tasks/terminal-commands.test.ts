@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { Task, TaskSummary } from "@luke/features/task-wire";
-import { shellsAsked } from "@luke/features/terminal-store";
-import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { StripTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import type { Task, TaskSummary } from "@repo/features/task-wire";
+import { shellsAsked } from "@repo/features/terminal-store";
+import { SANDBOX_STATE } from "@repo/features/terminal-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import type { StripTab } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

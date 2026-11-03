@@ -1,4 +1,4 @@
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   ChevronDownIcon,
   dropBelowStart,
@@ -7,7 +7,7 @@ import {
   NavItem,
   PlusIcon,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";

@@ -9,7 +9,7 @@ import type { Baseline } from "./baseline.ts";
 /**
  * press-listener-guard.ts -- what the `no-document-press-listener` rule
  * reads: the presses a document or window may not listen for outside
- * `@luke/ui`, the one place a press anywhere in the window is heard
+ * `@repo/ui`, the one place a press anywhere in the window is heard
  * (`usePressAway`), and the baseline of files that still listen for one. A
  * popover, menu or card closes on a press outside it through the layer it
  * hangs from (`AnchoredPopover`, `RectFloat`) and never a listener of its own.

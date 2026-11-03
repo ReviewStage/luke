@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import type { MessageListRead } from "@luke/database/models/message-reads";
-import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
-import { CLEARED_CONVERSATION_RETENTION_MS } from "@luke/database/models/soft-delete";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import type { MessageListRead } from "@repo/database/models/message-reads";
+import { listRecentMessages, type StoredMessageRecord } from "@repo/database/models/message-reads";
+import { CLEARED_CONVERSATION_RETENTION_MS } from "@repo/database/models/soft-delete";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   type ConversationRow,
   insertConversation as insertConversationRow,
@@ -15,8 +15,8 @@ import {
   readTurnsByConversation,
   setConversationDeletedAt,
   type TurnInsertRow,
-} from "@luke/database/testing";
-import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/database/testing";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { type ToolSet, tool } from "ai";
 import { afterAll, test } from "vitest";
 import { z } from "zod";

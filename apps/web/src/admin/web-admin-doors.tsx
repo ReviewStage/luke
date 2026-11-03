@@ -1,7 +1,7 @@
 /**
  * web-admin-doors.tsx -- the standalone `/admin` page's doors into the admin screens: the service's admin procedures on this page's browser client, under the session cookie, and the page's own sign-in and refusal cards.
  *
- * The screens are the panel's (`@luke/panel/admin/*`) and name no client;
+ * The screens are the panel's (`@repo/panel/admin/*`) and name no client;
  * this page hands them its own (`admin-doors.tsx`). A refusal is worded
  * here, by its status, as the screens tell it apart, and an answer that came
  * through a redirect is something in front of the service answering, such as
@@ -18,27 +18,27 @@ import type {
   AdminUserDetail,
   AdminUserList,
   AdminWorkspaceList,
-} from "@luke/features/admin-answer-wire";
-import type { AdminCost } from "@luke/features/admin-cost-wire";
+} from "@repo/features/admin-answer-wire";
+import type { AdminCost } from "@repo/features/admin-cost-wire";
 import {
   ADMIN_HTTP_STATUS,
   ADMIN_REFUSED,
   ADMIN_USER_ID_PARAM,
   type AdminRefused,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import {
   BrowserRedirected,
   browserClient,
   browserRefusal,
-} from "@luke/features/contract/browser-client";
+} from "@repo/features/contract/browser-client";
 import {
   type AdminDoors,
   AdminDoorsProvider,
   AdminReadRefused,
   type AdminReads,
-} from "@luke/panel/admin/admin-doors";
-import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
-import { accountHref, searchFromLocation, searchHref } from "@luke/panel/admin/routing";
+} from "@repo/panel/admin/admin-doors";
+import { SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
+import { accountHref, searchFromLocation, searchHref } from "@repo/panel/admin/routing";
 import { ForbiddenCard, SignInCard } from "./chrome/gate-cards";
 
 /** The word the screens tell a refusal apart by, from the status it was answered under. */
@@ -55,7 +55,7 @@ const REFUSED_BY_STATUS: ReadonlyMap<number, AdminRefused> = new Map([
  */
 async function asked<T>(read: () => Promise<unknown>): Promise<T> {
   try {
-    // SAFETY: each admin procedure answers the shape `@luke/features/admin-answer-wire` names for it, for which the contract declares no output.
+    // SAFETY: each admin procedure answers the shape `@repo/features/admin-answer-wire` names for it, for which the contract declares no output.
     return (await read()) as T;
   } catch (cause) {
     if (cause instanceof BrowserRedirected) throw new AdminReadRefused(ADMIN_REFUSED.INTERCEPTED);

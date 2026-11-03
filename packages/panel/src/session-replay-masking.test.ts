@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { afterEach, expect, test, vi } from "vitest";
 import { sessionReplay } from "./session-replay.js";
 

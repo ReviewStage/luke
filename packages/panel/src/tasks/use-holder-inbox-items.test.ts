@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { UNREAD } from "@luke/host/app-state";
+} from "@repo/features/inbox-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { UNREAD } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

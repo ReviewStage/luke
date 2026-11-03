@@ -3,9 +3,9 @@ import {
   type CheckState,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineTitle } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
+} from "@repo/features/agent-wire";
+import { THREAD_LINE_LEAD, threadLineTitle } from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import {
   DISCLOSURE_FILL,
   type EventNote,
@@ -13,8 +13,8 @@ import {
   OneLine,
   type SubjectFit,
   SubjectLine,
-} from "@luke/ui";
-import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@repo/ui/icons";
 import {
   type CommentLineMetadata,
   GITHUB_CHECK_CONCLUSION,
@@ -23,7 +23,7 @@ import {
   type GitHubLineMetadata,
   isFailingConclusion,
   type ThreadLineMetadata,
-} from "@luke/wire";
+} from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import {

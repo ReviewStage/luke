@@ -9,10 +9,10 @@
 // It writes two kinds of output, both from the one description of the mark:
 //
 //   packages/brand/assets/**.svg                 standalone assets
-//   packages/brand/src/generated/mark-art.ts     the mark's and the wordmark's geometry, for @luke/ui
+//   packages/brand/src/generated/mark-art.ts     the mark's and the wordmark's geometry, for @repo/ui
 //
 // The colours are the brand's, read from brand-palette.mjs, the table
-// @luke/ui's palette is generated from too, so a change of brand redraws
+// @repo/ui's palette is generated from too, so a change of brand redraws
 // the icons with the app.
 //
 // PNG derivatives (app icon sizes, the cards) are rasterized separately --
@@ -344,7 +344,7 @@ function tsEntry(key, value) {
   return line.length <= 100 || key.length <= 4 ? line : `  ${key}:\n    "${value}",`;
 }
 
-// The mark's geometry, for @luke/ui's ProductMark to draw from, and the
+// The mark's geometry, for @repo/ui's ProductMark to draw from, and the
 // wordmark's, for the landing's footer.
 put(
   join(SURFACE, "mark-art.ts"),

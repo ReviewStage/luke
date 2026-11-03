@@ -4,8 +4,8 @@ import {
   BROWSER_LIVE_PORT_MESSAGE,
   type BrowserLivePortOutbound,
   type BrowserLivePortTicket,
-} from "@luke/features/browser-live-acts";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/browser-live-acts";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import { ACT_KIND } from "../acts.js";
 import type { HostOperator } from "../host-operator.js";

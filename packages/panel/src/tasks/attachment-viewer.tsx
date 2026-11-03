@@ -5,9 +5,9 @@ import {
   chipBase64,
   type FileChip,
   sizeLabel,
-} from "@luke/features/attachment-model";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
+} from "@repo/features/attachment-model";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SHORTCUT_KEY, type ShortcutChord } from "@repo/settings/shortcuts";
 import {
   Button,
   ButtonLink,
@@ -34,8 +34,8 @@ import {
   VIDEO_PLAYER_PLACE,
   VideoPlayer,
   ZoomImage,
-} from "@luke/ui";
-import { DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
+} from "@repo/ui";
+import { DIAGRAM_DRAWING } from "@repo/ui/diagram-contract";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -70,12 +70,12 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). Its card
+ * moved by a drag or a two-finger scroll (`@repo/ui`'s ZoomImage). Its card
  * fills the room whatever the picture's shape, as Slack's and Quick Look's
  * frames do, so the header stands still while the picture is zoomed. A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
- * controls, Full screen among them (`@luke/ui`'s VideoPlayer). A Mermaid
+ * controls, Full screen among them (`@repo/ui`'s VideoPlayer). A Mermaid
  * file (`.mmd`, `.mermaid`) is drawn as its diagram, through the diagram
  * bundle a plan's fences draw through (`../diagram-drawing.ts`), and then
  * shown, zoomed, and copied as a picture is; while it is drawn, or where
@@ -88,7 +88,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * note the place opening it gives the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog drawn bare over the dimmed window, its top clear of the
+ * `@repo/ui`'s dialog drawn bare over the dimmed window, its top clear of the
  * traffic lights, and the viewer's own card (`DialogCard`) filling the room
  * the arrows and the strip leave it, the file fitted inside it edge to edge: a picture or a
  * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
@@ -105,7 +105,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * end holding every other button of the header, the arrow keys still
  * walking the files. On a touch screen a finger swiping sideways across the
  * viewer walks the files too, the file shown following it until it is let
- * go (`@luke/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
+ * go (`@repo/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
  * finger moves the picture instead.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
@@ -141,7 +141,7 @@ const COPY_WHAT = {
   IMAGE: "image",
 } as const;
 
-/** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
+/** The bare keys a picture's zoom buttons name in their hints, which `@repo/ui`'s `useImageZoom` answers. */
 const ZOOM_CHORD = {
   IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
@@ -200,7 +200,7 @@ function download(file: FileChip): void {
   link.click();
 }
 
-/** Copy for a text file's words, `@luke/ui`'s one Copy. */
+/** Copy for a text file's words, `@repo/ui`'s one Copy. */
 function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   return <CopyButton text={text} what={COPY_WHAT.TEXT} copy={copyThroughShell} />;
 }
@@ -383,7 +383,7 @@ function AttachmentBody({
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
   if (image || diagram.picture !== undefined) {
     return (
-      // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
+      // Two fingers anywhere on the frame pinch the picture (`@repo/ui`'s ZoomImage), never the page.
       <div
         ref={zoom.frameRef}
         className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"

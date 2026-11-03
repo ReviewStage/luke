@@ -9,7 +9,7 @@
  * and the summary model an agent started from another replays with.
  */
 
-import { storeWriter } from "@luke/database/models/writer";
+import { storeWriter } from "@repo/database/models/writer";
 import { Effect } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { AgentDoorSeams } from "../coder-host/agent-doors.js";

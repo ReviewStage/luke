@@ -108,7 +108,7 @@ const OWN_REPOSITORY = [
 
 /**
  * The script, its values quoted, that makes a local agent's own repository
- * (`@luke/host`'s `compose-local-agents.ts`), at the head of the branch the
+ * (`@repo/host`'s `compose-local-agents.ts`), at the head of the branch the
  * agent starts from, or of GitHub's default branch where it names none,
  * read in our own clone of the repository, under its lock. The agent's work stays in its own folder,
  * and a worktree's Git folder would stand in the shared clone, so the agent
@@ -177,7 +177,7 @@ export function agentWorktreeScript(input: {
 
 /**
  * The script, its path quoted, that says what a discard would lose from a
- * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
+ * local agent's worktree (`@repo/host`'s `compose-local-agents.ts`): it
  * prints one line, and exits 0, when the worktree holds work that is nowhere
  * else, changes `git status --porcelain` shows, commits its upstream does
  * not hold, or, with no upstream, commits on no remote branch of our

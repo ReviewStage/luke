@@ -1,7 +1,7 @@
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
-import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
-import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@repo/features/agent-status";
+import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { GITHUB_TOKEN_REFRESH } from "@repo/features/host-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -25,7 +25,7 @@ export const CODER = {
    * idle rather than by this: a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
    * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
-   * or two minutes into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * or two minutes into a wait on wakeups alone (`@repo/agent-runner`'s `RUNNER_RELEASE`,
    * whose process table tells the harness's own processes from the
    * agent's). A shorter timeout would stop none of those sooner, so this is
    * only the backstop for one nothing stopped, which bills its memory until
@@ -101,7 +101,7 @@ export const CODER = {
    * the same (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(3), deleteEvicted: true },
-  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@luke/features/host-wire`). */
+  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@repo/features/host-wire`). */
   GITHUB_TOKEN_REFRESH,
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
@@ -206,7 +206,7 @@ export const CODER = {
    * The device's is thirty minutes, because nothing is billed on a host, and
    * every message within it goes into the running session rather than
    * through a relaunched CLI, a new GitHub token, and the last runner's
-   * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
+   * grace. Thirty, half the runner's own cap (`@repo/agent-runner`'s
    * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
    * by our retire under the lease and never by the runner ending itself,
    * whose stdin a message its host writes in that instant is lost on: the

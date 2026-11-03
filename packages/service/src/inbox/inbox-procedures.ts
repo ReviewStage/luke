@@ -1,7 +1,7 @@
 /**
  * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read, and a thread a member starts.
  *
- * The inbox resource of the hosted oRPC router (`@luke/features/contract`'s
+ * The inbox resource of the hosted oRPC router (`@repo/features/contract`'s
  * `inbox.ts`), each procedure answering the bytes its old `HttpRouter`
  * endpoint answered. The caller is resolved on the resource's implementer,
  * so an unsigned request is refused before its input is read; a procedure
@@ -15,18 +15,18 @@
  * stays on the agents' group (`agents/agents-app.ts`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   readAgent,
   readVisibleAgent,
   readVisibleAgentWorkspace,
-} from "@luke/database/models/agent-store";
-import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import type { AgentAttachment } from "@luke/features/agent-wire";
+} from "@repo/database/models/agent-store";
+import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
+import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
   INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
@@ -42,10 +42,10 @@ import {
   inboxStartTitle,
   inboxThreadMessage,
   inboxTodoTicks,
-} from "@luke/features/inbox-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
-import { failureKind } from "@luke/runtime/effect";
-import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import { failureKind } from "@repo/runtime/effect";
+import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@repo/wire";
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";

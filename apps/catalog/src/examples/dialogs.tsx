@@ -19,7 +19,7 @@ import {
   Text,
   TextArea,
   TextField,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

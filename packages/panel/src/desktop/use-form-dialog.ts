@@ -1,10 +1,10 @@
-import type { DialogAct, DialogConfirm } from "@luke/ui";
+import type { DialogAct, DialogConfirm } from "@repo/ui";
 import {
   CONFIRM_STAGE,
   type ConfirmRejection,
   confirmAsked,
   confirmWithdrawable,
-} from "@luke/ui/confirm-state";
+} from "@repo/ui/confirm-state";
 import { useState } from "react";
 
 /**

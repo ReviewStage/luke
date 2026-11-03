@@ -5,7 +5,7 @@ import {
   WRITING_INSERT,
   type WritingBlock,
   type WritingInsert,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   BLOCK_MENU_GROUP,
   BlockMenu,
@@ -20,7 +20,7 @@ import {
   UserIcon,
   useComboboxField,
   writingRow,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, type RefObject, useEffect, useId, useState } from "react";
 import {
   type ComposerTrigger,

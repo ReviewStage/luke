@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -7,7 +7,7 @@ import {
   type PlanCommentWriterRef,
   readPlanCommentThread,
   readPlanCommentThreads,
-} from "@luke/database/models/plan-comments";
+} from "@repo/database/models/plan-comments";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -16,9 +16,9 @@ import {
   type PlanCommentEntry,
   type PlanCommentThread,
   planCommentWordsSchema,
-} from "@luke/features/plan-comment-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import {

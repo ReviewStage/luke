@@ -11,7 +11,7 @@
  * tarball it downloads against the digest it carries before
  * anything of it is installed. A release moves `HOST_RELEASE` whole, its
  * digests read off the release CI published, as a tool's pin moves
- * (`@luke/agent-runner/pins`).
+ * (`@repo/agent-runner/pins`).
  */
 
 /** The repository whose releases carry the host's tarballs. */

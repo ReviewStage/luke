@@ -5,31 +5,31 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import { Database } from "@repo/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@repo/database/github-installation-vocabulary";
+import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   archiveAgent,
   readAgent,
   readAgentByKey,
   renameAgent,
   updateAgentBranch,
-} from "@luke/database/models/agent-store";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { rewindConversation } from "@luke/database/models/conversation-rewind";
-import { registerDevice } from "@luke/database/models/device-store";
-import { childConversationId } from "@luke/database/models/ids";
-import { sentLineStands } from "@luke/database/models/message-reads";
-import { writePage } from "@luke/database/models/plan-pages";
-import { createTask } from "@luke/database/models/task-store";
-import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { planRevision } from "@luke/database/schemas/plan-revision";
-import { conversations, messages } from "@luke/database/schemas/storage";
-import { task as taskTable } from "@luke/database/schemas/task";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/agent-store";
+import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { rewindConversation } from "@repo/database/models/conversation-rewind";
+import { registerDevice } from "@repo/database/models/device-store";
+import { childConversationId } from "@repo/database/models/ids";
+import { sentLineStands } from "@repo/database/models/message-reads";
+import { writePage } from "@repo/database/models/plan-pages";
+import { createTask } from "@repo/database/models/task-store";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { planRevision } from "@repo/database/schemas/plan-revision";
+import { conversations, messages } from "@repo/database/schemas/storage";
+import { task as taskTable } from "@repo/database/schemas/task";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
@@ -37,8 +37,8 @@ import {
   joinWorkspace,
   openWorkspace,
   startTask,
-} from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
+} from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
 import {
   AGENT_BOUNDS,
   AGENT_BRIEF,
@@ -54,16 +54,16 @@ import {
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   TRANSCRIPT_PARTS_QUERY,
-} from "@luke/features/agent-wire";
-import { INBOX_IMAGE_TYPE, inboxAnswerSchema } from "@luke/features/inbox-wire";
-import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { TASK_STATUS, taskListAnswerSchema, taskStartAnswerSchema } from "@luke/features/task-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { INBOX_IMAGE_TYPE, inboxAnswerSchema } from "@repo/features/inbox-wire";
+import { transcriptNowAnswerSchema } from "@repo/features/live-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
+import { TASK_STATUS, taskListAnswerSchema, taskStartAnswerSchema } from "@repo/features/task-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";

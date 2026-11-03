@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { sessionRecorderLoaded } from "@luke/panel/session-recorder/contract";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { sessionRecorderLoaded } from "@repo/panel/session-recorder/contract";
 import { afterEach, test, vi } from "vitest";
 import { webPlatform } from "../src/app/web-platform";
 

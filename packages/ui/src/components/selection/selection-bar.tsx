@@ -1,4 +1,4 @@
-import { SELECTION_WORDS, selectedWords } from "@luke/features/words";
+import { SELECTION_WORDS, selectedWords } from "@repo/features/words";
 import { type FocusEvent, type KeyboardEvent, useId, useLayoutEffect, useRef } from "react";
 import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";

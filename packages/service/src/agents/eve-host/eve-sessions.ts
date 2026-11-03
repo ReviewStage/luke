@@ -6,7 +6,7 @@
  * (`../coder-host/runtime-sessions.ts` routes each conversation to its own).
  */
 
-import { failureKind } from "@luke/runtime/effect";
+import { failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
 import { Data, type Effect, Schema as EffectSchema } from "effect";
 import type * as HttpClientError from "effect/http/HttpClientError";

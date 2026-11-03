@@ -1,10 +1,10 @@
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { REFRESH_FAILED_WORDS } from "@luke/features/words";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@luke/ui";
-import { InboxIcon } from "@luke/ui/icons";
-import { searchTokens } from "@luke/ui/search-tokens";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { REFRESH_FAILED_WORDS } from "@repo/features/words";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
+import { InboxIcon } from "@repo/ui/icons";
+import { searchTokens } from "@repo/ui/search-tokens";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -112,7 +112,7 @@ export function SideInboxTab({
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const { act } = useAct();
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
-  // Note that the holder's read draws the window's own marks, answers, and messages already, as the host draws them into it (`@luke/host`'s `inbox-collections.ts`).
+  // Note that the holder's read draws the window's own marks, answers, and messages already, as the host draws them into it (`@repo/host`'s `inbox-collections.ts`).
   const groups = [{ holder, items: [...inbox.board.open, ...inbox.board.settled] }];
   // Note that a panel's own Inbox offers no Mark all as read.
   const marks = useInboxReadMarks({ act, workspaceId });

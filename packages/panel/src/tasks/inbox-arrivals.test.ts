@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

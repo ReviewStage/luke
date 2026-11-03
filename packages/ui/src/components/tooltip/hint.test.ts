@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";

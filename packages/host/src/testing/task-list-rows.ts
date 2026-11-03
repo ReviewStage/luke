@@ -2,7 +2,7 @@
  * task-list-rows.ts -- the task list's rows as its statements deliver them, for a host test.
  */
 
-import { AGENT_BRIEF } from "@luke/features/agent-wire";
+import { AGENT_BRIEF } from "@repo/features/agent-wire";
 import type { AgentRow } from "../task-list-collections.js";
 
 /** One agent of the plan, or of none, as the agents statement delivers its row, started at `createdAt`, with no turn yet. */

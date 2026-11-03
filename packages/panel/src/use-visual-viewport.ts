@@ -5,7 +5,7 @@
  * browser toolbars and, while it is up, the on-screen keyboard; `dvh` follows
  * the toolbars but never the keyboard. The visual viewport is the part that
  * is actually seen, so the panel writes where it begins, its height, and the
- * keyboard's height below it over `@luke/ui`'s `--ui-viewport-top`,
+ * keyboard's height below it over `@repo/ui`'s `--ui-viewport-top`,
  * `--ui-stage-height`, and `--ui-keyboard-inset`,
  * and the stage, the palette, the dialogs, and the viewers are measured by
  * those. They are written on the document's root rather than the stage,
@@ -43,7 +43,7 @@
  * keyboard's slide away, which WebKit measures only once it has ended.
  */
 
-import { visibleViewport } from "@luke/ui/visible-viewport";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { useLayoutEffect } from "react";
 
 /** How far down the layout viewport the visible part begins, as a phone pans it to a focused field. */

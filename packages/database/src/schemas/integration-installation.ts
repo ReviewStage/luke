@@ -1,4 +1,4 @@
-import type { TriggerProvider } from "@luke/features/trigger-catalog";
+import type { TriggerProvider } from "@repo/features/trigger-catalog";
 import { index, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import type { IntegrationInstallationStatus } from "../integration-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
@@ -7,7 +7,7 @@ import { organization, user } from "./auth.js";
 /**
  * integration-installation.ts -- an integration's own app installed on a workspace, whose deliveries fire that workspace's automations.
  *
- * A provider that fires automations (`@luke/features/trigger-catalog`)
+ * A provider that fires automations (`@repo/features/trigger-catalog`)
  * delivers its events through an app of ours that an owner or admin
  * installs on their account at the provider: a Sentry organization installs
  * our Sentry integration. Each installation stands for exactly one

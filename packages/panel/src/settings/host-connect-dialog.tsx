@@ -2,12 +2,12 @@ import { useAtom, useAtomSet } from "@effect/atom-react";
 import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingFailed,
-} from "@luke/features/host-pairing-view";
-import { type HostPairingAnswer, shownHostUserCode } from "@luke/features/host-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { momentText } from "@luke/features/time-format";
-import { readFailedWords, readingWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/host-pairing-view";
+import { type HostPairingAnswer, shownHostUserCode } from "@repo/features/host-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { momentText } from "@repo/features/time-format";
+import { readFailedWords, readingWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   ANNOUNCE,
   BUTTON_VARIANT,
@@ -23,7 +23,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";

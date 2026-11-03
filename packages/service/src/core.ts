@@ -5,11 +5,11 @@
  * outside the package imports it, and a consumer names the defining package.
  */
 
-export * from "@luke/features";
-export * from "@luke/features/analytics";
+export * from "@repo/features";
+export * from "@repo/features/analytics";
 // The task vocabulary stands behind doors of its own, which the barrel
 // above re-exports nothing of.
-export * from "@luke/features/task-wire";
+export * from "@repo/features/task-wire";
 // The brain is named rather than starred: what is listed is what the server
 // imports through this door and nothing more.
 export {
@@ -37,8 +37,8 @@ export {
   UI_PART_TYPE,
   userMessage,
   userMetadataOf,
-} from "@luke/features/turn-run";
-export { wireValidatedTool } from "@luke/features/turn-run/tool-set";
-export * from "@luke/runtime/vocabulary";
-export * from "@luke/wire";
-export * from "@luke/wire/ui-messages";
+} from "@repo/features/turn-run";
+export { wireValidatedTool } from "@repo/features/turn-run/tool-set";
+export * from "@repo/runtime/vocabulary";
+export * from "@repo/wire";
+export * from "@repo/wire/ui-messages";

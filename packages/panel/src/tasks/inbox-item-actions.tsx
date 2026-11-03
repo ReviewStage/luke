@@ -1,6 +1,6 @@
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
-import { GLYPH } from "@luke/ui/icons";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
+import { GLYPH } from "@repo/ui/icons";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { closeAction } from "./inbox-close.js";

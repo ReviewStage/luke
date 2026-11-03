@@ -1,4 +1,4 @@
-import { BUTTON_VARIANT, Button, MoreButton, PAGE_HEADER_END, PageHeader } from "@luke/ui";
+import { BUTTON_VARIANT, Button, MoreButton, PAGE_HEADER_END, PageHeader } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

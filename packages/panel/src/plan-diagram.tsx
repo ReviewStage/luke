@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   Button,
   CARD_CORNER,
@@ -9,8 +9,8 @@ import {
   IMAGE_OPENING,
   PictureTile,
   PortalFence,
-} from "@luke/ui";
-import { DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
+} from "@repo/ui";
+import { DIAGRAM_DRAWING } from "@repo/ui/diagram-contract";
 import { type ReactNode, useContext, useState } from "react";
 import { DIAGRAM_REFUSED_LINE } from "./bundle-loader.js";
 import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";

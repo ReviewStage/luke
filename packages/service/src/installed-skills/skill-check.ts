@@ -20,18 +20,18 @@ import {
   INSTALLED_SKILL_PROBLEM,
   type InstalledSkillFilesRefusal,
   type InstalledSkillProblem,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_BOUNDS,
   INSTALLED_SKILL_MAIN_FILE,
-} from "@luke/features/installed-skill-wire";
+} from "@repo/features/installed-skill-wire";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
   SKILL_KEY,
   SKILL_NAME_RULE,
-} from "@luke/features/skill-file";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+} from "@repo/features/skill-file";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 
 /** The repository check's provider-credential shapes, kept in step with `scripts/repository-checks.sh`. */
 const CREDENTIAL_SHAPES: readonly RegExp[] = [

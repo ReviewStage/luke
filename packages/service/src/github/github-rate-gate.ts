@@ -29,7 +29,7 @@
  * per permission set, and a hold on one token would leave its siblings
  * asking; a member's own token is its own identity, as GitHub limits it
  * apart. Note too that a hold is written to the database as well as kept
- * here (`@luke/database/models/github-rate-holds`), so one instance's
+ * here (`@repo/database/models/github-rate-holds`), so one instance's
  * refusal holds every instance, rather than each finding the limit with a
  * request of its own. An instance reads an identity's shared hold at most
  * once per `GATE.SHARED_READ_FOR`, so it may still send a request in the
@@ -42,13 +42,13 @@
  */
 
 import { createHash } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type GitHubRateHold,
   holdGitHubIdentity,
   liftGitHubRateHold,
   readGitHubRateHold,
-} from "@luke/database/models/github-rate-holds";
+} from "@repo/database/models/github-rate-holds";
 import { Clock, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";

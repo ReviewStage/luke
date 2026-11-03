@@ -3,7 +3,7 @@ import { chmod, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { describe, expect, it } from "vitest";
 import {
   beginAuthorization,

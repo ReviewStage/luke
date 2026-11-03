@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { WireRecord } from "@luke/wire";
+import type { WireRecord } from "@repo/wire";
 import { test } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { CODER_TOOL, opensSandbox } from "./tool-set.js";

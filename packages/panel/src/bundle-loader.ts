@@ -1,5 +1,5 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import type { DiagramModule } from "@luke/ui/diagram-contract";
+import type { DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type * as Atom from "effect/reactivity/Atom";

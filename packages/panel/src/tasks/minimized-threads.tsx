@@ -1,6 +1,6 @@
-import type { ReviewThread } from "@luke/features/agent-wire";
-import { DISCLOSURE_SUMMARY, DisclosureSummary, Tooltip } from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
+import type { ReviewThread } from "@repo/features/agent-wire";
+import { DISCLOSURE_SUMMARY, DisclosureSummary, Tooltip } from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
 import { CircleCheckIcon, CircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";

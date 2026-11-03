@@ -7,8 +7,8 @@ import {
   type TaskSectionIcon,
   type TaskSectionIconColor,
   taskSectionIconSchema,
-} from "@luke/features/task-section-wire";
-import { noMatchWords, readingWords } from "@luke/features/words";
+} from "@repo/features/task-section-wire";
+import { noMatchWords, readingWords } from "@repo/features/words";
 import {
   BUTTON_SIZE,
   type ButtonSize,
@@ -28,8 +28,8 @@ import {
   Text,
   TextButton,
   VisuallyHidden,
-} from "@luke/ui";
-import { SmilePlusIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { SmilePlusIcon } from "@repo/ui/icons";
 import {
   emojiGroups,
   findEmoji,
@@ -39,7 +39,7 @@ import {
   glyphLabel,
   isSuggestedGlyph,
   recentIcons,
-} from "@luke/ui/section-icon-model";
+} from "@repo/ui/section-icon-model";
 import { Effect, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";

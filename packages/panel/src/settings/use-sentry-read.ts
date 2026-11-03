@@ -2,8 +2,8 @@
  * use-sentry-read.ts -- a workspace's Sentry as the service holds it now, for the rows that offer our Sentry integration.
  */
 
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 

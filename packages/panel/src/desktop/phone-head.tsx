@@ -1,4 +1,4 @@
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   BackButton,
   dropBelow,
@@ -14,7 +14,7 @@ import {
   type ToolbarProps,
   Tooltip,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useEffect, useRef, useState } from "react";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./action-menu.js";

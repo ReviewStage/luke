@@ -46,7 +46,7 @@ export const noFollowOutsideHostReadRule = defineRule({
     },
     messages: {
       newFollow:
-        "`{{what}}` reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) over the app-state slice the host fills for the read (`@luke/host`'s `live-collection.ts`).",
+        "`{{what}}` reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) over the app-state slice the host fills for the read (`@repo/host`'s `live-collection.ts`).",
       staleListed:
         "This file is named in `tools/anti-slop/follows-unmigrated.json` but reads nothing outside `useHostRead`. Delete its row.",
     },

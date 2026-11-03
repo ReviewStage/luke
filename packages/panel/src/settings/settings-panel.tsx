@@ -1,16 +1,16 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { SIGNED_OUT_WORDS } from "@luke/features/words";
-import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { SIGNED_OUT_WORDS } from "@repo/features/words";
+import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@repo/settings";
 import type {
   MicrophoneControl,
   NotificationsControl,
   UpdateControl,
-} from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import type { AppSettingsView } from "@luke/settings/wire";
-import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-import type { ActionResult } from "@luke/wire";
+} from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import type { AppSettingsView } from "@repo/settings/wire";
+import { TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
+import type { ActionResult } from "@repo/wire";
 import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
 import { AgentsPage } from "./agents-page.js";

@@ -1,4 +1,4 @@
-import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import { PULL_REQUEST_WRITE_BOUNDS } from "@repo/features/pull-request-write-wire";
 import {
   ANNOUNCE,
   BLOCK_MENU_GROUP,
@@ -6,9 +6,9 @@ import {
   ComposerFrame,
   IconButton,
   Tooltip,
-} from "@luke/ui";
-import { FileDiffIcon } from "@luke/ui/icons";
-import { markdownClass } from "@luke/ui/markdown-class";
+} from "@repo/ui";
+import { FileDiffIcon } from "@repo/ui/icons";
+import { markdownClass } from "@repo/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { enterSends } from "../enter-sends.js";
 import {

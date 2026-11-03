@@ -26,7 +26,7 @@ export const taskPin = pgTable(
     taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
-    // Where the pin stands in the sidebar's Pinned section once it has been dragged, a fractional index (`@luke/features/pin-order`); null stands it by `pinnedAt`.
+    // Where the pin stands in the sidebar's Pinned section once it has been dragged, a fractional index (`@repo/features/pin-order`); null stands it by `pinnedAt`.
     position: text("position"),
     pinnedAt: timestamptz("pinned_at").notNull(),
   },

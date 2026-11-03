@@ -1,15 +1,15 @@
 import path from "node:path";
-import type { AppLinkInbox } from "@luke/features/app-links";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { type RunMode, runModeFor } from "@luke/host";
+import type { AppLinkInbox } from "@repo/features/app-links";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { type RunMode, runModeFor } from "@repo/host";
 import {
   buildCarriesDeveloperIdSigning,
   resolveAppName,
   resolveInstance,
-} from "@luke/host/app-identity";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { buildCommit } from "@luke/host/build-commit";
-import { type SentryEnvironment, sentryEnvironment } from "@luke/host/sentry-environment";
+} from "@repo/host/app-identity";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { buildCommit } from "@repo/host/build-commit";
+import { type SentryEnvironment, sentryEnvironment } from "@repo/host/sentry-environment";
 import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
 

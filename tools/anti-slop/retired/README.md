@@ -7,7 +7,7 @@ so guard PRs that land together never touch the same file.
 
 ```json
 {
-  "instead": "Draw the bar with Toolbar from @luke/ui.",
+  "instead": "Draw the bar with Toolbar from @repo/ui.",
   "classes": [{ "class": "desktop-toolbar*", "allow": ["packages/ui/src/components/toolbar/"] }],
   "glyphs": [{ "glyph": "ArrowLeft", "allow": ["packages/ui/src/components/back-button/"] }],
   "patterns": [
@@ -22,7 +22,7 @@ so guard PRs that land together never touch the same file.
   `className` or kept in a constant (the oxlint rule), and in a stylesheet's
   selectors (the style guard, `style-guard.ts`). A trailing `*` matches every
   class it starts.
-- A **glyph** is a name imported from `@luke/ui/icons`, Lucide's aliases alike
+- A **glyph** is a name imported from `@repo/ui/icons`, Lucide's aliases alike
   (`ArrowLeft`, `ArrowLeftIcon`, `LucideArrowLeft`), or a concept read off the
   registry (`GLYPH.BACK`).
 - A **pattern** is a JSX prop by name, or an import of a module or its

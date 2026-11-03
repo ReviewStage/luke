@@ -6,7 +6,7 @@ import {
   TASK_GROUPING,
   type TaskGrouping,
   type TaskListView,
-} from "@luke/ui/task-list-model";
+} from "@repo/ui/task-list-model";
 import { Schema, SchemaTransformation } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { keptKey, useKept } from "../use-kept.js";

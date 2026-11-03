@@ -5,7 +5,7 @@
  * only a panel draws a task's agents, so every one refuses the takeover and
  * any other window, in its own sentence. What the service answers
  * comes back as the panel's own answer; on its way it is noted by the
- * notices (`@luke/host/agent-notices`), which hold where each agent stands
+ * notices (`@repo/host/agent-notices`), which hold where each agent stands
  * so an end the panel is not looking at is still announced, and which
  * agent's tab and task's Inbox the panel shows, so an item it is
  * looking at is not; and an agent's own pull request, read, is noted as
@@ -61,13 +61,13 @@ import {
   type HostDoneAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import type {
   HostPairingApproveView,
   HostPairingDenyView,
   HostPairingView,
-} from "@luke/features/host-pairing-view";
-import type { ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/host-pairing-view";
+import type { ModelChoice } from "@repo/features/models-wire";
 import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";

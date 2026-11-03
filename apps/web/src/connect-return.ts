@@ -19,10 +19,10 @@
  * same words, Open and the app's name.
  */
 
-import { LANDING_CLOSE_TAB, LANDING_TONE, type LandingWords } from "@luke/features/landing-outcome";
-import type { LinkPlatform } from "@luke/features/link-open";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { AuthAction } from "@luke/ui";
+import { LANDING_CLOSE_TAB, LANDING_TONE, type LandingWords } from "@repo/features/landing-outcome";
+import type { LinkPlatform } from "@repo/features/link-open";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { AuthAction } from "@repo/ui";
 import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { PANEL_PATH } from "./app/web-address";

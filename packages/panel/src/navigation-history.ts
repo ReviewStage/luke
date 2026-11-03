@@ -11,7 +11,7 @@
  * stands. It lives as long as the window does, the way a browser tab's does.
  *
  * The history is held by the adapter the window's root installs
- * (`@luke/ui/history-adapter`), each place as the state a step back reopens
+ * (`@repo/ui/history-adapter`), each place as the state a step back reopens
  * it from, the way a browser's `history.state` stands beside its URL, and
  * the path of its app link as its address: the link Copy link names for
  * the step (`links-at-hand.ts`), so the two never disagree, or `/app` for a
@@ -76,16 +76,16 @@
  * as that step is (`WindowHistory`'s `away` and `onLeave`).
  */
 
-import { PRODUCT_SURFACE } from "@luke/features/analytics";
-import { linkOf, type ReadLink } from "@luke/features/link-grammar";
-import type { SettingsView } from "@luke/settings/settings-views";
+import { PRODUCT_SURFACE } from "@repo/features/analytics";
+import { linkOf, type ReadLink } from "@repo/features/link-grammar";
+import type { SettingsView } from "@repo/settings/settings-views";
 import {
   HISTORY_LIMIT,
   type HistoryAdapter,
   type HistoryEntry,
   type HistorySnapshot,
   memoryHistory,
-} from "@luke/ui/history-adapter";
+} from "@repo/ui/history-adapter";
 import {
   isAgentTab,
   isChangesTab,
@@ -99,8 +99,8 @@ import {
   type StripTab,
   sameTab,
   tabKey,
-} from "@luke/ui/tab-strip-model";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/ui/tab-strip-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import {
   useCallback,
   useEffect,
