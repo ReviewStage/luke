@@ -23,6 +23,7 @@ import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view
 import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  cn,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
@@ -408,7 +409,9 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
  * comments, told the frame has loaded.
  * Note that the frame stands from the start, its ring over it until `onLoad` of the `src` it
  * shows, because the page reads only as the frame loads it, a version stepped to included, and a
- * frame left blank says nothing of that.
+ * frame left blank says nothing of that. Until then the frame is hidden, as a page's thumb is,
+ * because the blank document it loads through is light only, and a frame worn by a dark panel
+ * paints it on an opaque white canvas: hidden, the ring stands on the panel's own ground.
  */
 function PageFrame({
   title,
@@ -429,11 +432,12 @@ function PageFrame({
   const found = useFrameFind(frame);
   useFrameLinks(frame);
   useFrameFocus(frame);
+  const loaded = framedSrc === src;
   return (
     <div ref={room} className="page-view-room relative flex min-h-0 flex-1">
       <iframe
         ref={frame}
-        className="block min-h-0 w-full flex-1 border-0"
+        className={cn("block min-h-0 w-full flex-1 border-0", !loaded && "invisible")}
         title={title}
         src={src}
         sandbox={PAGE_SANDBOX}
@@ -445,7 +449,7 @@ function PageFrame({
           onLoaded?.();
         }}
       />
-      {framedSrc === src ? null : (
+      {loaded ? null : (
         <div className="pointer-events-none absolute inset-0 flex">
           <SpinnerRegion delay label={readingWords("the page")} />
         </div>
