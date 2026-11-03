@@ -1,11 +1,13 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
+  BUTTON_SHAPE,
   BUTTON_VARIANT,
   ButtonLink,
   IconButtonLink,
   MARK_PROVIDER,
   ProductMark,
   ProviderMark,
+  SiteBarPages,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_LINK_CURRENT,
@@ -64,11 +66,13 @@ function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurren
 
 /**
  * Shared between every page so navigation and branding never drift apart:
- * the wordmark, the links, and the way to sign in that the site's bar holds,
- * handed to PublicPage's `banner` or the landing's `bar`; `current` marks
- * where the reader is. Every link stands the
- * web's 44px tall inside the 64px banner, so its hit target is the contract's
- * without moving a word.
+ * the wordmark, then at the bar's end the site's pages, a hairline, and the
+ * actions that leave the page (the repository, signing in), handed to
+ * PublicPage's `banner` or the landing's `bar`; `current` marks where the
+ * reader is. The call (`SiteBarDownload`) ends the bar after them, as every
+ * devtool's bar ends on its call with signing in just before it. Every link
+ * stands the web's 44px tall inside the 64px banner, so its hit target is the
+ * contract's without moving a word.
  */
 export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
@@ -85,27 +89,29 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
           {PRODUCT_NAME}
         </span>
       </TextLink>
-      <div className="flex items-center gap-4">
-        <TextLink
-          href={SITE_PAGE.ABOUT}
-          variant={TEXT_VARIANT.LABEL}
-          height={TEXT_LINK_HEIGHT.CONTROL}
-          current={currentOf(SITE_PAGE.ABOUT, current)}
-        >
-          About
-        </TextLink>
-        <TextLink
-          href={SITE_PAGE.CHANGELOG}
-          variant={TEXT_VARIANT.LABEL}
-          height={TEXT_LINK_HEIGHT.CONTROL}
-          current={currentOf(SITE_PAGE.CHANGELOG, current)}
-        >
-          Changelog
-        </TextLink>
-        {/* The negative margins keep the mark where it stood beside its
-              44px square: 22px from the last link, and optically aligned with
-              the column's edge rather than inset from it. */}
-        <span className="-mr-3.5 -ml-2 flex">
+      <div className="flex items-center gap-5">
+        <SiteBarPages>
+          <TextLink
+            href={SITE_PAGE.ABOUT}
+            variant={TEXT_VARIANT.LABEL}
+            height={TEXT_LINK_HEIGHT.CONTROL}
+            current={currentOf(SITE_PAGE.ABOUT, current)}
+          >
+            About
+          </TextLink>
+          <TextLink
+            href={SITE_PAGE.CHANGELOG}
+            variant={TEXT_VARIANT.LABEL}
+            height={TEXT_LINK_HEIGHT.CONTROL}
+            current={currentOf(SITE_PAGE.CHANGELOG, current)}
+          >
+            Changelog
+          </TextLink>
+        </SiteBarPages>
+        {/* The negative margins take back the room round the mark inside
+              its 44px square, the same on either side, so the mark stands as
+              far from its neighbours as one word stands from the next. */}
+        <span className="-mx-3 flex">
           <IconButtonLink
             href={REPOSITORY_URL}
             icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
@@ -121,8 +127,8 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
 }
 
 /**
- * The download, the call at the end of every page's bar and the landing's
- * one call, counted wherever it is pressed.
+ * The download, the landing's one call in its hero and its close, counted
+ * wherever it is pressed.
  */
 export function SiteDownload(): React.JSX.Element {
   return (
@@ -132,6 +138,26 @@ export function SiteDownload(): React.JSX.Element {
       onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
     >
       Download for macOS
+    </ButtonLink>
+  );
+}
+
+/**
+ * The download at the end of every page's bar: a pill, so it nests in the
+ * floating bar's round end, and named in one word, as the bar has room for,
+ * since the page under it says which Mac it is for; its accessible name says
+ * it whole. Counted as the hero's is.
+ */
+export function SiteBarDownload(): React.JSX.Element {
+  return (
+    <ButtonLink
+      variant={BUTTON_VARIANT.PRIMARY}
+      shape={BUTTON_SHAPE.ROUND}
+      href={DMG_URL}
+      label="Download for macOS"
+      onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
+    >
+      Download
     </ButtonLink>
   );
 }

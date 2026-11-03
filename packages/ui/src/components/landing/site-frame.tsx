@@ -47,6 +47,15 @@ export function SiteRule(): React.JSX.Element {
   );
 }
 
+/**
+ * The bar's links to the site's own pages, set apart from the actions after
+ * them by a hairline; a page narrower than a phone's leaves them to the foot,
+ * which links them too.
+ */
+export function SiteBarPages({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="ui-landing-bar-pages">{children}</span>;
+}
+
 /** The site's frame: `bar` and its `barCall` over the page's `children`, over the `footer` and the wordmark. */
 export function SiteFrame({
   bar,

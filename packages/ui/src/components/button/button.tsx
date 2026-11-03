@@ -645,6 +645,7 @@ export function Button({
 export function ButtonLink({
   href,
   variant,
+  shape,
   icon,
   label,
   onClick,
@@ -653,6 +654,8 @@ export function ButtonLink({
 }: LinkHintProps & {
   href: string;
   variant?: ButtonVariant;
+  /** Its outline: the control's corner, or a pill. */
+  shape?: ButtonShape;
   /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
@@ -663,9 +666,7 @@ export function ButtonLink({
 }): React.JSX.Element {
   return (
     <a
-      className={linkClasses(
-        buttonLook({ variant, size: undefined, shape: undefined, iconOnly: false }),
-      )}
+      className={linkClasses(buttonLook({ variant, size: undefined, shape, iconOnly: false }))}
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       {...hint}
       href={href}

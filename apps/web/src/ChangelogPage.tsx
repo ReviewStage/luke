@@ -31,7 +31,7 @@ import {
 import {
   REPOSITORY_URL,
   SITE_PAGE,
-  SiteDownload,
+  SiteBarDownload,
   SiteFooterLinks,
   SiteNavigation,
 } from "./SiteChrome";
@@ -175,7 +175,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
   return (
     <PublicPage
       banner={<SiteNavigation current={place} />}
-      bannerCall={<SiteDownload />}
+      bannerCall={<SiteBarDownload />}
       footer={<SiteFooterLinks current={place} />}
       back={page ? undefined : { href: CHANGELOG_PATH, label: "Changelog" }}
       title={page ? "Changelog" : `${PRODUCT_NAME} ${view.release.version}`}
