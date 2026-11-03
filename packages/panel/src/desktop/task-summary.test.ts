@@ -10,16 +10,12 @@ import {
 } from "@repo/features/agent-wire";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
-import { TASK_STATUS, type Task } from "@repo/features/task-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { ChipCards } from "../tasks/chip-cards.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -28,7 +24,6 @@ import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import type { HeldTranscripts } from "./strip-tabs.js";
-import { taskCardOf } from "./task-card.js";
 import {
   SummaryButton,
   type SummaryLayout,
@@ -230,63 +225,6 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId, pageId: funnel.id, version: 1 }),
   );
-});
-
-test("the plan's row hangs the task's card, as the Plan tab does", () => {
-  const task: Task = {
-    id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-    workspaceId: "workspace-personal",
-    name: "Teammate invitations",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    document: { body: "", assumptions: [] },
-  };
-  const base = tasksControl();
-  const tasks = tasksControl({
-    page: TASKS_PAGE.DOCUMENT,
-    tasks: [{ ...task, status: TASK_STATUS.IN_PROGRESS }],
-    activeTaskId: task.id,
-    region: { kind: DOCUMENT_REGION.READY, task },
-    sidePanel: { ...base.sidePanel, used: [SIDE_PANEL_TAB.PLAN] },
-  });
-  // The window's tasks' cards, as the shell hands them to everything it holds.
-  const chipCards = {
-    taskCard: (taskId: string, now: number) => {
-      const listed = tasks.tasks.find((each) => each.id === taskId);
-      return listed === undefined ? undefined : taskCardOf(tasks, listed, now);
-    },
-  };
-  const page = document.createElement("div");
-  document.body.append(page);
-  root = createRoot(page);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          ChipCards,
-          { value: chipCards },
-          createElement(TaskSummary, {
-            tasks,
-            layout: PINNED,
-            cardId: "summary-card",
-            inbox: { open: [], waiting: [], settled: [] },
-            held: HELD,
-            onOpenAgent: () => undefined,
-          }),
-        ),
-      ),
-    ),
-  );
-  const row = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.includes(task.name),
-  );
-  assert.ok(row, "the plan has a row");
-  hover(row);
-  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
-  assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, task.name);
 });
 
 test("the agent a pull request row's card names opens through the plan's door, which hands its column the keys", () => {

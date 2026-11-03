@@ -190,7 +190,6 @@ function mount(
                       `choose ${typeof chosen === "string" ? chosen : JSON.stringify(chosen)}`,
                     ),
                   onToggle: () => told.push("toggle"),
-                  onShowList: () => told.push("list"),
                   onClose: (closed) => told.push(`close ${String(closed)}`),
                 },
               }),

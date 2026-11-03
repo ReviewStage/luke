@@ -1214,9 +1214,6 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
   return entries.filter((entry) => listed.has(entry.taskId));
 }
 
-/** What the open task holds of each fixed tab's kind: its plan always. */
-const TASK_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.PLAN]: true };
-
 /** The Inbox's choice of the item a link names: under its task, its agent, or by its id alone. */
 function inboxChoiceOf(place: InboxItemPlace): InboxChoice {
   if ("planId" in place) return { taskId: place.planId, itemId: place.itemId };
@@ -1608,7 +1605,7 @@ export function useTasksTab(input: {
           bare: true,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: TASK_HOLDS }
+        ? { id: viewed.activeTaskId, holds: NO_HOLDS }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
@@ -3439,9 +3436,9 @@ export function useTasksTab(input: {
   // the panel is never shown empty beside the summary that lists the same:
   // the tab last closed on the plan this launch, where ⇧⌘T would open it,
   // else the kind last closed on it, kept across launches, else none, the
-  // panel shown empty, offering what its "+" does. An
+  // toggle dropping what the "+" offers (`useSidePanel`'s `onToggle`). An
   // agent's page, and the Inbox beside an item, have no kind to fall back on,
-  // so their panel shows empty, offering what its "+" does.
+  // so their toggle drops the same.
   const toggleSidePanel = () => {
     const task = tasks.activeTaskId;
     if (

@@ -29,7 +29,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * plan-agents.tsx -- the open task's agents at the head of its plan, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
  *
  * The agents stand under a group head, Agents and how many, which folds
- * them, folded where the page says nothing, the same shape every group of
+ * them, folded where the page asks, the same shape every group of
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
  * task's agent as its "+" row and the summary draw it (`agentEntries`): its
  * tab's glyph, which gives way to the working mark while it works, its
@@ -168,7 +168,7 @@ export function PlanAgents({
   held,
   tab,
   runsOn,
-  folded = true,
+  folded,
   onOpenAgent,
   onOpenPullRequest,
   phone,
@@ -180,8 +180,8 @@ export function PlanAgents({
   tab: MainTabsControl["tab"];
   /** Where the task's agents run, which every row says. */
   runsOn: TaskRunsOn | undefined;
-  /** Whether the group starts folded; folded unless the page says otherwise. */
-  folded?: boolean | undefined;
+  /** Whether the group starts folded. */
+  folded: boolean;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
   /** A phone's additions; none elsewhere. */

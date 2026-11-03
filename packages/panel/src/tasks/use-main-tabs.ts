@@ -90,7 +90,7 @@ export const MAIN_TAB = {
 } as const;
 
 /** The task's Overview tab. */
-export type OverviewTab = typeof MAIN_TAB.OVERVIEW;
+type OverviewTab = typeof MAIN_TAB.OVERVIEW;
 
 /** Whether a tab is the task's Overview. */
 export function isOverviewTab(tab: StripTab | undefined): tab is OverviewTab {

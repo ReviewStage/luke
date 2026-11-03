@@ -34,10 +34,7 @@ import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { failureFactsSchema } from "./failure-facts.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import {
-  githubPullRequestNumberSchema,
-  githubRepositoryFullNameSchema,
-} from "./github-repositories-wire.js";
+import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   devicePresenceAnswerSchema,
@@ -73,7 +70,6 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { workspaceIdSchema } from "./task-wire.js";
 import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
@@ -540,19 +536,6 @@ export const agentPullRequestReadParamsSchema = EffectSchema.Struct({
 
 export type AgentPullRequestReadParams = typeof agentPullRequestReadParamsSchema.Type;
 
-/**
- * One pull request of a workspace's repository, as the window names it with
- * no agent: the workspace whose installation reaches the repository, the
- * repository's full name, and the number, as a link names it.
- */
-export const repositoryPullRequestParamsSchema = EffectSchema.Struct({
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-  number: githubPullRequestNumberSchema,
-});
-
-export type RepositoryPullRequestParams = typeof repositoryPullRequestParamsSchema.Type;
-
 /** What the agent published, as the window hears it: its branch and pull request as GitHub holds them, or why there is no answer. */
 export const agentPullRequestAnswerViewSchema = EffectSchema.Union([
   agentPullRequestAnswerSchema,
@@ -616,14 +599,6 @@ export const agentPullRequestActionParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentPullRequestActionParams = typeof agentPullRequestActionParamsSchema.Type;
-
-/** One change to a pull request named by its repository and number, as the window asks it made: the pull request, and the change. */
-export const repositoryPullRequestActionParamsSchema = EffectSchema.Struct({
-  ...repositoryPullRequestParamsSchema.fields,
-  request: pullRequestActionRequestSchema,
-});
-
-export type RepositoryPullRequestActionParams = typeof repositoryPullRequestActionParamsSchema.Type;
 
 /** How GitHub took a change to an agent's pull request, as the window hears it: made, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
 export const agentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
