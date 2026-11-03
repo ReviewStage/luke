@@ -100,12 +100,14 @@ function plainTile(iconDirectory: string): NativeImage {
  * from a build draws nothing, leaving the bundle icon (or the stock one) in
  * place rather than an empty tile. A development build's band is drawn over
  * the plain tile once it has painted, so a band that fails, or never paints,
- * leaves the plain tile standing rather than Electron's own.
+ * leaves the plain tile standing rather than Electron's own, and one a later
+ * draw overtook (`latest`) sets nothing.
  */
 async function drawDockIcon(
   iconDirectory: string,
   badge: DevBuildBadge | undefined,
   report: (message: string) => void,
+  latest: () => boolean,
 ): Promise<void> {
   if (!app.dock) return;
   const tile = plainTile(iconDirectory);
@@ -114,7 +116,8 @@ async function drawDockIcon(
   if (badge === undefined) return;
   try {
     const banded = await paintOffscreen(bandedTilePage(tile, badge));
-    app.dock.setIcon(banded);
+    // Note that a draw a later theme change overtook keeps its band to itself.
+    if (latest()) app.dock.setIcon(banded);
   } catch (error) {
     report(
       `the Dock band could not be drawn: ${error instanceof Error ? error.message : String(error)}`,
@@ -133,8 +136,11 @@ export function followDockIcon(
   badge: DevBuildBadge | undefined,
   report: (message: string) => void,
 ): void {
+  let draws = 0;
   const draw = (): void => {
-    void drawDockIcon(iconDirectory, badge, report);
+    draws += 1;
+    const mine = draws;
+    void drawDockIcon(iconDirectory, badge, report, () => mine === draws);
   };
   draw();
   nativeTheme.on("updated", draw);
