@@ -84,6 +84,7 @@ import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -2089,41 +2090,65 @@ function sized(
   });
 }
 
-/** A Pull request tab on its Conversation, the header and the conversation's scroller given the boxes a phone lays them out in. */
+/** A Pull request tab on a phone's Conversation, the header, its one-line title, and the conversation's scroller given the boxes a phone lays them out in, so the header folds away 160 pixels. */
 async function phoneTab(conversationRuns: number) {
-  const tab = await draw(controlAnswering());
+  const tab = await drawn(
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(Switching, {
+        control: controlAnswering(),
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+      }),
+    ),
+  );
   const header = tab.querySelector(".pull-request-header") ?? assert.fail("the header stands");
+  const line =
+    tab.querySelector(".pull-request-compact") ?? assert.fail("the title's one line stands");
   const conversation =
     tab.querySelector("[aria-label='Pull request conversation']") ??
     assert.fail("the conversation scrolls");
   sized(header, { height: 200 });
+  sized(line, { height: 40 });
   sized(conversation, { height: 400, content: conversationRuns });
+  act(() => relayout());
   return { tab, conversation, folded: () => header.hasAttribute("data-folded") };
 }
 
-test("the header folds once the view under it is scrolled down, not by a sideways scroll, and unfolds back at its top or on another view", async () => {
+/** Lets `box` be scrolled to where a scroll the tab makes asks, at once, as a glide lands. */
+function glides(box: Element): void {
+  Object.defineProperty(box, "scrollTo", {
+    configurable: true,
+    value: ({ top }: ScrollToOptions) => {
+      Object.defineProperty(box, "scrollTop", { configurable: true, value: top });
+      box.dispatchEvent(new Event("scroll"));
+    },
+  });
+}
+
+/** Scrolls `box` to `top` and lets go there, as a finger lifted once the scroll comes to rest. */
+function rest(box: Element, top: number): void {
+  scrollTo(box, top);
+  act(() => {
+    box.dispatchEvent(new Event("scrollend"));
+  });
+}
+
+test("on a phone the header folds away as far as the view under it is scrolled, folded once past its room and back with the finger, and another view follows its own scroll", async () => {
   const { tab, conversation, folded } = await phoneTab(2000);
 
-  scrollTo(conversation, 20);
-  assert.equal(folded(), false, "a nudge folds nothing");
+  scrollTo(conversation, 100);
+  assert.equal(folded(), false, "part-way, the header is still folding away");
+  scrollTo(conversation, 160);
+  assert.equal(folded(), true, "scrolled past its room, the header is folded");
   scrollTo(conversation, 400);
-  assert.equal(folded(), true, "scrolled down, the header folds");
-  scrollTo(conversation, 400);
-  assert.equal(folded(), true, "a sideways scroll, its top where it stood, leaves it folded");
-  scrollTo(conversation, 20);
-  assert.equal(folded(), true, "near the top it stays folded");
-  scrollTo(conversation, 0);
-  assert.equal(folded(), false, "at the top it unfolds");
+  assert.equal(folded(), true);
+  scrollTo(conversation, 159);
+  assert.equal(folded(), false, "scrolled back a pixel, it comes back with the finger");
 
   scrollTo(conversation, 400);
   await choose(tab, "Checks");
-  assert.equal(folded(), false, "another view starts unfolded");
-});
-
-test("a view that runs on past its box by less than the header stands never folds it, since the box the fold grows would land back at its top", async () => {
-  const { conversation, folded } = await phoneTab(400 + 150);
-  scrollTo(conversation, 120);
-  assert.equal(folded(), false);
+  assert.equal(folded(), false, "another view, at its top, shows the header whole");
 });
 
 test("a box scrolled inside the view, a comment's field, folds nothing; only the view's own scroller does", async () => {
@@ -2134,6 +2159,22 @@ test("a box scrolled inside the view, a comment's field, folds nothing; only the
   assert.equal(folded(), false, "the field's own scroll leaves the header whole");
   scrollTo(conversation, 300);
   assert.equal(folded(), true);
+});
+
+test("a scroll left resting with the header part-way folded glides on to whichever end is nearer", async () => {
+  const { conversation, folded } = await phoneTab(2000);
+  glides(conversation);
+  rest(conversation, 120);
+  assert.equal(folded(), true, "past half its room, it glides on until folded");
+  rest(conversation, 50);
+  assert.equal(conversation.scrollTop, 0, "short of half, it glides back to the top");
+});
+
+test("a scroll left resting at the end of a view too short to fold the header whole stays at its end", async () => {
+  const { conversation } = await phoneTab(400 + 100);
+  glides(conversation);
+  rest(conversation, 100);
+  assert.equal(conversation.scrollTop, 100);
 });
 
 test("an agent with no pull request yet says so, and the toolbar's ⋯ offers nothing for one, though what it published is still held", async () => {

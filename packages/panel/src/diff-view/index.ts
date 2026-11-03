@@ -787,7 +787,11 @@ function listOptions(
       diffHeaderHeight: LIST_HEADER_HEIGHT,
       hunkSeparatorHeight: LIST_GAP_HEIGHT,
     },
-    layout: { paddingTop: LIST_FILE_GAP, paddingBottom: LIST_FOOT_ROOM, gap: LIST_FILE_GAP },
+    layout: {
+      paddingTop: LIST_FILE_GAP + (latest().topRoom ?? 0),
+      paddingBottom: LIST_FOOT_ROOM,
+      gap: LIST_FILE_GAP,
+    },
     renderCustomHeader: (
       _drawn: FileDiffMetadata | FileContents,
       context: { item: { id: string } },
@@ -1101,7 +1105,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       if (
         !sameLook(next.look, was.look) ||
         (next.onComment === undefined) !== (was.onComment === undefined) ||
-        (next.readTexts === undefined) !== (was.readTexts === undefined)
+        (next.readTexts === undefined) !== (was.readTexts === undefined) ||
+        next.topRoom !== was.topRoom
       )
         view.setOptions(optionsFor(next));
       view.setItems(itemsOf(next.files));

@@ -128,6 +128,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -181,6 +182,7 @@ import {
   filteredConversation,
   useConversationFilters,
 } from "./conversation-filters.js";
+import { DiffListTopRoomContext } from "./diff-list.js";
 import { PierreDiff, useDiffLook } from "./file-diff.js";
 import type { TreeShown } from "./file-view.js";
 import { MergeControl } from "./merge-box.js";
@@ -277,8 +279,8 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  *
  * The header stays put while the tab under it scrolls, and spends as few
  * rows as it can; on a phone, where it would take half the screen, it folds
- * to its title's one line once the tab under it is scrolled, and unfolds at
- * the top again (`useHeaderFold`). Its first row is the title's: the pill wearing the pull
+ * away over the view as the view scrolls, at the finger's pace, to its
+ * title's one line, and back at the top again (`useHeaderFold`). Its first row is the title's: the pill wearing the pull
  * request's mark and the word for where it stands, its title and number
  * (⌘-click opens it on GitHub), the title first in the markup so a screen
  * reader names it before the pill drawn ahead of it, and at the row's end, while it is open or a
@@ -2812,18 +2814,13 @@ interface AgentPullRequestTabProps {
 }
 
 /**
- * How far the view shown is scrolled before the header folds, in CSS
- * pixels, and how near its top it unfolds again: apart, so a scroll resting
- * on the line does not fold and unfold it in turn.
- */
-const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
-
-/**
  * The views' own scrollers, whose scroll alone folds the header: the
- * Checks' page column, the Conversation's scroller, and the diff list's.
+ * Checks' page, its body where a narrow page scrolls its columns as one and
+ * its main column where a roomy one scrolls that alone, the Conversation's
+ * scroller, and the diff list's.
  */
 const VIEW_SCROLLER =
-  ".ui-detail-page-main, .pull-request-view > .ui-scroll-area, .diff-list > .ui-scroll-area";
+  ".ui-detail-page-body, .ui-detail-page-main, .pull-request-view > .ui-scroll-area, .diff-list > .ui-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at
@@ -2841,50 +2838,167 @@ function viewScroller(box: Element, root: Element): boolean {
   );
 }
 
-/** Whether the header is folded, the box it stands in, and what the tab's root hears its scrolls by. */
-interface HeaderFold {
-  readonly folded: boolean;
-  readonly header: React.RefObject<HTMLElement | null>;
-  readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
+/** The shown view's own scroller in the tab at `root`, where one is drawn. */
+function shownScroller(root: Element): Element | undefined {
+  return [...root.querySelectorAll(VIEW_SCROLLER)].find((box) => viewScroller(box, root));
 }
 
 /**
- * Whether the header is folded to its title's one line, as the shown view's
- * own scroller is scrolled down, and what the tab's root hears every scroll
- * in it by. A scroll that leaves its box's top where it was is a sideways
- * one, an unwrapped diff's, and is no scroll down. It folds only where the
- * view runs on past its box by more than the header's height, which is more
- * than folding gives back, so the box grown by the fold still stands
- * scrolled rather than back at its top, which would unfold it at once. The
- * view switched to starts unfolded. It is held on every width, and only a
- * narrow room's stylesheet folds it (tasks.css), so the desktop's header
- * stays put.
+ * Whether the view's own scroller stands at its view's top, nothing over it
+ * (a chapter's bar, a notice), so the room the header folds away from can
+ * stand inside it and scroll away with what it holds.
  */
-function useHeaderFold(view: PullRequestView): HeaderFold {
-  const [fold, setFold] = useState<{ readonly view: PullRequestView; readonly folded: boolean }>({
-    view,
-    folded: false,
-  });
+function leadsView(box: Element): boolean {
+  const view = box.closest(".pull-request-view");
+  if (view === null) return false;
+  const inset = Number.parseFloat(getComputedStyle(view).paddingTop) || 0;
+  return box.getBoundingClientRect().top - view.getBoundingClientRect().top - inset < 1;
+}
+
+/** How a scroll the tab makes itself gets there: a glide, or at once where motion is held still (`--ui-scroll-glide`). */
+function glideOf(box: Element): ScrollBehavior {
+  return getComputedStyle(box).getPropertyValue("--ui-scroll-glide").trim() === "auto"
+    ? "instant"
+    : "smooth";
+}
+
+/**
+ * The properties the tab's root carries the fold in (tasks.css): the room
+ * the header folds away, how far it has slid, and how far its one-line
+ * title has faded in, from 0 to 1.
+ */
+const FOLD_PROPERTY = {
+  ROOM: "--pull-request-fold-room",
+  SLID: "--pull-request-fold",
+  TITLE: "--pull-request-fold-title",
+} as const;
+
+/** The room the header folds away, in CSS pixels, and whether the shown view's scroller leads its view (`leadsView`). */
+interface FoldShape {
+  readonly room: number;
+  readonly lead: boolean;
+}
+
+/** The shape a header with nothing measured yet folds by: none. */
+const NO_FOLD: FoldShape = { room: 0, lead: false };
+
+/** The shape the header folds by, the boxes it measures, and what the tab's root hears its views' scrolls by. */
+interface HeaderFold {
+  readonly shape: FoldShape;
+  readonly root: React.RefObject<HTMLElement | null>;
+  readonly header: React.RefObject<HTMLElement | null>;
+  readonly compact: React.RefObject<HTMLDivElement | null>;
+  readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
+  readonly onScrollEndCapture: (event: React.UIEvent<HTMLElement>) => void;
+}
+
+/**
+ * A phone's header, folded away over the view as the shown view's own
+ * scroller scrolls, as a phone's large title folds: it slides up by as far
+ * as the view is scrolled, at the finger's own pace, until only its title's
+ * one line is left (`CompactTitle`), and back as the view returns to its
+ * top. The room it folds away is its height less that line's. Where the
+ * view's scroller leads the view, that room stands at the top of what it
+ * scrolls, so the header only ever uncovers what the view holds and never
+ * moves it; where something stands over the scroller, a chapter's bar, the
+ * view gives the room up as the header folds (tasks.css). A scroll left to
+ * rest part-way glides on to whichever end is nearer, unless it rests at
+ * the view's end. The slide is written straight to the tab's root, never
+ * drawn through React, so a scroll redraws nothing; the shape is measured
+ * as the header or the tab is resized, as the tab draws, and as a scroller
+ * drawn since scrolls. Only a phone folds it: elsewhere the header stays put.
+ */
+function useHeaderFold(phone: boolean): HeaderFold {
+  const [shape, setShape] = useState<FoldShape>(NO_FOLD);
+  const root = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
-  const tops = useRef(new WeakMap<Element, number>());
+  const compact = useRef<HTMLDivElement>(null);
+  // The shown view's scroller as last measured, and the room the header folds away.
+  const measured = useRef<Element | undefined>(undefined);
+  const room = useRef(0);
+  const follow = (top: number) => {
+    const whole = room.current;
+    const slid = Math.min(Math.max(top, 0), whole);
+    const line = compact.current?.offsetHeight ?? 0;
+    const title = line === 0 ? 1 : Math.min(Math.max((slid - (whole - line)) / line, 0), 1);
+    root.current?.style.setProperty(FOLD_PROPERTY.SLID, `${slid}px`);
+    root.current?.style.setProperty(FOLD_PROPERTY.TITLE, String(title));
+    header.current?.toggleAttribute("data-folded", whole > 0 && slid >= whole);
+  };
+  const measure = () => {
+    const tab = root.current;
+    const head = header.current;
+    const line = compact.current;
+    if (!phone || tab === null || head === null || line === null) return;
+    const box = shownScroller(tab);
+    const whole = Math.max(0, head.offsetHeight - line.offsetHeight);
+    const lead = box !== undefined && leadsView(box);
+    measured.current = box;
+    room.current = whole;
+    tab.style.setProperty(FOLD_PROPERTY.ROOM, `${whole}px`);
+    setShape((held) => (held.room === whole && held.lead === lead ? held : { room: whole, lead }));
+    follow(box?.scrollTop ?? 0);
+  };
+  const measureNow = useRef(measure);
+  measureNow.current = measure;
+  // Note that the tab is measured each time it draws, because a view's scroller stands only once its read lands.
+  useLayoutEffect(() => measureNow.current());
+  useEffect(() => {
+    const tab = root.current;
+    const head = header.current;
+    if (!phone || tab === null || head === null) return undefined;
+    const sizes = new ResizeObserver(() => measureNow.current());
+    sizes.observe(tab);
+    sizes.observe(head);
+    return () => sizes.disconnect();
+  }, [phone]);
   return {
-    folded: fold.view === view && fold.folded,
+    shape,
+    root,
     header,
+    compact,
     onScrollCapture: (event) => {
       const box = event.target;
-      if (!(box instanceof Element) || !viewScroller(box, event.currentTarget)) return;
+      if (!phone || !(box instanceof Element) || !viewScroller(box, event.currentTarget)) return;
+      if (box === measured.current) follow(box.scrollTop);
+      else measure();
+    },
+    onScrollEndCapture: (event) => {
+      const box = event.target;
+      if (!phone || !(box instanceof Element) || box !== measured.current) return;
       const top = box.scrollTop;
-      const was = tops.current.get(box) ?? 0;
-      tops.current.set(box, top);
-      if (top === was) return;
-      const room = box.scrollHeight - box.clientHeight > (header.current?.offsetHeight ?? 0);
-      setFold((held) => {
-        const folded =
-          held.view === view && held.folded ? top > HEADER_FOLD.BACK : top > HEADER_FOLD.AT && room;
-        return held.view === view && held.folded === folded ? held : { view, folded };
-      });
+      const whole = room.current;
+      const end = box.scrollHeight - box.clientHeight;
+      if (top <= 0 || top >= whole || top >= end - 1) return;
+      box.scrollTo({ top: top < whole / 2 ? 0 : whole, behavior: glideOf(box) });
     },
   };
+}
+
+/**
+ * The header's title on its one line, faded in over the header's foot as
+ * the header folds away over it, so a folded header still names its pull
+ * request. Note that it is hidden from a reader, who reads the title itself.
+ */
+function CompactTitle({
+  title,
+  ref,
+}: {
+  title: Pick<AgentPullRequest, "title" | "number"> | undefined;
+  ref: React.Ref<HTMLDivElement>;
+}): React.JSX.Element {
+  const number = title === undefined ? "" : pullRequestNumberLabel(title);
+  return (
+    <div ref={ref} className="pull-request-compact px-column-inset" aria-hidden="true">
+      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.DIALOG}>
+        {title === undefined ? null : (
+          <OneLine words={`${title.title} ${number}`} hint={(line) => line}>
+            {title.title} <span className="pull-request-number">{number}</span>
+          </OneLine>
+        )}
+      </Text>
+    </div>
+  );
 }
 
 /** The Pull request tab under the number it names, reading through its source (`AgentPullRequestTab`). */
@@ -3075,15 +3189,20 @@ function PullRequestTabBody({
   const kept = new Set(
     [threadJumps.kept, anchors.kept].filter((each): each is string => each !== undefined),
   );
-  const fold = useHeaderFold(view);
+  const fold = useHeaderFold(phone);
+  const listRoom = phone && fold.shape.lead ? fold.shape.room : 0;
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   const page = (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
         <AnchorsContext.Provider value={anchors.open}>
           <Fill
+            ref={fold.root}
             className="file-view pull-request-tab ph-no-capture"
+            data-header-fold={phone ? "" : undefined}
+            data-fold-lead={phone && fold.shape.lead ? "" : undefined}
             onScrollCapture={fold.onScrollCapture}
+            onScrollEndCapture={fold.onScrollEndCapture}
           >
             <PullRequestWriteNote writes={writes} />
             {none ? (
@@ -3096,7 +3215,6 @@ function PullRequestTabBody({
                 <header
                   ref={fold.header}
                   className="pull-request-header relative z-1 flex-none px-column-inset py-row-inset"
-                  data-folded={fold.folded ? "" : undefined}
                 >
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
@@ -3131,6 +3249,7 @@ function PullRequestTabBody({
                     editing={{ options, picks, refreshing: pullRequestRead.out }}
                     lines={linesOf(published, changes)}
                   />
+                  {phone ? <CompactTitle ref={fold.compact} title={title} /> : null}
                 </header>
                 <PaneBar
                   middle={
@@ -3231,23 +3350,25 @@ function PullRequestTabBody({
               aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
               hidden={none || view !== PULL_REQUEST_VIEW.FILES}
             >
-              <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
-                <HandTabActionsContext.Provider
-                  value={viewActions.handFor(PULL_REQUEST_VIEW.FILES)}
-                >
-                  <AgentChangesTab
-                    agentId={agentId}
-                    source={source}
-                    shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-                    repository={repository}
-                    tree={tree}
-                    threads={changesThreads}
-                    lineComments={{ pending: pendingReview, onWritten: written }}
-                    reads={changes}
-                    reveal={threadJumps.filesReveal}
-                  />
-                </HandTabActionsContext.Provider>
-              </PendingSurfaceProvider>
+              <DiffListTopRoomContext.Provider value={listRoom}>
+                <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
+                  <HandTabActionsContext.Provider
+                    value={viewActions.handFor(PULL_REQUEST_VIEW.FILES)}
+                  >
+                    <AgentChangesTab
+                      agentId={agentId}
+                      source={source}
+                      shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                      repository={repository}
+                      tree={tree}
+                      threads={changesThreads}
+                      lineComments={{ pending: pendingReview, onWritten: written }}
+                      reads={changes}
+                      reveal={threadJumps.filesReveal}
+                    />
+                  </HandTabActionsContext.Provider>
+                </PendingSurfaceProvider>
+              </DiffListTopRoomContext.Provider>
             </Fill>
           </Fill>
         </AnchorsContext.Provider>
