@@ -1074,57 +1074,73 @@
 }
 
 /* On a phone the header would hold half the screen over the view under it,
-   so once that view is scrolled it folds to its title's one line, the rest
-   back as the view returns to its top (`useHeaderFold`). Note that this is
-   the phone's chrome, answering the screen's height a narrow room stands
-   for, so it reads the room; how the title row lays out is the header's
-   own width's (above), in any room. */
-:where(:root)[data-ui-room="narrow"] .desktop-shell .pull-request-header[data-folded] {
+   so it folds away over the view as the view scrolls, at the finger's own
+   pace, to its title's one line, and back as the view returns to its top
+   (`useHeaderFold`, which writes the properties read here on the tab's
+   root). The header and the tabs under it stand over the view's top by the
+   room the header folds away (`--pull-request-fold-room`), and slide up by
+   as far as the view is scrolled (`--pull-request-fold`), so they uncover
+   what the view holds rather than moving it. Note that the header is cut at
+   its own top as it slides, so it never passes over what stands above the
+   tab, while the merge control's panel hung from its foot stands whole. */
+.pull-request-tab[data-header-fold] > .pull-request-header,
+.pull-request-tab[data-header-fold] > .ui-pane-bar {
+  translate: 0 calc(-1 * var(--pull-request-fold, 0px));
+}
+
+.pull-request-tab[data-header-fold] > .pull-request-header {
+  z-index: 3;
+  background: var(--ui-color-well);
+  clip-path: inset(var(--pull-request-fold, 0px) -100vmax -100vmax);
+}
+
+/* Note that the tabs' own fill is translucent, so it is laid over the
+   panel's ground, or what scrolls under them would show through. */
+.pull-request-tab[data-header-fold] > .ui-pane-bar {
+  position: relative;
+  z-index: 2;
+  margin-bottom: calc(-1 * var(--pull-request-fold-room, 0px));
+  background: linear-gradient(var(--ui-color-fill-hover), var(--ui-color-fill-hover))
+    var(--ui-color-well);
+}
+
+/* The room stands at the top of what the shown view's scroller holds where
+   that scroller leads its view, and scrolls away under the header; the diff
+   list takes it as its own (`DiffListTopRoomContext`). Note that it is a box
+   of its own rather than the scroller's padding, because a heading stuck to
+   the scroller's top sticks inside its padding. */
+.pull-request-tab[data-header-fold][data-fold-lead] > .pull-request-view > .ui-scroll-area::before,
+.pull-request-tab[data-header-fold][data-fold-lead]
+  > .pull-request-view
+  .ui-detail-page-body::before {
+  display: block;
+  height: var(--pull-request-fold-room, 0px);
+  content: "";
+}
+
+/* Where something stands over the scroller, a chapter's bar or a notice,
+   the view itself opens with the room and gives it up as the header folds,
+   so what stands there is never under the header. */
+.pull-request-tab[data-header-fold]:not([data-fold-lead]) > .pull-request-view {
+  padding-top: calc(var(--pull-request-fold-room, 0px) - var(--pull-request-fold, 0px));
+}
+
+/* The title's one line, over the header's foot, fading in as the full
+   title passes under it (`CompactTitle`). Once folded, what stands under it
+   is hidden, so neither the keyboard nor a press reaches a control it
+   covers. */
+.pull-request-compact {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
   padding-block: var(--ui-item-gap);
+  background: var(--ui-color-well);
+  opacity: var(--pull-request-fold-title, 0);
+  pointer-events: none;
 }
 
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .pull-request-header[data-folded]
-  > :not(.pull-request-title-row),
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .pull-request-header[data-folded]
-  .pull-request-title-row
-  > :not(.pull-request-title),
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .pull-request-header[data-folded]
-  .pull-request-title-edit {
-  display: none;
-}
-
-/* The folded title holds to one line. Note that its pencil goes with its
-   siblings (above), because it stands past the cut, where the keyboard would
-   land on a control it cannot see; the full header holds it, and the words
-   take back the room it kept, ending at the inset of a title with none. Note
-   too that the cut is a clip, never `hidden`, because a scroll container is
-   scrolled sideways by a focus inside it, words and fade and all. */
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .pull-request-header[data-folded]
-  .pull-request-title {
-  padding-inline-end: var(--row-inset);
-  overflow: clip;
-  white-space: nowrap;
-}
-
-/* The folded title cut short fades out at its end, as a cut label does
-   (below). Note that the fade is laid over its content box alone, because
-   the inset after the words would otherwise take the fade, and the words
-   would stop at a hard edge before it. */
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .pull-request-header[data-folded]
-  .pull-request-title[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
-  mask-origin: content-box;
-  mask-repeat: no-repeat;
+.pull-request-header[data-folded] > :not(.pull-request-compact) {
+  visibility: hidden;
 }
 
 /* The Conversation's scroller ends a page's inset short of the foot. */

@@ -203,6 +203,8 @@ export interface DiffListProps {
    * or closed again where the file's patch is read anew.
    */
   readonly onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
+  /** Room over the first file, in pixels, for what stands over the list's top while it is scrolled there, a phone's pull request header; none adds none. */
+  readonly topRoom?: number | undefined;
 }
 
 /** A run of a whole file's lines, from its first to its last, counted from 1. */

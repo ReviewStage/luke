@@ -20,10 +20,12 @@ import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
+  createContext,
   Fragment,
   type ReactNode,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -120,6 +122,14 @@ interface GapHint {
   readonly anchor: HTMLElement;
   readonly label: string;
 }
+
+/**
+ * Room over a list's first file, in pixels, for what stands over the list's
+ * top while it is scrolled there: a phone's pull request header, which
+ * folds away over the list as it scrolls (`agent-pull-request-tab.tsx`).
+ * None where nothing stands over it.
+ */
+export const DiffListTopRoomContext = createContext(0);
 
 /**
  * The hint for the control of a gap the pointer or the focus arrived on,
@@ -371,6 +381,7 @@ export function PierreDiffList({
     [],
   );
   const files = entries.map(listFileOf);
+  const topRoom = useContext(DiffListTopRoomContext);
   const props: DiffListProps = {
     files,
     look,
@@ -382,6 +393,7 @@ export function PierreDiffList({
     selected,
     readTexts: readTexts === undefined ? undefined : askTexts,
     onDrawn,
+    topRoom,
   };
   // What the list was last drawn with; the mount reads the latest, so it is mounted once.
   const drawn = useRef(props);
@@ -427,7 +439,8 @@ export function PierreDiffList({
       sameLook(was.look, look) &&
       sameListSelection(was.selected, selected) &&
       (was.onComment === undefined) === (onComment === undefined) &&
-      (was.readTexts === undefined) === (readTexts === undefined)
+      (was.readTexts === undefined) === (readTexts === undefined) &&
+      was.topRoom === topRoom
     )
       return;
     drawn.current = latest.current;
