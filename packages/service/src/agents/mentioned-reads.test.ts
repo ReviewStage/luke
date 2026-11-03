@@ -49,6 +49,14 @@ const numberedSection = (ownerId: string) =>
     return { workspace, task: { ...created, document: PLAN }, words };
   });
 
+/** A task of the owner's in a workspace of its own, which the message's agent works on. */
+const agentTask = (ownerId: string) =>
+  Effect.gen(function* () {
+    const workspace = yield* openWorkspace(ownerId);
+    const created = yield* createTask(ownerId, { name: "Billing", organizationId: workspace });
+    return { workspace, task: { ...created, document: PLAN } };
+  });
+
 it.layer(getTestDB())("a task a message names by its number", (it) => {
   it.effect("is handed as its plan's section where the sender is a member of its workspace", () =>
     Effect.gen(function* () {
@@ -72,5 +80,34 @@ it.layer(getTestDB())("a task a message names by its number", (it) => {
 
       assert.equal(mentionedContext(words, task, reads), undefined);
     }),
+  );
+
+  it.effect(
+    "is handed its id, as another task than the agent's, where the sender is a member of its workspace",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const { task: named, words } = yield* numberedSection(dean);
+        const { workspace, task } = yield* agentTask(dean);
+
+        const reads = yield* readMentioned(dean, words, { task, workspaceId: workspace });
+
+        assert.match(mentionedContext(words, task, reads) ?? "", new RegExp(named.id, "u"));
+      }),
+  );
+
+  it.effect(
+    "is handed no id, as another task than the agent's, where the sender is no member of its workspace",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const stranger = yield* openAccount;
+        const { words } = yield* numberedSection(dean);
+        const { workspace, task } = yield* agentTask(stranger);
+
+        const reads = yield* readMentioned(stranger, words, { task, workspaceId: workspace });
+
+        assert.equal(mentionedContext(words, task, reads), undefined);
+      }),
   );
 });
