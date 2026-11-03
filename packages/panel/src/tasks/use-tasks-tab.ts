@@ -2859,22 +2859,7 @@ export function useTasksTab(input: {
     setStandIn(undefined);
     setHistoryFor(undefined);
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    shutForColumn(taskId, tab);
     mainTabs.onShow(taskId, tab);
-  };
-  // Note that another tab of the open task's column is a stop of its own, so
-  // the side panel shuts as it is shown; a press that opens something there
-  // too, as a worker's link does, opens it again after. Another task is a
-  // stop already, which the panel shuts for by itself.
-  const shutForColumn = (taskId: string, tab: MainTab) => {
-    const shown = mainTabs.tab;
-    if (taskId !== tasks.activeTaskId || (shown !== undefined && sameTab(shown, tab))) return;
-    sidePanel.onSetOpen(false);
-  };
-  // The column's own tab chosen, as its strip or a key chooses one.
-  const chooseColumnTab = (tab: MainTab) => {
-    if (tasks.activeTaskId !== undefined) shutForColumn(tasks.activeTaskId, tab);
-    mainTabs.onChoose(tab);
   };
 
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
@@ -3626,7 +3611,7 @@ export function useTasksTab(input: {
     region,
     copy: { onPress: pressCopy },
     edit,
-    mainTabs: { ...mainTabs, onChoose: chooseColumnTab, onClose: closeColumnTab },
+    mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
     pages: tasks.pages,
