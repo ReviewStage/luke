@@ -52,8 +52,8 @@ export const WORKSPACE_GROUP_TYPE = "workspace";
 
 /** The `$lib` tag a batch is stamped with, by the platform that sent it. */
 const PRODUCT_EVENT_LIB = {
-  [PRODUCT_PLATFORM.DESKTOP]: "luke-desktop",
-  [PRODUCT_PLATFORM.WEB]: "luke-web",
+  [PRODUCT_PLATFORM.DESKTOP]: "vespin-desktop",
+  [PRODUCT_PLATFORM.WEB]: "vespin-web",
 } as const satisfies Record<ProductClientPlatform, string>;
 
 /** The property every forwarded event names its platform under. */

@@ -2,8 +2,8 @@ import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 
 export const MACOS_DEPLOYMENT_TARGET = "14.0";
 export const SWIFT_TARGET_TRIPLE = `${PACKAGED_ARCHITECTURE}-apple-macos${MACOS_DEPLOYMENT_TARGET}`;
-export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";
-export const NOTICE_RESOURCE_NAME = "LUKE-NOTICE.txt";
+export const LICENSE_RESOURCE_NAME = "VESPIN-LICENSE.txt";
+export const NOTICE_RESOURCE_NAME = "VESPIN-NOTICE.txt";
 // The bundle's identifier, which macOS knows the app by.
 export const APP_ID = "dev.vespin.app";
 // This is the sentence macOS shows when it asks for the microphone, so it is

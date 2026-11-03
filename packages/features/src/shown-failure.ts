@@ -391,7 +391,7 @@ const DETAILS_HEADING = `${PRODUCT_NAME} showed an error. Find it in Sentry and 
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
 
 /** The mechanism an issue names, so Sentry says which path caught it; handled, since the app showed it. */
-const SHOWN_FAILURE_MECHANISM = "auto.luke.shown_failure";
+const SHOWN_FAILURE_MECHANISM = "auto.vespin.shown_failure";
 
 /** What every issue's fingerprint starts with, so a shown failure never groups with a crash of the same name. */
 const SHOWN_FAILURE_FINGERPRINT = "shown-failure";

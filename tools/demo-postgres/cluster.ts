@@ -21,11 +21,11 @@ import { SqlClient } from "effect/sql";
 /** Who the cluster answers, and on what. */
 const CLUSTER = {
   HOST: "127.0.0.1",
-  USER: "luke",
-  DATABASE: "luke",
+  USER: "vespin",
+  DATABASE: "vespin",
   /** The database `initdb` makes, which the cluster's own is created from. */
   MAINTENANCE_DATABASE: "postgres",
-  TEMP_PREFIX: "luke-demo-postgres-",
+  TEMP_PREFIX: "vespin-demo-postgres-",
   /** How long `pg_ctl` waits on a start or a stop. */
   WAIT_SECONDS: "60",
 } as const;

@@ -30,7 +30,7 @@ Six assets, and every one of them is load-bearing:
 The workflow verifies all six before it publishes anything: `Vespin.dmg` must be byte-identical
 to the versioned DMG, both checksums must verify, the DMG must pass `codesign`, `spctl`,
 `stapler validate`, and `hdiutil verify`, the app must be arm64-only, hardened-runtime,
-`Notarized Developer ID`, and carrying `LUKE-LICENSE.txt`, and `latest-mac.yml` must name
+`Notarized Developer ID`, and carrying `VESPIN-LICENSE.txt`, and `latest-mac.yml` must name
 the zip with a relative URL and carry both `sha512` and `size`.
 
 Every build's Sentry SDK reports under the release `Vespin@X.Y.Z`, the name the
@@ -158,7 +158,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
 | `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `APP_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
-| `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
+| `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `vespin-desktop` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Vespin@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
 ### Export the signing certificate
@@ -195,13 +195,13 @@ After rotating anything here, dispatch a rehearsal run before the next tag.
 
 **Use this only when Actions cannot cut the release** — the hosted path above is the
 release process. Everything below runs from a Mac holding the Developer ID identity and a
-stored `luke-notary` notarytool profile
-(`xcrun notarytool store-credentials luke-notary`), plus a `gh` login with write access.
+stored `vespin-notary` notarytool profile
+(`xcrun notarytool store-credentials vespin-notary`), plus a `gh` login with write access.
 
 ```sh
 export APP_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
-export SENTRY_DSN='https://…'                            # from the luke-desktop project
+export SENTRY_DSN='https://…'                            # from the vespin-desktop project
 export SENTRY_AUTH_TOKEN='sntrys_…'                     # source-map upload token
 pnpm release:macos                    # signs, notarizes, staples; writes the DMG, zip, and manifest
 git tag v0.1.1 && git push origin v0.1.1
