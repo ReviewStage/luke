@@ -53,6 +53,7 @@ import {
 import {
   type ParentCallFailure,
   type RelationCallFailure,
+  summaryOfTaskless,
   TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
   TASK_PARENT_FAILURE,
@@ -1046,11 +1047,6 @@ const NO_IDS: readonly string[] = [];
 
 /** No agent with no plan, before the list carries any. */
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
-
-/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
-function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
-  return automationId === null ? agent : { ...agent, automationId };
-}
 
 /** A task's act that never answered, settled as unanswered with the error beneath. */
 const taskUnreached = unreachedAs(TASK_CALL_FAILURE.UNANSWERED);

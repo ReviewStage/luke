@@ -337,7 +337,6 @@ function MentionGlyph({
   return thingMark(thingOfMention(mention), {
     name,
     known,
-    where: { taskId: holderTaskId(doors.holder), workspace: doors.place.workspace },
     workspace: readLink(target)?.workspace ?? doors.place.workspace,
     tiles: agentTiles(doors),
     standing,
@@ -725,7 +724,6 @@ function PlaceGlyph({
   return thingMark(thingOfPlace(place), {
     name,
     known,
-    where: { taskId: placeTaskId(place), workspace },
     workspace,
     tiles: agentTiles(doors),
     standing: undefined,

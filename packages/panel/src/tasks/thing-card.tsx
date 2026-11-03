@@ -134,14 +134,7 @@ export const THING_CARD: ThingCards = {
     />
   ),
   [THING_KIND.AGENT]: (agent, at) => (
-    <MentionedAgentCard
-      agentId={agent.agentId}
-      taskId={undefined}
-      name={at.name}
-      workspaceId={at.wordsWorkspaceId}
-      reading={reading(at)}
-      fallback={at.own}
-    />
+    <MentionedAgentCard agentId={agent.agentId} reading={reading(at)} fallback={at.own} />
   ),
   [THING_KIND.WORKER]: OWN_CARD,
   [THING_KIND.APP]: () => <AppCard />,

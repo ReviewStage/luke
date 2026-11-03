@@ -5,7 +5,13 @@ import {
   browserTabsPlaceSchema,
 } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
-import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
+import {
+  type AgentSummary,
+  agentSummarySchema,
+  localAgentRefusalSchema,
+  type TasklessAgent,
+  tasklessAgentSchema,
+} from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -252,6 +258,11 @@ export const IDLE_TASKS_VIEW: TasksView = {
   workspaces: [],
   document: { status: TASKS_READ.IDLE },
 };
+
+/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
+export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+  return automationId === null ? agent : { ...agent, automationId };
+}
 
 /**
  * Starting a task, as the window asks it: the service's own start, and
