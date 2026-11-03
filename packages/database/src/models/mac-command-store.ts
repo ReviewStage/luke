@@ -10,7 +10,7 @@ import {
   type MacCommandResult,
   macCommandResultSchema,
 } from "@repo/features/mac-command-wire";
-import { MESSAGE_ROLE } from "@repo/wire";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE } from "@repo/wire";
 import {
   and,
   asc,
@@ -272,8 +272,11 @@ const HANDED_OUTSIDE_RUN = exists(
     ),
 );
 
-/** What an automation's or GitHub's line says of whether it carries words its owner did not write: `true` or `false`, or null on a line kept before it said. */
+/** What an automation's, GitHub's, or a Slack message's line says of whether it carries words its owner did not write: `true` or `false`, or null on a line kept before it said. */
 const LINE_OUTSIDE_WORDS = sql<string | null>`${messages.metadata} ->> 'outside_words'`;
+
+/** The channel a line says carried it. */
+const LINE_CHANNEL = sql<string | null>`${messages.metadata} ->> 'channel'`;
 
 /** The logins of GitHub's Apps, every one of which ends with `[bot]`, which no person's login can spell. */
 const APP_LOGINS = "%[bot]";
@@ -306,7 +309,10 @@ export type ForeignLine = typeof ForeignLineSchema.Type;
  * as the line says itself (`outside_words`); a line kept before it said
  * counts where the run that started the agent was so fired, or a run so
  * fired was sent to it while its automation stands. A schedule's run and a
- * "Run now" carry the owner's prompt alone. A GitHub line counts where it carries a review's or a
+ * "Run now" carry the owner's prompt alone. A Slack message's line counts
+ * where its prompt carries the thread's earlier messages anyone but its
+ * writer wrote (`outside_words`, `slack/slack-agent-starts.ts`); a later
+ * message from another member counts as any teammate's line does. A GitHub line counts where it carries a review's or a
  * comment's words by a person other than the owner, which on a public
  * repository anyone may write, as the line says itself (`outside_words`,
  * `github/agent-wakes.ts`); an App's words never count. A line kept before
@@ -365,6 +371,11 @@ const findForeignLine = SqlSchema.findOneOption({
                   eq(LINE_OUTSIDE_WORDS, "true"),
                   and(isNull(LINE_OUTSIDE_WORDS), or(STARTED_ON_OUTSIDE_WORDS, HANDED_OUTSIDE_RUN)),
                 ),
+              ),
+              and(
+                eq(messages.sender, MESSAGE_SENDER.MEMBER),
+                eq(LINE_CHANNEL, MESSAGE_CHANNEL.SLACK),
+                eq(LINE_OUTSIDE_WORDS, "true"),
               ),
               and(
                 eq(messages.sender, MESSAGE_SENDER.GITHUB),

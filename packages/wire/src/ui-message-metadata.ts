@@ -416,7 +416,9 @@ export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_
  * started from or a later one in its Slack thread: the member's own words,
  * which a window draws in place of the prompt the agent read (the thread's
  * earlier messages and what to do with them), and the message's link where
- * Slack answered one. Who wrote it is the row's sender.
+ * Slack answered one; and whether the prompt carries the thread's earlier
+ * messages anyone but its writer wrote, which `run_on_mac` reads. Who wrote
+ * it is the row's sender.
  */
 const SLACK_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.SLACK),
@@ -424,6 +426,7 @@ const SLACK_LINE_METADATA = EffectSchema.Struct({
   url: EffectSchema.optional(
     trimmedText.check(EffectSchema.isMaxLength(SLACK_LINE_BOUNDS.URL_CHARS)),
   ),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type SlackLineMetadata = EffectSchema.Schema.Type<typeof SLACK_LINE_METADATA>;

@@ -23,6 +23,7 @@ import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type MessageRole,
+  type SlackLineMetadata,
 } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -320,7 +321,7 @@ const sendLine = (
     readonly agentId?: string;
   },
   role: MessageRole = MESSAGE_ROLE.USER,
-  metadata?: GitHubLineMetadata,
+  metadata?: GitHubLineMetadata | SlackLineMetadata,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -563,6 +564,37 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           false,
           "a failed check carries no one's words",
         );
+      }),
+  );
+
+  it.effect(
+    "a Slack message's line counts where its prompt carries the thread's words its writer did not write, and not where it carries theirs alone",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const heardAfter = (line: SlackLineMetadata) =>
+          Effect.gen(function* () {
+            const agent = yield* openAgent(starter, workspace, "Fix the flaky invite test.");
+            yield* sendLine(
+              starter,
+              agent.conversationId,
+              1,
+              { kind: MESSAGE_SENDER.MEMBER, userId: starter },
+              MESSAGE_ROLE.USER,
+              line,
+            );
+            return yield* heardFromAnotherAccount({
+              userId: starter,
+              conversationId: agent.conversationId,
+            });
+          });
+        const said = {
+          channel: MESSAGE_CHANNEL.SLACK,
+          words: "Fix the flaky invite test.",
+        } as const;
+
+        assert.equal(yield* heardAfter({ ...said, outside_words: true }), true);
+        assert.equal(yield* heardAfter(said), false, "the writer's own words");
       }),
   );
 
