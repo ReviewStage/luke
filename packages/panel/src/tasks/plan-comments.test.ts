@@ -1823,7 +1823,7 @@ function datedThread(by: { userId: string; name: string }): PlanCommentThread {
         id: `${ID.OPEN.slice(0, -4)}aaaa`,
         kind: PLAN_COMMENT_ENTRY.COMMENT,
         writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by },
-        words: "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+        words: "Ship by [@Oct 23, 2026](mention://date/2026-10-23).",
         at: 1,
       },
     ],
@@ -1855,7 +1855,7 @@ test("the date chip in the reader's own comment opens its picker with no field o
       action: {
         action: PLAN_COMMENT_ACTION.EDIT,
         entry: `${ID.OPEN.slice(0, -4)}aaaa`,
-        words: "Ship by [@Oct 24, 2026](luke://date/2026-10-24).",
+        words: "Ship by [@Oct 24, 2026](mention://date/2026-10-24).",
       },
     },
   ]);
@@ -1970,7 +1970,7 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
   const { edit, field, press, asked } = ownComment();
 
   edit();
-  assert.equal(field()?.value, "Ship by [@Oct 23, 2026](luke://date/2026-10-23).");
+  assert.equal(field()?.value, "Ship by [@Oct 23, 2026](mention://date/2026-10-23).");
   typeInto(field(), "Ship by Friday.");
   press("Cancel");
   assert.ok(field() === null, "Cancel closes the field");
@@ -1993,7 +1993,7 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
   edit();
   assert.equal(
     field()?.value,
-    "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+    "Ship by [@Oct 23, 2026](mention://date/2026-10-23).",
     "saved, its draft is let go",
   );
 });

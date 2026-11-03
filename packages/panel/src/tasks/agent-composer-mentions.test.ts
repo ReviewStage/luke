@@ -1963,7 +1963,7 @@ test("words after an @ that read as a date offer it first, said from today, and 
 
     assert.deepEqual(offered, ["Dates", ["Tomorrow"]]);
     assert.deepEqual(chips.map(chipName), ["Tomorrow"]);
-    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](mention://date/2026-10-20)"]);
   } finally {
     vi.useRealTimers();
   }
@@ -1999,7 +1999,7 @@ test("a date's chip in the box opens its picker, and the day picked there is the
     await settle();
 
     assert.equal(container.querySelector('[role="dialog"]'), null);
-    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](luke://date/2026-10-22)"]);
+    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](mention://date/2026-10-22)"]);
   } finally {
     vi.useRealTimers();
   }
@@ -2027,7 +2027,7 @@ test("a sent message's date is drawn as a chip saying it from today that opens n
   try {
     const container = drawn(
       createElement(TranscriptWords, {
-        text: "Ready [@Oct 23, 2026](luke://date/2026-10-23), not [@Feb 30](luke://date/2026-02-30).",
+        text: "Ready [@Oct 23, 2026](mention://date/2026-10-23), not [@Feb 30](mention://date/2026-02-30).",
       }),
       planPage([]),
     );

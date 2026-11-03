@@ -971,10 +971,10 @@ it.effect(
         assert.ok(options.disallowedTools?.includes(tool), tool);
       }
       const worker = options.agents?.worker;
-      for (const tool of ["Edit", "Write", "mcp__luke"]) {
+      for (const tool of ["Edit", "Write", "mcp__workspace"]) {
         assert.ok(worker?.disallowedTools?.includes(tool), tool);
       }
-      const mcp = options.mcpServers?.luke;
+      const mcp = options.mcpServers?.workspace;
       assert.equal(mcp?.type, "sdk");
       assert.ok(!JSON.stringify(options).includes(BEARER));
       assert.equal(options.sandbox?.enabled, true);
@@ -1033,7 +1033,7 @@ it.effect(
       const missing = join(folder, "never-written");
       const installed = join(folder, "installed");
       mkdirSync(join(installed, ".claude-plugin"), { recursive: true });
-      writeFileSync(join(installed, INSTALLED_SKILLS.MANIFEST), '{"name":"luke"}\n');
+      writeFileSync(join(installed, INSTALLED_SKILLS.MANIFEST), '{"name":"workspace"}\n');
 
       const optionsWith = (installedSkills: string) =>
         Effect.gen(function* () {
@@ -1090,7 +1090,10 @@ function fakeCliTransport() {
 /** A launch whose fake service answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; our own unless an integration's is named. */
 function launchWithMcp(
   mcp: ReturnType<typeof fakeMcpRoute>,
-  named: { readonly name: string; readonly url: string } = { name: "luke", url: CONFIG.mcpUrl },
+  named: { readonly name: string; readonly url: string } = {
+    name: "workspace",
+    url: CONFIG.mcpUrl,
+  },
 ) {
   return Effect.gen(function* () {
     const luke = fakeService();
@@ -1152,7 +1155,7 @@ it.effect(
       yield* write(FIRST_MESSAGE);
       yield* Fiber.join(run);
 
-      assert.deepEqual(Object.keys(cli.options?.mcpServers ?? {}), ["luke", "linear"]);
+      assert.deepEqual(Object.keys(cli.options?.mcpServers ?? {}), ["workspace", "linear"]);
       assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
       assert.deepEqual(
         mcp.calls.map(({ authorization, body }) => ({ authorization, body })),

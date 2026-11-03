@@ -28,6 +28,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { isAgentBranch } from "../agents/coder-host/bounds.js";
 import { agentPullRequestReach } from "../agents/coder-host/published.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
@@ -57,7 +58,7 @@ import {
  * in a thread submit too, so a review's inline comments are never told one
  * by one; a comment on the pull request's conversation (`issue_comment` on
  * a pull request); and a check suite that completed without passing on an
- * agent's `luke/` branch, the one failure the automations leave to the agent
+ * agent's branch, the one failure the automations leave to the agent
  * (`automation-github.ts`). `pull_request_review_comment` is answered and
  * ignored, since its review already told it. Only what the message says is
  * read off a delivery: the repository, the pull request's number and branch,
@@ -69,7 +70,7 @@ import {
  * the agent to read them itself with `gh`. What the reviewer wrote is handed
  * fenced as their own words, to weigh as a reviewer's and never as the
  * developer's, and cut with a note where it would not fit a message. A
- * commit status that failed on a `luke/` branch is told as a failed check
+ * commit status that failed on an agent's branch is told as a failed check
  * is, since the pull request's checks count it beside the check runs.
  *
  * On a public repository anyone on GitHub may write a review or a comment,
@@ -110,7 +111,7 @@ import {
  * message steered into its turn does, rather than the agent holding its
  * sandbox up to watch CI. A check suite completed (all of its check runs
  * completed, with a conclusion), a check run completed, or a commit status
- * set to anything but pending on a `luke/` branch says the head's checks
+ * set to anything but pending on an agent's branch says the head's checks
  * moved (https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_suite,
  * #check_run and #status); no one delivery says they all finished, since a
  * commit has a suite for each App and statuses beside them, so the head's
@@ -204,9 +205,6 @@ const FAILED_CHECKS_GRACE = Duration.seconds(2);
 
 /** The room the message keeps for saying how many failed checks it left unnamed, commit statuses among them. */
 const UNNAMED_CHECKS_ROOM = 120;
-
-/** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
-const AGENT_BRANCH_PREFIX = "luke/";
 
 /** What GitHub appends to an App's login, which a failed check is told by and an App's words told apart by. */
 const BOT_LOGIN_SUFFIX = "[bot]";
@@ -385,7 +383,7 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
     action !== WAKE_ACTION.COMPLETED ||
     !FAILED_CONCLUSIONS.has(suite.conclusion ?? "") ||
     branch === null ||
-    !branch.startsWith(AGENT_BRANCH_PREFIX)
+    !isAgentBranch(branch)
   ) {
     return undefined;
   }
@@ -402,14 +400,12 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
   };
 }
 
-/** A commit status that failed on agents' branches, every `luke/` branch at the commit, told as a failed check is: by who set it, on the failed commit's checks. */
+/** A commit status that failed on agents' branches, every agent's branch at the commit, told as a failed check is: by who set it, on the failed commit's checks. */
 function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
   const read = readDelivery(StatusDeliverySchema, payload);
   if (Result.isFailure(read) || !FAILED_STATES.has(read.success.state)) return undefined;
   const { repository, sender, sha, branches } = read.success;
-  const agentBranches = branches
-    .map((each) => each.name)
-    .filter((name) => name.startsWith(AGENT_BRANCH_PREFIX));
+  const agentBranches = branches.map((each) => each.name).filter(isAgentBranch);
   if (agentBranches.length === 0) return undefined;
   return {
     kind: AGENT_WAKE.CHECK_FAILED,
@@ -426,8 +422,7 @@ function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | 
 /** The agent branches of those named, the null a detached head or a fork's branch leaves dropped. */
 function agentBranchesOf(named: readonly (string | null | undefined)[]): readonly string[] {
   return named.filter(
-    (branch): branch is string =>
-      typeof branch === "string" && branch.startsWith(AGENT_BRANCH_PREFIX),
+    (branch): branch is string => typeof branch === "string" && isAgentBranch(branch),
   );
 }
 

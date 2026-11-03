@@ -80,7 +80,7 @@ export type ReplayValueForm = (typeof REPLAY_VALUE_FORM)[keyof typeof REPLAY_VAL
 export const REPLAY_SENDER = {
   DEVELOPER: "developer",
   MEMBER: "member",
-  LUKE: "luke",
+  LUKE: "app",
   AUTOMATION: "automation",
   GITHUB: "github",
   AGENT: "agent",
@@ -196,26 +196,53 @@ export interface FirstMessage {
   readonly note?: FirstMessageNote;
 }
 
-const REPLAY_CLOSE = "<!-- /luke:replay -->";
-const REPLAY_OPEN_START = "<!-- luke:replay ";
-const REPLAY_LEAD = `\n\n${REPLAY_HEADING}\n\n${REPLAY_OPEN_START}`;
+/**
+ * The namespace every marker is written under, and the one written before
+ * it, which a message handed then still holds and is read in as well.
+ */
+const MARKER_SPACE = "agent";
+const LEGACY_MARKER_SPACE = "luke";
+const MARKER_SPACES = [MARKER_SPACE, LEGACY_MARKER_SPACE] as const;
+/** Either namespace, as a marker's pattern reads it. */
+const SPACE = `(?:${MARKER_SPACE}|${LEGACY_MARKER_SPACE})`;
+
+const REPLAY_CLOSES = MARKER_SPACES.map((space) => `<!-- /${space}:replay -->`);
+const REPLAY_CLOSE = `<!-- /${MARKER_SPACE}:replay -->`;
+const REPLAY_OPEN_START = `<!-- ${MARKER_SPACE}:replay `;
+const REPLAY_HEADING_LEAD = `\n\n${REPLAY_HEADING}\n\n`;
+const REPLAY_LEADS = MARKER_SPACES.map((space) => `${REPLAY_HEADING_LEAD}<!-- ${space}:replay `);
 const MARKER_END = " -->\n";
 const SECTION_GAP = "\n\n";
 
-const NOTE_OPEN = /^<!-- luke:note text-files=(\d+) other-files=(\d+) chars=(\d+) -->\n/u;
-const NOTE_OPEN_START = "<!-- luke:note ";
+const NOTE_OPEN = new RegExp(
+  `^<!-- ${SPACE}:note text-files=(\\d+) other-files=(\\d+) chars=(\\d+) -->\\n`,
+  "u",
+);
+const NOTE_OPEN_START = `<!-- ${MARKER_SPACE}:note `;
+const NOTE_OPEN_STARTS = MARKER_SPACES.map((space) => `<!-- ${space}:note `);
 
-const REPLAY_OPEN =
-  /^<!-- luke:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\d+) total-steps=(\d+) chars=(\d+) -->\n/u;
-const STEP_OPEN =
-  /^<!-- luke:step kind=([a-z]+)((?: [a-z-]+=[A-Za-z0-9_.:@-]+)*) chars=(\d+) -->\n/u;
+const REPLAY_OPEN = new RegExp(
+  `^<!-- ${SPACE}:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\\d+) total-steps=(\\d+) chars=(\\d+) -->\\n`,
+  "u",
+);
+const STEP_OPEN = new RegExp(
+  `^<!-- ${SPACE}:step kind=([a-z]+)((?: [a-z-]+=[A-Za-z0-9_.:@-]+)*) chars=(\\d+) -->\\n`,
+  "u",
+);
 const STEP_ATTRIBUTE = / ([a-z-]+)=([A-Za-z0-9_.:@-]+)/gu;
 const ATTRIBUTE_VALUE = /^[A-Za-z0-9_.:@-]+$/u;
 const INSTANT_VALUE = /^\d+$/u;
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(REPLAY_TOOL_STATE));
 const SENDER_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_SENDER));
+/** The app's sender as a marker written before it was `app` spells it. */
+const LEGACY_APP_SENDER = "luke";
 const VALUE_FORMS: ReadonlySet<string> = new Set(Object.values(REPLAY_VALUE_FORM));
-const SUMMARY_OPEN = /^<!-- luke:summary by=luke steps=(\d+) chars=(\d+) -->\n/u;
+/** Whose words a summary is, as its marker says: the app's, `luke` before it. */
+const SUMMARY_BY = "app";
+const SUMMARY_OPEN = new RegExp(
+  `^<!-- ${SPACE}:summary by=(?:${SUMMARY_BY}|luke) steps=(\\d+) chars=(\\d+) -->\\n`,
+  "u",
+);
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
 /** Each heading a note may stand under, as it is spelled and as it is read: today's, then the retired spelling. */
@@ -223,6 +250,12 @@ const NOTE_HEADINGS: readonly (readonly [string, StartNoteHeading])[] = [
   ...Object.values(START_NOTE_HEADING).map((heading) => [heading, heading] as const),
   [RETIRED_AGENT_NOTE_HEADING, START_NOTE_HEADING.AGENT],
 ];
+
+/** Where the first of the needles stands in the text from `from`, in either namespace; -1 where none does. */
+function firstIndexOf(text: string, needles: readonly string[], from: number): number {
+  const found = needles.map((needle) => text.indexOf(needle, from)).filter((at) => at >= 0);
+  return found.length === 0 ? -1 : Math.min(...found);
+}
 
 /** A summary held to one line, since a step's first line is its summary. */
 function oneLine(text: string): string {
@@ -257,7 +290,7 @@ function stepAttributes(step: ReplayStep): string {
 /** One step as the block spells it. */
 function stepText(step: ReplayStep): string {
   const body = `${oneLine(step.summary)}\n${step.words}`;
-  return `<!-- luke:step kind=${step.kind}${stepAttributes(step)} chars=${body.length}${MARKER_END}${body}\n`;
+  return `<!-- ${MARKER_SPACE}:step kind=${step.kind}${stepAttributes(step)} chars=${body.length}${MARKER_END}${body}\n`;
 }
 
 /** A value's form read back from its marker; none where it names none it knows. */
@@ -315,7 +348,8 @@ function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "
 
 /** A line's sender read back from its marker; none where it names none it knows. */
 function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
-  const kind = attributes.get("sender") ?? "";
+  const spelled = attributes.get("sender") ?? "";
+  const kind = spelled === LEGACY_APP_SENDER ? REPLAY_SENDER.LUKE : spelled;
   if (!SENDER_KINDS.has(kind)) return {};
   const member = attributes.get("member");
   // SAFETY: the kind was checked against the vocabulary just above.
@@ -329,7 +363,7 @@ function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep,
 /** The summary as the block spells it, marked as the app's words rather than the agent's. */
 function summaryText(summary: ReplaySummary | undefined): string {
   if (summary === undefined) return "";
-  return `<!-- luke:summary by=luke steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;
+  return `<!-- ${MARKER_SPACE}:summary by=${SUMMARY_BY} steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;
 }
 
 /** The replay as it follows the brief: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
@@ -428,7 +462,8 @@ function stepsFrom(
 ): { readonly steps: ReplayStep[]; readonly next: number } | undefined {
   const steps: ReplayStep[] = [];
   let at = start;
-  while (!text.startsWith(REPLAY_CLOSE, at)) {
+  let close = REPLAY_CLOSES.find((each) => text.startsWith(each, at));
+  while (close === undefined) {
     const open = STEP_OPEN.exec(text.slice(at, at + 512));
     const [marker, kind = "", named = "", chars = ""] = open ?? [];
     if (marker === undefined || !STEP_KINDS.has(kind)) return undefined;
@@ -449,8 +484,9 @@ function stepsFrom(
       ...(kind === REPLAY_STEP_KIND.LINE ? lineFields(attributes) : undefined),
     });
     at = body.next;
+    close = REPLAY_CLOSES.find((each) => text.startsWith(each, at));
   }
-  return { steps, next: at + REPLAY_CLOSE.length };
+  return { steps, next: at + close.length };
 }
 
 /** The marked note whose heading starts at `at` and that ends the message exactly; nothing where its marker does not add up. */
@@ -493,7 +529,7 @@ function noteFrom(text: string, at: number): FirstMessageNote | null | undefined
 
 /** The first marked note that ends the message, with the brief before it; nothing where none adds up. */
 function markedNoteIn(text: string): FirstMessage | undefined {
-  let at = text.indexOf(NOTE_OPEN_START);
+  let at = firstIndexOf(text, NOTE_OPEN_STARTS, 0);
   while (at >= 0) {
     // The marker stands after its heading, so the note starts at the gap before that heading.
     for (const [spelled] of NOTE_HEADINGS) {
@@ -503,14 +539,14 @@ function markedNoteIn(text: string): FirstMessage | undefined {
       const note = markedNoteAt(text, from);
       if (note !== undefined) return { brief: text.slice(0, from), note };
     }
-    at = text.indexOf(NOTE_OPEN_START, at + 1);
+    at = firstIndexOf(text, NOTE_OPEN_STARTS, at + 1);
   }
   return undefined;
 }
 
 /** The replay whose heading starts at `at`, and the note after it; nothing where the block does not add up. */
 function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undefined {
-  const start = at + REPLAY_LEAD.length - REPLAY_OPEN_START.length;
+  const start = at + REPLAY_HEADING_LEAD.length;
   const open = REPLAY_OPEN.exec(text.slice(start, start + 256));
   if (open === null) return undefined;
   const [marker, agentId = "", messageId, kept = "", total = "", chars = ""] = open;
@@ -541,11 +577,11 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
  * that only holds a note's heading in its prose is read whole.
  */
 export function firstMessageParts(text: string): FirstMessage {
-  let at = text.indexOf(REPLAY_LEAD);
+  let at = firstIndexOf(text, REPLAY_LEADS, 0);
   while (at >= 0) {
     const read = replayAt(text, at);
     if (read !== undefined) return { brief: text.slice(0, at), ...read };
-    at = text.indexOf(REPLAY_LEAD, at + 1);
+    at = firstIndexOf(text, REPLAY_LEADS, at + 1);
   }
   return markedNoteIn(text) ?? { brief: text };
 }

@@ -1,5 +1,5 @@
 import { CODEX_ERROR_INFO, codexErrorKind } from "@luke/agent-runner/protocol";
-import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
+import { CODEX_TOOL, WORKSPACE_MCP_SERVER_NAMES } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
@@ -288,7 +288,7 @@ function storedMcpCall(
   call: typeof McpToolCallSchema.Type,
   args: WireValue,
 ): { readonly name: string; readonly input: UnparsedWireValue } {
-  if (call.server === CODEX_LUKE_MCP_SERVER) return { name: call.tool, input: args };
+  if (WORKSPACE_MCP_SERVER_NAMES.has(call.server)) return { name: call.tool, input: args };
   return (
     storedServerCall(call.server, call.tool, args, call.id) ?? {
       name: CODEX_TOOL.MCP_TOOL_CALL,
@@ -300,7 +300,7 @@ function storedMcpCall(
 /** A call to an MCP server, stored as `storedMcpCall` names it. */
 function mcpCall(item: unknown): Option.Option<Answered> {
   return Option.map(readMcpToolCall(item), (call) => {
-    const lukeTool = call.server === CODEX_LUKE_MCP_SERVER;
+    const lukeTool = WORKSPACE_MCP_SERVER_NAMES.has(call.server);
     const args = call.arguments ?? {};
     const text =
       call.error?.message ??

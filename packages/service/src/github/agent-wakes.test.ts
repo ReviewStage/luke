@@ -293,7 +293,7 @@ const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
   );
 
 test("a review submitted, a comment on a pull request, and a failed check suite or commit status on an agent's branch are read, each by who caused it and when, and nothing else is", () => {
-  const ref = "luke/invites";
+  const ref = "agent/invites";
   assert.deepEqual(
     agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
     {
@@ -360,6 +360,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     updated_at: new Date(MADE_AT).toISOString(),
     repository,
     sender: { login: "buildkite[bot]", type: "Bot" },
+    // An agent's branch under the prefix agents worked on before, whose pull requests still stand open.
     branches: [{ name: "main" }, { name: branch }, { name: "luke/another-agent" }],
     description: "Never read.",
   });
