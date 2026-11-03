@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { type TaskSummary, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
-import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -40,10 +39,9 @@ const TITLED_AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNTITLED_AGENT = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e60";
 const TASKLESS_AGENT = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f61";
 
-/** A plan the window lists, still Untitled, and two it lists not. */
+/** A plan the window lists, still Untitled, and one it lists not. */
 const UNTITLED_TASK = "4e5f6a7b-8c9d-4e0f-8a1b-2c3d4e5f6a72";
 const UNLISTED_TASK = "5f6a7b8c-9d0e-4f1a-8b2c-3d4e5f6a7b83";
-const LATER_TASK = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c94";
 
 const HOME = "https://vespin.dev/acme";
 const PLAN = `${HOME}/plan/${TASK_ID}`;
@@ -138,22 +136,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `STATE`, every read of the task list counted. */
-async function drawn(
-  text: string,
-  state: AppStateSnapshot = STATE,
-): Promise<{ container: HTMLElement; refreshes: () => number }> {
-  let refreshes = 0;
+/** The words drawn on the plan's page in a window holding `STATE`. */
+async function drawn(text: string): Promise<{ container: HTMLElement }> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(state),
+    requestAppState: () => Promise.resolve(STATE),
   });
-  fakeActPort({
-    [ACT_KIND.TASKS_REFRESH]: () => {
-      refreshes += 1;
-      return Promise.resolve();
-    },
-  });
+  fakeActPort({});
   fakeAppPlatform(QUIET_PANEL);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -168,7 +157,7 @@ async function drawn(
   // Drawn again, as a transcript is drawn as its turn streams.
   act(() => root?.render(onRegistry(registry, words(`${text} `))));
   await settle();
-  return { container, refreshes: () => refreshes };
+  return { container };
 }
 
 async function settle(): Promise<void> {
@@ -211,29 +200,4 @@ test("a chip written under an old name is called by the name the window holds no
     ["plan", UNTITLED_TASK_NAME],
     ["plan", "Billing revamp"],
   ]);
-});
-
-test("chips naming plans before the window ever read its task list ask it to follow the list, once between them, however often they are drawn", async () => {
-  const unread: AppStateSnapshot = {
-    ...STATE,
-    tasks: { ...STATE.tasks, listStatus: TASKS_READ.IDLE, tasks: [] },
-  };
-  const { refreshes } = await drawn(
-    [
-      `[@Untitled](${HOME}/plan/${UNTITLED_TASK})`,
-      `[@Later](${HOME}/plan/${LATER_TASK})`,
-      `[@Untitled](${PLAN})`,
-    ].join(" "),
-    unread,
-  );
-
-  assert.equal(refreshes(), 1);
-});
-
-test("a window already following its task list asks nothing, even for a plan it lists Untitled or not at all, whose name the follow brings", async () => {
-  const { refreshes } = await drawn(
-    `[@Untitled](${HOME}/plan/${UNTITLED_TASK}) and [@Later](${HOME}/plan/${LATER_TASK})`,
-  );
-
-  assert.equal(refreshes(), 0);
 });

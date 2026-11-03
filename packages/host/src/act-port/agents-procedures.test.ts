@@ -278,10 +278,7 @@ function windowPort(
           options.answers?.[name] ?? options.fallback ?? (() => Effect.succeed(UNANSWERED));
         return answer();
       });
-  const names: (keyof HostAsk)[] = [
-    ...ACTS.flatMap((act) => (act.ask === undefined ? [] : [act.ask])),
-    "tasksRefresh",
-  ];
+  const names: (keyof HostAsk)[] = ACTS.flatMap((act) => (act.ask === undefined ? [] : [act.ask]));
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(names.map((name) => [name, ask(name)])) as unknown as HostAsk;
   const notices: AgentProceduresDependencies["notices"] = {
@@ -379,64 +376,6 @@ it("a panel's Start reaches the host with the plan and the press's own key, hear
   assert.deepEqual(started, { answer: STARTED });
   assert.deepEqual(asked, [["agentStart", { taskId: TASK_ID, idempotencyKey: "press-1" }]]);
   assert.deepEqual(noted, [`agents:${AGENT_ID}=${AGENT_STATUS.STARTING}`]);
-});
-
-it("a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not", async () => {
-  const unplaced = { agent: { ...STARTED.agent, planId: null } };
-  const answered = () => Effect.succeed(unplaced);
-  const taskless = windowPort(PANEL, {
-    answers: {
-      agentRename: answered,
-      agentArchive: answered,
-      agentPin: answered,
-    },
-  });
-  const onTask = windowPort(PANEL, {
-    answers: { agentRename: () => Effect.succeed(STARTED) },
-  });
-  const rename = { agentId: AGENT_ID, title: "Triage" };
-
-  await taskless.call(AGENT_ACT_KIND.AGENTS_RENAME, rename);
-  await taskless.call(AGENT_ACT_KIND.AGENTS_ARCHIVE, {
-    agentId: AGENT_ID,
-    archived: true,
-  });
-  await taskless.call(AGENT_ACT_KIND.AGENTS_PIN, {
-    agentId: AGENT_ID,
-    pinned: true,
-  });
-  await onTask.call(AGENT_ACT_KIND.AGENTS_RENAME, rename);
-
-  assert.deepEqual(taskless.asked, [
-    ["agentRename", rename],
-    ["tasksRefresh"],
-    ["agentArchive", { agentId: AGENT_ID, archived: true }],
-    ["tasksRefresh"],
-    ["agentPin", { agentId: AGENT_ID, pinned: true }],
-    ["tasksRefresh"],
-  ]);
-  assert.deepEqual(onTask.asked, [["agentRename", rename]]);
-});
-
-it("a delete that took the agent reads the plan list again, so its sidebar row goes, and one refused does not", async () => {
-  const deleted = windowPort(PANEL, {
-    answers: { agentDelete: () => Effect.succeed({ deleted: true as const }) },
-  });
-  const refused = windowPort(PANEL, {
-    answers: {
-      agentDelete: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.AGENT_NOT_READY }),
-    },
-  });
-
-  assert.deepEqual(await deleted.call(AGENT_ACT_KIND.AGENTS_DELETE, { agentId: AGENT_ID }), {
-    answer: { deleted: true },
-  });
-  assert.deepEqual(await refused.call(AGENT_ACT_KIND.AGENTS_DELETE, { agentId: AGENT_ID }), {
-    answer: { failure: AGENT_CALL_FAILURE.AGENT_NOT_READY },
-  });
-
-  assert.deepEqual(deleted.asked, [["agentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
-  assert.deepEqual(refused.asked, [["agentDelete", { agentId: AGENT_ID }]]);
 });
 
 it("a panel's reads are noted on their way: a task's agents or the task gone, and an agent's status, but a worker's page is no word on the agent", async () => {

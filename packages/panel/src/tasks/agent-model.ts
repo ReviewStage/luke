@@ -118,7 +118,6 @@ import { devicePlatformOf } from "../device-platform.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
 import {
-  changesSidebar,
   plainWords,
   remoteCallOf,
   TOOL_TARGET,
@@ -1981,18 +1980,6 @@ function storedPartRead(part: WireValue): AgentPart {
  */
 const partsRead = new WeakMap<AgentTranscriptMessage, readonly AgentPart[]>();
 
-/** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
-export function settledPlanEdits(messages: readonly AgentTranscriptMessage[]): number {
-  return messages
-    .flatMap(agentParts)
-    .filter(
-      (part) =>
-        part.kind === AGENT_PART.TOOL &&
-        part.tool === AGENT_TOOL.EDIT_PLAN &&
-        part.state === TOOL_STATE.OUTPUT_AVAILABLE,
-    ).length;
-}
-
 /**
  * The coding agent a call started, read off its answer, which is the agent
  * its row opens; nothing for any other call, one still running, or a start
@@ -2026,15 +2013,6 @@ export function agentListCallIds(messages: readonly AgentTranscriptMessage[]): r
       part.kind === AGENT_PART.TOOL && AGENT_LIST_TOOLS.has(part.tool) && part.output !== undefined
         ? [part.callId]
         : [],
-    );
-}
-
-/** The answered calls of a transcript that changed the sidebar (`changesSidebar`), by call id: what the tasks are read again on as each lands, so the sidebar draws the change. */
-export function sidebarCallIds(messages: readonly AgentTranscriptMessage[]): readonly string[] {
-  return messages
-    .flatMap(agentParts)
-    .flatMap((part) =>
-      part.kind === AGENT_PART.TOOL && changesSidebar(part.tool, part.output) ? [part.callId] : [],
     );
 }
 

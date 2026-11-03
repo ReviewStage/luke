@@ -3,13 +3,10 @@ import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskStatus } from "@repo/features/task-wire";
-import { TASKS_READ } from "@repo/features/tasks-view";
 import { taskKey } from "@repo/features/workspace-key";
-import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useMemo } from "react";
-import { tellAct } from "../act.js";
+import { useMemo } from "react";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { appStateDerivedAtom } from "../use-app-state.js";
@@ -24,9 +21,9 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * pages, each task's key, the Inbox items waiting, and the agents an
  * automation started with no task; from the directories standing around
  * the caller, the members and the automation asked for. Nothing is fetched,
- * so a name the window does not hold is not here; a chip naming a task
- * before the list was ever read asks for it once (`useTaskNameCatchUp`), and
- * the follow that read starts brings each task's name as the service gives it.
+ * so a name the window does not hold is not here; the task list is followed
+ * from the account signing in (`compose-tasks.ts`), which brings each task's
+ * name as the service gives it.
  *
  * The document's names are built once per delivery in an atom every chip
  * shares, rather than once per chip, so a transcript of a hundred chips
@@ -108,35 +105,6 @@ const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
       ),
     ),
 );
-
-/** Whether main's document holds no read of the task list yet, so nothing follows it and no task's name can land. */
-const listUnreadAtom: Atom.Atom<boolean> = appStateDerivedAtom(
-  (state) => state?.tasks.listStatus === TASKS_READ.IDLE,
-);
-
-/** Whether a chip has asked for the list since it was last unread, so the chips of one transcript ask once between them. */
-const listAsked = { asked: false };
-
-/**
- * Asks the window to follow its task list where a chip names a task and no
- * read of the list has started yet, once between every chip, so the task's
- * name lands. The list is followed live from its first read
- * (`compose-tasks.ts`), so a task the list holds Untitled or not at all
- * takes its name as the service names it, and asking again would read
- * nothing new; nothing for none asked for.
- */
-export function useTaskNameCatchUp(taskId: string | undefined): void {
-  const unread = useAtomValue(listUnreadAtom);
-  useEffect(() => {
-    if (!unread) {
-      listAsked.asked = false;
-      return;
-    }
-    if (taskId === undefined || listAsked.asked) return;
-    listAsked.asked = true;
-    tellAct(ACT_KIND.TASKS_REFRESH);
-  }, [unread, taskId]);
-}
 
 /** No keys: what a window listing no numbered task holds, one object for every reader. */
 const NO_KEY_TARGETS: ReadonlyMap<string, string> = new Map();

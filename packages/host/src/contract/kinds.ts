@@ -599,7 +599,9 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * behind its kind, fails the typecheck. Note that some names mislead: a
  * kind that marks something read or shown is a WRITE, as is one that opens
  * a Terminal tab's or a live view's stream, whose bytes never reach app
- * state; and `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
+ * state; `TASKS_REFRESH` is a WRITE, the task list's Try again, because the
+ * host follows the list from the account gate opening and only a press asks
+ * it again; and `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
  * whenever it is shown and nothing keeps it.
  */
@@ -719,7 +721,7 @@ export const PORT_ACT_USE = {
   SETTINGS_RESET: ACT_USE.WRITE,
   EXPERIMENT_SET: ACT_USE.WRITE,
 
-  TASKS_REFRESH: ACT_USE.READ,
+  TASKS_REFRESH: ACT_USE.WRITE,
   TASKS_SELECT: ACT_USE.WRITE,
   TASKS_CLOSE: ACT_USE.WRITE,
   TASKS_START: ACT_USE.WRITE,
