@@ -752,7 +752,7 @@ function PlanDocument({
   const openedWorkspace = opened?.workspaceId;
   const {
     tasks: everyTask,
-    onSelect: selectTask,
+    onResume: resumeTask,
     onSetTaskBlock,
     onSetTaskParent,
     onNewRelatedTask,
@@ -762,8 +762,8 @@ function PlanDocument({
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
   );
-  // A task the head names, a crumb or a related row, opens where it was left, as a sidebar row opens it, rather than as a link to its Overview does.
-  const openTask = useSteadyDoor(selectTask);
+  // A task the head names, a crumb or a related row, opens where it was left, rather than on its agent as a sidebar row opens it.
+  const openTask = useSteadyDoor(resumeTask);
   const changeBlock = useSteadyDoor(
     openedId === undefined
       ? undefined

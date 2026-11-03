@@ -345,6 +345,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     history: versionHistoryControl(),
     onSelect: ignore,
     onRestoreTask: ignore,
+    onResume: ignore,
     onShowAgent: ignore,
     onShowColumnTab: ignore,
     onShowPanelTab: ignore,

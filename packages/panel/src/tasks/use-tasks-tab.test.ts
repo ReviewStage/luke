@@ -839,6 +839,53 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
   }
 });
 
+test("a task opened from a list opens on the agent waiting on the developer rather than the tab it last showed, and one with no agent left on its Overview", () => {
+  const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
+  // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
+  const named = namingRow([AGENT_ID, WAITING], 2);
+  const waitingRow = {
+    ...named,
+    agents: {
+      ...named.agents,
+      working: 1,
+      agents: named.agents.agents.map((line) =>
+        line.id === AGENT_ID ? { ...line, status: AGENT_STATUS.RUNNING } : line,
+      ),
+    },
+  };
+  const elsewhere = (tasks: TasksView["tasks"]) => ({
+    ...OPEN,
+    tasks,
+    activeTaskId: OTHER_TASK_ID,
+  });
+  const tab = mount(
+    {
+      shown: true,
+      tasks: elsewhere([waitingRow]),
+      inboxWaiting: [
+        {
+          taskId: TASK.id,
+          items: [{ id: "item", agentId: WAITING, title: "Which retry budget?", postedAt: 1 }],
+        },
+      ],
+    },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() => tab.control().onSelect(TASK.id));
+  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
+  assert.deepEqual(
+    tab.control().mainTabs.tab,
+    { agent: WAITING },
+    "the agent waiting, past the one at work",
+  );
+
+  tab.stand({ tasks: elsewhere([row(TASK.id, 1)]), inboxWaiting: [] });
+  act(() => tab.control().onSelect(TASK.id));
+  tab.stand({ tasks: { ...OPEN, tasks: [row(TASK.id, 1)] } });
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "Overview, where New agent is");
+});
+
 test("in a narrow room Back to a task opens it as it stood, its panel open on the tab it showed, where a task opened from a list lands on its plan", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },

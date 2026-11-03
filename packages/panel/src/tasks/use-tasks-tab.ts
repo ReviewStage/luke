@@ -166,6 +166,7 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { holdsAsk } from "./inbox-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
@@ -677,8 +678,10 @@ export interface TasksControl {
   agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task from a list, the drawer, or the Inbox: in a narrow room on its plan. */
+  /** Opens a task from a list, the drawer, ⌘K, or the Inbox, on the agent waiting on the developer, else the one last active, else its Overview. */
   onSelect: (taskId: string) => void;
+  /** Opens a task a crumb or a related task's row names where it was left: in a narrow room on its plan. */
+  onResume: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a row's press or the call card's way back asks. */
@@ -1052,6 +1055,31 @@ function chosenPinOf(
 /** Whether a pin of the sidebar's is of the task: a tab pinned on it, or an agent on it. */
 function pinOnTask(pin: SidebarPin, taskId: string): boolean {
   return "task" in pin && pin.task === taskId;
+}
+
+/**
+ * The agent a task opened afresh lands on, so the developer arrives in the
+ * conversation: one with a thread waiting on them, a question before a
+ * notice, as the Inbox lists what waits; else the agent its row names that
+ * was last active, one at work counting as active now; none where its row
+ * names none, so it opens on its Overview. Note that the row names a few of
+ * its agents, archived ones left out and those at work first
+ * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
+ */
+function openingAgentOf(
+  taskId: string,
+  tasks: readonly TaskSummary[],
+  waiting: readonly AppInboxTask[],
+): string | undefined {
+  const items = waiting.find((each) => each.taskId === taskId)?.items ?? [];
+  const waitingOn = items.find(holdsAsk) ?? items[0];
+  if (waitingOn !== undefined) return waitingOn.agentId;
+  const lines = tasks.find((task) => task.id === taskId)?.agents?.agents ?? [];
+  const working = lines.find((line) => agentStillWriting(line.status));
+  if (working !== undefined) return working.id;
+  let latest = lines[0];
+  for (const line of lines) if ((line.at ?? 0) > (latest?.at ?? 0)) latest = line;
+  return latest?.id;
 }
 
 /** A pin pressed in the sidebar, and the task open when it was, or its own once that opens. */
@@ -2569,8 +2597,17 @@ export function useTasksTab(input: {
     setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
     select(taskId);
   };
-  // One opened from a list lands on its plan in a narrow room: its Overview, the panel shut over it.
+  // One opened from a list lands on its agent (`openingAgentOf`), else its
+  // Overview; in a narrow room the panel shuts over it, so the agent stands
+  // as a screen over Overview, which its header's way back returns to.
   const selectListed = (taskId: string) => {
+    openUnpinned(taskId);
+    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
+    const agentId = openingAgentOf(taskId, tasksNow, input.inboxWaiting);
+    mainTabs.onShow(taskId, agentId === undefined ? MAIN_TAB.OVERVIEW : { agent: agentId });
+  };
+  // One a crumb or a related task's row names opens where it was left, and in a narrow room on its plan.
+  const resumeListed = (taskId: string) => {
     openUnpinned(taskId);
     if (input.room !== SHELL_ROOM.NARROW) return;
     sidePanel.onSetOpen(false);
@@ -2865,6 +2902,15 @@ export function useTasksTab(input: {
   // Each ask is its own, so the same section asked twice scrolls twice.
   const showMention = (mention: PlanMention) => {
     const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
+    // A chip or link naming another task alone opens it afresh, as a list's row does, on its agent where it has one.
+    const agentId =
+      anchor === undefined && mention.taskId !== tasks.activeTaskId
+        ? openingAgentOf(mention.taskId, tasksNow, input.inboxWaiting)
+        : undefined;
+    if (agentId !== undefined) {
+      showColumnTab(mention.taskId, { agent: agentId });
+      return;
+    }
     showOverview(
       anchor === undefined
         ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
@@ -3552,12 +3598,13 @@ export function useTasksTab(input: {
     },
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
-    // go only once it opens. A narrow room shows one pane, so a task opened
-    // there from a list lands on its plan, the side panel standing full
-    // screen on the plan's tab, rather than on whatever tab it last showed;
-    // a link names its own place (`openLink`), and the history opens a task
-    // through `onRestoreTask` instead, standing the pane its step held.
+    // go only once it opens. A task opened from a list lands in the
+    // conversation, on its agent rather than on whatever tab it last showed,
+    // a narrow room's side panel shut over it; a link names its own place
+    // (`openLink`), and the history opens a task through `onRestoreTask`
+    // instead, standing the pane its step held.
     onSelect: guard(selectListed),
+    onResume: guard(resumeListed),
     onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
       select(taskId);
