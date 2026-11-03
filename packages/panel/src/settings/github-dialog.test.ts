@@ -11,7 +11,7 @@ import {
 } from "@repo/features/github-token-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind } from "@repo/host/contract";
-import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import type { SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement } from "react";
@@ -280,25 +280,9 @@ test("each refused save says why and what to do next, and keeps the field", asyn
     fine_grained: "This isn't a classic token. Create a classic token and paste that.",
     invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
     no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
-    no_github_account:
-      "No GitHub account is connected to your Vespin account. Connect GitHub in Integrations settings, then save the token again.",
-    other_user:
-      "This token belongs to a different GitHub account than the one connected to Vespin. Create it while signed in to the connected account.",
     unreachable: "GitHub could not be reached. Try again.",
     too_many_tries: "Too many tokens tried in the last hour. Try again later.",
   });
-});
-
-test("a save refused for want of a GitHub account names Integrations by a link that opens it", async () => {
-  await mountAndOpen();
-  refuseSave = GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT;
-  await paste(PASTED);
-  const line =
-    document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "") ??
-    assert.fail("no line says why");
-  assert.doesNotMatch(line.textContent ?? "", /›/u, "no path to the page is spelled");
-  act(() => button("Integrations", line).click());
-  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.INTEGRATIONS }]);
 });
 
 test("a saved token GitHub rejected says to remove it and add a new one", async () => {

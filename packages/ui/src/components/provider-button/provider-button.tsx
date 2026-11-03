@@ -122,6 +122,7 @@ export function ProviderButton({
   busyLabel,
   disabled = false,
   lastUsed = false,
+  words: said,
   onPress,
 }: BusyProps & {
   provider: MarkProvider;
@@ -133,10 +134,12 @@ export function ProviderButton({
   disabled?: boolean;
   /** Whether it is the way in taken last, which wears the pill that says so. */
   lastUsed?: boolean;
+  /** What it says where it is no sign-in ("Install on GitHub"); "Continue with" its name where none is given. */
+  words?: string | undefined;
   onPress: () => void;
 }): React.JSX.Element {
   const badge = useId();
-  const words = `Continue with ${name}`;
+  const words = said ?? `Continue with ${name}`;
   const describedBy = lastUsed ? badge : undefined;
   return (
     <span className="ui-provider-button-slot relative flex flex-col">

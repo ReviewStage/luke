@@ -129,6 +129,8 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
     onTabChange: setTab,
     tasks: tasksControl({
       page: onTask ? TASKS_PAGE.DOCUMENT : TASKS_PAGE.HOME,
+      // An account with a task, so Home rests on its own page rather than a new account's welcome.
+      tasks: [DOCUMENT_TASK],
       region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
       sidePanel,
     }),

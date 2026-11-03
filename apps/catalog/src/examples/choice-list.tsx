@@ -93,6 +93,7 @@ const CREDENTIALS: readonly ChoiceOption<string>[] = [
   {
     value: "subscription",
     label: "Subscription",
+    badge: "Recommended",
     after: (
       <span style={{ display: "inline-flex", width: 12, height: 12, marginLeft: 8 }}>
         <CheckIcon />

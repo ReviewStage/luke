@@ -252,13 +252,13 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
   );
 
   it.effect(
-    "a fine-grained token, one GitHub refuses, one without repo, and another GitHub user's keep nothing and say why",
+    "a fine-grained token, one GitHub refuses, and one without repo keep nothing and say why",
     () =>
       Effect.gen(function* () {
         const { owner, ask, checks } = yield* openMembers;
 
         const answers = [];
-        for (const token of [TOKEN.FINE_GRAINED, TOKEN.REFUSED, TOKEN.NO_REPO, TOKEN.OTHER]) {
+        for (const token of [TOKEN.FINE_GRAINED, TOKEN.REFUSED, TOKEN.NO_REPO]) {
           answers.push(answerOf(yield* ask(owner, "PUT", { token })));
         }
 
@@ -266,13 +266,27 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
           { token: null, rejected: GITHUB_TOKEN_REJECTION.FINE_GRAINED },
           { token: null, rejected: GITHUB_TOKEN_REJECTION.INVALID },
           { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE },
-          { token: null, rejected: GITHUB_TOKEN_REJECTION.OTHER_USER },
         ]);
         assert.deepEqual(countedFor(owner), [], "a token that was not kept is not counted");
         assert.ok(
           checks.every((check) => !check.authorization?.includes(TOKEN.FINE_GRAINED)),
           "a fine-grained token is never sent to GitHub",
         );
+      }),
+  );
+
+  it.effect(
+    "a token GitHub accepts stands on its own: a member with no GitHub linked keeps it, as the GitHub user it is",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { owner, ask } = yield* openMembers;
+        yield* db.delete(account).where(eq(account.userId, owner));
+
+        const { token, rejected } = answerOf(yield* ask(owner, "PUT", { token: TOKEN.OTHER }));
+
+        assert.equal(rejected, undefined);
+        assert.equal(token?.login, `login-${GITHUB_ID + 1}`);
       }),
   );
 
