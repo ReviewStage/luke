@@ -780,7 +780,7 @@ test("an @ whose read of the skills came back unread says they could not be read
   );
 });
 
-const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 
 /** Words pasted into the box's editor, as the system's clipboard hands them over. */
 function pasteInComposer(container: HTMLElement, words: string): void {
@@ -807,14 +807,14 @@ test("a page of an integration's pasted into the box on a plan's page is drawn a
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(chips.map(chipName), ["LUKE-142/fix-the-thing"]);
-  assert.deepEqual(sent, [`Fix [@LUKE-142/fix-the-thing](${ISSUE_URL})`]);
+  assert.deepEqual(chips.map(chipName), ["ACME-142/fix-the-thing"]);
+  assert.deepEqual(sent, [`Fix [@ACME-142/fix-the-thing](${ISSUE_URL})`]);
 });
 
 test("a sent message's page of an integration's is a chip linking to the page, which opens it in the browser", () => {
   const container = drawn(
     createElement(TranscriptWords, {
-      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
+      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "ACME-142/fix-the-thing", PLACE)}.`,
     }),
     planPage([]),
   );
@@ -831,7 +831,7 @@ test("a sent message's page of an integration's is a chip linking to the page, w
 test("off a plan's page a sent message's page of an integration's is still its chip, its address on no attribute the recording keeps", () => {
   const container = drawn(
     createElement(TranscriptWords, {
-      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
+      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "ACME-142/fix-the-thing", PLACE)}.`,
     }),
     undefined,
   );

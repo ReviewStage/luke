@@ -18,6 +18,7 @@
  * profile stages.
  */
 
+import { AsyncIteratorClass } from "@orpc/client";
 import { AGENT_CALL_FAILURE, type AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_AUTHOR,
@@ -67,7 +68,6 @@ import { RUN_PROFILE } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
-import { AsyncIteratorClass } from "@orpc/client";
 import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
 import {
   PULL_REQUEST_VIEW,
@@ -94,7 +94,7 @@ const PULL_REQUEST = {
   number: 214,
   title: "feat(members): invite a teammate by email",
   url: `https://github.com/${REPOSITORY}/pull/214`,
-  head: "luke/teammate-invitations",
+  head: "agent/teammate-invitations",
   base: "main",
   headSha: "3f9a1c7e5b2d4f6a8c0e1b3d5f7a9c1e3b5d7f9a",
   baseSha: "8b2d4f6a0c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d",

@@ -26,7 +26,7 @@
  * until it is matched here too. The relays each sandboxed command starts end
  * with that command, so none stands while the agent waits.
  *
- * Our own browser (`LUKE_BROWSER_PIN`) runs with an emptied set too, since
+ * Our own browser (`SANDBOX_BROWSER_PIN`) runs with an emptied set too, since
  * the pages it loads are no one's we vouch for, and stands for as long as
  * the sandbox once the agent opens it. It is told apart by its sessions:
  * Xvfb and Chromium each lead one of their own, Chromium's renderers and
@@ -51,7 +51,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { LUKE_BROWSER_PIN } from "./pins.js";
+import { SANDBOX_BROWSER_PIN } from "./pins.js";
 
 export interface ProcessTableShape {
   /** Whether a process of the agent's, beside the runner and the harness it spawned, still runs; yes where it cannot be told. */
@@ -69,9 +69,9 @@ const HARNESS_BRIDGE = {
 } as const;
 
 /** The command-line arguments the leader of a session of our browser runs with: Xvfb's display, or Chromium's DevTools port. */
-const LUKE_BROWSER_ARGUMENT = {
-  DISPLAY: `:${LUKE_BROWSER_PIN.DISPLAY}`,
-  DEVTOOLS: `--remote-debugging-port=${LUKE_BROWSER_PIN.DEVTOOLS_PORT}`,
+const SANDBOX_BROWSER_ARGUMENT = {
+  DISPLAY: `:${SANDBOX_BROWSER_PIN.DISPLAY}`,
+  DEVTOOLS: `--remote-debugging-port=${SANDBOX_BROWSER_PIN.DEVTOOLS_PORT}`,
 } as const;
 
 /** One process as its `status` names it: its parent, its session, where named, and whether its bounding set is empty. */
@@ -126,9 +126,9 @@ function leadsBrowser(root: string, leader: number): boolean {
   const argv = argvOf(root, leader);
   if (argv === undefined) return false;
   const [program, display] = argv;
-  if (program !== undefined && basename(program) === LUKE_BROWSER_PIN.XVFB)
-    return display === LUKE_BROWSER_ARGUMENT.DISPLAY;
-  return argv.includes(LUKE_BROWSER_ARGUMENT.DEVTOOLS);
+  if (program !== undefined && basename(program) === SANDBOX_BROWSER_PIN.XVFB)
+    return display === SANDBOX_BROWSER_ARGUMENT.DISPLAY;
+  return argv.includes(SANDBOX_BROWSER_ARGUMENT.DEVTOOLS);
 }
 
 /**

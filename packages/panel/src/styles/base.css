@@ -31,7 +31,7 @@
      palette's green (`--ui-color-complete`); the app answers in the working ink the
      rest of the surface already uses for something live and in progress,
      which is what a reply is. */
-  --voice-luke: var(--ui-color-working);
+  --voice-app: var(--ui-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--ui-focus-ring-*` (`tokens/profiles.css`). */
   /* The code on screen, in the inks of GitHub's themes on its ground

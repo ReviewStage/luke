@@ -33,7 +33,13 @@ import {
 import { Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { type GitHubUnavailable, githubPost, githubRead, send } from "./github-app.js";
+import {
+  GITHUB_USER_AGENT,
+  type GitHubUnavailable,
+  githubPost,
+  githubRead,
+  send,
+} from "./github-app.js";
 
 /** An image read for the window: its bytes and the type GitHub served them as. */
 export interface ReadImage {
@@ -157,7 +163,7 @@ function imageAt(
   address: string,
 ): Effect.Effect<Option.Option<ReadImage>, GitHubUnavailable, HttpClient.HttpClient> {
   const request = HttpClientRequest.get(address).pipe(
-    HttpClientRequest.setHeader("user-agent", "luke-github-app"),
+    HttpClientRequest.setHeader("user-agent", GITHUB_USER_AGENT),
   );
   return imageOf(request, imageTypeOf);
 }

@@ -35,7 +35,7 @@ import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/relay";
 const COMMIT = "0a1b2c3d";
-const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 
 const WORDS = [
   `Read [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
@@ -126,7 +126,7 @@ test("on a plan's page a plan's link, a file's lines, and a Linear page are chip
   assert.deepEqual(chips(container), [
     [MENTION_KIND.SECTION, "Rollout"],
     [MENTION_KIND.FILE, "the store"],
-    [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
+    [MENTION_KIND.LINK, "ACME-142/fix-the-thing"],
   ]);
   assert.deepEqual(
     [...container.querySelectorAll("a:not([data-mention-ref])")].map((link) => link.textContent),
@@ -154,7 +154,7 @@ test("off a plan's page, as in the workspace's Inbox, the same links are chips, 
   assert.deepEqual(chips(container), [
     [MENTION_KIND.SECTION, "the rollout"],
     [MENTION_KIND.FILE, "the store"],
-    [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
+    [MENTION_KIND.LINK, "ACME-142/fix-the-thing"],
   ]);
   assert.deepEqual(
     [...container.querySelectorAll("a:not([data-mention-ref])")].map((link) => link.textContent),

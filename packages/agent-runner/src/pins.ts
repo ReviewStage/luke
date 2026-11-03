@@ -56,7 +56,7 @@ export const PLAYWRIGHT_PIN = {
  * session's leader, and a wait after the agent opened its browser can still
  * stop the sandbox, whose stop keeps the browser's profile on its disk.
  */
-export const LUKE_BROWSER_PIN = {
+export const SANDBOX_BROWSER_PIN = {
   /** Chromium's DevTools port on the sandbox's loopback, as its `--remote-debugging-port` flag names it. */
   DEVTOOLS_PORT: 9333,
   /** The program Xvfb runs as, and the display its first argument names. */

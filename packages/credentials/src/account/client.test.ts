@@ -16,7 +16,7 @@ function json(body: JsonValue, status = 200): Response {
 test("the authorization URL carries the native public-client contract", () => {
   const client = new AccountClient({
     baseUrl: "https://vespin.dev/api/auth/",
-    clientId: "luke-desktop",
+    clientId: "desktop",
   });
   const url = new URL(
     client.authorizeUrl({
@@ -25,7 +25,7 @@ test("the authorization URL carries the native public-client contract", () => {
       codeChallenge: "challenge-value",
     }),
   );
-  assert.equal(url.searchParams.get("client_id"), "luke-desktop");
+  assert.equal(url.searchParams.get("client_id"), "desktop");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("redirect_uri"), "http://127.0.0.1:49152/callback");
   assert.equal(url.searchParams.get("state"), "state-value");
@@ -45,7 +45,7 @@ it.effect("the code exchange sends the verifier and redirect as form fields", ()
     };
     const client = new AccountClient({
       baseUrl: "https://vespin.dev/api/auth",
-      clientId: "luke-desktop",
+      clientId: "desktop",
       httpClient: fakeHttpClientLayer(fetch),
     });
 
@@ -65,7 +65,7 @@ it.effect("the code exchange sends the verifier and redirect as form fields", ()
     assert.equal(form.get("grant_type"), "authorization_code");
     assert.equal(form.get("code"), "authorization-code");
     assert.equal(form.get("code_verifier"), "verifier");
-    assert.equal(form.get("client_id"), "luke-desktop");
+    assert.equal(form.get("client_id"), "desktop");
     assert.equal(form.get("redirect_uri"), "http://127.0.0.1:49152/callback");
   }),
 );
@@ -82,7 +82,7 @@ it.effect("userinfo returns the identity fields and nothing else the claim carri
     };
     const client = new AccountClient({
       baseUrl: "https://vespin.dev/api/auth",
-      clientId: "luke-desktop",
+      clientId: "desktop",
       httpClient: fakeHttpClientLayer(fetch),
     });
 
@@ -99,7 +99,7 @@ it.effect("invalid token and identity responses are refused", () =>
   Effect.gen(function* () {
     const tokenClient = new AccountClient({
       baseUrl: "https://vespin.dev/api/auth",
-      clientId: "luke-desktop",
+      clientId: "desktop",
       httpClient: fakeHttpClientLayer(async () => json({ access_token: "access-only" })),
     });
     const tokens = yield* Effect.flip(
@@ -113,7 +113,7 @@ it.effect("invalid token and identity responses are refused", () =>
 
     const identityClient = new AccountClient({
       baseUrl: "https://vespin.dev/api/auth",
-      clientId: "luke-desktop",
+      clientId: "desktop",
       httpClient: fakeHttpClientLayer(async () => json({ provider: "unknown" })),
     });
     const identity = yield* Effect.flip(identityClient.userInfo("access", ACCOUNT_PROVIDER.GOOGLE));
@@ -158,7 +158,7 @@ function recordingClient(answer: () => Response) {
   };
   const client = new AccountClient({
     baseUrl: "https://vespin.dev/api/auth",
-    clientId: "luke-desktop",
+    clientId: "desktop",
     httpClient: fakeHttpClientLayer(fetch),
   });
   return { client, sent: () => request };

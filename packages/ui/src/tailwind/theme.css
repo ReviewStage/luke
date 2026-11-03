@@ -1085,7 +1085,7 @@
   --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
   --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
   --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
-  --color-voice-luke: var(--voice-luke);
+  --color-voice-app: var(--voice-app);
   /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
      sides, as far in as the measure leaves them (`--pull-request-page-measure`,
      tasks.css), never under a column's inset; the Chapters view's rail, as

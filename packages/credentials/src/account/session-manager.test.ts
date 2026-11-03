@@ -189,7 +189,7 @@ function refreshingClient(
   };
   return new AccountClient({
     baseUrl: "https://vespin.dev/api/auth",
-    clientId: "luke-desktop",
+    clientId: "desktop",
     httpClient: fakeHttpClientLayer(fetchStub),
   });
 }

@@ -15,7 +15,7 @@ import {
   type SignInConsentSeam,
 } from "./effect/seams.js";
 
-const ACCOUNT_CLIENT_ID = "luke-desktop";
+const ACCOUNT_CLIENT_ID = "desktop";
 
 /**
  * The desktop's account: an OAuth sign-in through the developer's browser,

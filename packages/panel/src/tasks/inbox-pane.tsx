@@ -513,7 +513,7 @@ function useScrollToOwnMessage(
 }
 
 /** What an ask's box says where its type is one this build does not know. */
-const NEWER_LUKE_ASK = `Answer this in a newer ${PRODUCT_NAME}.`;
+const NEWER_APP_ASK = `Answer this in a newer ${PRODUCT_NAME}.`;
 
 /**
  * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its
@@ -878,7 +878,7 @@ function AskBox({
       <div className={INBOX_ASK_BOX} data-inbox-ask="newer">
         <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
           <CardHead>
-            <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
+            <Text tone={TEXT_TONE.MUTED}>{NEWER_APP_ASK}</Text>
             {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
           </CardHead>
         </Card>
