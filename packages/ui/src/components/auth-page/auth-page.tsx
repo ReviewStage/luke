@@ -8,6 +8,7 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  *
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
+ * a step's foot where the page is one step of several (`AuthStepFoot`),
  * what went wrong, the one way on it offers, and a closing note. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
@@ -52,6 +53,7 @@ export function AuthPage({
   error,
   action,
   footnote,
+  foot,
   children,
 }: {
   /** The artwork the page opens with: an `AuthMark`, or the product's mark. */
@@ -65,6 +67,8 @@ export function AuthPage({
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
+  /** The foot of a page that is one step of several, an `AuthStepFoot`, under what the step holds. */
+  foot?: ReactNode;
   /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -95,6 +99,9 @@ export function AuthPage({
           <div className="ui-auth-body flex flex-col self-stretch gap-ui-12 mt-ui-32 text-start">
             {children}
           </div>
+        ) : null}
+        {said(foot) ? (
+          <div className="ui-auth-foot @container/ui-auth-foot self-stretch mt-ui-24">{foot}</div>
         ) : null}
         <p className="ui-auth-error m-0 mt-ui-16 empty:mt-0 text-danger" role="alert">
           {error !== undefined && said(error.words) ? error.words : null}

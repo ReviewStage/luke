@@ -292,7 +292,7 @@ const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
     }),
   );
 
-test("a review submitted, a comment on a pull request, and a failed check suite or commit status on an agent's branch are read, each by who caused it and when, and nothing else is", () => {
+test("a review submitted, a comment on a pull request, a failed check suite or commit status on an agent's branch, and the merge queue taking an agent's open pull request out are read, each by who caused it and when, and nothing else is", () => {
   const ref = "agent/invites";
   assert.deepEqual(
     agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
@@ -382,8 +382,44 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     sha: "4567cdef",
   });
 
+  const dequeued = (
+    branch: string,
+    reason: string,
+    pullRequest: { state: string; merged: boolean } = { state: "open", merged: false },
+    action = "dequeued",
+  ) => ({
+    action,
+    number: 41,
+    reason,
+    repository,
+    sender: sender("octocat"),
+    pull_request: {
+      number: 41,
+      html_url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
+      head: { ref: branch, sha: "0123abcd" },
+      ...pullRequest,
+    },
+  });
+  assert.deepEqual(agentWakeOf("pull_request", unparsedWire(dequeued(ref, "CI_FAILURE")), 7), {
+    kind: AGENT_WAKE.DEQUEUED,
+    repository: RELAY_FULL_NAME,
+    branches: [ref],
+    pullRequest: 41,
+    url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
+    by: "octocat",
+    byId: "583231",
+    // GitHub's delivery names no instant of its own, so it is told as of when it arrived.
+    at: 7,
+    reason: "CI_FAILURE",
+  });
+
   for (const [event, payload] of [
     ["pull_request_review", reviewDelivery(ref, "octocat", "edited")],
+    // Taken out by hand, as the agent's own `gh pr merge --disable-auto` takes it out.
+    ["pull_request", dequeued(ref, "MANUAL")],
+    ["pull_request", dequeued(ref, "MERGE", { state: "closed", merged: true })],
+    ["pull_request", dequeued("main", "CI_FAILURE")],
+    ["pull_request", dequeued(ref, "CI_FAILURE", { state: "open", merged: false }, "enqueued")],
     ["pull_request_review_comment", reviewDelivery(ref, "octocat", "created")],
     ["issue_comment", comment(false)],
     ["issue_comment", comment(true, "edited")],

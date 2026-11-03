@@ -14,6 +14,8 @@
  * reaches it.
  */
 
+import { RECORDING_CURSOR_FONT } from "./recording-cursor-font.js";
+
 /**
  * Where the sandbox image keeps the pointer's source, every user's to read,
  * for a script to hand Playwright's `page.addInitScript({ path })`.
@@ -25,17 +27,31 @@ export const RECORDING_CURSOR_FILE = {
 
 /**
  * The agent's pointer, drawn into each page while it is recorded: the
- * panel's arrow on its soft halo, in a closed shadow root on the document's
+ * panel's amber arrow with its white edge, in a closed shadow root on the document's
  * root, hidden from the accessibility tree and taking no pointer events. It
  * follows the input the agent sends, which a page hears as a person's
  * (`@repo/features/browser-agent-cdp`), gliding to each point on the panel's
  * spring (`--ui-spring-fast` over `--ui-duration-fast`), and once it arrives a
- * press presses it, with a ripple at the point, and typing bobs it; over a
- * dark page it is drawn in the panel's lighter grey, and near the page's
- * right or bottom edge it is mirrored about its tip. The panel's tokens are
+ * press presses it, with a ripple at the point, and typing bobs it over an
+ * amber glow; over a dark page it is drawn in the dark mode's brighter amber, and near the page's
+ * right or bottom edge it is mirrored about its tip. A key a viewer could
+ * not otherwise see, such as Enter, Tab, Escape, an arrow, or a shortcut,
+ * shows at the foot of the page on the window's tooltip surface, set as
+ * `@repo/ui`'s `Shortcut` sets a chord, its keys tight and unboxed, the
+ * newest in the tooltip's ink and the two before it in its chord's, fading a
+ * beat after the last; a key that only types text never does, since the
+ * field shows that itself and it may be a password. A key's glyph is drawn
+ * as Lucide draws it, the window's icons, and its letters in Geist, which the
+ * source adds to the page's fonts from its own bytes
+ * (`recording-cursor-font.ts`), since the sandbox's Linux has neither and
+ * its fallback faces set each glyph in a weight of its own. The panel's
+ * tokens are
  * no part of the page, so their values are written out here: hold them to
- * `--agent-pointer`, `--agent-pointer-on-dark`, and `--agent-pointer-halo`,
- * and to the `.cloud-browser-cursor` rules. Note that it does not rock while
+ * `--agent-pointer`, its `-on-dark`, `-edge`, `-shadow`, `-glow`, and
+ * `-glow-on-dark` siblings,
+ * to the `.cloud-browser-cursor` rules, and to `--ui-color-tooltip`, its edge,
+ * text, and chord inks, `--ui-tooltip-radius`, and `--ui-tooltip-shadow`; the
+ * caps stand larger than a tooltip's words, which a compressed video blurs. Note that it does not rock while
  * still, as the panel's does while the agent works, because a video shows the
  * agent only as it acts.
  */
@@ -53,12 +69,23 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   const EXIT = "cubic-bezier(.4,0,.6,1)";
   const SPRING = "linear(0,.0288,.1002,.1961,.3029,.4113,.5149,.6097,.6935,.7656,.826,.8755,.9149,.9457,.969,.9861,.9982,1.0063,1.0113,1.014,1.0151,1.015,1.0141,1.0127,1.0112,1.0095,1)";
   const svg = "http://www.w3.org/2000/svg";
+  const FAMILY = "agent-recording-geist";
+  // The key caps' face, from its own bytes; a page that cannot take it sets them in its own sans.
+  let face;
+  if (typeof FontFace === "function" && document.fonts) {
+    try {
+      face = new FontFace(FAMILY, Uint8Array.from(atob("${RECORDING_CURSOR_FONT}"), (c) => c.charCodeAt(0)), { weight: "100 900" });
+      document.fonts.add(face);
+    } catch {
+      face = undefined;
+    }
+  }
   const host = document.createElement("div");
   host.setAttribute("data-ui-recording-cursor", "");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.2),transparent)}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:rgba(107,111,118,.9);stroke:rgba(107,111,118,.9);stroke-width:.6;stroke-linejoin:round;transform-origin:0 0}.c.dark .a{fill:rgba(206,209,214,.92);stroke:rgba(206,209,214,.92)}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1px solid rgba(107,111,118,.9);border-radius:50%;opacity:0}.r.dark{border-color:rgba(206,209,214,.92)}";
+  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(167,97,27,.42),transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,rgba(207,123,38,.5),transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:#a7611b;stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:#cf7b26}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid #a7611b;border-radius:50%;opacity:0}.r.dark{border-color:#cf7b26}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
   // A constructed sheet, since a page's own style-src may refuse a style element.
   if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
     const sheet = new CSSStyleSheet();
@@ -79,11 +106,13 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   icon.setAttribute("class", "a");
   icon.setAttribute("viewBox", "1 1 16 16");
   const path = document.createElementNS(svg, "path");
-  path.setAttribute("d", "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z");
+  path.setAttribute("d", "M1 1 13.07 5.16Q15.2 5.89 13.56 6.58L8.64 8.64 6.58 13.56Q5.89 15.2 5.16 13.07Z");
   icon.append(path);
   flip.append(icon);
   arrow.append(halo, flip);
-  shadow.append(arrow);
+  const keys = document.createElement("div");
+  keys.className = "k";
+  shadow.append(arrow, keys);
   root.append(host);
   const stop = new AbortController();
   const on = { capture: true, passive: true, signal: stop.signal };
@@ -93,6 +122,23 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   let pressedAt = 0;
   let bob;
   let bobEnd;
+  let keysEnd;
+  // Each key's glyph as Lucide draws it, its paths in its 24 box, or its name where Lucide draws none.
+  const ICONS = {
+    Enter: ["M20 4v7a4 4 0 0 1-4 4H4", "m9 10-5 5 5 5"],
+    Tab: ["M17 12H3", "m11 18 6-6-6-6", "M21 5v14"],
+    Backspace: ["M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z", "m12 9 6 6", "m18 9-6 6"],
+    ArrowUp: ["m5 12 7-7 7 7", "M12 19V5"],
+    ArrowDown: ["M12 5v14", "m19 12-7 7-7-7"],
+    ArrowLeft: ["m12 19-7-7 7-7", "M19 12H5"],
+    ArrowRight: ["M5 12h14", "m12 5 7 7-7 7"],
+    Control: ["m18 15-6-6-6 6"],
+    Alt: ["M14 3h7", "M3 3h5.28a1 1 0 0 1 .948.684l5.544 16.632a1 1 0 0 0 .949.684H21"],
+    Shift: ["M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z"],
+    Meta: ["M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"],
+  };
+  const NAMES = { Escape: "Esc", Delete: "Del", Home: "Home", End: "End", PageUp: "PgUp", PageDown: "PgDn" };
+  const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
   // Whether the page is dark just inside the arrow's tip: the first background there that mostly covers what is under it, by its luminance.
   const darkAt = (x, y) => {
     if (typeof document.elementsFromPoint !== "function") return false;
@@ -131,15 +177,55 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     const ripple = ring.animate([{ opacity: 0, transform: "scale(.3)" }, { opacity: 0.6, offset: 0.15 }, { opacity: 0, transform: "scale(1.6)" }], { duration: 460, delay, easing: EXIT });
     ripple.onfinish = () => ring.remove();
   };
-  // Typing bobs the arrow until the keys have stopped for a beat.
+  // Typing bobs the arrow over its glow until the keys have stopped for a beat.
   const bobOnce = () => {
-    if (!animates) return;
-    if (!bob) bob = icon.animate([{ translate: "0 0" }, { translate: "0 -2px" }, { translate: "0 0" }], { duration: 600, iterations: Infinity, easing: "ease-in-out" });
+    arrow.classList.add("t");
+    if (animates && !bob) bob = icon.animate([{ translate: "0 0" }, { translate: "0 -2px" }, { translate: "0 0" }], { duration: 600, iterations: Infinity, easing: "ease-in-out" });
     clearTimeout(bobEnd);
     bobEnd = setTimeout(() => {
+      arrow.classList.remove("t");
       bob?.cancel();
       bob = undefined;
     }, 700);
+  };
+  // A key's glyphs, its modifiers first in a Mac menu's order, each a Lucide icon's name or a word; none for a modifier alone or a key that only types text.
+  const capsOf = (event) => {
+    if (MODIFIERS.has(event.key)) return undefined;
+    const chord = event.metaKey || event.ctrlKey || event.altKey;
+    const icon = Object.hasOwn(ICONS, event.key) ? { icon: event.key } : undefined;
+    const name = Object.hasOwn(NAMES, event.key) ? NAMES[event.key] : /^F\\d{1,2}$/.test(event.key) ? event.key : undefined;
+    if (icon === undefined && name === undefined && !chord) return undefined;
+    const code = event.code || "";
+    const word = name ?? (/^Key[A-Z]$/.test(code) ? code.slice(3) : /^Digit\\d$/.test(code) ? code.slice(5) : event.key === " " ? "Space" : event.key.toUpperCase());
+    const held = [["Control", event.ctrlKey], ["Alt", event.altKey], ["Shift", event.shiftKey], ["Meta", event.metaKey]].filter(([, down]) => down).map(([modifier]) => ({ icon: modifier }));
+    return [...held, icon ?? { word }];
+  };
+  const glyphOf = (part) => {
+    if (part.word !== undefined) return document.createTextNode(part.word);
+    const drawn = document.createElementNS(svg, "svg");
+    drawn.setAttribute("viewBox", "0 0 24 24");
+    for (const d of ICONS[part.icon]) {
+      const line = document.createElementNS(svg, "path");
+      line.setAttribute("d", d);
+      drawn.append(line);
+    }
+    return drawn;
+  };
+  // The last three keys stand on the pill, which fades a beat after the last.
+  const showKeys = (event) => {
+    const caps = capsOf(event);
+    if (caps === undefined) return;
+    if (!host.isConnected && document.documentElement) document.documentElement.append(host);
+    const cap = document.createElement("span");
+    cap.append(...caps.map(glyphOf));
+    keys.append(cap);
+    while (keys.childElementCount > 3) keys.firstElementChild.remove();
+    keys.classList.add("on");
+    clearTimeout(keysEnd);
+    keysEnd = setTimeout(() => {
+      keys.classList.remove("on");
+      keysEnd = setTimeout(() => keys.replaceChildren(), 200);
+    }, 1200);
   };
   const middleOf = (target) => {
     if (!(target instanceof Element)) return undefined;
@@ -155,7 +241,10 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     pressAt(event.clientX, event.clientY);
   }, on);
   window.addEventListener("beforeinput", bobOnce, on);
-  window.addEventListener("keydown", bobOnce, on);
+  window.addEventListener("keydown", (event) => {
+    bobOnce();
+    showKeys(event);
+  }, on);
   // Typing by ref focuses its field and a choice sets its dropdown, neither with the mouse, so the pointer goes to the field it lands in.
   window.addEventListener("focusin", (event) => {
     if (Date.now() - pressedAt < 400) return;
@@ -172,6 +261,8 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window.addEventListener("agent-recording-stop", () => {
     stop.abort();
     clearTimeout(bobEnd);
+    clearTimeout(keysEnd);
+    if (face) document.fonts.delete(face);
     host.remove();
     delete window[mark];
   }, { once: true });

@@ -1305,6 +1305,36 @@ body,
   bottom: 0;
 }
 
+/* Chat on the right (Settings › Experimental): with the panel open, the
+   panel fills the middle and the column, the chat, stands at its right at
+   the panel's kept width (`--chat-width`), leaving the panel the room the
+   document keeps beside it otherwise. Its edge stands between the two, at
+   the panel's right (shell.css on the frame). */
+.desktop-task[data-chat-side="right"] {
+  flex-direction: row-reverse;
+}
+
+.desktop-task[data-chat-side="right"] > .desktop-task-main {
+  flex: none;
+  width: var(--chat-width);
+  max-width: var(--spacing-side-panel);
+}
+
+.desktop-task[data-chat-side="right"] > :is(.side-panel, .side-panel-room) {
+  flex: 1 1 0;
+  max-width: none;
+}
+
+.desktop-task[data-chat-side="right"] > .side-panel:not([data-full-screen="true"]) {
+  border-right: 1px solid var(--ui-color-border);
+  border-left: 0;
+}
+
+.desktop-task[data-chat-side="right"] > .side-panel > .ui-resize-edge {
+  right: -3px;
+  left: auto;
+}
+
 /* A drag the edge's snap took away from under the pointer is still the
    edge's (`@repo/ui`'s ResizeEdge marks the root), so the whole window wears
    its cursor and selects nothing. Note that this stays out of the layers,

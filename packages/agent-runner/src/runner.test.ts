@@ -384,7 +384,7 @@ it.effect(
 );
 
 it.effect(
-  "ends as failed a launch whose CLI says nothing of the message a stray result left, once its bound passes",
+  "ends as failed, saying why, a launch whose CLI says nothing of the message a stray result left, once its bound passes",
   () =>
     Effect.gen(function* () {
       const service = fakeService([], STRAY_RESULT.uuid);
@@ -398,6 +398,11 @@ it.effect(
       yield* TestClock.adjust(1);
       assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
       assert.equal(cli.closed, true);
+      assert.deepEqual(service.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.FAILED,
+        detail: "the CLI never took up a message a result left",
+      });
     }),
 );
 

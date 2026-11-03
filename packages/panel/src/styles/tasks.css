@@ -127,18 +127,16 @@
   font-size: inherit;
 }
 
-/* Note that a drawn section's heading margin folds into the gap above its
-   section, so a heading in the editor stands the gap alone. An h3 after a
-   block stands it too, as it does drawn (desktop.css), so opening the text
-   does not pull it up onto the block before it. */
+/* Note that a drawn section's heading margin collapses with the gap above
+   its section, so the larger of the two stands: the heading's own (desktop.css),
+   since it is measured at the heading's larger size. A heading in the editor
+   stands that larger one, so opening the text does not pull each section up
+   onto the one before it. An h3 after a block keeps its own margin, as it
+   does drawn, from desktop.css. */
 .desktop-document
   .plan-document-text
-  > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child),
-.desktop-document
-  .plan-document-text
-  > :not(.ui-markdown-heading)
-  + .ui-markdown-heading[data-level="3"] {
-  margin-top: var(--plan-section-gap);
+  > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
+  margin-top: max(var(--plan-section-gap), 1.6em);
 }
 
 /* A link the read view draws as a mention's chip wears the chip's light look
@@ -191,6 +189,12 @@
 
 .plan-document-text li[data-checked] > div {
   margin-top: 0;
+}
+
+/* A loose task list, its items a blank line apart, opens as a list per item,
+   which stand an item's gap apart, as the read view's one list does. */
+.plan-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
+  margin-top: 0.25em;
 }
 
 /* The editor's box takes a finger's press around it on a coarse pointer, as
@@ -457,9 +461,10 @@
    --ui-spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
-   typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
-   lighter over a dark page, so it reads on any page, an accent button
-   included. The rock and the bob are endless loops held by
+   typing bobs it, with a glow of its amber under it. It is a compact
+   arrowhead in the accent, the dark mode's brighter amber over a dark page,
+   with a white edge and a small shadow, so it reads on any page, an accent
+   button included. The rock and the bob are endless loops held by
    --ui-loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-cursor {
   position: absolute;
@@ -510,23 +515,26 @@
   height: var(--ui-space-16);
   overflow: visible;
   fill: var(--agent-pointer);
-  stroke: var(--agent-pointer);
-  stroke-width: 0.6;
+  stroke: var(--agent-pointer-edge);
+  stroke-width: 2.4;
   stroke-linejoin: round;
+  paint-order: stroke;
+  filter: drop-shadow(
+    0 calc(var(--ui-space-2) / 2) calc(var(--ui-space-2) * 0.75) var(--agent-pointer-shadow)
+  );
   transform-origin: 0 0;
 }
 
 .cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-arrow {
   fill: var(--agent-pointer-on-dark);
-  stroke: var(--agent-pointer-on-dark);
 }
 
 .cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-ripple {
   border-color: var(--agent-pointer-on-dark);
 }
 
-/* The soft halo behind the arrowhead, centred a little inside it from the
-   tip, which holds it apart from whatever the page draws under it. */
+/* The glow behind the arrowhead while the agent types, centred a little
+   inside it from the tip, in the arrow's own amber. */
 .cloud-browser-cursor-halo {
   position: absolute;
   top: calc(var(--ui-space-6) - var(--ui-space-40) / 2);
@@ -534,7 +542,17 @@
   width: var(--ui-space-40);
   height: var(--ui-space-40);
   border-radius: 50%;
-  background: radial-gradient(closest-side, var(--agent-pointer-halo), transparent);
+  background: radial-gradient(closest-side, var(--agent-pointer-glow), transparent);
+  opacity: 0;
+  transition: opacity var(--ui-duration-fast) var(--ui-motion-exit);
+}
+
+.cloud-browser-cursor[data-ground="dark"] .cloud-browser-cursor-halo {
+  background: radial-gradient(closest-side, var(--agent-pointer-glow-on-dark), transparent);
+}
+
+.cloud-browser-cursor[data-shown][data-kind="type"] .cloud-browser-cursor-halo {
+  opacity: 1;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
@@ -554,7 +572,7 @@
   width: var(--ui-space-24);
   height: var(--ui-space-24);
   margin: calc(var(--ui-space-24) / -2);
-  border: calc(var(--ui-space-2) / 2) solid var(--agent-pointer);
+  border: calc(var(--ui-space-2) * 0.75) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
   animation: cloud-browser-cursor-ripple var(--ui-duration-shape) var(--ui-motion-exit)

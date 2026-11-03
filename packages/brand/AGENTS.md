@@ -4,8 +4,8 @@ The product's brand: the design sources, the generators that cut every
 committed copy from them, and what those copies are.
 
 - `assets/` holds the SVG and PNG sources and the cut artwork: icon, mark,
-  logo, wordmark, avatar, DMG background, social card, download button.
-  `README.md` is the asset sheet.
+  logo, wordmark, avatar, banner, DMG background, social card, download
+  button. `README.md` is the asset sheet.
 - `scripts/` holds the two generators (`pnpm --filter @repo/brand generate`),
   the brand's colour table both read (`brand-palette.mjs`), and the DMG window
   layout the desktop's packaging reads.

@@ -5,6 +5,7 @@ import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import {
   PullRequestWriteNote,
   type PullRequestWrites,
+  type ReadAgain,
   usePullRequestWrites,
 } from "./pull-request-writes.js";
 
@@ -40,7 +41,7 @@ export interface PullRequestComment {
 }
 
 /** The comment box's words and change, for the tab to hold across the box coming and going. */
-export function usePullRequestComment(agentId: string, onWritten: () => void): PullRequestComment {
+export function usePullRequestComment(agentId: string, onWritten: ReadAgain): PullRequestComment {
   const writes = usePullRequestWrites(agentId, onWritten);
   const [body, setBody] = useState("");
   return { writes, body, setBody };

@@ -5,7 +5,11 @@ import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { type HeldBodies, heldBodies } from "./comment-drafts.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
-import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
+import {
+  PullRequestWriteNote,
+  type ReadAgain,
+  usePullRequestWrites,
+} from "./pull-request-writes.js";
 import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
 /**
@@ -49,7 +53,7 @@ const REPLY_WORDS: ReplyFormWords = {
 /** Which agent's pull request a tab's threads are on, and what to read again once one changes. */
 interface ThreadWrites {
   readonly agentId: string;
-  readonly onWritten: () => void;
+  readonly onWritten: ReadAgain;
 }
 
 /** What a tab's threads write on, and the words held in its replies and its pending-comment edits, which outlast the box they were written in. */

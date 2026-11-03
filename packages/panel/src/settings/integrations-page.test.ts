@@ -1424,7 +1424,7 @@ test("an account alone at its provider is named by its label where it carries on
   assert.ok(!names.some((name) => name?.includes("Account 1")));
 });
 
-test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one", async () => {
+test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one, which stands while the integrations are read again", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   accounts = [
@@ -1469,10 +1469,14 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(typing, "Work");
     typing.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  holdReads = true;
   press("Enter");
   await settle();
   assert.equal(field(), null);
   assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
+  assert.ok(rowOf("Work"), "the old name never stands again while the read is out");
+  for (const release of heldReads.splice(0)) release();
+  await settle();
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 

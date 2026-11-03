@@ -6,18 +6,21 @@ import {
 import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  ALIGN,
   BUTTON_VARIANT,
   Button,
   ButtonLink,
   CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
+  GAP,
   MARK_PROVIDER,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   SETTINGS_ROW_STATE,
   SecretField,
   SettingsRowStateLine,
+  Stack,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -162,10 +165,11 @@ function TokenRoute({
       </>
     );
   }
+  // Note that the card's two steps, making a token and pasting it, stand a block apart, each held tight within.
   return (
-    <>
-      <CardWords>No admin needed. Reviews and checks reach agents up to a minute late.</CardWords>
-      <span className="flex">
+    <Stack gap={GAP.BLOCK}>
+      <Stack gap={GAP.CONTROL} align={ALIGN.START}>
+        <CardWords>No admin needed. Reviews and checks reach agents up to a minute late.</CardWords>
         <ButtonLink
           href={GITHUB_TOKEN_CREATE_URL}
           variant={BUTTON_VARIANT.OUTLINE}
@@ -173,19 +177,21 @@ function TokenRoute({
         >
           Create a token on GitHub
         </ButtonLink>
-      </span>
-      <SecretField
-        label="Classic token"
-        placeholder="ghp_…"
-        value={pasted}
-        onChange={setPasted}
-        onEnter={save}
-      />
-      {rejection !== undefined ? (
-        <CardWords>{rejectionLabel(rejection)}</CardWords>
-      ) : failed ? (
-        <CardWords>The token could not be saved. Try again.</CardWords>
-      ) : null}
+      </Stack>
+      <Stack gap={GAP.CONTROL}>
+        <SecretField
+          label="Classic token"
+          placeholder="ghp_…"
+          value={pasted}
+          onChange={setPasted}
+          onEnter={save}
+        />
+        {rejection !== undefined ? (
+          <CardWords>{rejectionLabel(rejection)}</CardWords>
+        ) : failed ? (
+          <CardWords>The token could not be saved. Try again.</CardWords>
+        ) : null}
+      </Stack>
       <div className="flex justify-end">
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
@@ -197,7 +203,7 @@ function TokenRoute({
           Save
         </Button>
       </div>
-    </>
+    </Stack>
   );
 }
 

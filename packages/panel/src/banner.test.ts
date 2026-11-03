@@ -56,7 +56,7 @@ test("an archived agent's composer row is named by its words and carries Stop an
   const note = drawn(
     createElement(ArchivedComposerNote, {
       onUnarchive: () => undefined,
-      stop: () => Promise.resolve(),
+      stop: () => Promise.resolve(true),
     }),
   );
   assert.equal(named(note), "Unarchive to send messages");
@@ -64,25 +64,36 @@ test("an archived agent's composer row is named by its words and carries Stop an
   press(note, "Unarchive");
 });
 
-test("an archived agent's Stop is named Stopping and unavailable until the service answers", async () => {
-  let answer: () => void = () => undefined;
-  const note = drawn(
-    createElement(ArchivedComposerNote, {
-      onUnarchive: () => undefined,
-      stop: () => {
-        return new Promise<void>((resolve) => {
-          answer = resolve;
-        });
-      },
-    }),
+test("an archived agent's Stop the service took stays Stopping until the agent offers none, and one it refused is offered again", async () => {
+  const answers: ((took: boolean) => void)[] = [];
+  const stop = () => {
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    answers.push(resolve);
+    return promise;
+  };
+  const note = drawn(createElement(ArchivedComposerNote, { onUnarchive: () => undefined, stop }));
+  act(() => press(note, "Stop").click());
+  const busy = press(note, "Stop");
+  assert.equal(busy.getAttribute("aria-label"), "Stopping");
+  assert.equal(busy.getAttribute("aria-disabled"), "true");
+  await act(async () => answers[0]?.(false));
+  assert.equal(busy.getAttribute("aria-label"), null, "a refused Stop is offered again");
+  act(() => busy.click());
+  await act(async () => answers[1]?.(true));
+  assert.equal(
+    busy.getAttribute("aria-label"),
+    "Stopping",
+    "the task list has not carried the stop",
   );
-  const stop = press(note, "Stop");
-  act(() => stop.click());
-  assert.equal(stop.getAttribute("aria-label"), "Stopping");
-  assert.equal(stop.getAttribute("aria-disabled"), "true");
-  await act(async () => answer());
-  assert.equal(stop.getAttribute("aria-label"), null);
-  assert.equal(stop.getAttribute("aria-disabled"), null);
+  act(() => root?.render(createElement(ArchivedComposerNote, { onUnarchive: () => undefined })));
+  act(() =>
+    root?.render(createElement(ArchivedComposerNote, { onUnarchive: () => undefined, stop })),
+  );
+  assert.equal(
+    press(note, "Stop").getAttribute("aria-label"),
+    null,
+    "a later turn's Stop is fresh",
+  );
 });
 
 test("an archived agent's Unarchive is named Unarchiving while the service answers, shows its ring once the settle delay has passed, holds Stop meanwhile, and clears when it answers", async () => {
@@ -98,7 +109,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
             answer = resolve;
           });
         },
-        stop: () => Promise.resolve(),
+        stop: () => Promise.resolve(true),
       }),
     );
     const unarchive = press(note, "Unarchive");

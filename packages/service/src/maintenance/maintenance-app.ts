@@ -35,7 +35,8 @@ import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 const SWEEP_MONITOR: CronMonitor = {
   slug: "maintenance-sweep",
   crontab: MAINTENANCE_SWEEP.CRONTAB,
-  maxRuntimeMinutes: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS / 60,
+  // Note that the check-in times the sweep's own work alone, never what it hands on past its answer, so a sweep still running when the next is called is late.
+  maxRuntimeMinutes: 1,
   checkInMarginMinutes: 1,
   failuresBeforeIssue: 3,
 };

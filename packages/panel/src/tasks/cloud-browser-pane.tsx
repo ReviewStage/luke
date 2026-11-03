@@ -453,9 +453,9 @@ function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undef
 
 /**
  * The relative luminance (WCAG 2, linear light) under which the page beneath
- * the agent's pointer reads as dark: about where its two greys, `--agent-pointer`
- * (#6b6f76) and `--agent-pointer-on-dark` (#ced1d6), stand apart from the page
- * equally, so the one that stands further apart is drawn.
+ * the agent's pointer reads as dark, which draws it in `--agent-pointer-on-dark`,
+ * the dark mode's brighter amber, rather than `--agent-pointer`; its white edge
+ * holds it apart from the page on either side of the line.
  */
 const DARK_PAGE_LUMA = 0.32;
 
@@ -474,7 +474,7 @@ const GROUND_INSET = 4;
 /**
  * Whether the drawn page is dark beneath the pointer's tip, given in CSS
  * pixels of the canvas; none where the canvas cannot be read. Only a few
- * pixels are read, and only to choose the pointer's grey: nothing read is
+ * pixels are read, and only to choose the pointer's amber: nothing read is
  * kept.
  */
 function darkBeneath(

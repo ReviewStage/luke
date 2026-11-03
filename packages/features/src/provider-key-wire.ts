@@ -1,4 +1,4 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -217,15 +217,30 @@ export const providerKeysAnswerSchema = EffectSchema.Struct({
 
 export type ProviderKeysAnswer = typeof providerKeysAnswerSchema.Type;
 
+/**
+ * A pasted key with every whitespace character taken out, then bounded. Note
+ * that we strip inside the key too, not only its ends, because no provider's
+ * key holds whitespace and `claude setup-token` wraps its token at the
+ * terminal's width, so a copy of it carries a line break and an indent.
+ */
+const pastedKeySchema = EffectSchema.String.pipe(
+  EffectSchema.decodeTo(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(PROVIDER_KEY_BOUNDS.MIN_KEY_CHARS),
+      EffectSchema.isMaxLength(PROVIDER_KEY_BOUNDS.MAX_KEY_CHARS),
+    ),
+    SchemaTransformation.transform({
+      decode: (pasted) => pasted.replace(/\s/gu, ""),
+      encode: (key) => key,
+    }),
+  ),
+);
+
 /** Saving a key for a provider (PUT), replacing the one of its kind it held; a request naming no kind saves an API key. */
 export const providerKeySaveRequestSchema = EffectSchema.Struct({
   provider: providerSchema,
   kind: EffectSchema.optionalKey(providerKeyKindSchema),
-  key: EffectSchema.Trim.check(
-    EffectSchema.isMinLength(PROVIDER_KEY_BOUNDS.MIN_KEY_CHARS),
-    EffectSchema.isMaxLength(PROVIDER_KEY_BOUNDS.MAX_KEY_CHARS),
-    EffectSchema.isPattern(/^\S+$/u),
-  ),
+  key: pastedKeySchema,
 });
 
 /** The subscription kinds, which alone carry a default for the account's coding agents. */

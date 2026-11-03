@@ -24,8 +24,16 @@ export const CRON_ENVIRONMENT = {
 } as const;
 
 export const MAINTENANCE_SWEEP = {
-  /** The function duration the sweep's bundle declares. */
-  MAX_DURATION_SECONDS: 60,
+  /**
+   * The function duration the sweep's bundle declares. Note that it is the
+   * Fluid default every Start's function runs under rather than the minute
+   * the cron calls on, because an agent the sweep starts (an automation's
+   * run, a wakeup, a queued message) launches past the sweep's answer under
+   * this same bound (`after-response.ts`), and a sandbox can take most of a
+   * minute to open: a launch cut off by the bound dies with nothing to say
+   * so, and its agent reads as one that never started.
+   */
+  MAX_DURATION_SECONDS: 300,
   /** The schedule the root `vercel.json` calls the sweep on, which its Sentry monitor expects a check-in against. */
   CRONTAB: "* * * * *",
 } as const;

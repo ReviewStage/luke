@@ -2929,6 +2929,33 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
   );
 });
 
+test("a change GitHub took keeps its press busy until the tab reads the pull request again, so Merge when ready never stands again before Disable auto-merge", async () => {
+  const readBack = held<AgentOverviewPullRequestAnswerView>();
+  let reads = 0;
+  const before = {
+    ...PULL_REQUEST,
+    merge: MERGE_STATE.CLEAN,
+    merging: { ...MERGING, queue: true },
+  };
+  const after = { ...before, merging: { ...before.merging, autoMerge: { method: null } } };
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        reads += 1;
+        return reads === 1 ? Promise.resolve({ pullRequest: before }) : readBack.read();
+      },
+    }),
+  );
+  await pressBox(tab, "Merge when ready");
+  const [busy] = mergePresses(tab);
+  assert.equal(busy?.getAttribute("aria-busy"), "true", "GitHub answered, the read is still out");
+  assert.equal(busy?.getAttribute("aria-label"), "Turning on auto-merge");
+  readBack.answer({ pullRequest: after });
+  await settle();
+  assert.equal(mergeShown(tab)?.press, "Disable auto-merge");
+  assert.equal(mergePresses(tab)[0]?.getAttribute("aria-busy"), null);
+});
+
 test("Review stands at the end of the tabs' row however the pull request stands, open, a draft, closed, or merged, as GitHub takes a review of each", async () => {
   const states = [
     [PULL_REQUEST_STATE.OPEN, true],
@@ -3553,7 +3580,13 @@ test("the reviewer picker lists the repository's teams then its people, the auth
       { action: PULL_REQUEST_ACTION.REQUEST_REVIEW, reviewer: { kind: "user", name: "priyan" } },
     ],
   ]);
-  assert.equal(picker().disabled, true, "nothing is chosen from what the pull request held before");
+  assert.equal(
+    tab
+      .querySelector('.pull-request-reviewers [aria-label="Updating reviewers"]')
+      ?.getAttribute("aria-busy"),
+    "true",
+    "nothing is chosen from what the pull request held before",
+  );
   asked = [CHARLES_ON_GITHUB, { login: "priyan", bot: false }];
   reread.answer({
     pullRequest: {

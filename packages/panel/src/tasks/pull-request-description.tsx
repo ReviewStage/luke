@@ -22,6 +22,7 @@ import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { clickPlacement, documentWordsAt } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
+  type ReadAgain,
   usePullRequestWrites,
   WRITE_NOTE,
   type WriteNote,
@@ -193,7 +194,7 @@ export function PullRequestDescription({
   body: string;
   /** GitHub's rendering of it; none where it has none. */
   drawn: ReactNode | undefined;
-  onRead: () => void;
+  onRead: ReadAgain;
 }): React.JSX.Element {
   const { number } = pullRequest;
   const writes = usePullRequestWrites(agentId, onRead);

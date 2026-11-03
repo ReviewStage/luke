@@ -275,17 +275,23 @@ export function ContinuedComposerNote({
 }: {
   agent: AgentSummary;
   doors: ContinuedDoors;
-  /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<unknown>) | undefined;
+  /** Stops the agent, while it has a turn to stop; settles once the service has answered, with whether it took the stop. */
+  stop?: (() => Promise<boolean>) | undefined;
   control: AgentsControl;
   /** Whether the tab is on screen, which the archive's question goes with. */
   shown: boolean;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
+  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
+  // list carries the stop a moment after the answer.
+  if (stopping && stop === undefined) setStopping(false);
   const archive = useAgentArchive(agent, control, shown);
-  const pressStop = (run: () => Promise<unknown>) => {
+  const pressStop = (run: () => Promise<boolean>) => {
     setStopping(true);
-    run().finally(() => setStopping(false));
+    run().then(
+      (took) => setStopping(took),
+      () => setStopping(false),
+    );
   };
   return (
     <>

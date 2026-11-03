@@ -157,6 +157,8 @@
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
+  /* How far a wash bleeds past a name's box, by a ring of its own colour. */
+  --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
   --ui-dialog-wide-width: 520px;
@@ -413,6 +415,8 @@
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
+  /* How far a wash bleeds past a name's box, by a ring of its own colour. */
+  --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
   --ui-dialog-wide-width: 520px;

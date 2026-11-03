@@ -8,7 +8,12 @@ import { useState } from "react";
 import { type CommentLines, commentLinesLabel } from "./changes-model.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
-import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-request-writes.js";
+import {
+  PullRequestWriteNote,
+  type ReadAgain,
+  usePullRequestWrites,
+  WRITE_NOTE,
+} from "./pull-request-writes.js";
 
 /**
  * line-comment.tsx -- the comment a member writes on lines of a changed file in Files changed, drawn under the last of them as GitHub's own line comment is.
@@ -89,7 +94,7 @@ export function LineComment({
   onActive?: (() => void) | undefined;
   onClose: () => void;
   /** Reads the tab again once GitHub answered. */
-  onWritten: () => void;
+  onWritten: ReadAgain;
   /** Reads the changes again. */
   onRefresh: () => void;
 }): React.JSX.Element {

@@ -1,8 +1,9 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_SETTING_SCHEMA } from "@repo/settings";
 import {
   AuthPage,
-  BUTTON_VARIANT,
-  Button,
+  AuthStepFoot,
   ChoiceList,
   type ChoiceOption,
   ProductMark,
@@ -14,10 +15,12 @@ import {
 } from "@repo/ui";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
+import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { AgentAuthSection } from "../settings/agent-auth-section.js";
 import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GitHubSetup } from "./setup-github.js";
 import {
@@ -28,7 +31,7 @@ import {
   setupGate,
   setupSteps,
 } from "./setup-model.js";
-import { TeamForm } from "./setup-team.js";
+import { TeamForm, useTeamForm } from "./setup-team.js";
 import { ToolRows } from "./setup-tools.js";
 
 /**
@@ -37,8 +40,9 @@ import { ToolRows } from "./setup-tools.js";
  * Each card is the sign-in's own, so setup reads as the sign-in going on.
  * The team's workspace, an agent, and GitHub may each be skipped; what an
  * agent needs and was skipped is asked again on Home
- * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on this
- * machine, that the account finished setup, so it stands once.
+ * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on the
+ * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
+ * stands once on every machine.
  */
 
 /** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
@@ -60,6 +64,15 @@ const SETUP_PLACE = keptKey(
   Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
 );
 
+/**
+ * The accounts that finished setup on this device, by id: the account's own
+ * `setupFinished` read ahead of its preferences arriving.
+ */
+const SETUP_FINISHED = keptKey(
+  "app.setupFinished",
+  Schema.fromJsonString(Schema.Array(Schema.String)),
+);
+
 /** Where setup starts. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 
@@ -71,12 +84,20 @@ const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 export function useSetupGate(
   tasks: TasksControl,
   accountId: string | undefined,
-  finished: readonly string[],
+  /** Whether setup was finished in this window, before the account's setting comes back from its write. */
+  finishedHere: boolean,
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
+  const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
+  const finishedOnAccount = useAppSlice(APP_SETTINGS_VIEW)?.setupFinished === true;
+  // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
+  const finished =
+    finishedHere ||
+    finishedOnAccount ||
+    (accountId !== undefined && finishedOnDevice.includes(accountId));
   const { models, modelsRead, readModels, workspaces } = tasks.newTask;
   const fresh = welcomed(tasks);
-  const candidate = fresh && accountId !== undefined && !finished.includes(accountId);
+  const candidate = fresh && accountId !== undefined && !finished;
   useEffect(() => {
     if (candidate && modelsRead.state === MODELS_READ.UNREAD) readModels();
   }, [candidate, modelsRead.state, readModels]);
@@ -97,12 +118,6 @@ export function useSetupGate(
   });
 }
 
-/** The accounts that finished setup on this machine, by id. */
-export const SETUP_FINISHED = keptKey(
-  "app.setupFinished",
-  Schema.fromJsonString(Schema.Array(Schema.String)),
-);
-
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
   { value: SETUP_AUDIENCE.ME, label: "Just me" },
   { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
@@ -110,40 +125,6 @@ const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
 
 /** The Agents rows' API keys, which setup reads no further. */
 const IGNORE_KEYS = () => undefined;
-
-/** A card's foot: where it stands among the steps, Back, Skip, and its way on. */
-function StepFoot({
-  at,
-  total,
-  onBack,
-  onSkip,
-  next,
-}: {
-  at: number;
-  total: number;
-  onBack: (() => void) | undefined;
-  onSkip: (() => void) | undefined;
-  next: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="mt-ui-8 flex items-center gap-control-gap">
-      {onBack === undefined ? null : (
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onBack}>
-          Back
-        </Button>
-      )}
-      <span className="grow text-caption text-muted-foreground tabular-nums">
-        {at} of {total}
-      </span>
-      {onSkip === undefined ? null : (
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onSkip}>
-          Skip
-        </Button>
-      )}
-      {next}
-    </div>
-  );
-}
 
 /** Setup, step by step; `onFinish` lets the app in. */
 export function SetupSteps({
@@ -156,7 +137,9 @@ export function SetupSteps({
   accountId: string;
   onFinish: () => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
+  const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   const place = places[accountId] ?? SETUP_START;
   const { audience, team } = place;
   const [creating, setCreating] = useState(false);
@@ -184,7 +167,10 @@ export function SetupSteps({
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
-    // Finished, the account's place is let go of, as setup stands no more.
+    // Finished, the account's place is let go of, as setup stands no more on any machine.
+    // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
+    tell(ACT_KIND.SETTING_UPDATE, { field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
+    keepFinished((finished) => [...finished, accountId]);
     changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
   };
@@ -194,24 +180,34 @@ export function SetupSteps({
   const workspaceId =
     (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
   const foot = (done: boolean, optional: boolean, label = "Continue") => (
-    <StepFoot
+    <AuthStepFoot
       at={at + 1}
       total={steps.length}
       onBack={back}
       onSkip={optional && !done ? forward : undefined}
-      next={
-        done || !optional ? (
-          <Button variant={BUTTON_VARIANT.PRIMARY} disabled={!done} onClick={forward}>
-            {label}
-          </Button>
-        ) : null
-      }
+      next={done || !optional ? { label, onPress: forward, disabled: !done } : undefined}
     />
   );
+  const teamForm = useTeamForm({
+    onCreated: (made) => {
+      setCreating(true);
+      move({ team: made });
+      tasks.onChooseWorkspace(made);
+    },
+    onDone: (failed) => {
+      setCreating(false);
+      setRefused(failed);
+      if (failed.length === 0) setAt(at + 1);
+    },
+  });
 
   if (step === SETUP_STEP.WELCOME) {
     return (
-      <AuthPage mark={<ProductMark />} title={`Welcome to ${PRODUCT_NAME}`}>
+      <AuthPage
+        mark={<ProductMark />}
+        title={`Welcome to ${PRODUCT_NAME}`}
+        foot={foot(true, false)}
+      >
         <ChoiceList
           legend="Who you'll use it with"
           options={AUDIENCES}
@@ -220,26 +216,38 @@ export function SetupSteps({
             if (chosen !== undefined) setAudience(chosen);
           }}
         />
-        {foot(true, false)}
       </AuthPage>
     );
   }
   if (step === SETUP_STEP.TEAM) {
+    const forming = team === undefined || creating;
+    // Note that Create is the step's way on until the workspace is made, and Continue after it.
     return (
-      <AuthPage mark={<ProductMark />} title="Create a team workspace">
-        {team === undefined || creating ? (
-          <TeamForm
-            onCreated={(made) => {
-              setCreating(true);
-              move({ team: made });
-              tasks.onChooseWorkspace(made);
-            }}
-            onDone={(failed) => {
-              setCreating(false);
-              setRefused(failed);
-              if (failed.length === 0) setAt(at + 1);
-            }}
-          />
+      <AuthPage
+        mark={<ProductMark />}
+        title="Create a team workspace"
+        foot={
+          forming ? (
+            <AuthStepFoot
+              at={at + 1}
+              total={steps.length}
+              onBack={back}
+              onSkip={teamForm.busy ? undefined : forward}
+              next={{
+                label: "Create",
+                onPress: teamForm.create,
+                disabled: !teamForm.named,
+                busy: teamForm.busy,
+                busyLabel: "Creating",
+              }}
+            />
+          ) : (
+            foot(true, false)
+          )
+        }
+      >
+        {forming ? (
+          <TeamForm form={teamForm} />
         ) : (
           <>
             <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
@@ -252,7 +260,6 @@ export function SetupSteps({
             ))}
           </>
         )}
-        {foot(team !== undefined && !creating, team === undefined)}
       </AuthPage>
     );
   }
@@ -262,15 +269,15 @@ export function SetupSteps({
         mark={<ProductMark />}
         title="Connect an agent"
         description="Agents run on your own Claude or Codex plan."
+        foot={foot(agent, true)}
       >
         <AgentAuthSection signedIn onKeys={IGNORE_KEYS} onConnected={onConnected} />
-        {foot(agent, true)}
       </AuthPage>
     );
   }
   if (step === SETUP_STEP.GITHUB) {
     return (
-      <AuthPage mark={<ProductMark />} title="Connect GitHub">
+      <AuthPage mark={<ProductMark />} title="Connect GitHub" foot={foot(reached, true)}>
         {workspaceId === undefined ? null : (
           <GitHubSetup
             key={workspaceId}
@@ -279,14 +286,12 @@ export function SetupSteps({
             onReached={onReached}
           />
         )}
-        {foot(reached, true)}
       </AuthPage>
     );
   }
   return (
-    <AuthPage mark={<ProductMark />} title="Connect your tools">
+    <AuthPage mark={<ProductMark />} title="Connect your tools" foot={foot(true, false, "Finish")}>
       <ToolRows />
-      {foot(true, false, "Finish")}
     </AuthPage>
   );
 }

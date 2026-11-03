@@ -3294,6 +3294,11 @@ test("an agent refused as New task's Agent mode started its task opens the task 
     "the draft holds the words and the model",
   );
   assert.match(draft.refused?.text ?? "", /could not be started/u);
+  assert.deepEqual(
+    draft.refused?.cause,
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    "and the answer that refused it, which the draft's tab reports in its place",
+  );
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "the task opens on its tab");
   assert.equal(draft.id, AGENT_KEY, "the draft holds the start's key");
   assert.deepEqual(

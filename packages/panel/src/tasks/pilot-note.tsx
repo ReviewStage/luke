@@ -45,13 +45,19 @@ export function PilotComposerNote({
   control: AgentsControl;
   /** Opens what a target names; none where the view stands in no window that opens one. */
   onOpenTarget?: ((target: ToolTarget) => void) | undefined;
-  /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<unknown>) | undefined;
+  /** Stops the agent, while it has a turn to stop; settles once the service has answered, with whether it took the stop. */
+  stop?: (() => Promise<boolean>) | undefined;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
-  const pressStop = (run: () => Promise<unknown>) => {
+  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
+  // list carries the stop a moment after the answer.
+  if (stopping && stop === undefined) setStopping(false);
+  const pressStop = (run: () => Promise<boolean>) => {
     setStopping(true);
-    run().finally(() => setStopping(false));
+    run().then(
+      (took) => setStopping(took),
+      () => setStopping(false),
+    );
   };
   const subject = agentSubject(control, pilot.agentId, NOTHING_HELD, false, pilot);
   return (
