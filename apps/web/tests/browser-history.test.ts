@@ -319,7 +319,7 @@ it.effect(
 
         await travel(() => window.history.back());
         assert.ok(panel.shows("Home"), "Back lands on Home");
-        assert.equal(addressBar(), "/app");
+        assert.equal(addressBar(), "/personal", "at its workspace's own address");
         assert.equal(window.history.length, entries, "and pushes nothing");
 
         await travel(() => window.history.forward());
