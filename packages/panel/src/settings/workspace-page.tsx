@@ -1653,9 +1653,10 @@ function slackBotLine(slackBot: WorkspaceSlackBot, manages: boolean): React.Reac
  * The workspace's Slack bot, for an owner or an admin: Connect Slack bot
  * while it is not connected, which asks Slack which team the bot answers
  * for and keeps it, a connect that failed saying why under the row; and
- * once it is, a ⋯ whose menu disconnects it, which asks first. A disconnect
- * stops the bot writing to the workspace's members; the bot stays installed
- * in Slack, which the dialog says.
+ * once it is, a ⋯ whose menu disconnects it, which asks first, as the
+ * page's other rows hold their acts. A disconnect stops the bot writing to
+ * the workspace's members; the bot stays installed in Slack, which the
+ * dialog says.
  */
 function ManagedSlackBot({
   workspace,
@@ -1709,7 +1710,6 @@ function ManagedSlackBot({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Slack bot"
-        alone
         actions={actions}
         row={{
           leading: SLACK_MARK,
