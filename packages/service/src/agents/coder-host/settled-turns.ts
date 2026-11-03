@@ -15,8 +15,11 @@
  * once the request has answered, where the runtime runs work past the
  * answer, since none is the settle's to wait on; and the report and the
  * Slack message run on the pool rather than on a transaction the settle may
- * have run inside, which has ended by then, so their reads see the settle
- * committed and their sends hold no transaction open over eve or Slack.
+ * have run inside, so their sends hold no transaction open over eve or
+ * Slack. Note that the work may start before such a transaction commits, so
+ * a caller that runs the writer inside its own tells this listener only once
+ * it has (`../native-events/runner-events-app.ts`), and the reads here see
+ * the settle committed.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
