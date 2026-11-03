@@ -287,7 +287,7 @@ export function GitHubLineCard({
       fill={DISCLOSURE_FILL.ACTIONS}
       actions={
         // Note that a head too narrow for one line puts what was done on a line of its own under who did it, rather than shrinking a chip under the words beside it; there the count fades first, then the words, and the pull request's chip stays whole.
-        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-list-gap overflow-clip py-tight-gap">
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-tight-gap overflow-clip py-row-inset">
           {sender == null ? null : (
             <span className="inline-flex min-w-0 max-w-full overflow-clip">{sender}</span>
           )}
