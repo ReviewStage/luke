@@ -358,7 +358,7 @@ variables above for every environment that receives its deliveries.
 ## The Vespin Slack bot
 
 Vespin's own Slack bot writes to a workspace's members in Slack. It is one
-Slack app, Vercel Connect's managed `slack/slack` connector, apart from the
+Slack app, Vercel Connect's managed `slack/vespin` connector, apart from the
 Slack connector each member connects for their agents (`SLACK_CONNECTOR_UID`).
 `src/slack/slack-bot.ts`'s `SlackBot` reads the connector's UID from
 `SLACK_BOT_CONNECTOR_UID` and asks Connect for the bot token under an app
