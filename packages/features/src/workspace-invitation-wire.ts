@@ -27,7 +27,7 @@ import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
 
 /** The page an invitee accepts an invitation on. */
 const INVITATION_ACCEPT_PAGE = {
-  PATH: "/accept-invitation.html",
+  PATH: "/accept-invitation",
   /** Better Auth's id of the invitation. */
   ID_PARAM: "id",
   /** The address the invitation was made for. */

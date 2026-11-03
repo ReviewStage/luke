@@ -30,7 +30,7 @@ export type GitHubConnection = typeof githubConnectionAnswerSchema.Type;
 
 /** The page that connects GitHub, and the query it reads. */
 export const GITHUB_CONNECT_PAGE = {
-  PATH: "/connect-github.html",
+  PATH: "/connect-github",
   /** The opaque id of the intent the Mac asked for. */
   INTENT_PARAM: "intent",
   /** Better Auth returned the browser here with GitHub linked. */

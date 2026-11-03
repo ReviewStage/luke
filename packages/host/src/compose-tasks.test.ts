@@ -4332,7 +4332,7 @@ it.effect(
       yield* settled;
 
       const accept = (id: string) =>
-        `https://app.test/accept-invitation.html?id=${id}&email=${id}%40example.com`;
+        `https://app.test/accept-invitation?id=${id}&email=${id}%40example.com`;
       assert.deepEqual(invitations(), [
         {
           workspaceId: ACME.id,

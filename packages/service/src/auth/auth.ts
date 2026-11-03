@@ -98,7 +98,7 @@ export const auth = betterAuth({
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({
       loginPage: LOGIN_PAGE,
-      consentPage: "/consent.html",
+      consentPage: "/consent",
       allowDynamicClientRegistration: false,
       clientPrivileges: denyOAuthClientPrivileges,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),

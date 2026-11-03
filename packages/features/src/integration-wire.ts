@@ -494,7 +494,7 @@ export type IntegrationConnectAnswer = typeof integrationConnectAnswerSchema.Typ
 
 /** The page the browser lands on once a sign-in settled, and what its address carries. */
 export const INTEGRATION_LANDING = {
-  PATH: "/integration-connected.html",
+  PATH: "/integration-connected",
   PROVIDER_PARAM: "provider",
   STATUS_PARAM: "status",
 } as const;

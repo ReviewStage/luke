@@ -32,7 +32,7 @@ export const PAGE_SCHEME = "app-page";
 export const PAGE_SANDBOX_ORIGIN = "https://vespin.page";
 
 /** What a page's frame shows on the web where the deployment has no sandbox: the site's page saying pages open in the Mac app. */
-export const PAGE_IN_MAC_APP_PATH = "/page-in-mac-app.html";
+export const PAGE_IN_MAC_APP_PATH = "/page-in-mac-app";
 
 /** The status a page frame's load is answered with: See Other, the address the version is drawn from. */
 export const PAGE_FRAME_STATUS = 303;

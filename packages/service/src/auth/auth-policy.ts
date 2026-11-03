@@ -14,7 +14,7 @@ import { USER_ROLE } from "../admin/admin-access.js";
  * to, whose sign-in resumes it. The local server's demo sign-in answers this
  * path in the page's place (`apps/web/server/local-sign-in.ts`).
  */
-export const LOGIN_PAGE = "/sign-in.html";
+export const LOGIN_PAGE = "/sign-in";
 
 /**
  * What a GitHub sign-in asks for. It is our GitHub App's user

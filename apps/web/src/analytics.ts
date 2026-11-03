@@ -47,15 +47,19 @@ export type SiteEvent = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];
  * credential the funnel never needs to count. So no half of this file may
  * keep their address whole: the recorder does not run on them
  * (`disable_session_recording` below), and a counted event's every address is
- * cut to its path before it leaves (`sanitizeAnalyticsUrls`).
+ * cut to its path before it leaves (`sanitizeAnalyticsUrls`). Each is served
+ * at its clean path and at its `.html` file's, which a shipped desktop and a
+ * link already sent still open, so both are held alike.
  */
 const AUTH_PATH = {
-  SIGN_IN: "/sign-in.html",
-  CONSENT: "/consent.html",
-  DESKTOP_SESSION: "/desktop-session.html",
+  SIGN_IN: "/sign-in",
+  CONSENT: "/consent",
+  DESKTOP_SESSION: "/desktop-session",
 } as const;
 
-const AUTH_PATHS: ReadonlySet<string> = new Set(Object.values(AUTH_PATH));
+const AUTH_PATHS: ReadonlySet<string> = new Set(
+  Object.values(AUTH_PATH).flatMap((path) => [path, `${path}.html`]),
+);
 
 /**
  * The query parameters that carry a credential, or a step of one, on any
