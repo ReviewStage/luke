@@ -43,7 +43,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
-import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
+import { CommentFocusScope, PageComments, PlanCommentsTab } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 /**
@@ -2088,4 +2088,65 @@ test("a scroller with room for the reading width and one margin, but not one on 
 
   assert.ok(container.querySelector(".comment-count"), "the threads are counted at their lines");
   assert.equal(container.querySelector(".comment-margin"), null, "no margin stands");
+});
+
+test("a thread resolved fades out of a page's column where its row stood, out of reach, and goes once its fade has played", () => {
+  const motion = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.dataset.leaving === "true" ? [motion] : [];
+    },
+  });
+  try {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    const registry = AtomRegistry.make();
+    const draw = (threads: readonly PlanCommentThread[]) =>
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(PageComments, {
+              control: {
+                planId: PLAN.id,
+                threads,
+                read: true,
+                failed: false,
+                onRetry: () => undefined,
+                notes: new Map(),
+                start: async () => ({ note: "not in this test" }),
+                act: async () => true,
+              },
+              doors: { agents: undefined, me: "u-dean" },
+              open: undefined,
+              onOpen: () => undefined,
+            }),
+          ),
+        ),
+      );
+    draw(THREADS);
+    const slot = () =>
+      container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`)?.closest(".comment-slot");
+    const standing = slot();
+    assert.ok(standing);
+
+    draw(
+      THREADS.map((thread) =>
+        thread.id === ID.OPEN ? { ...thread, status: PLAN_COMMENT_STATUS.RESOLVED } : thread,
+      ),
+    );
+
+    assert.equal(slot() === standing, true, "the row it had fades, rather than going at once");
+    assert.equal(standing.getAttribute("data-leaving"), "true");
+    assert.equal(standing.hasAttribute("inert"), true);
+    act(() => {
+      motion.dispatchEvent(new Event("finish"));
+    });
+    assert.equal(standing.isConnected, false, "and goes once its fade has played");
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  }
 });
