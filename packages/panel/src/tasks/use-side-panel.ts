@@ -1,3 +1,4 @@
+import type { PagePlace } from "@repo/features/page-wire";
 import type { CodeRef } from "@repo/features/task-wire";
 import { CommentsIcon, DocumentIcon } from "@repo/ui";
 import {
@@ -224,6 +225,17 @@ export type SidePanelTab =
   | PageStripTab
   | CloudBrowserStripTab;
 
+/** Where a File tab reads its file: through a task, or through a workspace's installation and the repository where it stands for no task. */
+export type FileReadPlace =
+  | { readonly taskId: string }
+  | { readonly workspaceId: string; readonly repository: string };
+
+/** Where a File tab reads its file, and the repository, `owner/name`, it reads it from: none where the task has chosen none. */
+export interface FileReads {
+  readonly place: FileReadPlace;
+  readonly repository: string | null;
+}
+
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
  * for the whole file, and how many times it has been opened, so opening the
@@ -235,6 +247,8 @@ export interface OpenFile {
   readonly opened: number;
   /** The task the file was opened or browsed to on, whose strip alone draws its tab; none for one opened on no task. */
   readonly browsedOn?: string | undefined;
+  /** Where the tab reads its file, saved as it opened, so it reads there whatever the panel stands beside; none for one opened before its place was known, which reads through the panel's own. */
+  readonly reads?: FileReads | undefined;
   /** The commit the file is read at, as an inbox item's code pins it; none reads the default branch's head. */
   readonly commit?: string | undefined;
   /** The files this tab showed before this one, the latest last, which its Back walks. */
@@ -244,7 +258,7 @@ export interface OpenFile {
 }
 
 /** A file a File tab showed, as its history holds it to show again. */
-type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "commit">;
+type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "reads" | "commit">;
 
 /** Which of an agent's Pull request tab's tabs it shows under its fixed header: the description and conversation, the checks, the chapters, or the changed files. */
 export const PULL_REQUEST_VIEW = {
@@ -547,7 +561,7 @@ export type SidePanelState = typeof sidePanelStateSchema.Type;
 export interface StagedSidePanel extends Omit<SidePanelState, "tab"> {
   readonly tab?: SidePanelState["tab"] | FileStripTab | PageStripTab | TerminalStripTab;
   readonly files?: readonly OpenFile[];
-  readonly pages?: readonly PageStripTab[];
+  readonly pages?: readonly OpenPage[];
   readonly terminals?: readonly TerminalStripTab[];
   readonly pullRequestViews?: ByPullRequestTab<PullRequestView>;
 }
@@ -568,7 +582,7 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly transcripts: readonly TranscriptStripTab[];
   readonly files: readonly OpenFile[];
   /** The open page tabs, by page, in the order opened. */
-  readonly pages: readonly PageStripTab[];
+  readonly pages: readonly OpenPage[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
   /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
@@ -671,7 +685,7 @@ export interface SidePanelControl {
   /** The Changes tabs open on the open task, in the order opened, after the file tabs; only those of the task's agents are drawn. */
   changes: readonly ChangesStripTab[];
   /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
-  pages: readonly PageStripTab[];
+  pages: readonly OpenPage[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open task's agents are drawn. */
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
@@ -708,7 +722,7 @@ export interface SidePanelControl {
    */
   onPreview: (tab: SidePanelTab) => void;
   /** Opens a file as `onOpenFile` does, as the task's preview, as `onPreview` opens a tab. */
-  onPreviewFile: (ref: CodeRef, commit?: string) => void;
+  onPreviewFile: (ref: CodeRef, commit?: string, reads?: FileReads) => void;
   /** Keeps the tab, where it is the task's preview, as a tab of its own: what a double-click on it or typing into it asks. */
   onKeep: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
@@ -743,9 +757,11 @@ export interface SidePanelControl {
    * as an inbox item's code opens it, the file as it stood at that commit.
    * Either is drawn on the open task. One
    * naming the file alone, as ⌘K finds it, leaves a tab it has as it stands
-   * and opens a new one on the whole file, drawn on the open task.
+   * and opens a new one on the whole file, drawn on the open task. The tab
+   * reads where `reads` says, else where the open task's files read
+   * (`OpenTask.files`).
    */
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
+  onOpenFile: (ref: CodeRef, commit?: string, reads?: FileReads) => void;
   /**
    * Shows the file browsed to from the File tab of `from`: its own tab
    * where one stands, else in `from`'s tab, in its place, or in a tab of
@@ -789,6 +805,10 @@ export interface OpenTask {
   holds: TaskHolds;
   /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
   bare?: true | undefined;
+  /** Where a file opened here reads, as its tab saves it; none where the opener names it, as beside an agent on no task. */
+  files?: FileReads | undefined;
+  /** Where a page opened here stands, as its tab saves it. */
+  pages?: PagePlace | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files opened on it. */
@@ -811,6 +831,11 @@ export interface DrawnTabs {
 /** The developer's own choices of fixed tab on the task. */
 function taskTabs(held: HeldState, taskId: string | undefined): TaskTabs {
   return taskId === undefined ? NO_CHOICES : (held.tasks[taskId] ?? NO_CHOICES);
+}
+
+/** A page's tab as the panel holds it: the page, and the task or the agent on no task it stands on, saved as it opened, so it reads there whatever the panel stands beside; none for one opened before its place was known, which reads through the panel's own. */
+export interface OpenPage extends PageStripTab {
+  readonly place?: PagePlace | undefined;
 }
 
 /** A task with no page, the same array every render. */
@@ -1091,6 +1116,23 @@ function withTab(
       };
 }
 
+/**
+ * The state with the open page tab's place saved beside it, where it holds
+ * none yet. Note that only the held page keeps it, never the tab chosen or
+ * ordered, so every other reader of a tab sees the page alone.
+ */
+function withPagePlaced(
+  held: HeldState,
+  tab: SidePanelTab,
+  place: PagePlace | undefined,
+): HeldState {
+  if (!isPageTab(tab) || place === undefined) return held;
+  const standing = held.pages.find((each) => sameTab(each, tab));
+  if (standing === undefined || standing.place !== undefined) return held;
+  const pages = held.pages.map((each) => (each === standing ? { ...each, place } : each));
+  return { ...held, pages };
+}
+
 /** The range a reference lights, none for a whole file. */
 function rangeOf(ref: CodeRef): OpenFile["range"] {
   return ref.startLine === undefined || ref.endLine === undefined
@@ -1100,14 +1142,15 @@ function rangeOf(ref: CodeRef): OpenFile["range"] {
 
 /**
  * The state with the file's tab open and chosen, its lit lines the
- * reference's, opened once more, its history kept, drawn on the task named;
- * at the commit named, where one pins it.
+ * reference's, opened once more, its history kept, drawn on the task named
+ * and read where `reads` says; at the commit named, where one pins it.
  */
 function withFileOpened(
   held: HeldState,
   ref: CodeRef,
   commit: string | undefined,
   taskId: string | undefined,
+  reads: FileReads | undefined,
 ): HeldState {
   const standing = held.files.find((each) => each.path === ref.path);
   // Note that the tab keeps the way it came, since it shows the same file.
@@ -1116,6 +1159,7 @@ function withFileOpened(
     range: rangeOf(ref),
     opened: (standing?.opened ?? 0) + 1,
     browsedOn: taskId,
+    reads,
     ...(commit === undefined ? undefined : { commit }),
     ...(standing?.back === undefined ? undefined : { back: standing.back }),
     ...(standing?.forward === undefined ? undefined : { forward: standing.forward }),
@@ -1130,20 +1174,24 @@ function withFileOpened(
 /**
  * The state with the tab a file already has chosen and the panel shown, as
  * browsing or a step of a tab's history to that file asks: a tab another
- * task browsed to moves to this one, since this task does not draw it.
+ * task browsed to moves to this one, read where `reads` says, since this
+ * task does not draw it.
  */
 function withOpenFileChosen(
   held: HeldState,
   open: OpenFile,
   drawn: DrawnTabs,
   taskId: string | undefined,
+  reads: FileReads | undefined,
 ): HeldState {
   const tab: SidePanelTab = { file: open.path };
   const drawnHere = drawn.files.includes(open.path)
     ? held
     : {
         ...held,
-        files: held.files.map((each) => (each === open ? { ...each, browsedOn: taskId } : each)),
+        files: held.files.map((each) =>
+          each === open ? { ...each, browsedOn: taskId, reads } : each,
+        ),
       };
   const chosen = withTabLast(withChosenViewed(drawnHere, tab, drawn), tab, drawn);
   return { ...withTab(chosen, tab, taskId), open: true };
@@ -1154,24 +1202,26 @@ function withOpenFileChosen(
  * asks, ⌘K's or a File tab's tree's with ⌘ held: the tab it has, chosen as
  * it stands, or a new one at the strip's end, viewed after the tab it was
  * chosen from, and browsed to on the task named, so the task draws it
- * though the app never showed it.
+ * though the app never showed it, read where `reads` says.
  */
 function withFileShown(
   held: HeldState,
   path: string,
   drawn: DrawnTabs,
   taskId: string | undefined,
+  reads: FileReads | undefined,
 ): HeldState {
   const open = held.files.find((each) => each.path === path);
-  if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId);
+  if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId, reads);
   const tab: SidePanelTab = { file: path };
   const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
-  return withFileBrowsed(placed, taskId, undefined, path);
+  return withFileBrowsed(placed, taskId, undefined, path, reads);
 }
 
 /** What a File tab's history holds of the file it shows. */
 function visitOf(file: OpenFile): FileVisit {
-  return { path: file.path, range: file.range, browsedOn: file.browsedOn, commit: file.commit };
+  const { path, range, browsedOn, reads, commit } = file;
+  return { path, range, browsedOn, reads, commit };
 }
 
 /**
@@ -1204,19 +1254,22 @@ function withFileStepped(
 /**
  * The state with the file browsed to shown in the File tab `from` stands
  * in, in that tab's place in the strip, or in a tab of its own at the
- * strip's end where `from` is none (`withTabLast`), its lines lit nowhere.
+ * strip's end where `from` is none (`withTabLast`), its lines lit nowhere,
+ * read where `reads` says.
  */
 function withFileBrowsed(
   held: HeldState,
   taskId: string | undefined,
   from: OpenFile | undefined,
   to: string,
+  reads: FileReads | undefined,
 ): HeldState {
   const browsed: OpenFile = {
     path: to,
     range: undefined,
     opened: 1,
     browsedOn: taskId,
+    reads,
     ...(from === undefined ? undefined : { back: [...(from.back ?? []), visitOf(from)] }),
   };
   const files =
@@ -1494,9 +1547,10 @@ function withFileAsked(
   commit: string | undefined,
   drawn: DrawnTabs,
   taskId: string | undefined,
+  reads: FileReads | undefined,
 ): HeldState {
   if (ref.startLine === undefined && commit === undefined) {
-    return withFileShown(held, ref.path, drawn, taskId);
+    return withFileShown(held, ref.path, drawn, taskId, reads);
   }
   const tab: SidePanelTab = { file: ref.path };
   return withFileOpened(
@@ -1504,6 +1558,7 @@ function withFileAsked(
     ref,
     commit,
     taskId,
+    reads,
   );
 }
 
@@ -1879,6 +1934,7 @@ export function useSidePanel(
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
   const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
   const taskId = task.id;
+  const { files: fileReads, pages: pagePlace } = task;
   const state = stage === undefined ? kept : (moved ?? stage);
   // The files the task draws tabs of: those opened on it.
   const taskFiles = useMemo(
@@ -2040,16 +2096,20 @@ export function useSidePanel(
       if (tab === SIDE_PANEL_TAB.INBOX) return;
       setAsked(undefined);
       update((held) => ({
-        ...withTab(
-          withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+        ...withPagePlaced(
+          withTab(
+            withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+            tab,
+            taskId,
+            drawn.task.bare === true,
+          ),
           tab,
-          taskId,
-          drawn.task.bare === true,
+          pagePlace,
         ),
         open: true,
       }));
     },
-    [update, drawn, taskId],
+    [update, drawn, taskId, pagePlace],
   );
   // Note that the Inbox's kind of old, which a step of the history or a pin
   // an earlier version kept may still name, is never chosen nor shown: a
@@ -2084,31 +2144,35 @@ export function useSidePanel(
     [update],
   );
   const onOpenFile = useCallback(
-    (ref: CodeRef, commit?: string) =>
-      update((held) => withFileAsked(held, ref, commit, drawn, taskId)),
-    [update, drawn, taskId],
+    (ref: CodeRef, commit?: string, reads?: FileReads) =>
+      update((held) => withFileAsked(held, ref, commit, drawn, taskId, reads ?? fileReads)),
+    [update, drawn, taskId, fileReads],
   );
   const onPreview = useCallback(
     (tab: SidePanelTab) => {
       setAsked(undefined);
       update((held) => ({
         ...withPreview(held, tab, drawn, (from) =>
-          withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+          withPagePlaced(
+            withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+            tab,
+            pagePlace,
+          ),
         ),
         open: true,
       }));
     },
-    [update, drawn, taskId],
+    [update, drawn, taskId, pagePlace],
   );
   const onPreviewFile = useCallback(
-    (ref: CodeRef, commit?: string) =>
+    (ref: CodeRef, commit?: string, reads?: FileReads) =>
       update((held) => ({
         ...withPreview(held, { file: ref.path }, drawn, (from) =>
-          withFileAsked(from, ref, commit, drawn, taskId),
+          withFileAsked(from, ref, commit, drawn, taskId, reads ?? fileReads),
         ),
         open: true,
       })),
-    [update, drawn, taskId],
+    [update, drawn, taskId, fileReads],
   );
   const onKeep = useCallback(
     (tab: SidePanelTab) => {
@@ -2121,20 +2185,21 @@ export function useSidePanel(
   const onBrowseFile = useCallback(
     (from: string | undefined, path: string, newTab: boolean) =>
       update((held) => {
-        const standing =
-          newTab || from === undefined ? undefined : held.files.find((each) => each.path === from);
+        // A file browsed to from a File tab reads where that tab reads, since it is a file of the same tree.
+        const tree = held.files.find((each) => each.path === from);
+        const standing = newTab ? undefined : tree;
         if (standing === undefined || held.files.some((each) => each.path === path)) {
-          return withFileShown(held, path, drawn, taskId);
+          return withFileShown(held, path, drawn, taskId, tree?.reads ?? fileReads);
         }
         const viewed = withChosenViewed(held, { file: path }, drawn);
         return withPreviewMoved(
-          withFileBrowsed(viewed, taskId, standing, path),
+          withFileBrowsed(viewed, taskId, standing, path, standing.reads),
           taskId,
           standing.path,
           path,
         );
       }),
-    [update, drawn, taskId],
+    [update, drawn, taskId, fileReads],
   );
   // Note that a step to a file with a tab of its own by then chooses that
   // tab and leaves this one as it stands, because a file stands in one tab
@@ -2148,7 +2213,8 @@ export function useSidePanel(
         const to = ways?.at(-1)?.path;
         if (to === undefined) return held;
         const open = held.files.find((each) => each.path === to);
-        if (open !== undefined) return withOpenFileChosen(held, open, drawn, taskId);
+        if (open !== undefined)
+          return withOpenFileChosen(held, open, drawn, taskId, standing.reads);
         const stepped = withFileStepped(
           withChosenViewed(held, { file: to }, drawn),
           taskId,

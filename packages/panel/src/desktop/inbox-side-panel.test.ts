@@ -191,6 +191,7 @@ let root: Root | undefined;
 beforeEach(() => {
   window.localStorage.clear();
   readMarks = [];
+  filesRead = [];
   holdFrames();
 });
 
@@ -205,8 +206,15 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
+/** Every file a File tab read, by the task it was read through and its path. */
+let filesRead: string[][] = [];
+
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
+    case ACT_KIND.TASKS_FILE:
+      if ("taskId" in request.payload)
+        filesRead.push([request.payload.taskId, request.payload.path]);
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     case ACT_KIND.AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
@@ -376,6 +384,20 @@ test("a pull request, a page, and a file the item names open one after another i
     [{ kind: "page", planId: OTHER_TASK, pageId: FUNNEL.id }],
   );
   assert.equal(panelTabs(container)?.length, 1, "nothing of another plan opens in the panel");
+});
+
+test("a file opened on another task reads from that task in the panel standing for this one", async () => {
+  const { container, panel } = await inbox();
+  const ledger = { place: { taskId: OTHER_TASK }, repository: "acme/ledger" };
+  act(() => panel().onPreviewFile({ path: "src/ledger.ts" }, undefined, ledger));
+  await settle();
+  assert.deepEqual(panelTabs(container), ["▸ ledger.ts"]);
+  assert.ok(filesRead.length > 0, "the tab read its file");
+  assert.deepEqual(
+    filesRead.filter(([taskId]) => taskId !== OTHER_TASK),
+    [],
+    "every read went to the task the file was opened on",
+  );
 });
 
 test("a preview beside the Inbox kept by a double-click stands as a tab of its own, so the next link opens beside it", async () => {

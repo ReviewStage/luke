@@ -556,19 +556,28 @@ export function DesktopAgentPage({
         : { workspaceId, repository: agentRepository },
     [workspaceId, agentRepository],
   );
+  // A file the panel beside the agent opens is read through the agent's workspace and repository, as its tab saves it.
+  const fileReads = useMemo(
+    () =>
+      repositoryPlace === undefined
+        ? undefined
+        : { place: repositoryPlace, repository: repositoryPlace.repository },
+    [repositoryPlace],
+  );
   // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
   const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? sidePanel.onPreviewFile({ path })
+      ? sidePanel.onPreviewFile({ path }, undefined, fileReads)
       : sidePanel.onPreviewFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
+          fileReads,
         ),
   );
   // A skill's file opens where a file the agent names does: in the panel beside it.
   const openSkill = (skill: { readonly path: string }) => {
-    if (repositoryPlace === undefined) return;
-    sidePanel.onPreviewFile({ path: skill.path });
+    if (fileReads === undefined) return;
+    sidePanel.onPreviewFile({ path: skill.path }, undefined, fileReads);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const pullRequestCard = useSteadyDoor((url: string) => {

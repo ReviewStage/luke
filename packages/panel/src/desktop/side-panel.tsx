@@ -7,7 +7,7 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
-import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@repo/features/terminal-entry";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -106,6 +106,7 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card.js";
+import { useAgentsElsewhere } from "../tasks/agents-elsewhere.js";
 import {
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
@@ -151,9 +152,12 @@ import {
   drawsSubagent,
   drawsTerminal,
   type FileHistoryStep,
+  type FileReadPlace,
+  type FileReads,
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
+  type OpenPage,
   type PinHolder,
   PULL_REQUEST_VIEW,
   type PullRequestView,
@@ -164,6 +168,7 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
+import { usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -290,6 +295,41 @@ export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL
 /** What the panel's pages and cloud Browser tabs stand on: the agent an agent's page holds the panel under, else the task. */
 function holderPlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
+}
+
+/** Whether two places a File tab reads through are one. */
+function sameReadPlace(a: FileReadPlace, b: FileReadPlace): boolean {
+  if ("taskId" in a) return "taskId" in b && a.taskId === b.taskId;
+  return !("taskId" in b) && a.workspaceId === b.workspaceId && a.repository === b.repository;
+}
+
+/**
+ * Where a File tab reads its file: where it was opened, as its tab saved it,
+ * or, for one opened on the panel's own place or before its place was known,
+ * that place (`own`), with the repository as the task names it now.
+ */
+function fileReadsOf(file: OpenFile, own: FileReads): FileReads {
+  const saved = file.reads;
+  return saved === undefined || sameReadPlace(saved.place, own.place) ? own : saved;
+}
+
+/** No place beside the panel's own, the same array every render. */
+const NO_PLACES: readonly PagePlace[] = [];
+
+/** Whether the page tab stands on the place given, as one that saved no place does on the panel's own. */
+function pageStandsOn(tab: OpenPage, place: PagePlace): boolean {
+  return tab.place === undefined || pagePlaceId(tab.place) === pagePlaceId(place);
+}
+
+/** The places the page tabs given stand on other than `own`, each once. */
+function placesBeside(tabs: readonly OpenPage[], own: PagePlace): readonly PagePlace[] {
+  const places = new Map<string, PagePlace>();
+  for (const tab of tabs) {
+    if (tab.place !== undefined && !pageStandsOn(tab, own)) {
+      places.set(pagePlaceId(tab.place), tab.place);
+    }
+  }
+  return places.size === 0 ? NO_PLACES : [...places.values()];
 }
 
 /** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
@@ -894,6 +934,8 @@ function stripTabs(input: {
   panel: SidePanelControl;
   unread: readonly StripTab[];
   agents: AgentsControl;
+  /** The control a Pull request or Terminal tab draws its agent through (`useAgentsElsewhere`). */
+  agentsOf: (agentId: string) => AgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
@@ -913,7 +955,7 @@ function stripTabs(input: {
   thread: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
-  const { copied, onOpenAgent, shownAgent, pagePlace } = input;
+  const { copied, onOpenAgent, shownAgent, agentsOf } = input;
   const { cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -975,8 +1017,9 @@ function stripTabs(input: {
   }));
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
-    const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
-    const pullRequest = pullRequestOfTab(agents, tab);
+    const own = agentsOf(tab.changes);
+    const subject = agentSubject(own, tab.changes, held, shownAgent === tab.changes);
+    const pullRequest = pullRequestOfTab(own, tab);
     const changesCard = hungCard({
       kind: TAB_KIND.CHANGES,
       subject,
@@ -985,23 +1028,23 @@ function stripTabs(input: {
       people:
         pullRequest === undefined
           ? undefined
-          : peopleOf(agents.changesPeople.get(tab.changes), pullRequest),
+          : peopleOf(own.changesPeople.get(tab.changes), pullRequest),
       onOpenAgent: () => onOpenAgent(tab.changes),
     });
     return {
       tab,
-      look: look(tab, { ...changesLook(tab, agents), card: changesCard }),
+      look: look(tab, { ...changesLook(tab, own), card: changesCard }),
       close: () => panel.onClose(tab),
     };
   });
   // A page's tab hangs the page's card, previewing its newest version.
-  const pageTabs = pages.map(({ tab, line }) => ({
+  const pageTabs = pages.map(({ tab, line, place }) => ({
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PAGE, title: line.title }),
       card: hungCard({
         kind: TAB_KIND.PAGE,
-        place: pagePlace,
+        place,
         pageId: line.id,
         name: line.title,
         page: line,
@@ -1012,7 +1055,7 @@ function stripTabs(input: {
   // A Terminal tab wears its agent's glyph and name, and hangs its agent's
   // card, saying under a rule whose sandbox its shells run in.
   const terminalTabs = terminals.map((tab) => {
-    const subject = agentSubject(agents, tab.terminal, held, false);
+    const subject = agentSubject(agentsOf(tab.terminal), tab.terminal, held, false);
     return {
       tab,
       look: look(tab, {
@@ -1126,6 +1169,7 @@ function PanelTabs({
   keys,
   unread,
   agents,
+  agentsOf,
   subagents,
   files,
   changes,
@@ -1156,13 +1200,15 @@ function PanelTabs({
   keys: boolean;
   unread: readonly StripTab[];
   agents: AgentsControl;
+  /** The control a Pull request or Terminal tab draws its agent through. */
+  agentsOf: (agentId: string) => AgentsControl;
   /** The open subagent tabs the task draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
   /** The open file tabs, in the strip's order. */
   files: readonly OpenFile[];
   /** The open Changes tabs of the task's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
-  /** The open page tabs of the plan's pages, in the order opened. */
+  /** The open page tabs, each with the page as the place it stands on lists it, in the order opened. */
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the task's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
@@ -1194,6 +1240,7 @@ function PanelTabs({
     panel,
     unread,
     agents,
+    agentsOf,
     subagents,
     files,
     changes,
@@ -1511,10 +1558,11 @@ function ToggleOffers({
   );
 }
 
-/** An open page tab the task draws, with the page as the plan lists it. */
+/** An open page tab the panel draws, with the page as the place it stands on lists it, and that place. */
 interface DrawnPage {
   tab: PageStripTab;
   line: PageLine;
+  place: PagePlace;
 }
 
 /** An open subagent tab the task draws: its tab, the delegation that started it, what the strip calls it, and where its glyph says it stands. */
@@ -1789,6 +1837,7 @@ function TabContent({
   files,
   pages,
   agents,
+  agentsOf,
   standings,
   shown,
   findActive,
@@ -1818,11 +1867,13 @@ function TabContent({
   codeFilesRead: boolean;
   /** The workspace and repository a File tab reads through where the panel stands for no task; none where it stands for one. */
   repositoryPlace: PanelRepositoryPlace | undefined;
-  /** The open file tabs, which a file's tab reads its lit lines from. */
+  /** The open file tabs, which a file's tab reads its lit lines and where it reads from. */
   files: readonly OpenFile[];
-  /** The plan's pages, which a page's tab draws its newest version of. */
-  pages: readonly PageLine[];
+  /** The open page tabs, which a page's tab draws its newest version of, read on the place it stands on. */
+  pages: readonly DrawnPage[];
   agents: AgentsControl;
+  /** The control a Pull request or Terminal tab draws its agent through. */
+  agentsOf: (agentId: string) => AgentsControl;
   standings: WorkerStandings;
   /** Whether the panel is on screen, so a subagent's tab knows to follow its transcript. */
   shown: boolean;
@@ -1896,7 +1947,7 @@ function TabContent({
       <TerminalTab
         key={tab.terminal}
         agentId={tab.terminal}
-        agents={agents}
+        agents={agentsOf(tab.terminal)}
         shown={shown}
         onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
         onClose={() => onCloseTab(tab)}
@@ -1905,17 +1956,17 @@ function TabContent({
     );
   }
   if (isPageTab(tab)) {
-    const page = pages.find((each) => each.id === tab.page);
-    // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
-    return page === undefined ? (
-      <SpinnerRegion delay label={readingWords("the page")} />
-    ) : (
+    const drawn = pages.find((each) => each.tab.page === tab.page);
+    // The tab stands for a page its place no longer lists only until the panel moves on, a render away.
+    if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the page")} />;
+    const { line: page, place } = drawn;
+    return (
       <TaskPagePane
         key={page.id}
-        place={pagePlace}
+        place={place}
         page={page}
         readSource={(version) =>
-          act(ACT_KIND.TASKS_PAGE_SOURCE, { ...pagePlace, pageId: page.id, version })
+          act(ACT_KIND.TASKS_PAGE_SOURCE, { ...place, pageId: page.id, version })
         }
         findActive={findActive}
         doors={{
@@ -1941,7 +1992,7 @@ function TabContent({
             <PULL_REQUEST_TAB.Route
               agentId={tab.changes}
               number={tab.number}
-              control={agents}
+              control={agentsOf(tab.changes)}
               shown={shown}
               repository={repository}
               tree={fileTree}
@@ -1958,29 +2009,22 @@ function TabContent({
     const file = files.find((each) => each.path === tab.file);
     // The tab stands for a file no longer open only until the panel moves
     // on, a render away.
+    if (file === undefined) return <SpinnerRegion delay label={readingWords("the file")} />;
+    const reads = fileReadsOf(file, { place: repositoryPlace ?? { taskId }, repository });
+    const { place } = reads;
+    // Note that a task's tree is asked for by its plan, and a repository's by its workspace.
+    const tree = "taskId" in place ? { planId: place.taskId } : place;
     // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
-    return file === undefined ? (
-      <SpinnerRegion delay label={readingWords("the file")} />
-    ) : (
-      <Fragment key={repository ?? undefined}>
+    return (
+      <Fragment key={reads.repository ?? undefined}>
         <FileView
-          taskId={taskId}
-          repository={repository}
+          taskId={"taskId" in place ? place.taskId : taskId}
+          repository={reads.repository}
           file={file}
-          readFile={(window) =>
-            act(ACT_KIND.TASKS_FILE, { ...(repositoryPlace ?? { taskId }), ...window })
-          }
-          readFolder={(path) =>
-            act(ACT_KIND.TASKS_TREE, { ...(repositoryPlace ?? { planId: taskId }), path })
-          }
-          readWhole={() =>
-            act(ACT_KIND.TASKS_TREE, {
-              ...(repositoryPlace ?? { planId: taskId }),
-              path: "",
-              recursive: true,
-            })
-          }
+          readFile={(window) => act(ACT_KIND.TASKS_FILE, { ...place, ...window })}
+          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { ...tree, path })}
+          readWhole={() => act(ACT_KIND.TASKS_TREE, { ...tree, path: "", recursive: true })}
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -2456,6 +2500,11 @@ export function SidePanel({
   const terminals = !terminalsHere
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
+  // A Pull request or Terminal tab draws its agent where the agent stands, through the place's agents where they list it.
+  const agentsOf = useAgentsElsewhere(agents, [
+    ...changes.map((each) => each.changes),
+    ...terminals.map((each) => each.terminal),
+  ]);
   // The cloud Browser tabs stand on every platform, since the page draws them
   // from the service and needs nothing of main's: an agent's page lists its
   // agent's, on a task or on none, and a task's panel every one of its
@@ -2506,11 +2555,28 @@ export function SidePanel({
     },
     onDiscard: (draftId: string) => discardCloudDraft(cloudPlace, draftId),
   };
-  // A page's tab stands while the plan lists the page.
+  // A page's tab stands while the place it stands on lists the page: the panel's own, as the
+  // panel's pages, or, for a tab of another place its strip draws, that place's own pages.
   const taskPages = pages ?? NO_PAGES;
-  const pageTabs = panel.pages.flatMap((tab) => {
-    const line = taskPages.find((each) => each.id === tab.page);
-    return line === undefined ? [] : [{ tab, line }];
+  const pagesElsewhere = useMemo(
+    () =>
+      panel.pages.filter(
+        (tab) => !pageStandsOn(tab, pagePlace) && panel.strip.some((each) => sameTab(each, tab)),
+      ),
+    [panel.pages, panel.strip, pagePlace],
+  );
+  const pagesBeside = usePlacesPages(
+    useMemo(() => placesBeside(pagesElsewhere, pagePlace), [pagesElsewhere, pagePlace]),
+  );
+  const pageTabs = panel.pages.flatMap((tab): DrawnPage[] => {
+    const place = tab.place ?? pagePlace;
+    const listed = pageStandsOn(tab, pagePlace)
+      ? taskPages
+      : pagesElsewhere.includes(tab)
+        ? pagesBeside(place)
+        : undefined;
+    const line = listed?.find((each) => each.id === tab.page);
+    return line === undefined ? [] : [{ tab, line, place }];
   });
   const label =
     tab === undefined
@@ -2522,7 +2588,7 @@ export function SidePanel({
           : isFileTab(tab)
             ? tab.file
             : isChangesTab(tab)
-              ? changesLook(tab, agents).label
+              ? changesLook(tab, agentsOf(tab.changes)).label
               : isPageTab(tab)
                 ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
                 : isTerminalTab(tab)
@@ -2594,6 +2660,7 @@ export function SidePanel({
           keys={keys && focused}
           unread={unread}
           agents={agents}
+          agentsOf={agentsOf}
           subagents={subagents}
           files={files}
           changes={changes}
@@ -2666,8 +2733,9 @@ export function SidePanel({
                 pagePlace={pagePlace}
                 repository={repository}
                 files={files}
-                pages={taskPages}
+                pages={pageTabs}
                 agents={agents}
+                agentsOf={agentsOf}
                 standings={standings}
                 shown={keys}
                 findActive={keys && focused}
