@@ -61,7 +61,9 @@ const gatedGitHubClient = githubRateGate.pipe(
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
 /** Our Slack bot as the environment names it, named once so every layer that reaches it shares one. */
-const slackBot = slackBotFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer));
+const slackBot = slackBotFromEnvironment.pipe(
+  Layer.provide(Layer.merge(FetchHttpClient.layer, integrationConnectFromEnvironment)),
+);
 
 /**
  * The services every web function's and every agent's effects run against. A

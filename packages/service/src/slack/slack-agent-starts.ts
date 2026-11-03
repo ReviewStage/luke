@@ -10,7 +10,8 @@
  *
  * The writer is found as a member of a workspace connected to the event's
  * team, oldest connection first: by the Slack id the bot kept for them, or
- * else by the email Slack holds for them (`users.info`), which is then kept.
+ * through a Slack account a member connected themselves (`SlackBot.memberOf`),
+ * or else by the email Slack holds for them (`users.info`), which is then kept.
  * Where no workspace is connected, or none holds them as a member, the bot
  * says so in the thread and starts nothing.
  *
@@ -42,7 +43,6 @@ import {
   recordSlackMemberLookup,
   slackAgentThreadAt,
   slackMemberByEmail,
-  slackMemberOf,
   slackStartRepository,
   slackTeamWorkspaces,
 } from "@repo/database/models/slack-installation-store";
@@ -100,7 +100,7 @@ const RESULT_CUT_MARK = "…";
 /** What the bot says in a thread where it starts nothing. */
 const SLACK_REPLY = {
   NOT_CONNECTED: `This Slack workspace isn't connected to ${PRODUCT_NAME}. A workspace owner or admin can connect the Slack bot in ${PRODUCT_NAME}'s workspace settings.`,
-  NO_MEMBER: `I couldn't find you in a ${PRODUCT_NAME} workspace connected to this Slack. Sign in to ${PRODUCT_NAME} with the email your Slack profile shows, and join the workspace.`,
+  NO_MEMBER: `I couldn't find you in a ${PRODUCT_NAME} workspace connected to this Slack. Connect your Slack account in ${PRODUCT_NAME}'s Settings › Integrations, then write to me again.`,
 } as const;
 
 /** The event callback as far as it is read: the team, Slack's id for the event, the bot's own user, and the message. */
@@ -210,15 +210,17 @@ function refusalReply(what: string, failure: unknown): SlackMessageContent {
 
 /**
  * The member the Slack user is in the workspace: the one the bot's lookups
- * kept, or else the member whose email is the one Slack holds for them,
- * which is kept from then on; nothing where neither is.
+ * kept or its members' own Slack accounts name, or else the member whose
+ * email is the one Slack holds for them, which is kept from then on;
+ * nothing where none is.
  */
 const memberIn = Effect.fnUntraced(function* (
+  bot: SlackBotService,
   email: Effect.Effect<Option.Option<string>>,
   organizationId: string,
   addressed: SlackAddressed,
 ) {
-  const kept = yield* slackMemberOf(organizationId, addressed.teamId, addressed.slackUserId);
+  const kept = yield* bot.memberOf(organizationId, addressed.teamId, addressed.slackUserId);
   if (Option.isSome(kept)) return kept;
   const held = yield* email;
   if (Option.isNone(held)) return Option.none<string>();
@@ -379,7 +381,7 @@ const actOnAddressed = Effect.fnUntraced(function* (addressed: SlackAddressed) {
     for (const organizationId of workspaces) {
       const kept = yield* slackAgentThreadAt(organizationId, addressed.channel, thread);
       if (Option.isNone(kept)) continue;
-      const member = yield* memberIn(email, organizationId, addressed);
+      const member = yield* memberIn(bot, email, organizationId, addressed);
       if (Option.isNone(member)) {
         yield* bot.reply(addressed.channel, thread, plainReply(SLACK_REPLY.NO_MEMBER));
         return;
@@ -389,7 +391,7 @@ const actOnAddressed = Effect.fnUntraced(function* (addressed: SlackAddressed) {
     }
   }
   for (const organizationId of workspaces) {
-    const member = yield* memberIn(email, organizationId, addressed);
+    const member = yield* memberIn(bot, email, organizationId, addressed);
     if (Option.isNone(member)) continue;
     yield* startFromSlack(bot, addressed, organizationId, member.value);
     return;

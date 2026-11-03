@@ -17,8 +17,9 @@
  * names the item, the message whose ask it answers, and the option
  * (`SlackChoice`, `thread-dms.ts`); a press with none, the Open button's
  * among them, is acknowledged and nothing else. The presser is found back as
- * the workspace member the bot's lookups kept under that Slack user, in the
- * team the item's workspace connected (`slackMemberOf`), and the ask is
+ * the workspace member the bot's lookups kept under that Slack user, or
+ * one whose own Slack account is that user, in the team the item's
+ * workspace connected (`SlackBot.memberOf`), and the ask is
  * answered as that member (`answerAsMember`) under the button's action id,
  * so a press Slack sends again is the answer already taken. The answer
  * taken is handed to the agent as its "Thread answer", and the DM is
@@ -27,7 +28,6 @@
  * but a fixed line.
  */
 
-import { slackMemberOf } from "@repo/database/models/slack-installation-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@repo/wire";
@@ -51,7 +51,7 @@ import { answerAsMember } from "../inbox/inbox-procedures.js";
 import { INBOX_ASK_ANSWER } from "../inbox/inbox-store.js";
 import { ANY_METHOD } from "../route.js";
 import { actOnSlackEvent } from "./slack-agent-starts.js";
-import type { SlackMessage } from "./slack-bot.js";
+import { SlackBot, type SlackMessage } from "./slack-bot.js";
 import {
   chosenLine,
   itemWorkspace,
@@ -179,7 +179,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   const teamId = press.team?.id ?? press.user.team_id;
   if (teamId === undefined) return;
   const member = yield* hostedStoreOrUnavailable(
-    slackMemberOf(organizationId.value, teamId, press.user.id),
+    (yield* SlackBot).memberOf(organizationId.value, teamId, press.user.id),
   );
   if (Option.isNone(member)) return;
   const line = chosenLine(choice.choice);

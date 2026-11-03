@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
+import { INTEGRATION_ROW_STATUS } from "../../integration-vocabulary.js";
 import { member as memberTable, organization, user } from "../../schemas/auth.js";
+import { integrationConnection } from "../../schemas/integration.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   deleteSlackInstallation,
@@ -12,13 +15,15 @@ import {
   slackMemberByEmail,
   slackMemberLookup,
   slackMemberOf,
+  slackUnresolvedConnections,
   workspaceSlackInstallation,
 } from "../slack-installation-store.js";
 
 /**
  * The Slack team a workspace's bot is connected to, over a real dialect:
  * each workspace reads only its own installation and its own members' Slack
- * ids and emails, and a Disconnect forgets the ids it kept.
+ * ids, emails, and own Slack accounts, and a Disconnect forgets the ids it
+ * kept.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -61,6 +66,16 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
         teamName: "Ours",
         userId: member,
       });
+      yield* (yield* Database).insert(integrationConnection).values({
+        id: randomUUID(),
+        userId: member,
+        provider: INTEGRATION_PROVIDER.SLACK,
+        connectSubject: member,
+        connectionName: INTEGRATION_PROVIDER.SLACK,
+        status: INTEGRATION_ROW_STATUS.CONNECTED,
+      });
+      const unresolved = yield* slackUnresolvedConnections(ours);
+      const theirsUnresolved = yield* slackUnresolvedConnections(theirs);
       yield* recordSlackMemberLookup(ours, member, "U0001");
 
       assert.deepEqual(
@@ -68,6 +83,9 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
         Option.some({ teamId: "T0001", teamName: "Ours" }),
       );
       assert.equal(Option.isNone(yield* workspaceSlackInstallation(theirs)), true);
+      assert.deepEqual(unresolved, [{ userId: member, connectSubject: member }]);
+      assert.deepEqual(theirsUnresolved, []);
+      assert.deepEqual(yield* slackUnresolvedConnections(ours), []);
       assert.deepEqual(
         Option.map(yield* slackMemberLookup(ours, member), (found) => found.slackUserId),
         Option.some("U0001"),
