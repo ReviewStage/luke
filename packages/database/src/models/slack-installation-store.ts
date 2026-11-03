@@ -38,8 +38,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * email Slack holds for them (`slackMemberByEmail`); an agent it starts
  * works in the repository the member's latest agent in the workspace worked
  * in (`slackStartRepository`) unless the message names one. A thread an agent was
- * started from is kept against it (`slackAgentThread`), and each of the
- * agent's settled turns is claimed there once (`claimSlackThreadTurn`).
+ * started from is kept against it (`slackAgentThread`), and moved to the
+ * agent that continues it where that one ended (`moveSlackAgentThread`), and
+ * each of the agent's settled turns is claimed there once (`claimSlackThreadTurn`).
  * An owner or admin names the repository Slack starts default to, for the
  * workspace and for each channel (`slackStartRepositories`); a channel's is
  * forgotten when the bot leaves it.
@@ -327,6 +328,29 @@ const insertAgentThread = SqlSchema.void({
     ),
 });
 
+const updateAgentThread = SqlSchema.void({
+  Request: Schema.Struct({
+    ...SlackThreadSchema.fields,
+    fromAgentId: Schema.String,
+    agentId: Schema.String,
+    userId: Schema.String,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(slackAgentThread)
+        .set({ agentId: row.agentId, userId: row.userId, postedTurnId: null })
+        .where(
+          and(
+            eq(slackAgentThread.organizationId, row.organizationId),
+            eq(slackAgentThread.channelId, row.channelId),
+            eq(slackAgentThread.threadTs, row.threadTs),
+            eq(slackAgentThread.agentId, row.fromAgentId),
+          ),
+        ),
+    ),
+});
+
 const findAgentThread = SqlSchema.findOneOption({
   Request: SlackThreadSchema,
   Result: Schema.Struct({ agentId: Schema.String, userId: Schema.String }),
@@ -606,6 +630,13 @@ export function slackStartRepository(
 /** Keeps the thread as the one the agent was started from; a thread already kept keeps its first agent. */
 export function recordSlackAgentThread(thread: SlackAgentThread): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => insertAgentThread({ ...thread, now }));
+}
+
+/** Moves the thread from the agent it was kept for to the one that continues it, started by the member named, so its later messages and settled turns go there; a thread moved to another agent since stands. */
+export function moveSlackAgentThread(
+  thread: SlackAgentThread & { readonly fromAgentId: string },
+): TaskStoreEffect<void> {
+  return updateAgentThread(thread);
 }
 
 /** The agent the thread was started from, and the member who started it; nothing for a thread no agent was started from. */
