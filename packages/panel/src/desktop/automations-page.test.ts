@@ -2672,7 +2672,7 @@ test("a default model that could not be read is said as unknown, and a model can
 test("the reader's own automation says a model nothing of theirs pays for cannot run, while a teammate's, run on its maker's connections, says nothing of it", async () => {
   catalogUnconnected = true;
   standing = [DIGEST, SWEEP];
-  /** The pinned rows of the Model row's menu, on the automation given. */
+  /** The pinned rows of the Model row's menu and its last line, on the automation given. */
   const footOn = async (automationId: string): Promise<string> => {
     const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
     await settle();
@@ -2680,7 +2680,9 @@ test("the reader's own automation says a model nothing of theirs pays for cannot
     assert.ok(chip, "the Model row draws the default's chip");
     act(() => chip.click());
     await settle();
-    return page.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
+    return [...page.querySelectorAll(".ui-searchable-menu-foot, .ui-searchable-menu-last-line")]
+      .map((block) => block.textContent ?? "")
+      .join("");
   };
 
   assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
