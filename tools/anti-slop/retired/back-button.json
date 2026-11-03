@@ -22,7 +22,10 @@
     {
       "import": "../../face/glyphs.js",
       "names": ["BackIcon", "ArrowLeftIcon"],
-      "allow": ["packages/ui/src/components/calendar/"]
+      "allow": [
+        "packages/ui/src/components/calendar/",
+        "packages/ui/src/components/landing/landing-desktop.tsx"
+      ]
     },
     {
       "import": "../face/glyphs.js",
