@@ -1313,6 +1313,30 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
 );
 
 it.effect(
+  "the account gate opening follows the task list, the workspaces, and the sidebar, and reads GitHub, with no window asking",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.memberships = [PERSONAL, ACME];
+      service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
+      service.connection = { connected: true, login: "ada" };
+      const { tasks, last, listed } = yield* subject(service);
+
+      yield* tasks.open;
+      yield* listed();
+
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.name),
+        ["Teammate invitations"],
+      );
+      assert.equal(last()?.listStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
+      assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+    }),
+);
+
+it.effect(
   "a quiet start opens nothing and answers its task, and its agent's start where it named one",
   () =>
     Effect.gen(function* () {
@@ -1706,8 +1730,9 @@ it.effect(
 it.effect("behind a closed account gate nothing is read and nothing starts", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, told } = yield* subject(service, { signedIn: false });
+    const { call, told, tasks } = yield* subject(service, { signedIn: false });
 
+    yield* tasks.open;
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     const started = yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
 

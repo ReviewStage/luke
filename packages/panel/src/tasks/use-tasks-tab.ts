@@ -48,7 +48,6 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
   type ParentCallFailure,
@@ -1488,28 +1487,6 @@ export function useTasksTab(input: {
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
   }, [tasklessAgents, listedWorkspaceId]);
-  // An Untitled task takes its first agent's title on the service, and the
-  // window hears no push for a task's row, so the tasks are read again as an
-  // agent of the open task first holds a title while it stands Untitled.
-  // Note that a list read already holding a title is no title landing, so a
-  // task opened on titled agents asks nothing.
-  const agentTitled =
-    agents.agents === undefined ? undefined : agents.agents.some((agent) => agent.title !== null);
-  const openName =
-    tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.name ??
-    (openDocument?.id === viewed.activeTaskId ? openDocument?.name : undefined);
-  const untitled = openName === UNTITLED_TASK_NAME;
-  const titledSeen = useRef<{ taskId: string | undefined; titled: boolean | undefined }>({
-    taskId: undefined,
-    titled: undefined,
-  });
-  useEffect(() => {
-    const seen = titledSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && seen.titled === false && agentTitled === true;
-    titledSeen.current = { taskId, titled: agentTitled };
-    if (landed && untitled) tell(ACT_KIND.TASKS_REFRESH);
-  }, [agentTitled, untitled, viewed.activeTaskId, tell]);
   // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
   const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
   const rowAgents = openRow?.agents;
@@ -1782,17 +1759,6 @@ export function useTasksTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-
-  // The tab showing is what asks the host to read the tasks again; the open
-  // task and its call stand through it going away, and a call's drafts reach
-  // the document without any read. A fixture's tasks are read from nowhere.
-  const reading = shown && signedIn && fixture === undefined;
-  const wasReading = useRef(false);
-  useEffect(() => {
-    if (reading === wasReading.current) return;
-    wasReading.current = reading;
-    if (reading) tell(ACT_KIND.TASKS_REFRESH);
-  }, [reading, tell]);
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the task takes its ask

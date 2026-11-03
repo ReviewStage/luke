@@ -45,13 +45,7 @@ import {
   pageName,
 } from "@repo/features/turn-rows";
 import { skillWord } from "@repo/ui/skill-mention";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type WireValue,
-} from "@repo/wire";
+import { isRecord, isWireNumber, isWireString, type WireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
@@ -727,27 +721,6 @@ function agentUpdateKind(input: WireValue | undefined): CallKind {
   const archived = isRecord(input) ? input.archived : undefined;
   if (archived === true) return CALL_KIND.ARCHIVE_AGENT;
   return archived === false ? CALL_KIND.UNARCHIVE_AGENT : CALL_KIND.UPDATE_AGENT;
-}
-
-/** The tools that keep the member's sidebar sections or make or change a task, whose accepted call changes the sidebar. */
-const SIDEBAR_TOOLS: ReadonlySet<string> = new Set([
-  AGENT_TOOL.CREATE_TASK,
-  AGENT_TOOL.CREATE_SECTION,
-  AGENT_TOOL.DELETE_SECTION,
-  RETIRED_TOOL.MOVE_TASK,
-  AGENT_TOOL.UPDATE_TASK,
-]);
-
-/**
- * Whether an answered call changed what the sidebar draws, so the window
- * reads the tasks again: a task made, a start that made one before
- * `create_task` did, or a section made, deleted, or a task moved or changed,
- * each only once it was accepted.
- */
-export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
-  if (!isRecord(output)) return false;
-  if (tool === AGENT_TOOL.START_AGENT) return isRecord(output.newTask);
-  return SIDEBAR_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
 }
 
 /** What a call to another agent sent it, in the caller's own words: the words, and a start's note beside them. */

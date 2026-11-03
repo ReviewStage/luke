@@ -185,11 +185,11 @@ import {
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document.
  *
  * Nothing here writes a document but a restore the developer asks for: the
- * task's coding agents are its writers, on the service. The list and the
- * open task are read when the Tasks tab shows, when a task opens, and when
- * one starts, and never on a clock. The list itself is followed over Neon
- * Realtime from the first refresh until a sign-out (`task-list-follow.ts`),
- * and is read by none of those asks. The repositories the account reaches, and a task's repository
+ * task's coding agents are its writers, on the service. The open task is
+ * read when a task opens, when one starts, and on the list's Try again, and
+ * never on a clock. The list itself is followed over Neon Realtime from the
+ * account gate opening until a sign-out (`task-list-follow.ts`), and is read
+ * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
  * task pinned. A
  * plan's history is read for the version history that asks and held nowhere
@@ -202,8 +202,8 @@ import {
  *
  * The workspaces the account is a member of are carried on the view beside
  * the tasks and followed apart from them over Neon Realtime, so the tasks
- * never wait on them: from the first refresh after a launch or a sign-in
- * until a sign-out, each change drawn as it lands, a teammate's and the
+ * never wait on them: from the account gate opening, at a launch or a
+ * sign-in, until a sign-out, each change drawn as it lands, a teammate's and the
  * browser's among them. Whether the account's GitHub is connected is read
  * once beside them, and again when the panel comes forward, at most once a
  * minute, since it is measured against the clock and cannot be followed. A
@@ -413,7 +413,11 @@ export interface TasksComposer extends Composer {
   snapshot: () => TasksView;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
-  /** Follows every read a window holds anew, as the account gate opening asks, so a hold taken while nobody was signed in reads now. */
+  /**
+   * Follows the account's task list, workspaces, and sidebar, and every read
+   * a window holds anew, as the account gate opening asks, so the list loads
+   * with no window asking and a hold taken while nobody was signed in reads now.
+   */
   open: Effect.Effect<void>;
   /**
    * Waits for a write's transaction to arrive on the task list followed
@@ -476,9 +480,10 @@ type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
  * starting one replaces whichever was, and a read still out for the replaced
- * task is dropped when it lands. The Tasks tab showing reads the list and the
- * open task again, while the open task stands through the tab hiding. Behind a
- * closed account gate, or on a run that sends nothing, nothing is read.
+ * task is dropped when it lands. The list, the workspaces, and the sidebar
+ * are followed from the account gate opening, whether or not a window shows
+ * them. Behind a closed account gate, or on a run that sends nothing, nothing
+ * is read.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
@@ -787,7 +792,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
+  /** The one follow of the list, started as the account gate opens and stopped by a sign-out. */
   const listFollow = yield* FiberHandle.make<void>();
 
   /** The list's wait for a write's transaction, while every part of it is followed over Realtime. */
@@ -891,7 +896,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   });
 
-  /** The one follow of the account's workspaces, from the first refresh after a launch or a sign-in until a sign-out. */
+  /** The one follow of the account's workspaces, from the account gate opening, at a launch or a sign-in, until a sign-out. */
   const workspacesFollow = yield* FiberHandle.make<void>();
   /** How many times the follow or a write's answer has moved each workspace, so an answer that lands after a newer move of it is not drawn over it. */
   const workspaceMoves = new Map<string, number>();
@@ -1073,7 +1078,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (!fresh) yield* readGithub;
   });
 
-  /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
+  /** The one follow of the account's sidebar sections and pinned repositories, from the account gate opening, at a launch or a sign-in, until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
   /** The sidebar follow's wait for a write's transaction once Sync woke it; none while it polls or is let go. */
   let sidebarTxWait: TxWait | undefined;
@@ -1136,6 +1141,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
     yield* FiberHandle.run(sidebarFollow, followed, { onlyIfMissing: true });
   });
+
+  /**
+   * Follows the account's task list, workspaces, and sidebar where nothing
+   * follows each yet, the list saying it is reading until its first answer
+   * lands.
+   */
+  const followAccount = Effect.gen(function* () {
+    if (view.listStatus === TASKS_READ.IDLE) write({ listStatus: TASKS_READ.READING });
+    yield* FiberHandle.run(listFollow, followList, { onlyIfMissing: true });
+    yield* followWorkspaces;
+    yield* followSidebar;
+  });
+
+  /** The read of GitHub's connection the gate opening starts beside the follows, so a sign-in waits on none of it. */
+  const githubOpened = yield* FiberHandle.make<void>();
 
   /**
    * The active task's document as a read of it left it. A copy of the same
@@ -1628,22 +1648,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   const methods: GatewayMethodTable = {
-    // The workspaces are followed beside the tasks rather than read before
-    // them, from the first refresh after a launch or a sign-in; GitHub's
-    // connection is read beside them where the last read is stale.
+    // The list's Try again: what is followed already stands (`open`), so it
+    // starts only a follow that is not running, and reads the open task and,
+    // where the last read is stale, GitHub's connection again.
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
-        if (view.listStatus === TASKS_READ.IDLE) write({ listStatus: TASKS_READ.READING });
-        yield* FiberHandle.run(listFollow, followList, { onlyIfMissing: true });
+        yield* followAccount;
         const open = view.activeTaskId;
         if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
         const tasks = Effect.suspend(() => {
           const taskId = view.activeTaskId;
           return taskId === undefined ? Effect.void : readOpened(taskId);
         });
-        yield* followWorkspaces;
-        yield* followSidebar;
         yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
         return {};
       }),
@@ -3039,7 +3056,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   return {
     methods,
     snapshot: () => view,
-    open: heldPageReads.reopenHeld,
+    // The gate opening follows the account's task list, workspaces, and
+    // sidebar, so the list loads after a launch or a sign-in with no window
+    // asking; GitHub's connection is read beside them where the last read is stale.
+    open: Effect.gen(function* () {
+      yield* heldPageReads.reopenHeld;
+      if (!gate()) return;
+      yield* followAccount;
+      yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
+    }),
     listed,
     writeAgent: (agentId, change, written) =>
       Effect.suspend(() => taskList.collections.writeAgent(agentId, change, written)),
@@ -3059,6 +3084,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       taskList = yield* openTaskList;
       yield* FiberHandle.clear(workspacesFollow);
       yield* FiberHandle.clear(sidebarFollow);
+      yield* FiberHandle.clear(githubOpened);
       yield* FiberMap.clear(peopleFollows);
       yield* FiberMap.clear(invitationFollows);
       yield* Scope.close(sidebar.scope, Exit.void);

@@ -35,7 +35,6 @@ type NoticeHost = Pick<
   | "agentAccountInboxUnfollow"
   | "onAccountInboxChanged"
   | "onAccountChanged"
-  | "tasksRefresh"
   | "workspacesRefresh"
 >;
 

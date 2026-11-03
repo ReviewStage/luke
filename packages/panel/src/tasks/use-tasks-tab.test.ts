@@ -3354,32 +3354,6 @@ test("an agent refused as New task's Agent mode started its task opens the task 
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 });
 
-test("an agent's title first landing on a task still Untitled reads the tasks again, so the name it took shows; a titled task asks nothing", async () => {
-  const viewOf = (name: string, title: string | null): TasksView => ({
-    ...withAgents([{ ...RUNNING_AGENT, title }]),
-    tasks: [{ ...listed(), name }],
-    document: { status: TASKS_READ.READY, task: { ...TASK, name } },
-  });
-  const refreshes = (tab: ReturnType<typeof mount>) =>
-    tab.told.filter((kind) => kind === ACT_KIND.TASKS_REFRESH).length;
-  const tab = mount({ shown: true, tasks: viewOf("Untitled", null) });
-  await settle();
-  const before = refreshes(tab);
-  tab.stand({ tasks: viewOf("Untitled", "Fix token refresh") });
-  await settle();
-  const landed = refreshes(tab) - before;
-  closeWindow();
-
-  const named = mount({ shown: true, tasks: viewOf(TASK.name, null) });
-  await settle();
-  const namedBefore = refreshes(named);
-  named.stand({ tasks: viewOf(TASK.name, "Fix token refresh") });
-  await settle();
-
-  assert.equal(landed, 1);
-  assert.equal(refreshes(named) - namedBefore, 0);
-});
-
 /** The payload of every act of `kind` the tab asked, in order. */
 function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[] {
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);

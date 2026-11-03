@@ -61,7 +61,6 @@ function linked(
         agentAccountInboxUnfollow: () => Effect.void,
         onAccountInboxChanged: () => () => undefined,
         onAccountChanged: () => () => undefined,
-        tasksRefresh: () => Effect.void,
         workspacesRefresh,
       },
       presenter: {
