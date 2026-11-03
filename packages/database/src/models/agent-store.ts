@@ -22,6 +22,7 @@ import {
 } from "@repo/features/agent-wire";
 import { automationFiringSchema } from "@repo/features/automation-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import {
   integrationConnectionNameSchema,
   integrationConnectionOf,
@@ -41,6 +42,7 @@ import {
   isNull,
   lte,
   ne,
+  notExists,
   notInArray,
   or,
   type SQL,
@@ -62,6 +64,7 @@ import {
 } from "../schemas/agent.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
+import { inboxItem } from "../schemas/inbox.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import {
@@ -1049,6 +1052,18 @@ export const noOpenPullRequest: SQL = notInArray(
   [PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT],
 );
 
+/**
+ * An agent holding no inbox item open: what an archive the developer did not
+ * ask for waits on too, since an archive would settle the question or the
+ * notice the agent is waiting on.
+ */
+export const noOpenInboxItem: SQL = notExists(
+  queryBuilder
+    .select({ one: inboxItem.id })
+    .from(inboxItem)
+    .where(and(eq(inboxItem.agentId, agentTable.id), eq(inboxItem.status, INBOX_STATUS.OPEN))),
+);
+
 const updateUnmovedArchived = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1067,8 +1082,9 @@ const updateUnmovedArchived = SqlSchema.findAll({
           and(
             reachableAgent(userId, agentId),
             isNull(agentTable.archivedAt),
-            // Note that a pull request reopened since the read moves no line, so it is read again here.
+            // Note that a pull request reopened or an inbox item posted since the read moves no line, so both are read again here.
             noOpenPullRequest,
+            noOpenInboxItem,
             exists(
               queryBuilder
                 .select({ one: conversations.id })
@@ -3119,8 +3135,8 @@ export function settledTurnAgent(
  * Archives the agent as `archiveAgent` does, but only where it stands
  * unarchived, its conversation's lines have run no further than the
  * `seenSeq` its reader saw, so an agent a message woke since stands, and it
- * has no pull request open (`noOpenPullRequest`); answers whether it was
- * archived.
+ * has no pull request open (`noOpenPullRequest`) and no inbox item open
+ * (`noOpenInboxItem`); answers whether it was archived.
  */
 export function archiveUnmovedAgent(
   userId: string,
@@ -3145,6 +3161,30 @@ export function archiveUnmovedAgent(
         return rows.length > 0;
       }),
     ),
+  );
+}
+
+const findConversationSeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ seq: conversations.nextMessageSeq })
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(reachableAgent(userId, agentId)),
+    ),
+});
+
+/** How far the agent's conversation's lines have run, as `archiveUnmovedAgent` is handed it; nothing for an agent the account cannot read. */
+export function agentConversationSeq(
+  userId: string,
+  agentId: string,
+): AgentStoreEffect<Option.Option<number>> {
+  return Effect.map(
+    findConversationSeq({ userId, agentId }),
+    Option.map((row) => row.seq),
   );
 }
 
