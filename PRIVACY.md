@@ -635,8 +635,9 @@ reads them, and sends all of it, except the patches of files a reader reads
 past (lockfiles, minified files, source maps, snapshots, images, fonts,
 videos, and documents) and of files with no patch to read, to the Claude model
 the member who pressed it chose in Settings › Agents (Haiku 5.5 unless
-they changed it), on our own key, never yours and never counted in your daily
-usage, as described under "Who we send it to".
+they changed it), on that member's own Anthropic API key (or, with only an
+OpenAI key saved, to an OpenAI model on that key), never ours and never
+counted in your daily usage, as described under "Who we send it to".
 It stores the chapters that come back with the workspace, for that repository,
 pull request, and head commit, beside which member asked, when, the model
 that answered, and why a generation failed where one did: each chapter's
@@ -1244,7 +1245,7 @@ the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
-its Call tab, the contents of its File tabs with
+the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
@@ -1510,11 +1511,12 @@ only when you press Send.
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
   stops a running turn and sets the agent aside; its transcript, with your
-  files, and its pull request are kept, and you can bring it back. Vespin and
-  agents can archive an idle agent of the workspace too, a teammate's
-  included, for the member they act for, and bring one back; neither archives
-  one that is still working. The agent records who archived it (you, or Vespin
-  or the archiving agent's title on your behalf) and any reason given, which
+  files, and its pull request are kept, and you can bring it back. Agents can
+  archive an idle agent of the workspace too, a teammate's included, for the
+  member they act for, and bring one back; none archives one that is still
+  working. The agent records who archived it (you, the archiving agent's title
+  on your behalf, or, for one an earlier version archived, Vespin) and any
+  reason given, which
   every member of the workspace sees on the archived agent until it is
   brought back, when the record is cleared. The sandbox
   has ordinary Internet access and runs the repository's own checks; the agent
@@ -1545,8 +1547,8 @@ only when you press Send.
 - GitHub, through the Vespin GitHub App, for an agent's work. The agent
   checks the repository out and pushes its branch with an installation token
   the App mints for that one repository, set at the sandbox's network
-  boundary and never inside it. Where you started the agent, in the app or
-  by asking Vespin, you signed in with GitHub (or linked it), and your GitHub
+  boundary and never inside it. Where you started the agent, you signed in
+  with GitHub (or linked it), and your GitHub
   account may push to the repository, the agent writes as you: its commits
   name your GitHub account at the private noreply address GitHub gives it,
   each with Vespin's App as co-author, and our service opens its pull request
