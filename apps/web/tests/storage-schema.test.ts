@@ -114,6 +114,7 @@ const DECLARED_TABLES = [
   "turns",
   "user",
   "verification",
+  "workspace_former_slug",
   "workspace_token_repository",
 ].sort();
 

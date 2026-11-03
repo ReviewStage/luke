@@ -16,7 +16,8 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * the plugin's `updateMemberRole` under the same headers. A rename, and a photo set or removed, is the plugin's
  * `updateOrganization` under the same headers, given the name alone or the
  * logo alone, so the plugin checks that the caller may update the workspace
- * and leaves its slug as it was. An
+ * and leaves its slug as it was; a slug is the store's alone to change
+ * (`workspace-slug-store.ts`), which keeps the one it leaves. An
  * invitation is made, listed, and canceled the same way, through
  * `createInvitation`, `listInvitations`, and `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is

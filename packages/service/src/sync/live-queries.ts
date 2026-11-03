@@ -44,6 +44,7 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
+  workspaceFormerSlugSync,
   planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
@@ -177,14 +178,21 @@ export const tasksLive = defineLiveQuery({
 /**
  * The account's workspaces and the GitHub installations connected to them,
  * woken on the account's topic and on each of its workspaces'. A
- * workspace's name and photo, its members, its installations, and the name
+ * workspace's name and photo, the slugs it stood under before, its members, its installations, and the name
  * of the account it was made for name the workspace; the account's
  * memberships, its first workspace, and its own picture name the account.
  */
 export const workspacesLive = defineLiveQuery({
   name: "workspaces",
   params: ["userId"],
-  reads: [memberSync, organizationSync, personalWorkspaceSync, userSync, githubInstallationSync],
+  reads: [
+    memberSync,
+    organizationSync,
+    personalWorkspaceSync,
+    userSync,
+    githubInstallationSync,
+    workspaceFormerSlugSync,
+  ],
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => workspacesLiveStatements(userId),
   mode: LIVE_MODE.SNAPSHOT,

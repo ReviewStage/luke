@@ -35,7 +35,11 @@ import {
   TERM,
 } from "@repo/features/words";
 import { namesTaskKey, taskKey } from "@repo/features/workspace-key";
-import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import {
+  type Workspace,
+  type WorkspaceMember,
+  workspaceOfSlug,
+} from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxItems } from "@repo/host/app-state";
 import { EXPERIMENT } from "@repo/settings";
@@ -1751,8 +1755,7 @@ export function useMentionPicker({
   const tasksWorkspaceId =
     workspaceId ??
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
-    listed.workspaces.find((each) => each.slug !== undefined && each.slug === source?.workspace)
-      ?.id;
+    (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   const taskRowsOffered = open ? workspaceTaskRows(taskId, tasksWorkspace, listed.tasks) : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.

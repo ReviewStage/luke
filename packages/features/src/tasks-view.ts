@@ -88,6 +88,7 @@ import {
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceSlugSetRequestSchema,
   workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
@@ -888,6 +889,11 @@ export type TasksWorkspaceCreateParams = typeof tasksWorkspaceCreateParamsSchema
 export const tasksWorkspaceRenameParamsSchema = workspaceRenameRequestSchema;
 
 export type TasksWorkspaceRenameParams = typeof tasksWorkspaceRenameParamsSchema.Type;
+
+/** Changing a workspace's slug, as the window asks it: the workspace and the slug as typed, as the service takes them. */
+export const tasksWorkspaceSlugSetParamsSchema = workspaceSlugSetRequestSchema;
+
+export type TasksWorkspaceSlugSetParams = typeof tasksWorkspaceSlugSetParamsSchema.Type;
 
 /** Setting or removing a workspace's photo, as the window asks it: the workspace and the photo as a `data:` URL, or null, as the service takes them. */
 export const tasksWorkspacePhotoSetParamsSchema = workspacePhotoSetRequestSchema;

@@ -8,7 +8,7 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
 import { MENTION_KIND, type Mention } from "@repo/features/mention-link";
 import type { TasksView } from "@repo/features/tasks-view";
-import type { Workspace } from "@repo/features/workspace-wire";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -308,7 +308,7 @@ function wordsWorkspace(
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??
-    workspaces.find((each) => each.slug === where.workspace)
+    workspaceOfSlug(workspaces, where.workspace)
   );
 }
 

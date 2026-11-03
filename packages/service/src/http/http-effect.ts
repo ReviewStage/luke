@@ -63,6 +63,9 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -170,6 +173,12 @@ export const HOSTED_REFUSAL = {
   SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
   /** Another open channel of the workspace goes by that name; nothing was written. */
   CHANNEL_NAME_TAKEN: { error: HOSTED_API_ERROR.CHANNEL_NAME_TAKEN },
+  /** A slug the owner chose is spelled other than a slug may be; nothing was written. */
+  WORKSPACE_SLUG_MALFORMED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED },
+  /** A slug the owner chose is reserved; nothing was written. */
+  WORKSPACE_SLUG_RESERVED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED },
+  /** A slug the owner chose is another workspace's; nothing was written. */
+  WORKSPACE_SLUG_TAKEN: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN },
   /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
   /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */

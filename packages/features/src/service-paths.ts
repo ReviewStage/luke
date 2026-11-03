@@ -388,6 +388,8 @@ export const HOSTED_SERVICE_PATH = {
   SENTRY_INSTALLED: "/api/triggers/sentry/installed",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
+  /** A workspace's slug changed by its owner alone (POST), answering the workspace under its new slug. */
+  WORKSPACES_SLUG_SET: "/api/workspaces/slug/set",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */

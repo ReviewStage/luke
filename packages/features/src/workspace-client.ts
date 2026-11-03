@@ -68,12 +68,13 @@ import {
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
+  workspaceSlugSetRequestSchema,
   workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a slug or a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. Renaming, setting the photo,
@@ -108,6 +109,9 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED, WORKSPACE_CALL_FAILURE.SLUG_MALFORMED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED, WORKSPACE_CALL_FAILURE.SLUG_RESERVED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN, WORKSPACE_CALL_FAILURE.SLUG_TAKEN],
 ]);
 
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
@@ -281,6 +285,21 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hostedInSession.workspaces.rename, admitted),
+      (answer) => answer.workspace,
+    );
+  }
+
+  /** The workspace's slug changed by its owner, answering it under its new slug; the service reads the slug's spelling itself, so a refusal names why. */
+  setSlug(
+    workspaceId: string,
+    slug: string,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlugSetRequestSchema)({ workspaceId, slug }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaces.setSlug, admitted),
       (answer) => answer.workspace,
     );
   }

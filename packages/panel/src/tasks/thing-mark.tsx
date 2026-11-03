@@ -1,7 +1,7 @@
 import { CHECK_SUMMARY } from "@repo/features/agent-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@repo/features/thing-kind";
-import type { Workspace } from "@repo/features/workspace-wire";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ProviderMark } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
 import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@repo/ui/icons";
@@ -150,9 +150,8 @@ function PersonMark({
   name: string;
   workspace: string;
 }): React.JSX.Element {
-  const named = useAppSlice(workspacesAtom)?.find(
-    (each) => each.slug === workspace || each.id === workspace,
-  );
+  const listed = useAppSlice(workspacesAtom);
+  const named = listed === undefined ? undefined : workspaceOfSlug(listed, workspace);
   const face = <PersonFace userId={userId} name={name} />;
   return named === undefined ? (
     face
@@ -184,7 +183,8 @@ function AutomationTile({
 
 /** A workspace's tile as its rows draw it; its letter by its slug where the window holds it not. */
 function WorkspaceMark({ slug }: { slug: string }): React.JSX.Element {
-  const listed = useAppSlice(workspacesAtom)?.find((each) => each.slug === slug);
+  const workspaces = useAppSlice(workspacesAtom);
+  const listed = workspaces === undefined ? undefined : workspaceOfSlug(workspaces, slug);
   return <WorkspaceTile workspace={listed ?? { id: slug, name: slug }} size={TILE_SIZE.INLINE} />;
 }
 

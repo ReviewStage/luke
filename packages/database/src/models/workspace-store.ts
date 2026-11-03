@@ -3,9 +3,12 @@ import { pinnedPictureUrl } from "@repo/features/account-picture";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import {
+  formerSlugsOf,
+  PERSONAL_WORKSPACE_SLUG_PREFIX,
   RESERVED_WORKSPACE_SLUGS,
   roleOf,
   type Workspace as WireWorkspace,
+  WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type WorkspacePhoto,
@@ -30,11 +33,13 @@ import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { task } from "../schemas/task.js";
+import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import {
   PERSONAL_WORKSPACE_METADATA,
   type WorkspaceCreation,
   type WorkspaceSeams,
 } from "./workspace-seams.js";
+import { formerSlugHeld } from "./workspace-slug-store.js";
 
 /**
  * workspace-store.ts -- the workspaces an account is a member of, and the first one, made for it.
@@ -75,9 +80,6 @@ import {
  * Every function is an effect over the ambient `Database`.
  */
 
-/** The slug an account's first workspace falls back to where its name spells none free, one per account, and the one every first workspace before readable slugs was made under. */
-const PERSONAL_SLUG_PREFIX = "personal-";
-
 /** How many hex characters of the account's id digest suffix its first workspace's slug where the readable one is taken. */
 const PERSONAL_SUFFIX_CHARS = 8;
 
@@ -101,6 +103,13 @@ export type Workspace = WireWorkspace;
  * name is what stands once the account is gone.
  */
 export const WORKSPACE_NAME = sql<string>`coalesce((select "owner"."name" from ${personalWorkspace} as "personal" inner join ${user} as "owner" on "owner"."id" = "personal"."user_id" where "personal"."organization_id" = ${organization.id}), ${organization.name})`;
+
+/**
+ * The slugs a workspace stood under before its owner changed it, by name,
+ * as one text with a space between each, empty for none: one value a live
+ * row carries as it carries any other, and no slug holds a space.
+ */
+const FORMER_SLUGS = sql<string>`coalesce((select string_agg("former"."slug", ' ' order by "former"."slug") from ${workspaceFormerSlug} as "former" where "former"."organization_id" = ${organization.id}), '')`;
 
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
   A,
@@ -126,6 +135,8 @@ const WorkspaceRowSchema = Schema.Struct({
   logo: Schema.NullOr(Schema.String),
   /** The account's own sign-in picture where this workspace is the first one made for it, else null. */
   ownerImage: Schema.NullOr(Schema.String),
+  /** The slugs it stood under before, `FORMER_SLUGS` spells them. */
+  formerSlugs: Schema.String,
 });
 
 const InstallationRowSchema = Schema.Struct({
@@ -310,6 +321,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
       logo: organization.logo,
       ownerImage: user.image,
+      formerSlugs: FORMER_SLUGS,
     })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -444,12 +456,10 @@ function workspaceOfRow(
     githubInstallations,
     memberCount: row.memberCount,
     ...faceOfRow(row),
+    ...formerSlugsOf(row.formerSlugs),
   };
   return row.personal ? { ...workspace, personal: true } : workspace;
 }
-
-/** The longest slug spelled from a workspace's name, before any suffix. */
-const MAX_SLUG_CHARS = 48;
 
 /**
  * A slug spelled from a name: lowercase letters and digits, a hyphen between
@@ -462,11 +472,12 @@ function spelledSlugOf(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, "-")
     .replace(/^-+|-+$/gu, "")
-    .slice(0, MAX_SLUG_CHARS)
+    .slice(0, WORKSPACE_BOUNDS.MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "";
   // Note that no name takes the slug an account's first workspace falls back to, so an ensure finds its own there, nor a step of our own paths.
-  const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
+  const own =
+    spelled.startsWith(PERSONAL_WORKSPACE_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
   return own ? `workspace-${spelled}` : spelled;
 }
 
@@ -491,7 +502,7 @@ function personalSlugsOf(
   name: string,
   githubLogin: string | null,
 ): readonly [string, ...string[]] {
-  const fallback = `${PERSONAL_SLUG_PREFIX}${userId}`;
+  const fallback = `${PERSONAL_WORKSPACE_SLUG_PREFIX}${userId}`;
   const last = `${fallback}-${randomUUID()}`;
   const readable = spelledSlugOf(name) || spelledSlugOf(githubLogin ?? "");
   if (readable === "") return [fallback, last];
@@ -506,7 +517,8 @@ function personalSlugsOf(
  * stands for, which is a racing call having made it first; an organization
  * anyone else made under the slug is never adopted, and the next slug is
  * tried. Nothing under the slug means the plugin refused for another
- * reason, and that refusal, or the last slug's, is answered as it was.
+ * reason, and that refusal, or the last slug's, is answered as it was. A
+ * slug some workspace stood under before is passed over, but for the last.
  */
 function createLinkedOrganization(
   creation: Omit<WorkspaceCreation, "slug">,
@@ -515,6 +527,26 @@ function createLinkedOrganization(
   seams: WorkspaceSeams,
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
   const [slug, ...rest] = slugs;
+  const [next, ...after] = rest;
+  // Note that a slug some workspace stood under before stays that workspace's, so none is made under it while another is left to try.
+  if (next !== undefined) {
+    return Effect.flatMap(formerSlugHeld(slug), (held) =>
+      held
+        ? createLinkedOrganization(creation, [next, ...after], linked, seams)
+        : madeOrAdopted(creation, slug, [next, ...after], linked, seams),
+    );
+  }
+  return madeOrAdopted(creation, slug, [], linked, seams);
+}
+
+/** The workspace made under the slug, or adopted where a racing call made it first, else the next slug tried, as `createLinkedOrganization` says. */
+function madeOrAdopted(
+  creation: Omit<WorkspaceCreation, "slug">,
+  slug: string,
+  rest: readonly string[],
+  linked: OrganizationLinked,
+  seams: WorkspaceSeams,
+): WorkspaceStoreEffect<string, Cause.UnknownError> {
   return seams.createOrganization({ ...creation, slug }).pipe(
     Effect.map((created) => created.id),
     Effect.catch((refusal) =>
@@ -783,6 +815,7 @@ export function workspacesLiveStatements(userId: string): Option.Option<Workspac
           string | null
         >`case when ${LOGO_IS_PHOTO} then left(encode(sha256(${LOGO_BYTES}), 'hex'), ${PHOTO_VERSION_CHARS}) end`,
         ownerImage: user.image,
+        formerSlugs: FORMER_SLUGS,
       }),
     )
     .from(member)

@@ -1,5 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { LINK_HOME } from "@repo/features/link-home";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
@@ -25,8 +26,9 @@ import {
   type WorkspaceGithubInstallation,
   type WorkspaceMember,
   workspacePhotoOfDataUrl,
+  workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import { ACT_KIND, WORKSPACE_SLUG_REFUSAL } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import {
@@ -2043,6 +2045,82 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
 }
 
 /**
+ * The workspace's link, which its owner alone changes: the slug every link
+ * to the workspace is written under, typed in place, the address it makes
+ * said under it as it is typed, and what is wrong with it said there too,
+ * in the words the service refuses it with. Save sends it, and the new slug
+ * arrives with the workspaces the host reads again after it; the slug it
+ * leaves stays the workspace's, so no link written under it stops opening.
+ */
+function WorkspaceLink({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const standing = workspace.slug ?? "";
+  const [slug, setSlug] = useState(standing);
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const field = useRef<HTMLInputElement | null>(null);
+  const problem = workspaceSlugProblemOf(slug);
+  const shown = refusal ?? (problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem]);
+  const save = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (problem !== undefined) {
+      field.current?.focus();
+      return;
+    }
+    setSaving(true);
+    act(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId: workspace.id, slug })
+      .then(
+        () => undefined,
+        (refused: Error) => setRefusal(refused.message),
+      )
+      .finally(() => setSaving(false));
+  };
+  return (
+    <div
+      className="workspace-link flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block"
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_SLUG)}
+    >
+      <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={save}>
+        <FormField
+          label="Workspace link"
+          description={`${LINK_HOME.HOST}/${slug}`}
+          error={inputProblem(shown)}
+        >
+          {(control) => (
+            <Inline justify={JUSTIFY.END} growFirst>
+              <TextField
+                ref={field}
+                field={control}
+                autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                spellCheck={false}
+                autoCorrect={false}
+                value={slug}
+                disabled={saving}
+                // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                onEscape={() => field.current?.blur()}
+                onChange={(typed) => {
+                  setSlug(typed);
+                  setRefusal(undefined);
+                }}
+              />
+              <Button
+                type={BUTTON_TYPE.SUBMIT}
+                variant={BUTTON_VARIANT.PRIMARY}
+                busy={saving}
+                busyLabel="Saving"
+                disabled={slug === standing}
+              >
+                Save
+              </Button>
+            </Inline>
+          )}
+        </FormField>
+      </Inline>
+    </div>
+  );
+}
+
+/**
  * The page for the listed workspace, one kind of thing to a group: its
  * identity, its members, its invitations for an owner or an admin, its
  * GitHub, and last the leave for anyone but an owner, the members and
@@ -2102,6 +2180,10 @@ function ShownWorkspace({
     <>
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
+        {/* Keyed to the slug, so a slug changed elsewhere stands in the field rather than what was typed over the old one. */}
+        {workspace.role === WORKSPACE_ROLE.OWNER ? (
+          <WorkspaceLink key={workspace.slug} workspace={workspace} />
+        ) : null}
       </SettingsSection>
       <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <TeamMembers

@@ -47,6 +47,7 @@ import {
   workspaceAnswerSchema,
   workspaceGithubConnectAnswerSchema,
   workspaceMembersAnswerSchema,
+  workspaceOfSlug,
   workspacesAnswerSchema,
 } from "@repo/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
@@ -239,6 +240,7 @@ const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
   HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
   HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
+  HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET,
 ]);
 
 /**
@@ -1039,6 +1041,18 @@ const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =
 /** The account renaming the workspace, under its session. */
 const renaming = (plugin: WorkspacePlugin, userId: string, workspaceId: string, name: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_RENAME, { workspaceId, name });
+
+/** The account changing the workspace's slug, under its OAuth token. */
+const settingSlug = (plugin: WorkspacePlugin, userId: string, workspaceId: string, slug: string) =>
+  Effect.map(
+    send(
+      plugin.seams,
+      NO_GITHUB_TO_READ,
+      bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET, userId, { workspaceId, slug }),
+      plugin,
+    ),
+    ({ status, body }) => ({ status, body }),
+  );
 
 /** The account setting the workspace's photo, or removing it with null, under its session. */
 const settingPhoto = (
@@ -1963,6 +1977,126 @@ it.effect(
           refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: `acme-${ada}` });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the owner changes the slug, a link under the old one still names the workspace to its members alone, and an admin or a member is refused",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        yield* openTeam(plugin.api, grace, []);
+        const before = `acme-${ada}`;
+
+        const byOwner = readAs(
+          yield* settingSlug(plugin, ada, acme, "acme-labs"),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const byAdmin = yield* settingSlug(plugin, grace, acme, "grace-labs");
+        const byMember = yield* settingSlug(plugin, alan, acme, "alan-labs");
+        const byOutsider = yield* settingSlug(plugin, mallory, acme, "mallory-labs");
+
+        assert.deepEqual(
+          { slug: byOwner.slug, formerSlugs: byOwner.formerSlugs },
+          { slug: "acme-labs", formerSlugs: [before] },
+        );
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        assert.deepEqual(byAdmin, notPermitted);
+        assert.deepEqual(byMember, notPermitted);
+        assert.deepEqual(
+          byOutsider,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: "acme-labs" });
+        // Note that Grace is in two workspaces, so a link the old slug names must not fall to her other one.
+        const gracesListed = yield* workspacesOf(plugin.seams, NO_GITHUB_TO_READ, grace);
+        assert.equal(workspaceOfSlug(gracesListed, before.toUpperCase())?.id, acme);
+        assert.equal(workspaceOfSlug(gracesListed, "acme-labs")?.id, acme);
+        const mallorysListed = yield* workspacesOf(plugin.seams, NO_GITHUB_TO_READ, mallory);
+        assert.equal(workspaceOfSlug(mallorysListed, before), undefined);
+
+        const back = readAs(
+          yield* settingSlug(plugin, ada, acme, before),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        assert.deepEqual(
+          { slug: back.slug, formerSlugs: back.formerSlugs },
+          { slug: before, formerSlugs: ["acme-labs"] },
+        );
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a slug malformed, reserved, or another workspace's, now or before, is refused by its reason, and no workspace is made under a former one",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const bob = yield* openGithubAccount("Bob");
+        const acme = yield* openTeam(plugin.api, ada, []);
+        const beta = yield* openTeam(plugin.api, bob, []);
+        yield* Effect.promise(() =>
+          plugin.api.createOrganization({ body: { name: "Omega", slug: "Omega", userId: ada } }),
+        );
+        readAs(
+          yield* settingSlug(plugin, ada, acme, "zenith"),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        );
+        readAs(
+          yield* settingSlug(plugin, ada, acme, "zenith-two"),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        );
+
+        const refusalsOf = (slugs: readonly string[]) =>
+          Effect.forEach(slugs, (slug) => settingSlug(plugin, bob, beta, slug));
+        const malformed = refusedAs(
+          HOSTED_HTTP_STATUS.BAD_REQUEST,
+          HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED,
+        );
+        const reserved = refusedAs(
+          HOSTED_HTTP_STATUS.CONFLICT,
+          HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED,
+        );
+        const taken = refusedAs(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN);
+        assert.deepEqual(
+          yield* refusalsOf([
+            "Beta",
+            "beta--labs",
+            "-beta",
+            "",
+            "b".repeat(WORKSPACE_BOUNDS.MAX_SLUG_CHARS + 1),
+            "api",
+            "personal-bob",
+            "omega",
+            "zenith-two",
+            "zenith",
+          ]),
+          [...Array.from({ length: 5 }, () => malformed), reserved, reserved, taken, taken, taken],
+        );
+        assert.deepEqual(yield* organizationOf(beta), { name: "Acme", slug: `acme-${bob}` });
+
+        const made = yield* createAs(plugin.seams, NO_GITHUB_TO_READ, bob, "Zenith");
+        assert.notEqual(made.slug, "zenith");
+        assert.ok(made.slug?.startsWith("zenith-"));
       }).pipe(Effect.provide(plugin.database));
     }),
 );

@@ -1,6 +1,12 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
-import { formerMemberSchema, workspaceMemberSchema } from "@repo/features/workspace-wire";
+import {
+  formerMemberSchema,
+  WORKSPACE_BOUNDS,
+  WORKSPACE_SLUG_PROBLEM,
+  type WorkspaceSlugProblem,
+  workspaceMemberSchema,
+} from "@repo/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
 import { PORT_ACT_KIND } from "./contract/kinds.js";
 
@@ -20,6 +26,17 @@ export const ACT_KIND = PORT_ACT_KIND;
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
+
+/**
+ * What is wrong with a workspace's slug, in the words its field says as it
+ * is typed and a refused change is answered with: the same words whether the
+ * window or the service found it.
+ */
+export const WORKSPACE_SLUG_REFUSAL = {
+  [WORKSPACE_SLUG_PROBLEM.MALFORMED]: `Use lowercase letters and numbers, with single hyphens between them, up to ${WORKSPACE_BOUNDS.MAX_SLUG_CHARS} characters.`,
+  [WORKSPACE_SLUG_PROBLEM.RESERVED]: "That link is reserved. Choose another.",
+  [WORKSPACE_SLUG_PROBLEM.TAKEN]: "Another workspace already uses that link.",
+} as const satisfies Record<WorkspaceSlugProblem, string>;
 
 const _workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 const _formerMembersSchema = EffectSchema.Array(formerMemberSchema);

@@ -312,6 +312,7 @@ import {
   type TasksWorkspaceSentryDisconnectParams,
   type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceSlackBotNotificationsParams,
+  type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -590,6 +591,8 @@ export interface HostOperator {
   workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
   workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
+  /** A workspace's slug changed by its owner; the workspace under its new slug, or why it was not. */
+  workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
   workspaceGitHubConnect(
     params: TasksWorkspaceParams,
@@ -1492,6 +1495,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_RENAME, {
           workspaceId: params.workspaceId,
           name: params.name,
+        }),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlugSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, {
+          workspaceId: params.workspaceId,
+          slug: params.slug,
         }),
         answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),

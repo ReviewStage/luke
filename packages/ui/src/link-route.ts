@@ -1,5 +1,5 @@
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
-import type { Workspace } from "@repo/features/workspace-wire";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_VIEW,
@@ -46,9 +46,7 @@ export function linkRoute(
 ): LinkRoute {
   switch (place.kind) {
     case LINK_PLACE.SETTINGS: {
-      const home = window.workspaces.find(
-        (each) => each.slug === workspace || each.id === workspace,
-      );
+      const home = workspaceOfSlug(window.workspaces, workspace);
       const known = SETTINGS_PAGE_LIST.find((each) => each === place.page);
       // Note that a link naming no page this window knows names the page list, which stands on its first page.
       const page =
