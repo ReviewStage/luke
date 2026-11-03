@@ -58,7 +58,7 @@ export function hostReleaseTag(version: string): string {
   return `host-v${version}`;
 }
 
-/** One target's tarball, by its file name, whose one top folder is `luke-host`. */
+/** One target's tarball, by its file name, whose one top folder is `luke-host`. Note that both keep the old name though the program is `vespin-host` from 0.7.0 on, since a host through 0.6.0 fetches and unpacks its update by them. */
 export function hostTarballName(version: string, target: HostTarget): string {
   return `luke-host-${version}-${target}.tar.gz`;
 }

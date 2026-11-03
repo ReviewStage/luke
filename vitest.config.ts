@@ -18,6 +18,7 @@ export default defineConfig({
       "packages/service",
       "apps/desktop",
       "apps/web",
+      "apps/host",
       "packages/host",
       "packages/ui",
       "packages/panel",

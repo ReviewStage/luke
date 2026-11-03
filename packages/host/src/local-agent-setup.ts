@@ -7,7 +7,7 @@ import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
  * local-agent-setup.ts -- what a device has before it registers ready to take an agent: the Claude Code, Codex, and GitHub CLI its agents run on, each fetched and kept under the device's own state, and the words it registers its setup failed with.
  *
  * Every host keeps its own copy of each CLI, a Linux host and a Mac's
- * `luke-host` alike, This Mac's among them, at `agent-tools/` under its
+ * `vespin-host` alike, This Mac's among them, at `agent-tools/` under its
  * state root (`localAgentTool`): the very releases the runner is built
  * against (`@luke/agent-runner/pins`), so nothing of the box's own, and
  * nothing the developer installed, is what an agent runs. A pin moved

@@ -7,7 +7,7 @@ vespin.dev:
 
 - the Vespin desktop app for macOS
 - the web app at vespin.dev
-- the host daemon (`luke-host`), which runs on users' own machines
+- the host daemon (`vespin-host`), which runs on users' own machines
 
 ## Supported versions
 

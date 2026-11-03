@@ -76,9 +76,9 @@ export const LINUX_HOST: HostOs = {
  * A Mac: Apple silicon alone, its Computer Name, and the macOS arm64
  * builds of the agent CLIs, each install keeping its own copy. Note that
  * agents ran on the developer's own logins on This Mac before, which never
- * start again. Its `luke-host` is the account install, run as the member,
+ * start again. Its `vespin-host` is the account install, run as the member,
  * so its state is the account install's own, under the member's home
- * (`ACCOUNT_STATE` in `apps/host/scripts/luke-host.sh`, which names it
+ * (`ACCOUNT_STATE` in `apps/host/scripts/vespin-host.sh`, which names it
  * too). Its agents' folders stand in the member's own `~/.vespin/agents`,
  * where agents that ran on This Mac before left theirs, so they are never
  * its own alone.

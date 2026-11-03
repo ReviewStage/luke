@@ -17,7 +17,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { readHostDevice, writeHostDevice } from "../host-device-record.js";
 
 /**
- * host-pairing.ts -- a box connected to the service with a code (`luke-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
+ * host-pairing.ts -- a box connected to the service with a code (`vespin-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
  *
  * The start carries no credential. The service answers a poll secret, which
  * names the pairing and nothing else, the code and its link, how long the

@@ -190,7 +190,7 @@ export const NODE_LINUX_PINS: LinuxToolPins = {
 };
 
 /**
- * The Node a Mac's `luke-host` runs on, the same release as a Linux host's,
+ * The Node a Mac's `vespin-host` runs on, the same release as a Linux host's,
  * which a Mac's release carries (`apps/host/scripts/package.ts --os darwin`).
  */
 export const NODE_MAC_PIN: AgentToolPin = {

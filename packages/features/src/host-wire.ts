@@ -8,6 +8,7 @@ import {
   HOST_UPDATE_FAILURE_MAX_CHARS,
   hostUpdateSchema,
 } from "./device-agent-wire.js";
+import { HOST_RELEASE } from "./host-release.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -387,7 +388,24 @@ export function hostUpgradeCommand(installScriptUrl: string): string {
 }
 
 /** The host's command as the install command set it up in an account, by its link (`apps/web/install/install.sh`), which a person's shell expands. Note that it is named by its path, since the account's PATH may not hold `~/.local/bin`. */
-export const HOST_COMMAND = "~/.local/bin/luke-host";
+export const HOST_COMMAND = "~/.local/bin/vespin-host";
 
-/** The command that takes our host out of the account the install command set it up in, with no sudo: its service, its agents' folders, its state and its releases (`apps/host/scripts/luke-host.sh`). */
-export const HOST_UNINSTALL_COMMAND = `${HOST_COMMAND} uninstall`;
+/** The first release whose program and command are named `vespin-host` rather than `luke-host`. Note that its tarballs, their one top folder, and a `bin/luke-host` link keep the old name, which a host through 0.6.0 updates itself by (`apps/host/scripts/release-layout.ts`). */
+const HOST_RENAMED_IN = "0.7.0";
+
+/** The command's link as an install of a release before `HOST_RENAMED_IN` made it, which stays where it was made, since an older app's Remove names it. */
+const HOST_COMMAND_BEFORE_RENAME = "~/.local/bin/luke-host";
+
+/**
+ * The command that takes our host out of the account the install command set
+ * it up in, with no sudo: its service, its agents' folders, its state and its
+ * releases (`apps/host/scripts/vespin-host.sh`), named by the link the host's
+ * reported version stands behind. A host that has reported none yet is most
+ * likely one the install script just set up, so it is named by the release
+ * that script installs now (`HOST_RELEASE`).
+ */
+export function hostUninstallCommand(version: string | null): string {
+  const running = version ?? HOST_RELEASE?.VERSION ?? HOST_RENAMED_IN;
+  const renamed = hostVersionMeets(running, HOST_RENAMED_IN);
+  return `${renamed ? HOST_COMMAND : HOST_COMMAND_BEFORE_RENAME} uninstall`;
+}

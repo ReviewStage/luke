@@ -1,6 +1,6 @@
 import { DEVICE_STANDING } from "@luke/features/agent-wire";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "@luke/features/device-agent-wire";
-import { HOST_UNINSTALL_COMMAND, type Host, hostInstallCommand } from "@luke/features/host-wire";
+import { type Host, hostInstallCommand, hostUninstallCommand } from "@luke/features/host-wire";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
@@ -244,7 +244,7 @@ function HostRow({
             host.platform === DEVICE_PLATFORM.DARWIN ? UNINSTALL_TITLE.MAC : UNINSTALL_TITLE.SERVER
           }
           titleIs={CODE_CARD_TITLE.WORDS}
-          code={HOST_UNINSTALL_COMMAND}
+          code={hostUninstallCommand(host.version)}
           copy={copyThroughShell}
         />
       </ConfirmDialog>

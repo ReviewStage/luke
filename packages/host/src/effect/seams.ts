@@ -196,7 +196,7 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
  * built them could not load in a browser. Only the follower asks for it, as
- * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
+ * `vespin-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
   /** The process a runner is started as, given what it runs and the environment made for it: straight on the box in the agent's folder (`local-agent-box.ts`'s `agentOnBox`). */
@@ -248,7 +248,7 @@ export interface LocalAgentPlatformSeam {
   /**
    * Whether the agents' folders under the device's home are this install's
    * alone: a Linux host's are, its `luke-host` user's own, and a Mac's
-   * never, since This Mac and a standalone `luke-host` share the member's.
+   * never, since This Mac and a standalone `vespin-host` share the member's.
    * On such a device the follower takes every agent with a folder there as
    * one it made as its gate opens, beside those its own state names.
    */
