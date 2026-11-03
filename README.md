@@ -28,9 +28,6 @@ answer it there. A task breaks into sub-tasks that agents work on, agents start
 and message other agents, and they run on your own Claude or ChatGPT
 subscription or API key.
 
-It is an early MVP. It runs on Apple silicon Macs with macOS 14 or newer, and
-in a browser at [vespin.dev/app](https://vespin.dev/app). It is free.
-
 <p align="center">
   <img src="apps/web/public/changelog/0.19.0/inbox-asks.png" width="270" alt="The Inbox: an agent asks which invite email should ship">
   <img src="apps/web/public/changelog/0.19.0/pull-request-chapters.png" width="270" alt="A pull request's Chapters view">
