@@ -1,6 +1,6 @@
 import { WORDMARK_ART } from "@repo/brand";
 import { useEffect, useRef } from "react";
-import { bayerAt, fitCanvas, paintLoop, prefersStill, roleChannels } from "./landing-paint.js";
+import { bayerAt, fitCanvas, paintLoop, heldStill, roleChannels } from "./landing-paint.js";
 
 /**
  * landing-wordmark.tsx -- the product's wordmark set in copper dots across the foot of the page, a band of light passing through it, and a pointer's trail that turns the dots it crosses to chrome for a moment.
@@ -124,7 +124,7 @@ export function LandingWordmark(): React.JSX.Element {
     if (!canvas) return undefined;
     const trail: TrailPoint[] = [];
     const paint = wordmarkPainter(canvas, trail);
-    if (prefersStill()) return paintLoop(canvas, paint);
+    if (heldStill()) return paintLoop(canvas, paint);
     const onMove = (event: PointerEvent): void => {
       const box = canvas.getBoundingClientRect();
       trail.push({

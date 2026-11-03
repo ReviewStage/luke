@@ -45,6 +45,7 @@
     "anti-slop/no-raw-async-primitives": "error",
     "anti-slop/no-raw-heading-outside-ui": "error",
     "anti-slop/no-raw-press-outside-ui": "error",
+    "anti-slop/no-reduced-motion-query": "error",
     "anti-slop/no-run-promise-outside-edges": "error",
     "anti-slop/no-shadcn-focus-ring": "error",
     "anti-slop/no-source-read-in-test": "error",
