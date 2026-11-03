@@ -52,22 +52,27 @@ export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
  * never set up again on another machine. Finished is the account's, so it
  * holds on every machine. Once setup has started on this
  * machine it stands until finished, whatever it has connected or made
- * meanwhile; until the agent's read answers, a new account waits on it
- * rather than glimpsing the app.
+ * meanwhile. Until the account's preferences are read, which say whether it
+ * finished on another machine, and the agent's read answers, a new account
+ * waits on them rather than glimpsing setup or the app.
  */
 export function setupGate(account: {
   readonly id: string | undefined;
   readonly fresh: boolean;
   /** Whether the account finished setup, on any machine. */
   readonly finished: boolean;
+  /** Whether the account's preferences were read, so `finished` speaks for every machine. */
+  readonly accountRead: boolean;
   readonly started: boolean;
   readonly personalOnly: boolean;
   /** Whether an agent is connected; nothing while the models are still read. */
   readonly agent: boolean | undefined;
 }): SetupGate {
   if (account.id === undefined || !account.fresh || account.finished) return SETUP_GATE.NONE;
+  if (!account.started && (!account.personalOnly || account.agent === true)) {
+    return SETUP_GATE.NONE;
+  }
+  if (!account.accountRead) return SETUP_GATE.WAIT;
   if (account.started) return SETUP_GATE.OWED;
-  if (!account.personalOnly) return SETUP_GATE.NONE;
-  if (account.agent === undefined) return SETUP_GATE.WAIT;
-  return account.agent ? SETUP_GATE.NONE : SETUP_GATE.OWED;
+  return account.agent === undefined ? SETUP_GATE.WAIT : SETUP_GATE.OWED;
 }

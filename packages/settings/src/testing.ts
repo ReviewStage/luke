@@ -28,6 +28,7 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       ...APP_SETTING_DEFAULTS,
       preferBuiltInMicrophone: false,
       experiments: NO_EXPERIMENTS,
+      accountRead: true,
     },
     overrides,
   );
@@ -40,7 +41,7 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
   );
   // SAFETY: APP_SETTING_FIELDS enumerates every schema-derived stored field exactly once.
   const stored = storedEntries as StoredAppSettings;
-  return { stored, experiments: settings.experiments };
+  return { stored, experiments: settings.experiments, accountRead: settings.accountRead };
 }
 
 /**
