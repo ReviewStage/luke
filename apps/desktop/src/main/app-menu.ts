@@ -592,6 +592,7 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.COMMAND_PALETTE),
         SEPARATOR,
+        commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
         commandItem(APP_COMMAND.TASKS),
         commandItem(APP_COMMAND.AUTOMATIONS),

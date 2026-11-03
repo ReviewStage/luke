@@ -63,9 +63,10 @@ import {
   sameTab,
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { type HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
+import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -126,6 +127,7 @@ const WORK_AREA = ".desktop-main";
 
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
+  [SWITCHER_PLACE.HOME]: { icon: HouseIcon, label: "Home" },
   [SWITCHER_PLACE.INBOX]: { icon: InboxIcon, label: TAB_WORDS.INBOX },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
   [SWITCHER_PLACE.AUTOMATIONS]: { icon: ZapIcon, label: "Automations" },
@@ -340,6 +342,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
+    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open && !tasks.restoring,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
     column,
@@ -695,6 +698,9 @@ function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_K
 /** Opens a place through its own door. */
 function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
   switch (place) {
+    case SWITCHER_PLACE.HOME:
+      tasks.onGoHome();
+      return;
     case SWITCHER_PLACE.INBOX:
       tasks.inboxView.onOpen();
       return;

@@ -9,7 +9,7 @@ import { fakeService, LISTED_TASK } from "./support/fake-service";
 /**
  * The web app's root over a standing cookie session: the shared host in the
  * tab signs in from the session the service names, reads the account's tasks
- * from the service, and the panel rests on the Inbox beside them. One mount per
+ * from the service, and the panel opens on Home listing them. One mount per
  * file, because the panel's state read is the tab's once.
  */
 
@@ -20,7 +20,7 @@ afterEach(async () => {
   localStorage.clear();
 });
 
-test("with a session, the panel rests on the Inbox beside the tasks the service lists", async () => {
+test("with a session, the panel opens on Home over the tasks the service lists", async () => {
   const service = fakeService({ signedIn: true });
   const root = document.createElement("div");
   document.body.append(root);
@@ -30,8 +30,8 @@ test("with a session, the panel rests on the Inbox beside the tasks the service 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() => {
     assert.ok(
-      root.querySelector('main nav[aria-label^="Inbox items"]') !== null,
-      "the panel rests on the Inbox",
+      root.querySelector('main section[aria-label="Home"]') !== null,
+      "the panel opens on Home",
     );
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
   });

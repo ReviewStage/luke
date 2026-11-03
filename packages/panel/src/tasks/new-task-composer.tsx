@@ -78,7 +78,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
  * New task's repository chip stands in a head row over the card, the same in the
- * dialog and on a new account's welcome: the repository the task is about
+ * dialog and on Home: the repository the task is about
  * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
  * since the card says what it is, and an automation's drawn before it; on a
  * phone the row wraps, each chip cut short rather than overflowing.
@@ -122,7 +122,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * anywhere else with none named.
  * Until the chip is picked the start names no model, so the agent runs on
  * the default Settings holds as Start is pressed, which may be newer than
- * the one the chip read, as on the welcome's card left standing; a draft
+ * the one the chip read, as on Home's card left standing; a draft
  * handed over on a refusal names none either, and its tab reads the
  * default afresh. A call starts only from an agent's own tab, so starting
  * a task never opens one.
@@ -155,7 +155,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * The words and files are New task's draft in the workspace it starts in,
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
- * and opened again, or the welcome's, finds them where they were left, the words
+ * and opened again, or Home's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
  * does, an agent's start as it is pressed, so a New task opened while it is
  * out opens empty, and a refused card opened again brings its own words
@@ -355,7 +355,7 @@ export function NewTaskComposer({
   focusedByOwner?: boolean;
   /** The id the head row's title stands under, which names the dialog's card. */
   titleId?: string | undefined;
-  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on the welcome, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
+  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
   listSide: MentionMenuSide;
   /** What the card starts; a task's agent where none is named. */
   purpose?: NewTaskPurpose | undefined;
@@ -410,7 +410,7 @@ export function NewTaskComposer({
     TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
   );
   const relationSearchId = useId();
-  // Note that a relation names a task of the card's workspace, so a switch of workspace, as the welcome's, lets it go.
+  // Note that a relation names a task of the card's workspace, so a switch of workspace, as Home's, lets it go.
   const relations = forAutomation
     ? []
     : related.filter((each) => each.task.workspaceId === workspaceId);
@@ -478,7 +478,7 @@ export function NewTaskComposer({
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository picked in one workspace is none of another's,
-  // so the owner's switch, as the welcome's, lets it go, in the render that brings it; the scope first
+  // so the owner's switch, as Home's, lets it go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {

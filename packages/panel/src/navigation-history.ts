@@ -776,7 +776,7 @@ export interface ListBacks {
   readonly inbox: () => void;
   /** Shuts the side panel standing over the plan, the whole pane. */
   readonly panel: () => void;
-  /** Leaves the open task for the step behind it, or, where none stands behind it, for the page the window rests on. */
+  /** Leaves the open task for the step behind it, or, where none stands behind it, for Home. */
   readonly task: () => void;
 }
 
@@ -939,7 +939,7 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * arrival records nothing and the steps ahead are kept. A step it cannot
  * reach is passed over the way the move went, as the window's own step
  * passes over one, and an entry holding no step at all is a page loaded
- * there, which opens where the window rests with no task open. Note that such a move has already happened
+ * there, which opens on Home. Note that such a move has already happened
  * when the window hears it and cannot be refused, so while a page holds
  * unsaved work the adapter is stood back on the window's step first, along
  * the trail or, where the trail no longer holds it, written again after
@@ -1052,7 +1052,7 @@ function useHistory(input: {
   }, [history, place, address, own]);
 
   useEffect(() => {
-    // An entry holding no step is a page loaded there, which opens where the window rests; the window already there writes its step on it.
+    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
     const arriveNowhere = (was: HistoryEntry<Place>) => {
       const home: Place = { kind: PLACE_KIND.HOME };
       if (sameStep(was.state, home)) own(() => history.push(was));
@@ -1222,7 +1222,6 @@ export function useWindowHistory(input: {
     | "boardView"
     | "adminView"
     | "restoring"
-    | "resting"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1309,8 +1308,6 @@ export function useWindowHistory(input: {
         listed: narrow ? settingsListed : undefined,
       };
     }
-    // The page the window rests on with no task open is where no page stands, so a step to it is a step home.
-    if (tasks.resting) return { kind: PLACE_KIND.HOME };
     if (inboxOpen) {
       const inbox = { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen } as const;
       return inboxChannel === undefined ? inbox : { ...inbox, channelId: inboxChannel };
@@ -1346,7 +1343,6 @@ export function useWindowHistory(input: {
         };
   }, [
     known,
-    tasks.resting,
     tab,
     settingsView,
     settingsListed,

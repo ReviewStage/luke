@@ -127,8 +127,7 @@ import { taskCardOf } from "./task-card.js";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@repo/ui`'s `EmptyState`) over New task, the window resting here
- * with no task open (`resting-page.ts`); with its scope leaving out every item, the list
+ * glyph (`@repo/ui`'s `EmptyState`) over New task; with its scope leaving out every item, the list
  * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item

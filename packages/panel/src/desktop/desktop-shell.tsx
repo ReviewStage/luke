@@ -460,7 +460,7 @@ function useSettingsFocusReturn(inSettings: boolean): void {
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * task, Settings, the Inbox, the tab closed latest, opened again on its
+ * task, Settings, Home, the Inbox, the tab closed latest, opened again on its
  * task, the Keyboard shortcuts page that lists them all, and back and
  * forward, which answer whether or not their buttons are drawn.
  */
@@ -487,6 +487,15 @@ function usePlaceCommands(
       : undefined,
   );
   useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
+  useAppCommand(
+    APP_COMMAND.HOME,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.onGoHome();
+        }
+      : undefined,
+  );
   useAppCommand(
     APP_COMMAND.INBOX,
     pastGate && tasks.signedIn
@@ -1000,7 +1009,15 @@ export function DesktopShell({
                 </Suspense>
               </PageFind>
             ) : (
-              <DesktopTasks tasks={tasks} looks={looks} summary={summary} room={room} away={away} />
+              <DesktopTasks
+                tasks={tasks}
+                looks={looks}
+                summary={summary}
+                room={room}
+                away={away}
+                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+                staged={sidebar.staged}
+              />
             )}
             {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}
             {inboxOpen || inboxKept ? (

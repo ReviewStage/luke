@@ -4,11 +4,10 @@
  * A stop is a whole screen the window stood on, the same unit as a step of
  * Back's (`navigation-history.ts`): a task with the tab its column showed
  * and the tab its side panel showed, either of them none, or a place the
- * window shows in the task's place, the Inbox, the Board,
+ * window shows in the task's place, Home, the Inbox, the Board,
  * Automations, an agent's own page, or a person's. Settings and a
  * version history are no stop, since each is a layer over the window rather
- * than a place in it, and nor is a new account's welcome, which stands only
- * until a first task. Arriving on a task is one stop; a tab chosen there by
+ * than a place in it. Arriving on a task is one stop; a tab chosen there by
  * a press or a key, in either pane, makes the new pair another stop, and a
  * tab the window chose by itself, as the tabs arriving as a task opens or
  * the one chosen in place of a tab closed, takes the stop in place
@@ -36,6 +35,7 @@ const SWITCHER_CARDS = 5;
 
 /** The places the window shows in a task's place, each opened by its own door. */
 export const SWITCHER_PLACE = {
+  HOME: "home",
   INBOX: "inbox",
   BOARD: "board",
   AUTOMATIONS: "automations",
@@ -214,7 +214,9 @@ export interface WindowStanding {
     | undefined;
   readonly board: boolean;
   readonly automations: boolean;
-  /** The task the window is on, or on its way to; none with no task open. */
+  /** Whether Home stands, with no task open and nothing in its place, and no launch reopening a task. */
+  readonly home: boolean;
+  /** The task the window is on, or on its way to; none on Home. */
   readonly boundFor: string | undefined;
   /** The task the host has open, which the tabs below are of. */
   readonly openTaskId: string | undefined;
@@ -241,8 +243,7 @@ export function shownStop(standing: WindowStanding): Stop | undefined {
   if (standing.board) return place(SWITCHER_PLACE.BOARD);
   if (standing.automations) return place(SWITCHER_PLACE.AUTOMATIONS);
   const taskId = standing.boundFor;
-  // With no task open and nothing in its place, the window stands on a new account's welcome, or on its way to rest, and neither is a stop.
-  if (taskId === undefined) return undefined;
+  if (taskId === undefined) return standing.home ? place(SWITCHER_PLACE.HOME) : undefined;
   if (taskId !== standing.openTaskId) return undefined;
   const { column, panel } = standing;
   return {

@@ -229,7 +229,7 @@ export function useSkillPicker({
   source: SkillSource | undefined;
   /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no task's page. */
   onOpen: ((skill: SkillWithFile) => void) | undefined;
-  /** Which side of the slash's line the list stands: over it, as at the foot of an agent's tab, or under it, as on a new account's welcome. */
+  /** Which side of the slash's line the list stands: over it, as at the foot of an agent's tab, or under it, as on Home. */
   side?: MentionMenuSide;
 }): SkillPicker {
   const listId = useId();

@@ -231,7 +231,7 @@ export function agentHoldingsOf(
 }
 
 /**
- * A signed-in Tasks tab on screen with no task open and no tasks, every
+ * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
  * holding items, where none are given, those its open items of agents with
  * no task name (`agentHoldingsOf`), as main lists both from one read.
@@ -241,7 +241,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     page: TASKS_PAGE.HOME,
     restoring: false,
     starting: undefined,
-    resting: false,
     shown: true,
     signedIn: true,
     me: undefined,
@@ -442,6 +441,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onShowMention: ignore,
     },
     onLeaveTask: ignore,
+    onGoHome: ignore,
     onRenameTask: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkTask: ignore,

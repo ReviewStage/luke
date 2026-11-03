@@ -1,17 +1,16 @@
 import { FILL_ELEMENT, Fill, ProductMark, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
+import { freshAccount } from "../tasks/fresh-account.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
-import { freshAccount } from "../tasks/resting-page.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
- * desktop-welcome.tsx -- a new account's welcome, the page the window rests on with no task open while the account has nothing yet: the product's mark, one line, and New task's composer under them.
+ * desktop-welcome.tsx -- a new account's welcome, which Home draws in its own place while the account has nothing yet: the product's mark, one line, and New task's composer under them.
  *
- * An account with tasks, or a question waiting on it, rests on the Inbox
- * instead (`resting-page.ts`), so this page draws the welcome only for an account
- * with no task in any workspace and nothing waiting on it, once the task
- * list says so, and nothing otherwise, while the list is read or the window
- * passes on to where it rests. Nothing here names the sidebar, which may be
+ * An account with tasks, or a question waiting on it, sees Home itself
+ * (`desktop-home.tsx`), so the welcome stands only for an account with no
+ * task in any workspace and nothing waiting on it, once the task list says
+ * so, and nothing otherwise. Nothing here names the sidebar, which may be
  * folded away.
  *
  * The composer starts the task in the listed workspace, as the dialog
@@ -29,7 +28,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  */
 
 /** Hands the focus back to the page from whatever holds it, as Escape from an agent's box does. */
-function letGoOfFocus(): void {
+export function letGoOfFocus(): void {
   const active = document.activeElement;
   if (active instanceof HTMLElement) active.blur();
 }
