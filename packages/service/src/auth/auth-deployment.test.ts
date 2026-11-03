@@ -34,8 +34,6 @@ test("production names the registered address", () => {
 
 test("production trusts every preview, by deployment or by branch, and the dev server, as the OAuth proxy's docs prescribe", async () => {
   assert.ok(await productionTrusts(PRODUCTION_URL));
-  assert.ok(await productionTrusts("https://luke-abc123xyz-stage-review.vercel.app"));
-  assert.ok(await productionTrusts("https://luke-web-git-feature-branch-stage-review.vercel.app"));
   assert.ok(await productionTrusts("https://vespin-abc123xyz-stage-review.vercel.app"));
   assert.ok(await productionTrusts("https://vespin-git-feature-branch-stage-review.vercel.app"));
   assert.ok(await productionTrusts("http://localhost:5173"));
@@ -43,6 +41,7 @@ test("production trusts every preview, by deployment or by branch, and the dev s
 
 test("production trusts no other host", async () => {
   assert.equal(await productionTrusts("https://evil-stage-review.vercel.app"), false);
+  assert.equal(await productionTrusts("https://luke-abc123xyz-stage-review.vercel.app"), false);
   assert.equal(
     await productionTrusts("https://vespin-abc-stage-review.vercel.app.evil.com"),
     false,
