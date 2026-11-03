@@ -26,7 +26,7 @@ import {
   Stream,
 } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
-import { SYNC_CHANNEL } from "./notification.js";
+import { SYNC_CHANNEL, SYNC_CHANNEL_NEXT } from "./notification.js";
 
 /** Notifies the channel (`$1`) with the payload (`$2`), reading the share of the notification queue in use in the same statement. */
 const NOTIFY_STATEMENT = "select pg_notify($1, $2), pg_notification_queue_usage() as usage";
@@ -49,9 +49,10 @@ export interface SyncListening {
 
 export interface SyncListenerShape {
   /**
-   * Listens on `luke_sync`, answering once Postgres has acknowledged the
-   * `LISTEN`, so a write committed after it is answered is heard; closing
-   * the scope ends the listen and its connection.
+   * Listens on Sync's channel, and on the one it moves to next, answering
+   * once Postgres has acknowledged the `LISTEN`, so a write committed after
+   * it is answered is heard; closing the scope ends the listen and its
+   * connection.
    */
   readonly listen: Effect.Effect<SyncListening, SqlError, Scope.Scope>;
 }
@@ -104,9 +105,10 @@ export const syncListenerOverUrl = ({
         ]);
       }
       const notifications = yield* session.listen(SYNC_CHANNEL);
+      const moved = yield* session.listen(SYNC_CHANNEL_NEXT);
       return {
         payloads: Stream.map(
-          Stream.fromQueue(notifications),
+          Stream.merge(Stream.fromQueue(notifications), Stream.fromQueue(moved)),
           (notification) => notification.payload,
         ),
         notify: syncNotifyOver((statement, params) =>
