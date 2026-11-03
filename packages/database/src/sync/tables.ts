@@ -45,6 +45,7 @@ import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
+import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import { TOPIC } from "./notification.js";
 import { defineSyncTable, type SyncTable } from "./sync-table.js";
 
@@ -190,6 +191,11 @@ export const personalWorkspaceSync = defineSyncTable(personalWorkspace, {
     { kind: TOPIC.WORKSPACE, column: personalWorkspace.organizationId },
     { kind: TOPIC.ACCOUNT, column: personalWorkspace.userId },
   ],
+});
+
+/** A slug a workspace stood under before, on the workspace's topic, so its members' list names it. */
+export const workspaceFormerSlugSync = defineSyncTable(workspaceFormerSlug, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: workspaceFormerSlug.organizationId }],
 });
 
 /** A GitHub App installation connected to a workspace, on the workspace's topic. */
@@ -544,6 +550,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   invitationSync,
   organizationSync,
   personalWorkspaceSync,
+  workspaceFormerSlugSync,
   githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
