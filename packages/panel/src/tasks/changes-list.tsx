@@ -27,6 +27,7 @@ import {
   type ComponentProps,
   type ReactNode,
   type RefObject,
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -220,12 +221,15 @@ export function useChangesList(
   // Note that the file at the top is kept as the list scrolls but drawn only
   // while no file is stood on, because the tree marks the one stood on then,
   // and a draw of the whole view for each file scrolled past is the cost.
+  // That draw is a transition, so React yields it to the scroll's own
+  // frames and draws only the file that stands at the top once they rest,
+  // rather than the whole view for every small file a fling passes.
   const latestTop = useRef(top);
   // The file stood on among those the filter keeps, which the tree marks; set below once the filter is read.
   const standingNow = useRef<string | undefined>(undefined);
   const onTopFile = useCallback((path: string) => {
     latestTop.current = path;
-    if (standingNow.current === undefined) setTop(path);
+    if (standingNow.current === undefined) startTransition(() => setTop(path));
   }, []);
   const letGo = useCallback(() => {
     setTop(latestTop.current);
