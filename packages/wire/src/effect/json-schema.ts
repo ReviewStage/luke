@@ -8,6 +8,7 @@ import {
   SchemaAST,
   SchemaIssue,
   SchemaTransformation,
+  type StandardSchema,
 } from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
@@ -511,6 +512,40 @@ function emit(ast: SchemaAST.AST, above: Gathered, visiting: Set<SchemaAST.AST>)
 /** The JSON Schema node a model is shown for this declaration. */
 export function emitJsonSchema(schema: Schema.Top): JsonSchemaNode {
   return emit(schema.ast, NOTHING_GATHERED, new Set());
+}
+
+/** A declaration as the Standard Schema spec's schema with a JSON Schema: what a library that takes any schema library's declaration reads. */
+export type StandardSchemaWithJson<S extends Schema.Top> = StandardSchema.StandardSchemaV1<
+  S["Encoded"],
+  S["Type"]
+> &
+  StandardSchema.StandardJSONSchemaV1<S["Encoded"], S["Type"]>;
+
+/**
+ * The declaration as the Standard Schema spec (https://standardschema.dev)
+ * states one, with its JSON Schema beside its validation, which is how a
+ * library that takes any schema library's declaration reads it: the MCP
+ * SDK's `registerTool` takes a tool's input this way, validating a call's
+ * arguments through `validate` and listing the tool with what `jsonSchema`
+ * answers. `validate` is Effect's own, under the read `readEither` makes, a
+ * key the declaration does not name refused. `jsonSchema` answers the node a
+ * model is shown, whatever dialect is asked for, because that node is a
+ * golden's bytes rather than a translation of the declaration, and nothing
+ * reads Effect's own JSON Schema (`emitJsonSchema`).
+ */
+export function standardSchemaOf<S extends Schema.Top & Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+): StandardSchemaWithJson<S> {
+  const node = emitJsonSchema(schema);
+  const standard = Schema.toStandardSchemaV1(schema, {
+    parseOptions: { onExcessProperty: EXCESS_KEYS.REFUSE },
+  });
+  return {
+    "~standard": {
+      ...standard["~standard"],
+      jsonSchema: { input: () => node, output: () => node },
+    },
+  };
 }
 
 /** Why a value was refused and where, as the one error a wire read fails with. */

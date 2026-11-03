@@ -15,12 +15,15 @@ import {
 } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
+  AUTH_BASE_PATH,
   DESKTOP_SESSION,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
+  denyOAuthResourcePrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
   LOGIN_PAGE,
+  OAUTH_PROVIDER_SCOPES,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
@@ -79,6 +82,7 @@ export function socialProviders(registered: Pick<AuthSecrets, "google" | "github
 export const auth = betterAuth({
   appName: PRODUCT_NAME,
   baseURL: deployment.baseURL,
+  basePath: AUTH_BASE_PATH,
   trustedOrigins: deployment.trustedOrigins,
   secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),
   hooks: { before: refuseWithoutSessionSecret },
@@ -103,6 +107,16 @@ export const auth = betterAuth({
       clientPrivileges: denyOAuthClientPrivileges,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
+      scopes: [...OAUTH_PROVIDER_SCOPES],
+      // The member MCP server is the one resource (RFC 8707) the provider
+      // mints tokens for, its row written by the deployment's seeder at
+      // build (`apps/web/server/seed-clients.ts`) rather than by the
+      // plugin's own `resources`, whose seed runs a query as this module
+      // loads, which every function bundle must do with nothing configured.
+      // A client reaches it only once linked to it
+      // (`enforcePerClientResources`, the plugin's default), which the
+      // sign-in of outside clients does.
+      resourcePrivileges: denyOAuthResourcePrivileges,
     }),
     // A workspace is an organization: its members plan together.
     organization({ ...ORGANIZATION_OPTIONS, organizationHooks: authOrganizationHooks }),
