@@ -123,8 +123,9 @@ import {
  * the runner it runs, so a later call finds both. Note that Vercel refuses a
  * sandbox more than five tags, the session's among them, so a launch's
  * fingerprint rides in its launch tag rather than a tag of its own. And
- * note that the tags, and `SANDBOX_NAME`, keep their old names, because the
- * launch and the sweep find a persistent sandbox made before by them.
+ * note that these are the names written before the product's rename, which
+ * every deployment from before reads: each is read after its name in
+ * `RUNNER_TAG_NEXT`, and the next deployment writes those instead.
  */
 export const RUNNER_TAG = {
   AGENT: "lukeAgent",
@@ -141,6 +142,28 @@ export const RUNNER_TAG = {
    */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
+
+/**
+ * The names the tags move to, read before `RUNNER_TAG`'s. Note that a
+ * deployment reads them before any writes them, because one from before
+ * would read a sandbox tagged by them alone as no agent's and retire it;
+ * and that each write replaces a sandbox's whole set of tags, so a sandbox
+ * never carries both names of one tag.
+ */
+const RUNNER_TAG_NEXT = {
+  AGENT: "agentId",
+  SANDBOX_SESSION: "agentRunnerSession",
+  COMMAND: "agentRunnerCommand",
+  LAUNCH: "agentRunnerLaunch",
+} as const satisfies Record<keyof typeof RUNNER_TAG, string>;
+
+/** A runner tag of a sandbox, under its next name or the name it is written under. */
+export function runnerTag(
+  tags: Readonly<Record<string, string>> | undefined,
+  tag: keyof typeof RUNNER_TAG,
+): string | undefined {
+  return tags?.[RUNNER_TAG_NEXT[tag]] ?? tags?.[RUNNER_TAG[tag]];
+}
 
 /** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
 const LAUNCH_FINGERPRINT_MARK = "-";
@@ -172,7 +195,16 @@ const SANDBOX_LAYOUT: MachineLayout = {
 };
 
 /** What a sandbox we open is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
-export const SANDBOX_NAME = "luke-agent-";
+export const SANDBOX_NAME = "agent-sandbox-";
+
+/**
+ * What a sandbox opened before the product's rename is named as, which the
+ * sweeps still find and nothing opens. Note that it can go only once Vercel
+ * lists no sandbox under it, because a sandbox in steady use resumes from
+ * its own snapshot, under its own name, for as long as it lives; one goes on
+ * a reset, on the first message after its snapshot lapsed, or at its purge.
+ */
+export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
@@ -288,7 +320,7 @@ export interface TaggedRunner {
 
 /** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
 function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+  const [sequence = "", fingerprint] = (runnerTag(tags, "LAUNCH") ?? "").split(
     LAUNCH_FINGERPRINT_MARK,
   );
   const firstSequence = Number(sequence);
@@ -299,8 +331,8 @@ function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | unde
 /** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
 export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   const tags = sandbox.tags ?? {};
-  const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
-  const commandId = tags[RUNNER_TAG.COMMAND];
+  const sandboxSessionId = runnerTag(tags, "SANDBOX_SESSION");
+  const commandId = runnerTag(tags, "COMMAND");
   const launch = taggedLaunch(tags);
   if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
@@ -359,7 +391,7 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
   return {
     machine: AGENT_MACHINE.VERCEL,
     session,
-    agentId: tags[RUNNER_TAG.AGENT],
+    agentId: runnerTag(tags, "AGENT"),
     name: nameOfSandbox(sandbox.name),
     running,
     runner: runnerInSession(session, sandbox),
