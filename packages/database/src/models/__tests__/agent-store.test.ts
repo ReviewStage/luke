@@ -66,6 +66,7 @@ import {
   listWorkspaceAgentLines,
   listWorkspaceAgents,
   type NewAgent,
+  nativeRouteOfReached,
   nativeRuntimesOfReached,
   pinAgent,
   readAgent,
@@ -2231,35 +2232,42 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
       }),
   );
 
-  it.effect("the native runtimes read names the native agents' conversations alone", () =>
-    Effect.gen(function* () {
-      const starter = yield* openAccount;
-      const workspace = yield* openWorkspace(starter);
-      const eve = yield* startIn(starter, workspace);
-      const claude = yield* startIn(starter, workspace, {
-        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-        payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-      });
-      const codex = yield* startIn(starter, workspace, {
-        runtime: CONVERSATION_RUNTIME.CODEX,
-        payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-      });
+  it.effect(
+    "the native runtimes read names the native agents' conversations alone, and the route read each one's payer beside it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const eve = yield* startIn(starter, workspace);
+        const claude = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const codex = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
 
-      const read = yield* nativeRuntimesOfReached([
-        eve.conversationId,
-        claude.conversationId,
-        codex.conversationId,
-      ]);
+        const read = yield* nativeRuntimesOfReached([
+          eve.conversationId,
+          claude.conversationId,
+          codex.conversationId,
+        ]);
 
-      assert.deepEqual(
-        [...read.entries()].sort(([a], [b]) => a.localeCompare(b)),
-        [
-          [claude.conversationId, CONVERSATION_RUNTIME.CLAUDE_CODE] as const,
-          [codex.conversationId, CONVERSATION_RUNTIME.CODEX] as const,
-        ].sort(([a], [b]) => a.localeCompare(b)),
-      );
-      assert.equal((yield* nativeRuntimesOfReached([])).size, 0);
-    }),
+        assert.deepEqual(
+          [...read.entries()].sort(([a], [b]) => a.localeCompare(b)),
+          [
+            [claude.conversationId, CONVERSATION_RUNTIME.CLAUDE_CODE] as const,
+            [codex.conversationId, CONVERSATION_RUNTIME.CODEX] as const,
+          ].sort(([a], [b]) => a.localeCompare(b)),
+        );
+        assert.equal((yield* nativeRuntimesOfReached([])).size, 0);
+        assert.deepEqual(Option.getOrThrow(yield* nativeRouteOfReached(codex.conversationId)), {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        assert.ok(Option.isNone(yield* nativeRouteOfReached(eve.conversationId)));
+      }),
   );
 
   it.effect(

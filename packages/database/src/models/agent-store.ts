@@ -1414,6 +1414,28 @@ const findNativeRuntimes = SqlSchema.findAll({
     ),
 });
 
+const findNativeRoute = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({
+    runtime: Schema.Literals(NATIVE_RUNTIMES),
+    payer: Schema.NullOr(PayerColumnSchema),
+  }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ runtime: conversations.runtime, payer: agentTable.payer })
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 /** The conversation's newest turn: where it stands, and when it settled. */
 const findNewestTurnStanding = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -3262,6 +3284,24 @@ export function nativeRuntimesOfReached(
     findNativeRuntimes({ conversationIds }),
     (rows) => new Map(rows.map((row) => [row.conversationId, row.runtime])),
   );
+}
+
+/** A native agent's runtime and who pays for it, which together decide the models it may move to (`runtimeModelRule`). */
+export interface NativeRoute {
+  readonly runtime: (typeof NATIVE_RUNTIMES)[number];
+  /** Null for an agent from before the column. */
+  readonly payer: AgentPayer | null;
+}
+
+/**
+ * The native runtime of the agent of the conversation named and its payer;
+ * none on eve, or from before the column. Only for an id a gate already
+ * read, as above.
+ */
+export function nativeRouteOfReached(
+  conversationId: string,
+): AgentStoreEffect<Option.Option<NativeRoute>> {
+  return findNativeRoute({ conversationId });
 }
 
 /** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */

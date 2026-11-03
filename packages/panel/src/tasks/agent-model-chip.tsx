@@ -140,7 +140,9 @@ export function AgentModelChip({
 
   const provider = providerOf(model.choice.model);
   const label = choiceLabel(model.choice, models ?? []).trim();
-  const offered = models === undefined ? undefined : runtimeModels(models, model.runtime);
+  // Note that who pays decides Fast on Codex, which runs a fast version on an OpenAI API key alone.
+  const paidBy = payer ?? usage?.payer;
+  const offered = models === undefined ? undefined : runtimeModels(models, model.runtime, paidBy);
 
   return (
     <div className="agent-model-chip relative flex min-w-0" ref={root}>
@@ -174,12 +176,12 @@ export function AgentModelChip({
           onRetry={readModels}
           chosen={settledChoice(offered, model.choice)}
           startsNew={startsNew}
-          offersFast={runtimeModelRule(model.runtime).fast}
+          offersFast={runtimeModelRule(model.runtime, paidBy).fast}
           onChoose={model.choose}
           footNote={agentUsageLine(usage)}
           planNote={
             planPayerOf(model.runtime) === AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
-            (payer ?? usage?.payer) !== AGENT_PAYER.API_KEY ? (
+            paidBy !== AGENT_PAYER.API_KEY ? (
               <ChatGptPlanNote />
             ) : undefined
           }
