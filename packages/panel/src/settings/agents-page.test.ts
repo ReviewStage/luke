@@ -430,6 +430,33 @@ test("on Vespin's key the resting Fast row says the same and links nowhere, sinc
   assert.equal(note.querySelector("a"), null);
 });
 
+test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place, which stores the version chosen", async () => {
+  const sol: CatalogModel = {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  };
+  models = [
+    sol,
+    { ...sol, id: "openai/gpt-6.1-sol-fast", name: "GPT-6.1 Sol (Fast)" },
+    { ...sol, id: "openai/gpt-6.1-sol-ultrafast", name: "GPT-6.1 Sol (Ultrafast)" },
+  ];
+  stored = { model: sol.id, effort: "high" };
+  const page = await mount();
+  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  const speed = segmentedGroup(page, "Speed");
+  assert.deepEqual(readSegmented(speed), {
+    options: ["Standard", "Fast", "Ultrafast"],
+    checked: ["Standard"],
+    tabStops: ["Standard"],
+  });
+  act(() => segment(speed, "Ultrafast").click());
+  await settle();
+  assert.deepEqual(written(), [{ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }]);
+  assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]);
+});
+
 test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
   models = [{ ...OPUS, fastNotEnabled: true }];
   keys = [OWN_ANTHROPIC];

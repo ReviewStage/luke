@@ -433,7 +433,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, a fast version on the fast tier, never asks the plan, and is refused once the key is gone",
+    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, an Ultrafast version on the ultrafast tier, never asks the plan, and is refused once the key is gone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -446,7 +446,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
-          model: "openai/gpt-6.1-sol-fast",
+          model: "openai/gpt-6.1-sol-ultrafast",
           effort: "xhigh",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
@@ -481,10 +481,10 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(command !== undefined);
         assert.equal(command.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
-        // A fast version runs its base model on Codex's fast tier.
+        // An Ultrafast version runs its base model on Codex's ultrafast tier, and on its fast one where the runner predates it.
         const [config] = linesOf(command) as [CodexConfig];
         assert.equal(config.model, "gpt-6.1-sol");
-        assert.equal(config.fast, true);
+        assert.deepEqual([config.fast, config.ultrafast], [true, true]);
         const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
         assert.equal(visible.includes(apiKey), false);
         assert.equal(

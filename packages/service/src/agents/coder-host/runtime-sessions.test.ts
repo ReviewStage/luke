@@ -977,6 +977,12 @@ const PLAN_CATALOG = modelCatalogOf([
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
   },
+  {
+    id: "openai/gpt-6.1-sol-ultrafast",
+    name: "GPT-6.1 Sol (Ultrafast)",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
 ]);
 
 /** How the owner's ChatGPT sign-in stands: none, one Codex launches on, one OpenAI signed out, or one sealed under a key the ring no longer holds. */
@@ -2173,7 +2179,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan or API key selected a GPT fast version is offered beside its model, and a Start on one runs on Codex, which runs it on its fast tier",
+      "with the ChatGPT plan or API key selected a GPT fast version is offered beside its model, and a Start on one runs on Codex, which runs it on its fast tier, while its Ultrafast version is offered on API key alone",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {
@@ -2207,7 +2213,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
             assert.deepEqual(
               gpt.map((model) => model.id),
-              ["openai/gpt-5.5", "openai/gpt-5.5-fast", "openai/gpt-6.1-sol"],
+              [
+                "openai/gpt-5.5",
+                "openai/gpt-5.5-fast",
+                "openai/gpt-6.1-sol",
+                ...(forAgents ? [] : ["openai/gpt-6.1-sol-ultrafast"]),
+              ],
             );
             assert.ok(Result.isSuccess(started), String(forAgents));
             assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");

@@ -3,8 +3,13 @@ import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
+  MODEL_SPEED,
+  MODEL_SPEED_SUFFIX,
   type ModelChoice,
   type ModelProvider,
+  type ModelSpeed,
+  modelSpeedOf,
+  standardModelIdOf,
 } from "@repo/features/models-wire";
 import { FAST_ACCESS, type FastAccess } from "@repo/features/provider-key-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Ref, Result, Schema } from "effect";
@@ -34,7 +39,12 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * keys, never through AI Gateway, so `providerModelOf` is the one translation
  * from a catalog id to the id the provider's own API takes. A fast slug is
  * AI Gateway's own name and no provider's: the provider is asked for the
- * base model with its fast option on. Nothing here
+ * base model with its fast option on. The catalog lists no slug for
+ * OpenAI's Ultrafast tier, and prices it on the base model's entry instead
+ * (`pricing.service_tiers.ultrafast`), so where an OpenAI entry does, an
+ * Ultrafast version is offered beside it under an id of our own, the base's
+ * with `-ultrafast` (`MODEL_SPEED_SUFFIX`), priced at that tier; Codex runs
+ * it as the base model on the `ultrafast` service tier. Nothing here
  * knows which account asked: the catalog is public and the same for every
  * caller. What an account is offered of the catalog is `offeredToAccount`,
  * by whether the key its steps run on may run fast mode.
@@ -63,13 +73,6 @@ const TIER_BOUNDARY_TOKENS = 1_000;
 /** Anthropic spells a version's point as a dash in its own ids; the catalog keeps the point. */
 const CATALOG_VERSION_POINT = ".";
 const ANTHROPIC_VERSION_POINT = "-";
-
-/**
- * The suffix AI Gateway gives a model's fast version (`anthropic/claude-opus-5.5-fast`
- * beside `anthropic/claude-opus-5.5`). It is the gateway's slug for the
- * base model asked to run fast, and the suffix is the one signal of it.
- */
-const FAST_SLUG_SUFFIX = "-fast";
 
 /**
  * The providers whose own API is confirmed to run what a fast slug stands
@@ -127,11 +130,11 @@ export interface OfferedModel extends CatalogModel {
   readonly pricing?: ModelPricing;
 }
 
-/** A model as its provider's own API names it, and whether the catalog id asked for its fast version. */
+/** A model as its provider's own API names it, and the speed the catalog id asked it to run at. */
 export interface ProviderModel {
   readonly provider: ModelProvider;
   readonly modelId: string;
-  readonly fast: boolean;
+  readonly speed: ModelSpeed;
 }
 
 /** The catalog could not be read as the catalog: the request failed, or the answer is not its shape. */
@@ -192,6 +195,35 @@ const PriceTierSchema = Schema.Struct({
 });
 
 const PriceTiersSchema = Schema.optionalKey(Schema.NullOr(Schema.Array(PriceTierSchema)));
+
+/** A price a service tier lists, as the catalog spells one: dollars per token, as a decimal string. */
+const TierPriceSchema = Schema.FiniteFromString;
+
+/**
+ * What one of OpenAI's service tiers costs, as the catalog lists it on its
+ * base model's entry: the input, output, and cached input prices, and past
+ * `long_context.threshold` tokens of input, the same three again.
+ */
+const ServiceTierPricingSchema = Schema.Struct({
+  input: TierPriceSchema,
+  output: TierPriceSchema,
+  input_cache_read: Schema.optionalKey(TierPriceSchema),
+  long_context: Schema.optionalKey(
+    Schema.Struct({
+      threshold: Schema.Number,
+      input: TierPriceSchema,
+      output: TierPriceSchema,
+    }),
+  ),
+});
+
+/** The entry's Ultrafast tier, where its pricing lists one. */
+const UltrafastPricingSchema = Schema.Struct({
+  service_tiers: Schema.Struct({ ultrafast: ServiceTierPricingSchema }),
+});
+
+/** The entry's Ultrafast tier read apart from its prices, so a tier spelled in a way this module does not read costs the model its Ultrafast version and nothing else. */
+const readUltrafast = Schema.decodeUnknownOption(UltrafastPricingSchema);
 
 const TieredPricingSchema = Schema.Struct({
   input_tiers: PriceTiersSchema,
@@ -305,11 +337,12 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one we do not offer: a batch slug, and a fast slug where its provider's fast option is not confirmed. */
+/** The entry as an offered model, or nothing for one we do not offer: a batch slug, a fast slug where its provider's fast option is not confirmed, and an Ultrafast id, which is ours alone (`ultrafastModelOf`). */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const named = providerModelOf(entry.id);
   if (named === undefined || entry.id.endsWith(BATCH_SLUG_SUFFIX)) return undefined;
-  if (named.fast && !FAST_PROVIDERS.has(named.provider)) return undefined;
+  if (named.speed === MODEL_SPEED.FAST && !FAST_PROVIDERS.has(named.provider)) return undefined;
+  if (named.speed === MODEL_SPEED.ULTRAFAST) return undefined;
   const { provider } = named;
   const tags = entry.tags ?? [];
   if (!REQUIRED_TAGS.every((tag) => tags.includes(tag))) return undefined;
@@ -327,6 +360,54 @@ function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
     ...(contextWindows === undefined ? undefined : { contextWindows }),
     ...(contextWindow === undefined ? undefined : { contextWindow }),
     ...(pricing === undefined ? undefined : { pricing }),
+  };
+}
+
+/** The Ultrafast tier's window boundary as the catalog spells it read to a standard window, as a price tier's is (`TIER_BOUNDARY_TOKENS`); nothing where it falls outside the model's window. */
+function ultrafastWindows(
+  tier: typeof ServiceTierPricingSchema.Type,
+  contextWindow: number | undefined,
+): ContextWindows | undefined {
+  const long = tier.long_context;
+  if (long === undefined || contextWindow === undefined) return undefined;
+  const standardTokens = Math.floor(long.threshold / TIER_BOUNDARY_TOKENS) * TIER_BOUNDARY_TOKENS;
+  if (standardTokens <= 0 || standardTokens >= contextWindow) return undefined;
+  return {
+    standardTokens,
+    longTokens: contextWindow,
+    ...(tier.input > 0 ? { longInputPriceFactor: long.input / tier.input } : undefined),
+    ...(tier.output > 0 ? { longOutputPriceFactor: long.output / tier.output } : undefined),
+  };
+}
+
+/**
+ * The Ultrafast version of an offered OpenAI model whose entry prices
+ * OpenAI's Ultrafast tier, or nothing for one whose entry does not: the
+ * base model's efforts and window, named `<Name> (Ultrafast)` under the
+ * base's id with `-ultrafast`, and priced at that tier, its long-context
+ * prices read as its two windows as a price tier's are (`contextWindowsOf`).
+ */
+function ultrafastModelOf(entry: CatalogEntry, base: OfferedModel): OfferedModel | undefined {
+  if (base.provider !== MODEL_PROVIDER.OPENAI || modelSpeedOf(base.id) !== MODEL_SPEED.STANDARD) {
+    return undefined;
+  }
+  const tier = Option.getOrUndefined(readUltrafast(entry.pricing))?.service_tiers.ultrafast;
+  if (tier === undefined) return undefined;
+  const contextWindows = ultrafastWindows(tier, base.contextWindow);
+  return {
+    id: `${base.id}${MODEL_SPEED_SUFFIX[MODEL_SPEED.ULTRAFAST]}`,
+    name: `${base.name} (Ultrafast)`,
+    provider: base.provider,
+    efforts: base.efforts,
+    ...(contextWindows === undefined ? undefined : { contextWindows }),
+    ...(base.contextWindow === undefined ? undefined : { contextWindow: base.contextWindow }),
+    pricing: {
+      inputUsd: tier.input,
+      outputUsd: tier.output,
+      ...(tier.input_cache_read === undefined
+        ? undefined
+        : { cachedInputUsd: tier.input_cache_read }),
+    },
   };
 }
 
@@ -349,12 +430,15 @@ export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): numb
   );
 }
 
-/** The catalog's answer filtered to what we offer, in the catalog's own order. */
+/** The catalog's answer filtered to what we offer, in the catalog's own order, each model's Ultrafast version right after it. */
 function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly OfferedModel[] {
   const offered: OfferedModel[] = [];
   for (const entry of answer.data) {
     const model = offeredModel(entry);
-    if (model !== undefined) offered.push(model);
+    if (model === undefined) continue;
+    offered.push(model);
+    const ultrafast = ultrafastModelOf(entry, model);
+    if (ultrafast !== undefined) offered.push(ultrafast);
   }
   return offered;
 }
@@ -409,18 +493,22 @@ export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<Mod
 
 // ------------------------------------------------------------- the checks
 
-/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode. */
+/** What decides which fast and Ultrafast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its ChatGPT plan pays for its GPT agents. */
 export interface AccountFastOffer {
   readonly anthropic: FastAccess | undefined;
+  /** Whether its ChatGPT plan pays for its GPT agents, on which OpenAI limits Ultrafast to plans this one may not be. */
+  readonly chatGptPlan: boolean;
 }
 
 /**
  * The catalog as one account is offered it. Where Anthropic said the
  * organization of the Anthropic key its steps run on may not run fast mode,
  * Anthropic's fast versions are withheld and each base model says so
- * (`fastNotEnabled`). Everything else as the catalog lists it, OpenAI's
- * fast versions among them, which Codex runs on the ChatGPT plan and an
- * API key alike. Note that a key no fast
+ * (`fastNotEnabled`). Where its ChatGPT plan pays for its GPT agents,
+ * OpenAI's Ultrafast versions are withheld, since OpenAI limits Ultrafast to
+ * a few plans and Codex runs it on an API key alone. Everything else as the
+ * catalog lists it, OpenAI's fast versions among them, which Codex runs on
+ * the ChatGPT plan and an API key alike. Note that a key no fast
  * request has answered is offered its fast versions, because a fast step
  * Anthropic refuses runs at standard speed anyway (`coder-host/model.ts`)
  * and the refusal is the answer the key is then offered by.
@@ -429,12 +517,16 @@ export function offeredToAccount(
   offered: readonly OfferedModel[],
   fast: AccountFastOffer,
 ): readonly OfferedModel[] {
-  if (fast.anthropic !== FAST_ACCESS.NOT_ENABLED) return offered;
+  const anthropic = fast.anthropic === FAST_ACCESS.NOT_ENABLED;
+  if (!anthropic && !fast.chatGptPlan) return offered;
   const notEnabled = new Set<string>();
   const kept: OfferedModel[] = [];
   for (const model of offered) {
-    const isFast = providerModelOf(model.id)?.fast ?? false;
-    if (isFast && model.provider === MODEL_PROVIDER.ANTHROPIC) {
+    const speed = modelSpeedOf(model.id);
+    const openAiUltrafast =
+      speed === MODEL_SPEED.ULTRAFAST && model.provider === MODEL_PROVIDER.OPENAI;
+    if (openAiUltrafast && fast.chatGptPlan) continue;
+    if (speed === MODEL_SPEED.FAST && anthropic && model.provider === MODEL_PROVIDER.ANTHROPIC) {
       notEnabled.add(standardModelIdOf(model.id));
     } else {
       kept.push(model);
@@ -484,32 +576,25 @@ export function acceptedModelChoice(
   });
 }
 
-/** The catalog id of the model a fast slug is the fast version of, which runs at standard speed; any other id as it is. */
-export function standardModelIdOf(catalogId: string): string {
-  return providerModelOf(catalogId)?.fast === true
-    ? catalogId.slice(0, -FAST_SLUG_SUFFIX.length)
-    : catalogId;
-}
-
 /**
  * The model as its provider's own API names it: Anthropic spells the
  * version's point as a dash (`anthropic/claude-opus-5.5` is
  * `claude-opus-5-5`), and OpenAI's ids are the catalog's after the prefix.
- * Note that a fast slug names the base model with `fast` on, because the
- * slug is the gateway's name rather than the provider's: Anthropic answers
- * `claude-opus-5-5-fast` with a refusal at the step's first call, and runs
- * fast mode as `claude-opus-5-5` asked for its fast speed. Nothing for an
- * id outside the two providers.
+ * Note that a fast slug or an Ultrafast id names the base model at that
+ * speed, because the id is the gateway's or ours rather than the
+ * provider's: Anthropic answers `claude-opus-5-5-fast` with a refusal at
+ * the step's first call, and runs fast mode as `claude-opus-5-5` asked for
+ * its fast speed, and OpenAI runs Ultrafast as `gpt-6.1-sol` on the
+ * `ultrafast` service tier. Nothing for an id outside the two providers.
  */
 export function providerModelOf(catalogId: string): ProviderModel | undefined {
   const split = splitCatalogId(catalogId);
   const provider = providerOf(split?.provider ?? "");
   if (split === undefined || provider === undefined) return undefined;
-  const fast = split.name.endsWith(FAST_SLUG_SUFFIX);
-  const name = fast ? split.name.slice(0, -FAST_SLUG_SUFFIX.length) : split.name;
+  const name = standardModelIdOf(split.name);
   const modelId =
     provider === MODEL_PROVIDER.ANTHROPIC
       ? name.replaceAll(CATALOG_VERSION_POINT, ANTHROPIC_VERSION_POINT)
       : name;
-  return { provider, modelId, fast };
+  return { provider, modelId, speed: modelSpeedOf(split.name) };
 }
