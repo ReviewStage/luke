@@ -43,7 +43,6 @@ export function App(): React.JSX.Element {
       }
       close={{
         title: "Free and open source.",
-        lead: "Apache 2.0. The Mac app, the web app, and the service behind them are one repository.",
         actions: (
           <>
             <SiteDownload />
