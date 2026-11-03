@@ -36,47 +36,13 @@ subscription or API key.
 
 ## Features
 
-**Plan**
-
-- Tasks: create a task on a GitHub repository and message a coding agent on
-  it, typed or dictated. It reads the repository in a sandbox of its own.
-- Plans: the agent writes what you settle into the task's plan, a Markdown
-  document with pictures and Mermaid diagrams that you can edit, comment on,
-  and restore from version history.
-- Sub-tasks and blocked tasks: break a task down, nest sub-tasks under it, and
-  make a task wait on others. Agents make sub-tasks and set blocks too.
-
-**Build**
-
-- Coding agents: **Start** hands the plan to a coding agent on the Claude or
-  GPT model you pick. It works in a cloud sandbox, runs the tests, opens the
-  pull request under your GitHub account, and fixes the checks that fail.
-- Agents that start agents: agents hand scoped work to read-only subagents,
-  and message and start other agents in the workspace.
-- The Browser tab: watch an agent's cloud browser live beside the plan, and
-  press **Take over** to sign in or steer it.
-
-**Review**
-
-- The Inbox: the threads your agents open, each with the lines of code or the
-  screenshot it is about. Pick an option, fill in a form, mark a step done, or
-  reply, and your answer goes back to the agent.
-- Pull requests: a tab with the conversation, checks, diff, and a Chapters
-  view that splits the diff into chapters, each with its risk. A review left
-  on GitHub reaches the agent too.
-
-**Team and integrations**
-
-- Workspaces: share tasks and agents with your team.
-- Integrations: Linear, Notion, Sentry, GitHub, Granola, Mercury, Neon,
-  PostHog, Stripe, Supabase, Vercel, Y Combinator, and Executor, through each
-  service's own MCP server.
-- Skills: skills in the repository's `.agents/skills` or `.claude/skills` are
-  offered to agents.
-- Automations: start agents on a schedule, a GitHub event, an integration's
-  event, or a webhook.
-- Your own keys: agents run on your Claude or ChatGPT subscription or your
-  Anthropic or OpenAI API key. Vespin pays for no model calls.
+- **Plans** written with an agent as you talk it through, typed or dictated.
+- **Coding agents** that implement the plan in a cloud sandbox and open the pull request.
+- **The Inbox**, where agents ask for a decision, a manual step, or your review.
+- **Pull request review** with the diff split into chapters, each with its risk.
+- **Sub-tasks** that break a task down for several agents to work on.
+- **Integrations** with Linear, Notion, Sentry, Vercel, and more through MCP.
+- **Your own keys**: agents run on your Claude or ChatGPT subscription or API key.
 
 ## Install
 
