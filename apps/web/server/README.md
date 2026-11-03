@@ -184,7 +184,8 @@ An agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left, and a workspace renamed or given a photo, through
-`packages/service/src/accounts/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
+`packages/service/src/accounts/workspaces-procedures.ts`, on the hosted oRPC
+router; `workspaces-app.ts` beside it serves only the photo's bytes. `GET /api/workspaces/members?workspaceId=`
 answers a workspace's members to a member under the Mac's OAuth token, read
 through Drizzle (`packages/service/src/accounts/workspace-members.ts`), owners first, then admins,
 then members, since the plugin's own `listMembers` takes a session.

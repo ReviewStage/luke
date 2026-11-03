@@ -1219,7 +1219,14 @@ the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent 
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
-transcript, as many entries as asked, to a bound; `start_agent`, which starts
+transcript, as many entries as asked, to a bound; `message_agent`, which
+sends another agent of the workspace, on any task, a message by its id that
+lands in its conversation under the caller's name, opening with the caller's
+mention and closing with how to answer it, which the service writes, seen in
+those two transcripts alone, read by a running agent at its next step and
+starting a turn of an idle one, and answered `accepted` once its session
+takes it, never itself, an archived agent, or one whose starter left the
+workspace (`src/agents/coder-host/agent-message.ts`); `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the one path every start takes
 (`src/agents/coder-host/start.ts`), telling
@@ -1253,7 +1260,7 @@ task of the workspace, sets or clears its repository (confirmed through the
 workspace's installation), pins it for the agent's starter, moves it into
 one of the starter's sections or out of them by that same write, or
 archives it or brings it back, by the task
-menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
+menu's own path (`updateTask`, as `src/tasks/tasks-procedures.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
 task's archive keeps only when it stands from; `list_automations`,
@@ -1504,8 +1511,15 @@ lays it out are `src/chapters/chapters-prompt.ts`.
 
 ## The agent routes
 
-`src/agents/agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a task's agents through. An agent
+The desktop starts, lists, reads, messages, re-models, and stops a task's
+agents through procedures of the hosted oRPC router:
+`src/agents/agents-procedures.ts`, `src/agents/messages-procedures.ts`, and
+`src/agents/agent-pull-request-procedures.ts`, on the paths
+`@repo/features/contract`'s `agents.ts`, `messages.ts`, and
+`agent-pull-requests.ts` declare. `src/agents/agents-app.ts` serves only
+what an agent's window reads as bytes: a picture a tool answered the agent
+or one of its workers, a file of a message queued for it, an inbox item's
+attachment, and an image its pull request's overview names. An agent
 belongs to its task's workspace: every route reads it through the task's
 membership gate (`agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
@@ -1856,8 +1870,8 @@ fire.
 
 ## The tasks group
 
-`src/tasks/tasks-app.ts` is the Mac's Tasks tab's route group over the account's
-named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
+`src/tasks/tasks-procedures.ts`, on the hosted oRPC router, is the Mac's Tasks tab's
+route group over the account's named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
 started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
@@ -1914,11 +1928,15 @@ account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, where the
 next segment is a task's id.
 
-`src/accounts/workspaces-app.ts` answers the account's workspaces
-(`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
+`src/accounts/workspaces-procedures.ts`, on the hosted oRPC router, answers
+the account's workspaces (`packages/features/src/workspace-wire.ts`), with
+their GitHub in `workspace-github-procedures.ts` and their invitations in
+`workspace-invitations-procedures.ts`; `src/accounts/workspaces-app.ts`
+serves only a workspace's photo, as its bytes. Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
-repositories come only from the Vespin GitHub App installations an owner or
-admin connects to it, one per GitHub account. Every request resolves the bearer first and ensures the
+repositories come from the Vespin GitHub App installations an owner or
+admin connects to it, one per GitHub account, and from those its members add
+on their own GitHub token ("The Vespin GitHub App" above). Every request resolves the bearer first and ensures the
 account's first workspace.
 
 - `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
