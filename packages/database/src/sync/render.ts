@@ -152,12 +152,20 @@ function logStatements(table: SyncTable, log: SyncTableLog): readonly string[] {
   ];
 }
 
-/** The block logging the write, around its statements only an update `LOG.ROWS` skips. */
+/** Whether the write is one `LOG.ROWS` logs: not an update, or one of a column it names. */
+function rowsLogged(log: SyncTableLog): string {
+  const changed = log.updatesOf.map(
+    (column) => `OLD.${quoteIdentifier(column)} IS DISTINCT FROM NEW.${quoteIdentifier(column)}`,
+  );
+  return ["TG_OP <> 'UPDATE'", ...changed].join(" OR ");
+}
+
+/** The block logging the write, around its statements where `LOG.ROWS` skips the update. */
 function logBlock(table: SyncTable, log: SyncTableLog): string {
   const statements = logStatements(table, log);
   if (log.writes === LOG.EVERY) return statements.map((line) => `\t${line}`).join("\n");
   return [
-    "\tIF TG_OP <> 'UPDATE' THEN",
+    `\tIF ${rowsLogged(log)} THEN`,
     ...statements.map((line) => `\t\t${line}`),
     "\tEND IF;",
   ].join("\n");

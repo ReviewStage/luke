@@ -384,7 +384,7 @@ BEGIN
 	IF TG_OP <> 'DELETE' THEN
 		sync_topics := sync_topics || jsonb_build_array(jsonb_build_array('conversation', NEW."conversation_id"::text));
 	END IF;
-	IF TG_OP <> 'UPDATE' THEN
+	IF TG_OP <> 'UPDATE' OR OLD."turn_id" IS DISTINCT FROM NEW."turn_id" OR OLD."withdrawn_at" IS DISTINCT FROM NEW."withdrawn_at" THEN
 		IF TG_OP <> 'INSERT' THEN
 			sync_keys := sync_keys || jsonb_build_array(jsonb_build_object('id', OLD."id"));
 		END IF;

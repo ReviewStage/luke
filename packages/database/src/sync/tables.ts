@@ -486,12 +486,15 @@ export const pullRequestChaptersSync = defineSyncTable(pullRequestChapters, {
  * rewritten in place on every streamed step: each write transaction
  * notifies the one topic once, its rows' notifications folding into one,
  * and only the transcript's own readers wake on it. Its rows' arrival and
- * removal alone are logged, for the same reason: the task list reads when a
- * line awaiting its turn arrived, never a rewrite.
+ * removal are logged, and an update only where a turn took the line or its
+ * hand-over withdrew it, for the same reason: the task list reads when a
+ * line awaiting its turn arrived and whether it still waits, never a
+ * rewrite.
  */
 export const messagesSync = defineSyncTable(messages, {
   topics: [{ kind: TOPIC.CONVERSATION, column: messages.conversationId }],
   log: LOG.ROWS,
+  logUpdatesOf: [messages.turnId, messages.withdrawnAt],
 });
 
 /**
