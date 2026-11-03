@@ -34,10 +34,8 @@
  * beside it. Alone in a region it would have filled, a tab or a page, it is that region's empty state (`EmptyState`):
  * the glyph large and faint over the sentence, and Retry under it, standing
  * a little above the room's middle. The container places it and lends it no
- * colour of its own. Where trying the read again cannot mend it, because
- * what failed is the drawing of the place itself (`ErrorBoundary`), Reload
- * stands there in Retry's place, with Retry's glyph, and draws the place
- * again from the start.
+ * colour of its own. Where what failed is the drawing of the place itself,
+ * the place stands the product's own `ReloadState` instead (`ErrorBoundary`).
  *
  * A row that is itself the press, a list's foot such as "Show older
  * versions" turned failure, cannot hold a Retry button of its own, so it
@@ -118,20 +116,16 @@ type Placed =
       placement?: typeof ERROR_STATE_PLACEMENT.INLINE | typeof ERROR_STATE_PLACEMENT.ROWS;
       /** What did not land, as "The inbox could not be read." */
       children: ReactNode;
-      onReload?: undefined;
     })
   | (LineActions & {
       placement: typeof ERROR_STATE_PLACEMENT.TOOLBAR;
       /** What did not land, words alone, since a sentence cut short is said whole as its hint. */
       children: string;
-      onReload?: undefined;
     })
   | {
       placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
       /** The way out of the place the failure left empty, under Retry. */
       exit?: ErrorStateRemedy | undefined;
-      /** Reload's press, drawn in Retry's place, which draws the place again from the start. */
-      onReload?: (() => void) | undefined;
       children: ReactNode;
       remedy?: undefined;
       onRemove?: undefined;
@@ -171,7 +165,6 @@ const LINE = {
 
 const WORDS = {
   RETRY: "Retry",
-  RELOAD: "Reload",
   REMOVE: "Remove",
   DISMISS: "Dismiss",
 } as const;
@@ -180,8 +173,7 @@ const WORDS = {
  * A failure's sentence, `children`, and, where `onRetry` is given, the
  * Retry that tries again, said together as an alert and drawn at
  * `placement`; among rows, with the remedy, Remove, and Dismiss where each
- * is given; alone in its region, with Reload in Retry's place where
- * `onReload` is given; and, wherever it stands, Copy details for the
+ * is given; and, wherever it stands, Copy details for the
  * failure beneath it, which is reported as it first stands.
  */
 export function ErrorState(
@@ -192,16 +184,11 @@ export function ErrorState(
     failure: ReportedFailure | Unreported;
   } & Placed,
 ): React.JSX.Element {
-  const { onRetry, onReload, remedy, onRemove, onDismiss, failure, children } = props;
+  const { onRetry, remedy, onRemove, onDismiss, failure, children } = props;
   const Line = props.as ?? ERROR_STATE_ELEMENT.PARAGRAPH;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
-    const again =
-      onReload === undefined
-        ? onRetry === undefined
-          ? undefined
-          : { label: WORDS.RETRY, onClick: onRetry }
-        : { label: WORDS.RELOAD, onClick: onReload };
+    const again = onRetry === undefined ? undefined : { label: WORDS.RETRY, onClick: onRetry };
     return (
       <EmptyState
         icon={<AlertIcon />}

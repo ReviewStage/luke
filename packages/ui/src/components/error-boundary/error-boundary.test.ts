@@ -74,7 +74,9 @@ test("a child that throws while drawing draws the failure and Reload rather than
 test("a place that names no failure says the boundary's own sentence", () => {
   const Place = placeThatThrows({ now: true });
   const page = mount(createElement(ErrorBoundary, null, createElement(Place)));
-  expect(page.querySelector('[role="alert"]')?.textContent).toBe("This could not be shown.Reload");
+  expect(page.querySelector('[role="alert"]')?.textContent).toBe(
+    "This page could not be shown.Reload",
+  );
 });
 
 test("Reload runs what it is handed, then draws the place again", () => {
