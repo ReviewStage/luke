@@ -6,7 +6,8 @@
  * a member wrote to the bot directly. A bot's message, a message's edit or
  * other subtype, and Slack's own retry of an event (`x-slack-retry-num`)
  * are dropped unread, and the work runs once the answer has left, inside
- * Slack's three seconds.
+ * Slack's three seconds. Every event heard writes one fixed line, its kind
+ * and what came of it (`heardLine`), and nothing Slack wrote.
  *
  * The writer is found as a member of a workspace connected to the event's
  * team, oldest connection first: by the Slack id the bot kept for them, or
@@ -153,18 +154,56 @@ function withoutBotMention(text: string, botUserId: string | undefined): string 
     .trim();
 }
 
-/** The callback as a message addressed to the bot, or nothing for one a bot wrote, an edit, or any other event. */
-function addressedOf(callback: EventCallback): SlackAddressed | undefined {
+/** Why an event was not acted on, as its log line names it; a fixed word, never anything Slack wrote. */
+const SLACK_DROP = {
+  RETRY: "retry",
+  UNREAD: "unread",
+  NOT_ADDRESSED: "not_addressed",
+  DIRECT_MENTION: "direct_mention",
+  SUBTYPE: "subtype",
+  FROM_BOT: "from_bot",
+  EMPTY: "empty",
+} as const;
+
+type SlackDrop = (typeof SLACK_DROP)[keyof typeof SLACK_DROP];
+
+/** The event's kind as its log line names it: the two read, or any other. */
+const SLACK_HEARD = {
+  APP_MENTION: "app_mention",
+  DIRECT_MESSAGE: "message.im",
+  CHANNEL_MESSAGE: "message",
+  OTHER: "other",
+} as const;
+
+/** The event's kind as the log line names it, from Slack's own type and conversation type. */
+function heardKind(event: EventCallback["event"]): (typeof SLACK_HEARD)[keyof typeof SLACK_HEARD] {
+  if (event.type === SLACK_EVENT.APP_MENTION) return SLACK_HEARD.APP_MENTION;
+  if (event.type !== SLACK_EVENT.MESSAGE) return SLACK_HEARD.OTHER;
+  return event.channel_type === SLACK_IM ? SLACK_HEARD.DIRECT_MESSAGE : SLACK_HEARD.CHANNEL_MESSAGE;
+}
+
+/** One fixed line per event heard: its kind and what came of it, so a test in Slack shows in the runtime logs whatever was dropped. */
+function heardLine(kind: string, outcome: string): Effect.Effect<void> {
+  return Effect.logInfo("A Slack event was heard", { event: kind, outcome });
+}
+
+/** The callback as a message addressed to the bot, or why it is not one: a bot wrote it, an edit or other subtype, or any other event. */
+function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
   const { event } = callback;
   const botUserId = callback.authorizations?.[0]?.user_id;
-  const mention =
-    event.type === SLACK_EVENT.APP_MENTION && !event.channel.startsWith(DIRECT_CHANNEL_PREFIX);
-  const direct = event.type === SLACK_EVENT.MESSAGE && event.channel_type === SLACK_IM;
-  if (!mention && !direct) return undefined;
-  if (event.subtype !== undefined || event.bot_id !== undefined) return undefined;
-  if (event.user === undefined || event.user === botUserId) return undefined;
+  const kind = heardKind(event);
+  if (kind === SLACK_HEARD.APP_MENTION && event.channel.startsWith(DIRECT_CHANNEL_PREFIX)) {
+    return SLACK_DROP.DIRECT_MENTION;
+  }
+  if (kind !== SLACK_HEARD.APP_MENTION && kind !== SLACK_HEARD.DIRECT_MESSAGE) {
+    return SLACK_DROP.NOT_ADDRESSED;
+  }
+  if (event.subtype !== undefined) return SLACK_DROP.SUBTYPE;
+  if (event.bot_id !== undefined || event.user === undefined || event.user === botUserId) {
+    return SLACK_DROP.FROM_BOT;
+  }
   const text = withoutBotMention(event.text ?? "", botUserId);
-  if (text === "") return undefined;
+  if (text === "") return SLACK_DROP.EMPTY;
   return {
     teamId: callback.team_id,
     eventId: callback.event_id,
@@ -416,18 +455,22 @@ export function actOnSlackEvent(
   payload: UnparsedWireValue,
   retried: boolean,
 ): Effect.Effect<void, never, StartServices | SlackBot> {
-  if (retried) return Effect.void;
   const callback = readEither(EventCallbackSchema, { excess: EXCESS_KEYS.DROP })(payload);
-  if (Result.isFailure(callback)) return Effect.void;
+  if (Result.isFailure(callback)) return heardLine(SLACK_HEARD.OTHER, SLACK_DROP.UNREAD);
+  const kind = heardKind(callback.success.event);
+  if (retried) return heardLine(kind, SLACK_DROP.RETRY);
   const addressed = addressedOf(callback.success);
-  if (addressed === undefined) return Effect.void;
-  return afterResponse(
-    "a Slack message to the bot",
-    actOnAddressed(addressed).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("a Slack message to the bot was not acted on", {
-          failure: causeKind(cause),
-        }),
+  if (typeof addressed === "string") return heardLine(kind, addressed);
+  return Effect.andThen(
+    heardLine(kind, "acted"),
+    afterResponse(
+      "a Slack message to the bot",
+      actOnAddressed(addressed).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("a Slack message to the bot was not acted on", {
+            failure: causeKind(cause),
+          }),
+        ),
       ),
     ),
   );
