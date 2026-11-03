@@ -84,9 +84,6 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   `/person/<userId>` after it, the link their page is opened and copied
  *   by (`link-grammar.ts`): the account's id alone, never their name or email,
  *   so a mention of someone who renames themselves still names them.
- * - A channel is the workspace's address with `/channel/<channelId>` after
- *   it, the link its stream is opened and copied by: its id alone, never its
- *   name, so a mention of a channel renamed since still names it.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -146,8 +143,6 @@ export const MENTION_KIND = {
   PAGE: "page",
   AGENT: "agent",
   PERSON: "person",
-  /** A channel of the workspace, `#app`. */
-  CHANNEL: "channel",
   /** The app on one task, to which a comment's mention sends its thread. */
   APP: "app",
   /** A day, a time on one, or a range of either. */
@@ -355,10 +350,6 @@ const mentionSchema = EffectSchema.Union([
     userId: thingIdSchema,
   }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(MENTION_KIND.CHANNEL),
-    channelId: thingIdSchema,
-  }),
-  EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.APP),
     taskId: taskIdSchema,
   }),
@@ -484,7 +475,7 @@ function schemeFields({ host, steps, hash, search }: SchemeLink) {
   }
 }
 
-/** The fields a place of our own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
+/** The fields a place of our own spells as a mention: a task, a section, a page, an agent, or a person; nothing for a place no mention names. */
 function placeFields(place: LinkPlace, hash: string) {
   // A task named by its number is no mention, because a mention names it by its id alone, and the number is the workspace's; its link opens it once found by the slug.
   if (taskNumberOf(place) !== undefined) return undefined;
@@ -508,8 +499,6 @@ function placeFields(place: LinkPlace, hash: string) {
       return { kind: MENTION_KIND.AGENT, agentId: place.agentId };
     case LINK_PLACE.PERSON:
       return { kind: MENTION_KIND.PERSON, userId: place.userId };
-    case LINK_PLACE.CHANNEL:
-      return { kind: MENTION_KIND.CHANNEL, channelId: place.channelId };
     default:
       return undefined;
   }
@@ -813,8 +802,6 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return linkOf({ kind: LINK_PLACE.AGENT, agentId: mention.agentId }, workspace);
     case MENTION_KIND.PERSON:
       return linkOf({ kind: LINK_PLACE.PERSON, userId: mention.userId }, workspace);
-    case MENTION_KIND.CHANNEL:
-      return linkOf({ kind: LINK_PLACE.CHANNEL, channelId: mention.channelId }, workspace);
     case MENTION_KIND.APP:
       return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${APP_STEP}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
@@ -889,23 +876,21 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** The kinds an address of our own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and a channel. */
+/** The kinds an address of our own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, and a person. */
 const OWN_KINDS: ReadonlySet<Mention["kind"]> = new Set([
   MENTION_KIND.TASK,
   MENTION_KIND.SECTION,
   MENTION_KIND.PAGE,
   MENTION_KIND.AGENT,
   MENTION_KIND.PERSON,
-  MENTION_KIND.CHANNEL,
 ]);
 
-/** What a bare link's chip names a plan, a page, an agent, a person, and a channel by, since its address holds no name of theirs. */
+/** What a bare link's chip names a plan, a page, an agent, and a person by, since its address holds no name of theirs. */
 const BARE_NAME = {
   TASK: "Plan",
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
-  CHANNEL: "Channel",
   APP: PRODUCT_NAME,
 } as const;
 
@@ -945,8 +930,6 @@ function bareName(mention: Mention): string {
       return BARE_NAME.AGENT;
     case MENTION_KIND.PERSON:
       return BARE_NAME.PERSON;
-    case MENTION_KIND.CHANNEL:
-      return BARE_NAME.CHANNEL;
     case MENTION_KIND.APP:
       return BARE_NAME.APP;
     case MENTION_KIND.DATE:

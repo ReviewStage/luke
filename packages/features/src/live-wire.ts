@@ -240,12 +240,9 @@ function digest(text: string): string {
 /**
  * The cursor of a live answer: a digest of what the held read's cursor
  * stamps, each item's id, revision, instant, read state, who it waits
- * on, so its task's assignee changing moves it, whether it asks, and the
- * channel it lives in, since a move between channels changes nothing else
- * of it and the sidebar counts each channel's from this read, and each
- * failed run, so an answer whose cursor is
- * the last one's moved nothing a reader announces or counts, as a held
- * answer's does.
+ * on, so its task's assignee changing moves it, and whether it asks, and
+ * each failed run, so an answer whose cursor is the last one's moved nothing
+ * a reader announces or counts, as a held answer's does.
  */
 function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): string {
   const itemStamp = (item: {
@@ -255,7 +252,6 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly unread?: boolean | undefined;
     readonly waitsOn?: string | undefined;
     readonly asking?: boolean | undefined;
-    readonly channelId?: string | undefined;
   }) => [
     item.id,
     item.revision,
@@ -263,7 +259,6 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     item.unread ?? null,
     item.waitsOn ?? null,
     item.asking ?? null,
-    item.channelId ?? null,
   ];
   return digest(
     JSON.stringify([
@@ -755,8 +750,6 @@ export const LIVE_READ = {
   HOLDER_INBOX: "holderInbox",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
-  /** One workspace's channels, open and archived, as the reader reads them: the service's `workspaceChannels` query, held for the windows that list the workspace and a few they listed lately. */
-  CHANNELS: "workspaceChannels",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
@@ -813,8 +806,7 @@ export type AccountInboxItemsLiveAnswer = typeof accountInboxItemsLiveAnswerSche
  * Where one item stands as its row carries it: its plan, null for an item
  * of an agent with no task, and its agent; its stamp; whether it is unread
  * for the reader, which a read mark moves without moving `updatedAt`; who
- * it waits on; the channel it lives in, which a move between channels
- * changes alone; and how many messages its thread holds, which a withdrawn
+ * it waits on; and how many messages its thread holds, which a withdrawn
  * message moves.
  */
 const inboxItemStampRowSchema = EffectSchema.Struct({
@@ -827,7 +819,6 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
   waitsOn: EffectSchema.String,
-  channelId: EffectSchema.String,
   messages: countedNumber,
 });
 

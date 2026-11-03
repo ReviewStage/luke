@@ -24,7 +24,6 @@ import { agentQueue } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { channel, channelLook } from "../schemas/channel.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -321,9 +320,8 @@ export const planCommentSync = defineSyncTable(planComment, {
 /**
  * An inbox item, on its task's topic, its agent's, and its workspace's, and,
  * through the workspace's memberships, on the account of every member of
- * it. Note that the accounts are named here, because the account's inbox and
- * a workspace's channels are read per account, and a read's topics come
- * from its params alone: waking them on the workspace's topic instead would
+ * it. Note that the accounts are named here, because the account's inbox is
+ * read per account, and a read's topics come from its params alone: waking them on the workspace's topic instead would
  * re-run them on every plan save in it.
  */
 export const inboxItemSync = defineSyncTable(inboxItem, {
@@ -389,24 +387,6 @@ export const attachmentSync = defineSyncTable(attachment, {
     },
   ],
   ignore: [attachment.bytes],
-});
-
-/** A workspace's channel, on the workspace's topic and, as an inbox item names them, the account of every member of it. */
-export const channelSync = defineSyncTable(channel, {
-  topics: [
-    { kind: TOPIC.WORKSPACE, column: channel.organizationId },
-    {
-      through: member,
-      key: member.organizationId,
-      by: channel.organizationId,
-      topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
-    },
-  ],
-});
-
-/** A member's last look at a channel, on that member's own topic alone, since only they read it. */
-export const channelLookSync = defineSyncTable(channelLook, {
-  topics: [{ kind: TOPIC.ACCOUNT, column: channelLook.userId }],
 });
 
 /** An automation, on its workspace's topic and its creator's. */
@@ -571,8 +551,6 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   inboxMessageSync,
   inboxItemReadSync,
   attachmentSync,
-  channelSync,
-  channelLookSync,
   automationSync,
   automationRunSync,
   planRevisionSync,

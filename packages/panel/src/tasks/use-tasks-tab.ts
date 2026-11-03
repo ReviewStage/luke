@@ -3109,12 +3109,6 @@ export function useTasksTab(input: {
       case LINK_PLACE.INBOX_ITEM:
         openInboxItem(workspace, place);
         return;
-      // A channel's link, written before channels were removed, opens the Inbox, where its threads now stand.
-      case LINK_PLACE.CHANNEL:
-        listLinked(workspace);
-        timeInboxOpen();
-        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
-        return;
       case LINK_PLACE.AUTOMATIONS:
         listLinked(workspace);
         standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });

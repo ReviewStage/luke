@@ -93,8 +93,6 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** The channel the thread lives in, which its sidebar row counts it under; absent from a service before it. */
-  channelId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
@@ -149,8 +147,6 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** The channel the thread lives in, as a task's item says it, and on the same terms. */
-  channelId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;

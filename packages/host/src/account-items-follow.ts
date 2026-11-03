@@ -26,8 +26,8 @@ import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
  * keeps every item it was sent, with the plan it is on, or its agent where
  * that has no task, and asks each poll past the latest change it holds.
  *
- * Some moves change a stamp without resending its item. A read mark and a
- * move between channels are patched from the stamp. Any other (who it
+ * Some moves change a stamp without resending its item. A read mark is
+ * patched from the stamp. Any other (who it
  * waits on, a withdrawn message) asks once again past no digest, from that
  * item's change, so it is resent. An item no stamp names any more is gone,
  * and dropped.
@@ -55,7 +55,7 @@ type SealFailure = { readonly failure: string; readonly gone?: boolean };
 /** The kind of holder an item is on: a plan, or an agent with no task. */
 type HolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
 
-/** One item as the follow holds it: whole, the stamp it was last sent with, its read mark and channel kept current, and the plan or agent it is on. */
+/** One item as the follow holds it: whole, the stamp it was last sent with, its read mark kept current, and the plan or agent it is on. */
 interface HeldItem {
   readonly item: InboxItem;
   readonly sent: InboxItemStamp;
@@ -95,7 +95,7 @@ function holderOf(stamp: InboxItemStamp): Pick<HeldItem, "kind" | "holder"> {
  * The items held after an answer, the stamps that moved with no item sent,
  * and the items now on another holder than they were: each item the answer
  * sent taken whole, kept as it was held where it is sent unchanged; each
- * other held item's read mark patched from its stamp, and its channel; and
+ * other held item's read mark patched from its stamp; and
  * every item no stamp names dropped.
  */
 function heldAfter(
@@ -129,11 +129,11 @@ function heldAfter(
     }
     if (RESENT_ON.some((field) => before.sent[field] !== stamp[field])) unsent.push(stamp);
     const patched =
-      before.sent.unread === stamp.unread && before.sent.channelId === stamp.channelId
+      before.sent.unread === stamp.unread
         ? before
         : {
-            item: { ...before.item, unread: stamp.unread, channelId: stamp.channelId },
-            sent: { ...before.sent, unread: stamp.unread, channelId: stamp.channelId },
+            item: { ...before.item, unread: stamp.unread },
+            sent: { ...before.sent, unread: stamp.unread },
           };
     next.set(stamp.id, { item: patched.item, sent: patched.sent, ...on });
   }

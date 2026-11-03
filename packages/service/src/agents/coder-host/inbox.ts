@@ -463,9 +463,6 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_TITLE;
     case INBOX_POST_REFUSAL.NO_AGENT:
       return INBOX_REFUSAL.NO_AGENT;
-    // Note that an agent's post names no channel, so the store never refuses one on it.
-    case INBOX_POST_REFUSAL.NO_CHANNEL:
-      return INBOX_REFUSAL.UNAVAILABLE;
     case INBOX_POST_REFUSAL.NO_ADDRESSEE:
       return INBOX_REFUSAL.NO_ADDRESSEE;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:

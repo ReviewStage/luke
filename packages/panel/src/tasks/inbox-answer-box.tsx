@@ -556,7 +556,7 @@ function AnswerCard({
           failure: {
             surface: FAILURE_SURFACE.AGENT_ARCHIVE,
             cause: result,
-            about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+            about: { inboxItemId: item.id, agentId: item.agentId },
           },
         });
       } else if (kept !== undefined) control.onDropNote(item.id, kept);
