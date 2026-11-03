@@ -30,7 +30,7 @@ import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-reque
 import { agentOfTab, followedAgent, sameTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -838,12 +838,10 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does,
-  // keyed by the task, so another task's group starts folded rather than as this one was left.
+  // The task's agents head its plan, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
       <PlanAgents
-        key={openedId}
         agents={agents}
         held={views.held}
         tab={tab}
@@ -852,20 +850,21 @@ function PlanDocument({
         onOpenPullRequest={openPullRequestDoor}
       />
     ),
-    [openedId, agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
+    [agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
   );
-  // The task's sub-tasks and relations stand over its agents, keyed by the task,
-  // so another task's sub-tasks start folded rather than as this one's were left.
+  // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
+  // so another task's groups start folded rather than as this one's were left. Note that the
+  // key is the head's alone, because two siblings under one key leave the old task's drawn.
   const planHead = useMemo(
     () => (
-      <>
+      <Fragment key={openedId}>
         {opened === undefined ? null : (
-          <PlanRelations key={opened.id} task={opened} tasks={tasks} door={relations} />
+          <PlanRelations task={opened} tasks={tasks} door={relations} />
         )}
         {planAgents}
-      </>
+      </Fragment>
     ),
-    [opened, tasks, relations, planAgents],
+    [openedId, opened, tasks, relations, planAgents],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.

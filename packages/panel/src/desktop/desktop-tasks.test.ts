@@ -656,6 +656,63 @@ test("a plan's document opens on its path, then its title, with who created it a
   container.remove();
 });
 
+test("opening another task draws only its own sub-tasks, none of the task left behind", () => {
+  const home = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const other: Task = { ...TASK, id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a11", name: "Slack bot" };
+  const subTask = (id: string, number: number, parentTaskId: string) => ({
+    id,
+    workspaceId: TASK.workspaceId,
+    name: `Task ${number}`,
+    repository: null,
+    createdAt: number,
+    updatedAt: number,
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.NONE,
+    number,
+    parentTaskId,
+  });
+  const listed = [subTask("t-2", 2, TASK.id), subTask("t-3", 3, other.id)];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const open = (task: Task) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: task.id,
+              region: { kind: DOCUMENT_REGION.READY, task },
+              tasks: listed,
+              workspaces: [home],
+              workspace: home,
+              sidePanel: DOCUMENT_PANEL,
+            }),
+          }),
+        ),
+      ),
+    );
+  open(TASK);
+  open(other);
+
+  const rows = [...container.querySelectorAll("ul[aria-label='Sub-tasks'] > li[data-task-id]")];
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-task-id")),
+    ["t-3"],
+  );
+  act(() => root.unmount());
+  container.remove();
+});
+
 test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
   const agent: AgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
