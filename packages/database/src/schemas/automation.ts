@@ -40,6 +40,8 @@ import { organization, user } from "./auth.js";
  * where a run lands: a new agent each run, or the agent `target_agent_id`
  * names, which goes null where that agent is deleted. `archive_successful`
  * archives a new agent once its run finishes without failing.
+ * `slack_delivery` sends each run's result to the automation's owner as a
+ * Slack message from the workspace's own bot once the run's agent ends.
  */
 export const automation = pgTable(
   "automation",
@@ -74,6 +76,7 @@ export const automation = pgTable(
       onDelete: "set null",
     }),
     archiveSuccessful: boolean("archive_successful").notNull().default(false),
+    slackDelivery: boolean("slack_delivery").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -142,6 +145,12 @@ export const automationRun = pgTable(
      * away by hand; null until then, and for every other run.
      */
     archiveSettledAt: timestamptz("archive_settled_at"),
+    /**
+     * When the run's result was claimed for its owner's Slack message, for
+     * an automation that delivers to Slack, so a run sends it once however
+     * often its agent's turns settle; null until then, and for every other run.
+     */
+    slackDeliveredAt: timestamptz("slack_delivered_at"),
   },
   (table) => [
     // One run per firing: a second claim of the same firing finds this row.

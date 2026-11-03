@@ -1271,6 +1271,7 @@ test("a new automation is created only once it is named and told its task, and t
     scope: AUTOMATION_SCOPE.PERSONAL,
     target: { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: false,
+    slackDelivery: false,
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);

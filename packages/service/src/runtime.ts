@@ -60,6 +60,9 @@ const gatedGitHubClient = githubRateGate.pipe(
 /** Our GitHub App as the environment names it, named once so every layer that reaches it shares one. */
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
+/** Our Slack bot as the environment names it, named once so every layer that reaches it shares one. */
+const slackBot = slackBotFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer));
+
 /**
  * The services every web function's and every agent's effects run against. A
  * function reaches this layer only through its edge's runtime, so a service
@@ -79,8 +82,9 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  *
  * `SettledTurnListener` is here because the store writer tells it of every
  * coding agent turn it settles, on whichever function the settle ran: it
- * counts the turn and hands the agent's final message to the agent that
- * started it (`agents/coder-host/settled-turns.ts`).
+ * counts the turn, hands the agent's final message to the agent that
+ * started it, and sends an automation run's result on Slack
+ * (`agents/coder-host/settled-turns.ts`).
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -131,11 +135,11 @@ export const webServices = Layer.mergeAll(
   hostedEnvironment,
   githubApp,
   settledTurnListener.pipe(
-    Layer.provide(Layer.mergeAll(gatedGitHubClient, githubApp, hostedEnvironment)),
+    Layer.provide(Layer.mergeAll(gatedGitHubClient, githubApp, hostedEnvironment, slackBot)),
   ),
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
-  slackBotFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
+  slackBot,
   webLogger,
   syncFromEnvironment,
   bearerCallersLayer,

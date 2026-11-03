@@ -208,6 +208,7 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: automation.targetAgentId }
         : { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: automation.archiveSuccessful,
+    slackDelivery: automation.slackDelivery,
     mine: automation.userId === userId,
     creatorId: automation.userId,
   };
@@ -389,6 +390,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(asked.archiveSuccessful === undefined
       ? undefined
       : { archiveSuccessful: asked.archiveSuccessful }),
+    ...(asked.slackDelivery === undefined ? undefined : { slackDelivery: asked.slackDelivery }),
   };
   return { changes, webhookSecret: webhook?.secret };
 });
@@ -443,6 +445,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       scope,
       ...target,
       archiveSuccessful: made.archiveSuccessful ?? false,
+      slackDelivery: made.slackDelivery ?? false,
     }),
   );
   if (Option.isNone(created)) {

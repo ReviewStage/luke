@@ -536,6 +536,8 @@ export const automationSummarySchema = EffectSchema.Struct({
   /** Where a run lands; a same-agent target reads as no agent until its first run, and once its agent is deleted until the next. */
   target: EffectSchema.optionalKey(automationTargetSchema),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Whether each run's result is sent to its owner on Slack by the workspace's bot; absent from a service before it. */
+  slackDelivery: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * The address a webhook trigger's caller posts to, as the client that read
    * the automation reaches the service; the service sends none, since the
@@ -603,6 +605,7 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
   scope: EffectSchema.optionalKey(automationScopeSchema),
   target: EffectSchema.optionalKey(automationTargetSchema),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
+  slackDelivery: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /**
@@ -636,6 +639,7 @@ export const automationChangeRequestSchema = EffectSchema.Struct({
   scope: EffectSchema.optionalKey(automationScopeSchema),
   target: EffectSchema.optionalKey(automationTargetSchema),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
+  slackDelivery: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /**

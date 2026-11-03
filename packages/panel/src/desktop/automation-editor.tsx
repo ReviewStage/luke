@@ -2022,6 +2022,7 @@ function RunsGroup({
   problems,
   taskBacked,
   repositories,
+  slackOffered,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -2033,6 +2034,8 @@ function RunsGroup({
   problems: DraftProblems;
   taskBacked: boolean;
   repositories: RepositoryChooser;
+  /** Whether its runs' results may be sent on Slack: the workspace's bot is connected, or it sends them already. */
+  slackOffered: boolean;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const sameAgent = draft.target === AUTOMATION_TARGET.SAME_AGENT;
@@ -2113,6 +2116,14 @@ function RunsGroup({
           )
         }
       </RevealChoice>
+      {slackOffered ? (
+        <SwitchRow
+          label="Send the result to me on Slack"
+          detail="The workspace's Slack bot sends each run's final message, so the run needs no Slack of its own."
+          checked={draft.slackDelivery}
+          onChange={(slackDelivery) => onDraft({ slackDelivery })}
+        />
+      ) : null}
     </SettingsSection>
   );
 }
@@ -2140,6 +2151,7 @@ function EditorForm({
   onSecret,
   savedAgentId,
   sentry,
+  slackBot,
   onDraft,
   onUnreadableTime,
 }: {
@@ -2157,6 +2169,8 @@ function EditorForm({
   savedAgentId: string | null;
   /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
+  /** Whether the workspace's Slack bot is connected, which a run's result is sent by. */
+  slackBot: boolean;
   onDraft: (patch: Partial<AutomationDraft>) => void;
   /** Hears whether the schedule's time field holds words that are no time, which a save is refused over. */
   onUnreadableTime: (unreadable: boolean) => void;
@@ -2286,6 +2300,8 @@ function EditorForm({
           problems={problems}
           taskBacked={taskBacked}
           repositories={repositories}
+          // A saved delivery stays offered once the bot is gone, so it can still be turned off.
+          slackOffered={slackBot || automation?.slackDelivery === true}
           onDraft={onDraft}
         />
       </AutomationForm>
@@ -2524,6 +2540,7 @@ export function AutomationEditor({
   runsShown,
   onRuns,
   sentry,
+  slackBot,
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
@@ -2553,6 +2570,8 @@ export function AutomationEditor({
   onRuns: (shown: boolean) => void;
   /** The workspace's Sentry: a Sentry trigger offers its install in place of its rows where none is installed. */
   sentry: SentryOffer;
+  /** Whether the workspace's Slack bot is connected, so a run's result may be sent on Slack. */
+  slackBot: boolean;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
   const linkedRun = linked?.runId;
@@ -2794,6 +2813,7 @@ export function AutomationEditor({
             onSecret={setShownSecret}
             savedAgentId={savedAgentId}
             sentry={sentry}
+            slackBot={slackBot}
             onDraft={editDraft}
             onUnreadableTime={setUnreadableTime}
           />

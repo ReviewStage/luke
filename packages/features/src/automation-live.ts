@@ -102,6 +102,7 @@ const automationLiveRowSchema = EffectSchema.Struct({
   targetKind: automationTargetKindSchema,
   targetAgentId: EffectSchema.NullOr(EffectSchema.String),
   archiveSuccessful: EffectSchema.Boolean,
+  slackDelivery: EffectSchema.Boolean,
   createdAt: countedNumber,
   mine: EffectSchema.Boolean,
   runId: EffectSchema.NullOr(EffectSchema.String),
@@ -279,6 +280,7 @@ export function automationsOfLiveRows(
             ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: row.targetAgentId }
             : { kind: AUTOMATION_TARGET.NEW_AGENT },
         archiveSuccessful: row.archiveSuccessful,
+        slackDelivery: row.slackDelivery,
         mine: row.mine,
         creatorId: row.userId,
       }),

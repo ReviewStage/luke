@@ -90,6 +90,7 @@ const AutomationRowSchema = Schema.Struct({
   targetKind: automationTargetKindSchema,
   targetAgentId: Schema.NullOr(Schema.String),
   archiveSuccessful: Schema.Boolean,
+  slackDelivery: Schema.Boolean,
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
 });
@@ -112,6 +113,7 @@ export const AUTOMATION_COLUMNS = {
   targetKind: automation.targetKind,
   targetAgentId: automation.targetAgentId,
   archiveSuccessful: automation.archiveSuccessful,
+  slackDelivery: automation.slackDelivery,
   createdAt: automation.createdAt,
   updatedAt: automation.updatedAt,
 };
@@ -136,6 +138,7 @@ export interface NewAutomation {
   readonly targetKind?: AutomationTargetKind;
   readonly targetAgentId?: string | null;
   readonly archiveSuccessful?: boolean;
+  readonly slackDelivery?: boolean;
 }
 
 /**
@@ -156,6 +159,7 @@ export interface AutomationChanges {
   readonly targetKind?: AutomationTargetKind;
   readonly targetAgentId?: string | null;
   readonly archiveSuccessful?: boolean;
+  readonly slackDelivery?: boolean;
 }
 
 const RunRowSchema = Schema.Struct({
@@ -343,6 +347,7 @@ const insertAutomation = SqlSchema.findAll({
     targetKind: automationTargetKindSchema,
     targetAgentId: Schema.NullOr(Schema.String),
     archiveSuccessful: Schema.Boolean,
+    slackDelivery: Schema.Boolean,
     now: Schema.Date,
   }),
   Result: WrittenSchema,
@@ -359,6 +364,7 @@ const insertAutomation = SqlSchema.findAll({
           targetKind: row.targetKind,
           targetAgentId: row.targetAgentId,
           archiveSuccessful: row.archiveSuccessful,
+          slackDelivery: row.slackDelivery,
           name: row.name,
           enabled: true,
           ...triggerColumns(row.trigger, row.nextRunAt, row.webhookSecretHash),
@@ -422,6 +428,7 @@ const writeAutomation = SqlSchema.findAll({
     targetKind: Schema.optionalKey(automationTargetKindSchema),
     targetAgentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
     archiveSuccessful: Schema.optionalKey(Schema.Boolean),
+    slackDelivery: Schema.optionalKey(Schema.Boolean),
     now: Schema.Date,
   }),
   Result: WrittenSchema,
@@ -1158,6 +1165,7 @@ export function createAutomationCommitted(
       targetKind: made.targetKind ?? AUTOMATION_TARGET.NEW_AGENT,
       targetAgentId: made.targetAgentId ?? null,
       archiveSuccessful: made.archiveSuccessful ?? false,
+      slackDelivery: made.slackDelivery ?? false,
       now,
     });
     if (row === undefined) return Option.none();
@@ -1397,6 +1405,83 @@ const writeArchiveSettled = SqlSchema.void({
 /** Marks what becomes of the run's agent as settled, archived or left standing for good, so no later sweep reads it again. */
 export function settleRunArchive(runId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => writeArchiveSettled({ runId, now }));
+}
+
+const SlackDeliverySchema = Schema.Struct({
+  runId: Schema.String,
+  automationId: Schema.String,
+  automationName: Schema.String,
+  userId: Schema.String,
+  organizationId: Schema.String,
+});
+
+/** A run whose result is its owner's to be sent on Slack: the run, its automation's name, and the owner and workspace it is sent to. */
+export type RunSlackDelivery = typeof SlackDeliverySchema.Type;
+
+/**
+ * The newest started run the agent was started or handed for, of an
+ * automation that delivers to Slack, whose result has not been claimed yet.
+ * Note that the run must name the agent itself, because an agent its run's
+ * agent started belongs to the same run (`agent.automation_run_id`) and its
+ * end is not the run's.
+ */
+const findUndeliveredRun = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: SlackDeliverySchema,
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          runId: automationRun.id,
+          automationId: automation.id,
+          automationName: automation.name,
+          userId: automation.userId,
+          organizationId: automation.organizationId,
+        })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .where(
+          and(
+            eq(automationRun.agentId, agentId),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            isNull(automationRun.slackDeliveredAt),
+            eq(automation.slackDelivery, true),
+          ),
+        )
+        .orderBy(desc(automationRun.firedAt))
+        .limit(1),
+    ),
+});
+
+const writeSlackDelivered = SqlSchema.findAll({
+  Request: Schema.Struct({ runId: Schema.String, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ runId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ slackDeliveredAt: now })
+        .where(and(eq(automationRun.id, runId), isNull(automationRun.slackDeliveredAt)))
+        .returning({ id: automationRun.id }),
+    ),
+});
+
+/**
+ * Claims the result of the agent's run for its owner's Slack message, as
+ * above, and answers the run; nothing where the agent's run delivers to no
+ * Slack or its result was claimed already, by an earlier turn or a settle
+ * heard twice, so a run's result is sent once.
+ */
+export function claimRunSlackDelivery(
+  agentId: string,
+): TaskStoreEffect<Option.Option<RunSlackDelivery>> {
+  return Effect.gen(function* () {
+    const found = yield* findUndeliveredRun({ agentId });
+    if (Option.isNone(found)) return found;
+    const now = yield* DateTime.nowAsDate;
+    const claimed = yield* writeSlackDelivered({ runId: found.value.runId, now });
+    return claimed.length === 0 ? Option.none() : found;
+  });
 }
 
 /** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
