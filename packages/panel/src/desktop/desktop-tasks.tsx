@@ -1,4 +1,5 @@
 import type { AgentStatus } from "@repo/features/agent-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { MentionLines } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
@@ -56,7 +57,7 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
-import { keyedItem } from "../tasks/inbox-model.js";
+import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -692,6 +693,17 @@ function PlanDocument({
   );
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;
+  // The threads each agent posted that wait on the developer, which its tab counts and its box's
+  // dock opens in the Inbox narrowed to the task, on the next of them.
+  const waitingOf = useMemo(() => waitingByAgent(inbox.board.waiting), [inbox.board.waiting]);
+  const openWaitingThread = useSteadyDoor((item: InboxItem) => {
+    if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
+  });
+  const tabAgent = tab === undefined ? undefined : agentOfTab(tab);
+  const threads = useMemo(() => {
+    const waiting = tabAgent === undefined ? undefined : waitingOf.get(tabAgent);
+    return waiting === undefined ? undefined : { waiting, onOpen: openWaitingThread };
+  }, [tabAgent, waitingOf, openWaitingThread]);
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
   // The task's own menu, as the task's page holds it keyed by the task
@@ -1226,6 +1238,7 @@ function PlanDocument({
                                 slot={phone ? null : actionsSlot}
                                 onShown={phone ? setShownAgentTab : undefined}
                                 planMenu={planMenu}
+                                waiting={waitingOf}
                               />
                             }
                             actions={
@@ -1306,6 +1319,7 @@ function PlanDocument({
                                 cards={cards}
                                 onFork={forkDoor}
                                 onContinue={continueDoor}
+                                threads={threads}
                               />
                             )}
                           </FindScope>

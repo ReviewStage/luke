@@ -1459,7 +1459,7 @@ function inboxTaskNow(): () => string | undefined {
   return () => seen;
 }
 
-test("a task's Inbox door and its link narrow the Inbox to the task, and the Inbox's own row lists everything", async () => {
+test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await settle();
   const narrowed = inboxTaskNow();
@@ -1478,10 +1478,17 @@ test("a task's Inbox door and its link narrow the Inbox to the task, and the Inb
     }),
   );
   const linked = narrowedTo();
+  act(() => tab.control().onShowInbox({ taskId: "alerts", itemId: "thread" }));
+  const thread = narrowedTo();
   act(() => tab.control().inboxView.onOpen());
 
   assert.deepEqual(door, { open: true, chosen: undefined, taskId: "notes" });
   assert.deepEqual(linked, { open: true, chosen: undefined, taskId: "alerts" });
+  assert.deepEqual(thread, {
+    open: true,
+    chosen: { taskId: "alerts", itemId: "thread", opened: true },
+    taskId: "alerts",
+  });
   assert.deepEqual(narrowedTo(), { open: true, chosen: undefined, taskId: undefined });
 });
 

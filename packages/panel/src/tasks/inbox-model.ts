@@ -1173,6 +1173,23 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
+/** What a line of threads waiting on the developer says: "1 thread needs you", "3 threads need you". */
+export function threadsWaitingWords(waiting: number): string {
+  return waiting === 1
+    ? `1 thread ${NEEDS_YOU.COUNT.one}`
+    : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
+}
+
+/** The items given that wait on the developer, by the agent that posted each, in their order. */
+export function waitingByAgent(
+  waiting: readonly InboxItem[],
+): ReadonlyMap<string, readonly InboxItem[]> {
+  const byAgent = new Map<string, InboxItem[]>();
+  for (const item of waiting)
+    byAgent.set(item.agentId, [...(byAgent.get(item.agentId) ?? []), item]);
+  return byAgent;
+}
+
 /** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
