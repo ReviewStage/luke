@@ -139,7 +139,7 @@ import { MinimizedThreads } from "./minimized-threads.js";
 import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
-import { PullRequestWriteNote } from "./pull-request-writes.js";
+import { PullRequestWriteNote, type ReadAgain } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
@@ -216,7 +216,8 @@ const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWE
 
 /**
  * One agent's read as last answered, none before the first read lands;
- * whether a read is out; and the door that reads it again. The read is
+ * whether a read is out; and the door that reads it again, settling once
+ * its answer lands. The read is
  * asked as the tab first comes on screen and again the moment the agent
  * ends, since that is when what it published settles; every ask is
  * numbered, so only the latest one's answer is drawn, and a read that threw
@@ -238,7 +239,7 @@ export function useAgentRead<A>(
   // The agent's standing the last read on its own was asked for.
   const readFor = useRef<boolean | undefined>(undefined);
 
-  const ask = useCallback(() => {
+  const ask = useCallback((): Promise<void> => {
     asked.current += 1;
     const ask = asked.current;
     setOut(true);
@@ -247,7 +248,7 @@ export function useAgentRead<A>(
       setOut(false);
       setAnswer(next);
     };
-    latest.current.read(agentId).then(settle, () => settle(latest.current.unanswered));
+    return latest.current.read(agentId).then(settle, () => settle(latest.current.unanswered));
   }, [agentId]);
 
   useEffect(() => {
@@ -1071,7 +1072,7 @@ interface ListCommenting {
 /** How Files changed comments on lines, where its Pull request tab lets it: the member's pending review, which names the offers, and what reads the tab again once GitHub answered. */
 export interface LineComments {
   readonly pending: PendingReview;
-  readonly onWritten: () => void;
+  readonly onWritten: ReadAgain;
 }
 
 /**

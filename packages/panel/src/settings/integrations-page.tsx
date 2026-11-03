@@ -628,6 +628,8 @@ function IntegrationRow({
   // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
   const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
+  // The name a rename asked for, drawn in the account's place until the read after it lands, so the old name never stands between.
+  const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider are each renamed, and each disconnected leaving the others.
   const several = row.accounts > 1 && account !== undefined;
@@ -671,13 +673,16 @@ function IntegrationRow({
     setEditing(false);
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
-    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then(
-      (answer) => {
-        if ("failure" in answer) setRejection(`${name} could not be renamed. Try again.`);
-        void statuses.read();
-      },
-      () => setRejection(`${name} could not be renamed. Try again.`),
-    );
+    setRenaming(label);
+    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label })
+      .then(
+        (answer) => {
+          if ("failure" in answer) setRejection(`${name} could not be renamed. Try again.`);
+          return statuses.read();
+        },
+        () => setRejection(`${name} could not be renamed. Try again.`),
+      )
+      .finally(() => setRenaming(undefined));
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
@@ -750,15 +755,18 @@ function IntegrationRow({
           adornment:
             accountName === undefined ? undefined : (
               <InlineEdit
-                value={account === undefined ? accountName : integrationAccountLabel(account)}
+                value={
+                  renaming ??
+                  (account === undefined ? accountName : integrationAccountLabel(account))
+                }
                 label={`${name} account name`}
                 editing={editing && account !== undefined}
                 maxLength={INTEGRATION_LABEL_MAX}
                 look={INLINE_EDIT_LOOK.INPUT}
                 onEnd={renamed}
               >
-                <AccountWords words={accountName}>
-                  <Highlighted text={accountName} tokens={tools.tokens} />
+                <AccountWords words={renaming ?? accountName}>
+                  <Highlighted text={renaming ?? accountName} tokens={tools.tokens} />
                 </AccountWords>
               </InlineEdit>
             ),
