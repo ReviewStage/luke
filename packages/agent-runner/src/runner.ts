@@ -301,6 +301,8 @@ interface Launch {
   /** Held while a message is taken into the launch and while a wait is released, so no message lands in a launch a release ends. */
   readonly admission: Semaphore.Semaphore;
   readonly ended: Deferred.Deferred<RunnerEnd>;
+  /** Why the launch failed, where it did, for its END to say: the CLI's error, or the runner's own reason for ending it. */
+  readonly failure: Ref.Ref<string>;
   /** The launch's first event number, which a turn-scoped stop names. */
   readonly firstSequence: number;
 }
@@ -533,6 +535,18 @@ const watchWarm = Effect.fn("agent-runner/watchWarm")(function* (launch: Launch,
   );
 });
 
+/** What a launch ended by `watchUnheard` says it failed of. */
+const UNHEARD_FAILURE = "the CLI never took up a message a result left";
+
+/** Ends the launch as `FAILED` with why, unless something ended it first. */
+function endFailed(launch: Launch, failure: string) {
+  return Effect.gen(function* () {
+    if (yield* Deferred.isDone(launch.ended)) return;
+    yield* Ref.set(launch.failure, failure);
+    yield* Deferred.succeed(launch.ended, RUNNER_END.FAILED);
+  });
+}
+
 /**
  * The bound on the messages a `result` naming no prompt left unanswered,
  * `heardAt` being the launch's turn output when it came: once
@@ -553,8 +567,8 @@ const watchUnheard = Effect.fn("agent-runner/watchUnheard")(function* (
       if ((yield* Ref.get(launch.heard)) !== heardAt) return;
       const unanswered = yield* Ref.get(launch.unanswered);
       if (![...held].some((uuid) => unanswered.has(uuid))) return;
-      yield* Effect.logWarning("agent-runner: the CLI never took up a message a result left");
-      yield* Deferred.succeed(launch.ended, RUNNER_END.FAILED);
+      yield* Effect.logWarning(`agent-runner: ${UNHEARD_FAILURE}`);
+      yield* endFailed(launch, UNHEARD_FAILURE);
     }),
   );
 });
@@ -667,6 +681,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     released: yield* Ref.make<readonly RunnerWakeup[] | undefined>(undefined),
     admission: yield* Semaphore.make(1),
     ended: yield* Deferred.make<RunnerEnd>(),
+    failure: yield* Ref.make(""),
     firstSequence: config.firstSequence,
   };
 
@@ -678,15 +693,12 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     Effect.catchIf(Cause.isDone, () => Queue.end(prompts)),
     Effect.asVoid,
   );
-  let failure = "";
   const outputLoop = Stream.fromAsyncIterable(session, (cause) => cause).pipe(
     Stream.runForEach((message) => takeMessage(launch, message)),
     Effect.matchEffect({
       onSuccess: () => Deferred.succeed(launch.ended, RUNNER_END.INPUT_CLOSED),
-      onFailure: (cause) => {
-        failure = cause instanceof Error ? cause.message : String(cause);
-        return Deferred.succeed(launch.ended, RUNNER_END.FAILED);
-      },
+      onFailure: (cause) =>
+        endFailed(launch, cause instanceof Error ? cause.message : String(cause)),
     }),
   );
   const reading = [
@@ -711,6 +723,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   session.close();
   yield* Fiber.interrupt(posting);
   const wakeups = yield* Ref.get(launch.released);
+  const failure = yield* Ref.get(launch.failure);
   return (
     wakeups === undefined ? { end, failure } : { end, failure, wakeups }
   ) satisfies LaunchOutcome;
