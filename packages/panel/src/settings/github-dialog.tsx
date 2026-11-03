@@ -68,7 +68,7 @@ const LINE = {
 } as const;
 
 /** Why a save kept nothing, and what to do next, as one short line. */
-function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
+export function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
   switch (rejection) {
     case GITHUB_TOKEN_REJECTION.FINE_GRAINED:
       return "This isn't a classic token. Create a classic token and paste that.";

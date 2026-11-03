@@ -825,6 +825,7 @@ export function DesktopShell({
           <div className="desktop-drag-strip" />
           <SetupSteps
             tasks={tasks}
+            accountId={signedInId}
             onFinish={() => keepSetupFinished((finished) => [...finished, signedInId])}
           />
         </div>

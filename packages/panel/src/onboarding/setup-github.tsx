@@ -1,9 +1,15 @@
-import type { GitHubTokenSummary } from "@repo/features/github-token-wire";
+import {
+  GITHUB_TOKEN_CREATE_URL,
+  GITHUB_TOKEN_REJECTION,
+  type GitHubTokenRejection,
+  type GitHubTokenSummary,
+} from "@repo/features/github-token-wire";
 import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
@@ -11,6 +17,7 @@ import {
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   SETTINGS_ROW_STATE,
+  SecretField,
   SettingsRowStateLine,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -19,21 +26,22 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { useGitHubConnection } from "../github-connect.js";
-import { GitHubTokenDialog } from "../settings/github-dialog.js";
+import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
 import type { RepositoryChooser } from "../tasks/repository-chip.js";
-import { useDrawnThroughExit } from "../use-held-through-exit.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 
 /**
  * setup-github.tsx -- setup's GitHub step: the App installed on the workspace's repositories, or the member's own token, chosen as two cards.
  *
  * The App is one trip to GitHub, which also links the member's GitHub
- * (the service keeps the install's user token). The token takes the member's
- * GitHub linked first, since a token must be that account's, then the token,
- * then the repositories it may push to. The step is done once the workspace
+ * (the service keeps the install's user token). The token is made on
+ * GitHub's own page and pasted here, then the repositories it may push to
+ * are added; where the service refuses it for want of a linked GitHub
+ * account, the card offers the link and the save again. The step is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
  * so a trip finished in the browser lands on its own.
  */
@@ -96,7 +104,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   );
 }
 
-/** The token's card: GitHub linked, then the token, then the repositories it may push to. */
+/** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to; GitHub linked only where the service asks for it. */
 function TokenRoute({
   workspaceId,
   onAdded,
@@ -105,12 +113,15 @@ function TokenRoute({
   onAdded: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const { connection, connect } = useGitHubConnection();
+  const openLink = useOpenLink();
+  const { connect } = useGitHubConnection();
   const repositories = useTokenRepositories(workspaceId);
   const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
-  const [open, setOpen] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [rejection, setRejection] = useState<GitHubTokenRejection | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const { drawn, onExited } = useDrawnThroughExit(open);
   const added = repositories.listed.length;
   useEffect(() => {
     act(ACT_KIND.GITHUB_TOKEN_READ).then(
@@ -122,57 +133,84 @@ function TokenRoute({
   useEffect(() => {
     if (added > 0) onAdded();
   }, [added, onAdded]);
-  let step: React.ReactNode;
-  if (connection?.connected !== true) {
-    step = (
-      <ProviderButton
-        provider={MARK_PROVIDER.GITHUB}
-        name="GitHub"
-        words="Link GitHub"
-        size={PROVIDER_BUTTON_SIZE.GATE}
-        onPress={() => void connect()}
-      />
-    );
-  } else if (token === null) {
-    step = (
-      <span className="flex">
-        <Button
-          variant={BUTTON_VARIANT.OUTLINE}
-          aria-haspopup="dialog"
-          onClick={() => setOpen(true)}
-        >
-          Add token
-        </Button>
-      </span>
-    );
-  } else if (token !== undefined) {
-    step = (
-      <span className="flex">
-        <AddTokenRepository
-          workspaceId={workspaceId}
-          repositories={repositories}
-          onRefused={setRefusal}
-        />
-      </span>
+  const save = () => {
+    const typed = pasted.trim();
+    if (typed === "" || saving) return;
+    setSaving(true);
+    setRejection(undefined);
+    setFailed(false);
+    act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: typed })
+      .then(
+        (answer) => {
+          if ("failure" in answer) return setFailed(true);
+          setToken(answer.token);
+          setRejection(answer.rejected);
+          if (answer.rejected === undefined) setPasted("");
+        },
+        () => setFailed(true),
+      )
+      .finally(() => setSaving(false));
+  };
+  if (token !== undefined && token !== null) {
+    return (
+      <>
+        <span className="flex">
+          <AddTokenRepository
+            workspaceId={workspaceId}
+            repositories={repositories}
+            onRefused={setRefusal}
+          />
+        </span>
+        {refusal === undefined ? null : <CardWords>{refusal}</CardWords>}
+      </>
     );
   }
   return (
     <>
       <CardWords>No admin needed. Reviews and checks reach agents up to a minute late.</CardWords>
-      {step}
-      {refusal === undefined ? null : <CardWords>{refusal}</CardWords>}
-      {!drawn ? null : (
-        <GitHubTokenDialog
-          open={open}
-          token={token ?? null}
-          onToken={(saved) => {
-            setToken(saved);
-            if (saved !== null) setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-          onExited={onExited}
-        />
-      )}
+      <span className="flex">
+        <ButtonLink
+          href={GITHUB_TOKEN_CREATE_URL}
+          variant={BUTTON_VARIANT.OUTLINE}
+          onClick={linkPressOf(openLink, GITHUB_TOKEN_CREATE_URL)}
+        >
+          Create a token on GitHub
+        </ButtonLink>
+      </span>
+      <SecretField
+        label="Classic token"
+        placeholder="ghp_…"
+        value={pasted}
+        onChange={setPasted}
+        onEnter={save}
+      />
+      {rejection === GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT ? (
+        <>
+          <CardWords>Link the GitHub account this token is for, then save it again.</CardWords>
+          <ProviderButton
+            provider={MARK_PROVIDER.GITHUB}
+            name="GitHub"
+            words="Link GitHub"
+            size={PROVIDER_BUTTON_SIZE.GATE}
+            onPress={() => void connect()}
+          />
+        </>
+      ) : rejection !== undefined ? (
+        <CardWords>{rejectionLabel(rejection)}</CardWords>
+      ) : failed ? (
+        <CardWords>The token could not be saved. Try again.</CardWords>
+      ) : null}
+      <div className="flex justify-end">
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          disabled={pasted.trim() === ""}
+          busy={saving}
+          busyLabel="Saving"
+          onClick={save}
+        >
+          Save
+        </Button>
+      </div>
     </>
   );
 }

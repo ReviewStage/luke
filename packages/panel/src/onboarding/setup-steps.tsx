@@ -11,7 +11,7 @@ import { Schema } from "effect";
 import { useCallback, useState } from "react";
 import { AgentAuthSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { keptKey } from "../use-kept.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { SETUP_AUDIENCE, SETUP_STEP, type SetupAudience, setupSteps } from "./setup-model.js";
 import { GitHubSetup } from "./setup-github.js";
 import { TeamForm } from "./setup-team.js";
@@ -26,6 +26,28 @@ import { ToolRows } from "./setup-tools.js";
  * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on this
  * machine, that the account finished setup, so it stands once.
  */
+
+/** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
+const setupPlace = Schema.Struct({
+  audience: Schema.Literals(Object.values(SETUP_AUDIENCE)),
+  at: Schema.Number,
+  team: Schema.optionalKey(Schema.String),
+});
+
+type SetupPlace = typeof setupPlace.Type;
+
+/**
+ * Each account's place in setup on this machine, by its id, so a reload
+ * comes back to the step it left rather than the first, and a team's
+ * workspace made is not offered to be made again.
+ */
+const SETUP_PLACE = keptKey(
+  "app.setupPlace",
+  Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
+);
+
+/** Where setup starts. */
+const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 
 /** The accounts that finished setup on this machine, by id. */
 export const SETUP_FINISHED = keptKey(
@@ -78,14 +100,24 @@ function StepFoot({
 /** Setup, step by step; `onFinish` lets the app in. */
 export function SetupSteps({
   tasks,
+  accountId,
   onFinish,
 }: {
   tasks: TasksControl;
+  /** The account set up, whose place in setup is kept under its id. */
+  accountId: string;
   onFinish: () => void;
 }): React.JSX.Element {
-  const [audience, setAudience] = useState<SetupAudience>(SETUP_AUDIENCE.ME);
-  const [at, setAt] = useState(0);
-  const [team, setTeam] = useState<string | undefined>(undefined);
+  const [places, , changePlaces] = useKept(SETUP_PLACE, {});
+  const place = places[accountId] ?? SETUP_START;
+  const { audience, at, team } = place;
+  const move = (change: Partial<SetupPlace>) =>
+    changePlaces((kept) => ({
+      ...kept,
+      [accountId]: { ...(kept[accountId] ?? SETUP_START), ...change },
+    }));
+  const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
+  const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
   const [reached, setReached] = useState(false);
   const onConnected = useCallback((connected: boolean) => setAgent(connected), []);
@@ -93,7 +125,12 @@ export function SetupSteps({
   const steps = setupSteps(audience);
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
-  const forward = () => (last ? onFinish() : setAt(at + 1));
+  const finish = () => {
+    // Finished, the account's place is let go of, as setup stands no more.
+    changePlaces(({ [accountId]: _done, ...rest }) => rest);
+    onFinish();
+  };
+  const forward = () => (last ? finish() : setAt(at + 1));
   const back = at === 0 ? undefined : () => setAt(at - 1);
   const workspaceId = team ?? tasks.newTask.workspaceId;
   const foot = (done: boolean, optional: boolean, label = "Continue") => (
@@ -133,9 +170,8 @@ export function SetupSteps({
         {team === undefined ? (
           <TeamForm
             onCreated={(made) => {
-              setTeam(made);
+              move({ team: made, at: at + 1 });
               tasks.onChooseWorkspace(made);
-              setAt(at + 1);
             }}
           />
         ) : null}
