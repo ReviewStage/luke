@@ -1097,43 +1097,56 @@ const MODEL_AGENTS: readonly ModelAgent[] = [
   },
 ];
 
+/**
+ * Note that the list stands in no device, so it is made a picture here as a
+ * device makes its screen one: a reader is told what it shows, and its rows
+ * are inert, since none of them is ever pressed.
+ */
 function ModelsScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.MODELS);
   return (
-    <div ref={ref} className="ui-landing-scene ui-landing-models" {...DESKTOP_SURFACE}>
-      <List label="Agents" variant={LIST_VARIANT.CARD}>
-        {MODEL_AGENTS.map((agent) => (
-          <ListRow
-            key={agent.id}
-            motionKey={agent.id}
-            leading={
-              <Avatar
-                name={agent.name}
-                shape={AVATAR_SHAPE.SQUARE}
-                size={AVATAR_SIZE.ROW}
-                glyph={agent.mark}
-                decorative
-              />
-            }
-            title={agent.name}
-            description={agent.model}
-            meta={
-              step >= agent.done ? (
-                <span className="ui-landing-row-marks">
-                  <TaskStatusMark status={TASK_STATUS.DONE} />
-                  Done
-                </span>
-              ) : (
-                <span className="ui-landing-row-marks">
-                  <WorkingMark />
-                  <Shimmer>Working</Shimmer>
-                </span>
-              )
-            }
-            onPress={still}
-          />
-        ))}
-      </List>
+    <div
+      ref={ref}
+      className="ui-landing-scene ui-landing-models"
+      role="img"
+      aria-label="Three agents at work, each on the model it was started on"
+      {...DESKTOP_SURFACE}
+    >
+      <div inert>
+        <List label="Agents" variant={LIST_VARIANT.CARD}>
+          {MODEL_AGENTS.map((agent) => (
+            <ListRow
+              key={agent.id}
+              motionKey={agent.id}
+              leading={
+                <Avatar
+                  name={agent.name}
+                  shape={AVATAR_SHAPE.SQUARE}
+                  size={AVATAR_SIZE.ROW}
+                  glyph={agent.mark}
+                  decorative
+                />
+              }
+              title={agent.name}
+              description={agent.model}
+              meta={
+                step >= agent.done ? (
+                  <span className="ui-landing-row-marks">
+                    <TaskStatusMark status={TASK_STATUS.DONE} />
+                    Done
+                  </span>
+                ) : (
+                  <span className="ui-landing-row-marks">
+                    <WorkingMark />
+                    <Shimmer>Working</Shimmer>
+                  </span>
+                )
+              }
+              onPress={still}
+            />
+          ))}
+        </List>
+      </div>
     </div>
   );
 }

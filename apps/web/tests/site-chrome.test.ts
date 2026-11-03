@@ -81,8 +81,16 @@ for (const { path, page, marked } of PAGES) {
   });
 }
 
-test("the landing offers the web app beside the download", () => {
+test("the landing offers the web app beside the download, and nothing in its scenes to press", () => {
   const body = drawn(App).querySelector("main");
+  // A scene's controls are a picture of the app: none of them may take the keyboard.
+  const pressable = Array.from(body?.querySelectorAll("button, [tabindex]") ?? []).filter(
+    (control) => control.closest("[inert]") === null,
+  );
+  assert.deepEqual(
+    pressable.map((control) => control.textContent),
+    [],
+  );
   assert.deepEqual(links(body), [
     "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
     `or sign in on the web -> ${PANEL_PATH}`,
