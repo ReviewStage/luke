@@ -1226,8 +1226,9 @@ What an agent writes on a thread or in a plan is not counted among these. These 
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
-sees your network address for them, and deleting your account erases them
-with the rest of your usage data.
+sees your network address for them, with your name and email attached as the
+Mac's are, and deleting your account erases them with the rest of your usage
+data.
 
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
