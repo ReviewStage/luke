@@ -35,7 +35,7 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { recordingHarness } from "../testing/native-harness-fake.js";
-import { SlackBot, type SlackWebApi, slackBotOver } from "./slack-bot.js";
+import { SlackBot, type SlackFileTransfer, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { slackEventsApp } from "./slack-events-app.js";
 import { dmThreadPost } from "./thread-dms.js";
 
@@ -51,8 +51,10 @@ import { dmThreadPost } from "./thread-dms.js";
  * link, and starts nothing for a Slack user who is no member; a message in
  * the thread of an archived agent brings it back and hands it the message,
  * and one in the thread of an agent whose session ended continues it in a
- * new agent the thread moves to; and a member's reply under the DM of an
- * inbox thread is posted on that thread as theirs and starts no agent.
+ * new agent the thread moves to; a member's reply under the DM of an inbox
+ * thread is posted on that thread as theirs and starts no agent; and a
+ * direct message sharing an image and no words starts an agent handed the
+ * image.
  *
  * Synthetic accounts, workspaces, tokens, and Slack ids throughout.
  */
@@ -88,6 +90,24 @@ function fakeSlack(calls: SlackCall[], postedTs = "1700000000.000100"): SlackWeb
       default:
         return Effect.succeed({ ok: true });
     }
+  };
+}
+
+/** A one-pixel PNG, as a member shares a screenshot. */
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** A Slack whose every private file is the PNG, writing down each address read. */
+function fakeFiles(read: string[]): SlackFileTransfer {
+  return {
+    send: () => Effect.void,
+    read: (url) =>
+      Effect.sync(() => {
+        read.push(url);
+        return new Uint8Array(PNG);
+      }),
   };
 }
 
@@ -266,6 +286,37 @@ function threadMention(slackUserId: string, eventId: string, threadTs: string): 
       ts: "1700000003.000400",
       thread_ts: threadTs,
       channel: "C0001",
+    },
+  };
+  return new Request(new URL(EVENTS, ORIGIN), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${CONNECT_TOKEN}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Slack's direct message to the bot by the Slack user given, sharing a screenshot and a PDF with no words, as Connect forwards it. */
+function directShare(slackUserId: string, eventId: string): Request {
+  const shared = (name: string, mimetype: string) => ({
+    name,
+    mimetype,
+    size: 120,
+    url_private_download: `https://files.slack.com/files-pri/T0001-F0001/download/${name}`,
+  });
+  const payload = {
+    type: "event_callback",
+    team_id: "T0001",
+    event_id: eventId,
+    authorizations: [{ user_id: "UBOT" }],
+    event: {
+      type: "message",
+      subtype: "file_share",
+      channel_type: "im",
+      user: slackUserId,
+      text: "",
+      ts: "1700000003.000400",
+      channel: "D0002",
+      files: [shared("screen.png", "image/png"), shared("notes.pdf", "application/pdf")],
     },
   };
   return new Request(new URL(EVENTS, ORIGIN), {
@@ -581,6 +632,47 @@ it.layer(getTestDB())("our Slack route", (it) => {
           calls.filter((call) => call.method === "reactions.add").map((call) => call.args),
           [{ channel: "D0001", timestamp: "1700000005.000600", name: "eyes" }],
         );
+      });
+    },
+  );
+  it.effect(
+    "a direct message sharing an image and no words starts an agent handed the image, and leaves the PDF beside it out",
+    () => {
+      const calls: SlackCall[] = [];
+      const read: string[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles(read)));
+      return Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
+        const task = yield* startTask(owner, { name: "Shared screenshots" });
+        yield* linkSlackInstallation({
+          organizationId: task.workspaceId,
+          teamId: "T0001",
+          teamName: "Team",
+          userId: owner,
+        });
+        const [row] = yield* (yield* Database)
+          .select({ email: user.email })
+          .from(user)
+          .where(eq(user.id, owner));
+
+        const started = yield* answer(bot, directShare(`U-${row?.email}`, `Ev${randomUUID()}`));
+
+        assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
+        assert.deepEqual(read, [
+          "https://files.slack.com/files-pri/T0001-F0001/download/screen.png",
+        ]);
+        const [first] = yield* (yield* Database)
+          .select({ parts: messages.parts })
+          .from(slackAgentThread)
+          .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+          .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
+          .where(eq(slackAgentThread.channelId, "D0002"));
+        const files = (first?.parts ?? []).flatMap((part) =>
+          part.type === "file" ? [{ filename: part.filename, mediaType: part.mediaType }] : [],
+        );
+        assert.deepEqual(files, [{ filename: "screen.png", mediaType: "image/png" }]);
       });
     },
   );

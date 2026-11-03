@@ -27,9 +27,17 @@
  * (`conversations.list`), and an owner or admin puts the bot in a public one
  * (`conversations.join`) or takes it out of one (`conversations.leave`).
  *
- * `dm`, `update`, and those reads, replies, joins, and leaves are best-effort: whatever fails, Slack, Connect, or the
- * store, is logged by a fixed line and Slack's own error code, never Slack's
- * words or the token, and answers nothing. Note that neither is to be
+ * Files go both ways as Slack's own external upload takes them: each file
+ * is handed an address (`files.getUploadURLExternal`), its bytes are sent
+ * there, and the files sent are shared together in a thread
+ * (`files.completeUploadExternal`); a file a member shared is read from its
+ * private address on the bot's token, on Slack's file host alone and held
+ * to the bound its caller names.
+ *
+ * `dm`, `update`, those reads, replies, joins, and leaves, and the files
+ * are best-effort: whatever fails, Slack, Connect, or the store, is logged
+ * by a fixed line and Slack's own error code, never Slack's words or the
+ * token, and answers nothing. Note that neither is to be
  * yielded inside a transaction, because each waits on Slack.
  */
 
@@ -84,6 +92,8 @@ const SLACK_METHOD = {
   CONVERSATIONS_JOIN: "conversations.join",
   CONVERSATIONS_LEAVE: "conversations.leave",
   REACTIONS_ADD: "reactions.add",
+  FILES_GET_UPLOAD_URL_EXTERNAL: "files.getUploadURLExternal",
+  FILES_COMPLETE_UPLOAD_EXTERNAL: "files.completeUploadExternal",
 } as const;
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
@@ -125,6 +135,13 @@ export interface SlackChannel {
   readonly member: boolean;
 }
 
+/** A file the bot shares in a thread: its file name, the title Slack shows it under where it is not the name, and its bytes. */
+export interface SlackUpload {
+  readonly name: string;
+  readonly title?: string;
+  readonly bytes: Uint8Array;
+}
+
 /** The Slack team the bot's token answers for. */
 export interface SlackTeam {
   readonly id: string;
@@ -141,6 +158,23 @@ export class SlackBotFailure extends Data.TaggedError("SlackBotFailure")<{
       ? `Slack could not be asked ${this.method}`
       : `Slack answered ${this.method} with ${this.code}`;
   }
+}
+
+/** Why a file's bytes did not move: its address was refused or no Slack file host's, or the bytes ran past their bound. */
+export class SlackFileFailure extends Data.TaggedError("SlackFileFailure") {
+  override get message(): string {
+    return "A Slack file's bytes could not be moved";
+  }
+}
+
+/**
+ * The bytes a file moves outside the Web API's form posts: sent to the
+ * address Slack handed for its upload, or read from a file's private
+ * address on the bot's token, as many as `maxBytes` at most.
+ */
+export interface SlackFileTransfer {
+  readonly send: (url: string, bytes: Uint8Array) => Effect.Effect<void, SlackFileFailure>;
+  readonly read: (url: string, maxBytes: number) => Effect.Effect<Uint8Array, SlackFileFailure>;
 }
 
 /**
@@ -203,6 +237,14 @@ export interface SlackBotService {
   readonly leave: (channel: string) => Effect.Effect<boolean>;
   /** Reacts to a message with the emoji Slack names `emoji`; a failure is logged and answers nothing. */
   readonly react: (channel: string, ts: string, emoji: string) => Effect.Effect<void>;
+  /** Shares the files in the thread under the message `threadTs` names, each sent apart; a file that failed is logged and left out. */
+  readonly upload: (
+    channel: string,
+    threadTs: string,
+    files: readonly SlackUpload[],
+  ) => Effect.Effect<void>;
+  /** A file a member shared, read from its private address up to `maxBytes`; nothing where the read failed or ran past them. */
+  readonly download: (url: string, maxBytes: number) => Effect.Effect<Option.Option<Uint8Array>>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
@@ -252,6 +294,9 @@ const ChannelsSchema = Schema.Struct({
     }),
   ),
 });
+
+/** `files.getUploadURLExternal`'s answer, as far as it is read. */
+const UploadUrlSchema = Schema.Struct({ upload_url: Schema.String, file_id: Schema.String });
 
 /** The most channels read, Slack's own bound for one page; a team with more is read by its first page. */
 const CHANNELS_READ = "1000";
@@ -412,8 +457,55 @@ const memberOfSlackUser = Effect.fn("web/slackMemberOf")(function* (
   return Option.none<string>();
 });
 
-/** The bot over one Web API, or over none where the deployment names no connector. */
-export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
+/** The file's address from Slack, and its bytes sent there; its id where they arrived, nothing where either failed. */
+function sentFile(
+  api: SlackWebApi,
+  files: SlackFileTransfer,
+  file: SlackUpload,
+): Effect.Effect<Option.Option<{ readonly id: string; readonly title: string }>> {
+  return api(SLACK_METHOD.FILES_GET_UPLOAD_URL_EXTERNAL, {
+    filename: file.name,
+    length: String(file.bytes.byteLength),
+  }).pipe(
+    Effect.flatMap((answer) =>
+      readAnswer(SLACK_METHOD.FILES_GET_UPLOAD_URL_EXTERNAL, UploadUrlSchema, answer),
+    ),
+    Effect.tap((answer) => files.send(answer.upload_url, file.bytes)),
+    Effect.map((answer) => Option.some({ id: answer.file_id, title: file.title ?? file.name })),
+    Effect.catch(swallowed<{ readonly id: string; readonly title: string }>("upload a file")),
+  );
+}
+
+/**
+ * Each file sent to its own address, then those that arrived shared
+ * together in the thread; nothing is shared where none arrived. Note that
+ * they are sent one at a time, because each holds its bytes in memory.
+ */
+function uploadFiles(
+  api: SlackWebApi,
+  transfer: SlackFileTransfer,
+  channel: string,
+  threadTs: string,
+  files: readonly SlackUpload[],
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const sent = (yield* Effect.forEach(files, (file) => sentFile(api, transfer, file))).flatMap(
+      (one) => (Option.isSome(one) ? [one.value] : []),
+    );
+    if (sent.length === 0) return;
+    yield* api(SLACK_METHOD.FILES_COMPLETE_UPLOAD_EXTERNAL, {
+      files: JSON.stringify(sent),
+      channel_id: channel,
+      thread_ts: threadTs,
+    }).pipe(Effect.catch(swallowed<unknown>("share uploaded files")));
+  });
+}
+
+/** The bot over one Web API and the file transfer beside it, or over none where the deployment names no connector; a bot handed no transfer moves no file. */
+export function slackBotOver(
+  api: SlackWebApi | undefined,
+  transfer?: SlackFileTransfer,
+): SlackBotService {
   if (api === undefined) {
     return {
       configured: false,
@@ -429,6 +521,8 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       join: () => Effect.succeed(false),
       leave: () => Effect.succeed(false),
       react: () => Effect.void,
+      upload: () => Effect.void,
+      download: () => Effect.succeedNone,
     };
   }
   return {
@@ -565,6 +659,19 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         Effect.catch(swallowed<void>("react to a message")),
         Effect.asVoid,
       ),
+    upload: (channel, threadTs, files) =>
+      transfer === undefined || files.length === 0
+        ? Effect.void
+        : uploadFiles(api, transfer, channel, threadTs, files),
+    download: (url, maxBytes) =>
+      transfer === undefined
+        ? Effect.succeedNone
+        : transfer
+            .read(url, maxBytes)
+            .pipe(
+              Effect.map(Option.some),
+              Effect.catch(swallowed<Uint8Array>("read a shared file")),
+            ),
   };
 }
 
@@ -576,6 +683,11 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
  */
 const BOT_SUBJECT = { subject: { type: "app" } } as const;
 
+/** The bot's token from its own connector. */
+function botToken(connector: string): Effect.Effect<string, unknown> {
+  return Effect.tryPromise(() => getToken(connector, BOT_SUBJECT));
+}
+
 /** The token a call is made on: the bot's from its own connector, or a member's own Slack account's from the connector members connect Slack through. */
 function tokenFor(
   method: SlackMethod,
@@ -584,10 +696,7 @@ function tokenFor(
   memberSubject: string | undefined,
 ): Effect.Effect<string, SlackBotFailure> {
   if (memberSubject === undefined) {
-    return Effect.tryPromise({
-      try: () => getToken(connector, BOT_SUBJECT),
-      catch: () => new SlackBotFailure({ method }),
-    });
+    return botToken(connector).pipe(Effect.mapError(() => new SlackBotFailure({ method })));
   }
   return members.token(memberSubject, { fresh: false }).pipe(
     Effect.map((issued) => Redacted.value(issued.token)),
@@ -625,6 +734,60 @@ function slackWebApi(
     });
 }
 
+/** The host Slack serves a file's private address from, the one the bot's token is ever sent to outside the Web API. */
+const SLACK_FILE_HOST = "files.slack.com";
+
+/** Whether an address is https on the host given, and none other. */
+function isHttpsOn(url: string, host: string | undefined): boolean {
+  const parsed = URL.parse(url);
+  return (
+    parsed !== null &&
+    parsed.protocol === "https:" &&
+    (host === undefined || parsed.hostname === host)
+  );
+}
+
+/**
+ * A file's bytes moved over HTTP: sent as the upload address takes them, a
+ * raw body, on no token, since the address is itself the grant; and read
+ * on the bot's token from Slack's file host alone, refused past the bound
+ * by the length it states and again by the bytes that came.
+ */
+function slackFileTransfer(connector: string, client: HttpClient.HttpClient): SlackFileTransfer {
+  const failed = () => new SlackFileFailure();
+  return {
+    send: (url, bytes) =>
+      Effect.gen(function* () {
+        if (!isHttpsOn(url, undefined)) return yield* Effect.fail(failed());
+        const request = HttpClientRequest.post(url).pipe(
+          HttpClientRequest.bodyUint8Array(bytes, "application/octet-stream"),
+        );
+        yield* client
+          .execute(request)
+          .pipe(
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.scoped,
+            Effect.mapError(failed),
+          );
+      }),
+    read: (url, maxBytes) =>
+      Effect.gen(function* () {
+        if (!isHttpsOn(url, SLACK_FILE_HOST)) return yield* Effect.fail(failed());
+        const token = yield* botToken(connector).pipe(Effect.mapError(failed));
+        const request = HttpClientRequest.get(url).pipe(HttpClientRequest.bearerToken(token));
+        const bytes = yield* Effect.gen(function* () {
+          const response = yield* HttpClientResponse.filterStatusOk(yield* client.execute(request));
+          if (Number(response.headers["content-length"] ?? 0) > maxBytes) {
+            return yield* Effect.fail(failed());
+          }
+          return yield* response.arrayBuffer;
+        }).pipe(Effect.scoped, Effect.mapError(failed));
+        if (bytes.byteLength > maxBytes) return yield* Effect.fail(failed());
+        return new Uint8Array(bytes);
+      }),
+  };
+}
+
 /** The bot as this deployment's environment configures it, read as the services are built. */
 export const slackBotFromEnvironment: Layer.Layer<
   SlackBot,
@@ -638,6 +801,10 @@ export const slackBotFromEnvironment: Layer.Layer<
     );
     if (connector === undefined) return slackBotOver(undefined);
     const members = (yield* IntegrationConnect)[INTEGRATION_PROVIDER.SLACK];
-    return slackBotOver(slackWebApi(connector, members, yield* HttpClient.HttpClient));
+    const client = yield* HttpClient.HttpClient;
+    return slackBotOver(
+      slackWebApi(connector, members, client),
+      slackFileTransfer(connector, client),
+    );
   }),
 );

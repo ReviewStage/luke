@@ -1001,7 +1001,9 @@ it; deleting the workspace does the same, and deleting your account deletes
 your Slack user id. Messages the bot already sent stay in Slack.
 
 When an agent posts a thread that waits on you, the bot messages you its
-title, the agent's words, and a link to the thread, and our service keeps
+title, the agent's words, and a link to the thread, and uploads the
+pictures and recordings the post carried to Slack as files in that
+conversation, which Slack keeps under its own policy, and our service keeps
 that Slack message's conversation and timestamp, and which member it went
 to, beside the agent's message, so it can rewrite it once the ask is
 answered, withdrawn, or replaced, and post each later message of the agent's
@@ -1017,7 +1019,8 @@ thread, message, and option the button names, finds you by the Slack user
 id it kept, and keeps nothing else of the press. A reply you write in the
 Slack thread under such a message reaches our service the same way and is
 posted on the Vespin thread as your reply, as one typed in Vespin would be,
-and handed to its agent, so it reaches the agent's prompt, the model, its
+with the PNG, JPEG, and WebP images it shares as its files, read from Slack
+on the bot's token, and handed to its agent, so it reaches the agent's prompt, the model, its
 transcript, and its traces; one from anyone but the member the message went
 to is not posted.
 
@@ -1037,11 +1040,16 @@ handed your message, the earlier messages of the Slack thread it stands in,
 which our service reads from Slack and which other people may have written,
 with their Slack user ids, and the message's Slack link, so all of these
 reach the agent's prompt, the model, its transcript, and its traces, as
-anything you type to an agent does. Our service keeps which Slack
-conversation and thread each such agent was started from, so it can post the
-final message of each of the agent's turns, or that it failed or was
-stopped, back in that thread, where everyone in the conversation can read it; that record is
-deleted with the agent, with the workspace's bot connection, or with your
+anything you type to an agent does. The PNG, JPEG, and WebP images your
+message shares are read from Slack on the bot's token and handed to the
+agent as your message's files, kept beside its transcript as any picture
+you attach to an agent is; any other file you share is not read. Our
+service keeps which Slack conversation and thread each such agent was
+started from, so it can post the final message of each of the agent's
+turns, or that it failed or was stopped, back in that thread, with the
+pictures and recordings the agent showed in its transcript during that
+turn uploaded as files, where everyone in the conversation can read them;
+that record is deleted with the agent, with the workspace's bot connection, or with your
 account. Messages the bot posted stay in Slack. An owner or admin sees the
 Slack workspace's public channels, and the private ones the bot is in, under
 Settings › Workspace, read from Slack each time the page opens and not kept;

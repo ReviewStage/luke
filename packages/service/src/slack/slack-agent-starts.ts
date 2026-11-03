@@ -4,8 +4,8 @@
  * Our Slack route hands each event Connect forwarded here
  * (`slack-events-app.ts`): an `app_mention` in a channel, or a `message.im`
  * a member wrote to the bot directly. A bot's message, a message's edit or
- * other subtype, and Slack's own retry of an event (`x-slack-retry-num`)
- * are dropped unread, and the work runs once the answer has left, inside
+ * any subtype but a file share, and Slack's own retry of an event
+ * (`x-slack-retry-num`) are dropped unread, and the work runs once the answer has left, inside
  * Slack's three seconds. Every event heard writes one fixed line, its kind
  * and what came of it (`heardLine`), and nothing Slack wrote.
  *
@@ -35,8 +35,14 @@
  * repository the message names as `owner/name` where the workspace reaches
  * it, else in the channel's default repository, else in the workspace's,
  * both as an owner or admin named them in Settings, else in the repository
- * of the writer's latest agent in the workspace, else in none. Its prompt is the writer's words, the thread's earlier
- * messages fenced as data, since anyone in the channel wrote them, and the
+ * of the writer's latest agent in the workspace, else in none. The PNG,
+ * JPEG, and WebP images the message shared are read from Slack on the bot's
+ * token once the writer is found (`SlackBot.download`), sniffed by their
+ * bytes and held to the bounds a Start holds a message's files to, a large
+ * one read as Slack's own 1024-pixel thumbnail of it, and handed to the agent
+ * as the message's files, a Start's or a steer's alike; any other file is
+ * left out, and a message of images alone is acted on as one with words.
+ * Its prompt is the writer's words, the thread's earlier messages fenced as data, since anyone in the channel wrote them, and the
  * message's link; only the writer's own words hand it MCP servers. Its
  * first line, and each message sent on, says Slack carried it, with the
  * writer's words and the message's link (`slackLine`), which a window draws
@@ -48,7 +54,9 @@
  * Every turn of such an agent that settles is posted in its thread once
  * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
  * Slack draws as standard Markdown, or that it failed
- * or was stopped, each with the agent's link. A turn that finished well then
+ * or was stopped, each with the agent's link, and after it the pictures and
+ * recordings the agent showed with `show_image` in that turn, shared as
+ * files under the thread (`SlackBot.upload`). A turn that finished well then
  * archives the agent under the rule an automation's "Archive finished runs"
  * archives by (`archiveFinishedAgents`), so one with a pull request or an
  * inbox item open stands, and the thread's next message brings it back. Slack's words reach the
@@ -64,6 +72,7 @@ import {
   readVisibleAgent,
   unarchiveAgentFrom,
 } from "@repo/database/models/agent-store";
+import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import {
@@ -79,7 +88,15 @@ import {
 } from "@repo/database/models/slack-installation-store";
 import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
-import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { shownPicturesOf } from "@repo/features/agent-pictures-model";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { AGENT_BOUNDS, type AgentAttachment } from "@repo/features/agent-wire";
+import {
+  CONVERSATION_MEDIA_TYPE,
+  type ConversationMediaType,
+} from "@repo/features/conversation-picture-wire";
+import { sniffImageType } from "@repo/features/image-signature";
+import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { causeKind } from "@repo/runtime/effect";
@@ -92,6 +109,12 @@ import {
   type UnparsedWireValue,
 } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
+import {
+  isStoredToolPart,
+  type StoredUIMessage,
+  storedToolName,
+  TOOL_PART_STATE,
+} from "@repo/wire/ui-messages";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import {
   productionSummaryModel,
@@ -110,12 +133,29 @@ import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import { messageAsMember } from "../inbox/inbox-procedures.js";
-import { SlackBot, type SlackBotService, type SlackMessageContent } from "./slack-bot.js";
+import {
+  SlackBot,
+  type SlackBotService,
+  type SlackMessageContent,
+  type SlackUpload,
+} from "./slack-bot.js";
 import { slackClipped, slackEscaped, slackMarkdownBlock } from "./slack-markdown.js";
 import { threadDmAt } from "./thread-dms.js";
 
 /** The events read: a mention of the bot in a channel, and a message in a conversation with it. */
 const SLACK_EVENT = { APP_MENTION: "app_mention", MESSAGE: "message" } as const;
+
+/** The one subtype of a message acted on: a member's message that shares files. */
+const SLACK_FILE_SHARE = "file_share";
+
+/** The image types a shared file is read as, Slack's own word for each the one a Start's file travels as. */
+const SHARED_IMAGE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/** What a shared image is named where Slack names it nothing. */
+const SHARED_IMAGE_NAME = "image";
+
+/** What the prompt says in the member's words' place where they shared images alone. */
+const IMAGES_ALONE = "(The member sent the attached images without words.)";
 
 /** The conversation type a direct message to the bot arrives in. */
 const SLACK_IM = "im";
@@ -140,6 +180,17 @@ const CUT_MARK = "\n… (cut to fit; read the rest in Slack)";
 
 /** The most characters of a final message the notification's plain text says; the blocks hold more. */
 const NOTIFICATION_CHARS = 2500;
+
+/** The most pictures of one turn shared in its thread: its first ones shown. */
+const TURN_UPLOADS = 10;
+
+/** The extension a shown picture is named with in Slack, by its type, which Slack draws it by. */
+const MEDIA_EXTENSION = {
+  [CONVERSATION_MEDIA_TYPE.PNG]: "png",
+  [CONVERSATION_MEDIA_TYPE.JPEG]: "jpg",
+  [CONVERSATION_MEDIA_TYPE.WEBP]: "webp",
+  [CONVERSATION_MEDIA_TYPE.WEBM]: "webm",
+} as const satisfies Record<ConversationMediaType, string>;
 
 /** The emoji the bot reacts with to a message it acted on: 👀, as Slack names it. */
 const HEARD_EMOJI = "eyes";
@@ -169,10 +220,24 @@ const EventCallbackSchema = Schema.Struct({
     channel_type: Schema.optionalKey(Schema.String),
     bot_id: Schema.optionalKey(Schema.String),
     subtype: Schema.optionalKey(Schema.String),
+    files: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          name: Schema.optionalKey(Schema.String),
+          mimetype: Schema.optionalKey(Schema.String),
+          size: Schema.optionalKey(Schema.Number),
+          url_private_download: Schema.optionalKey(Schema.String),
+          thumb_1024: Schema.optionalKey(Schema.String),
+        }),
+      ),
+    ),
   }),
 });
 
 type EventCallback = typeof EventCallbackSchema.Type;
+
+/** One file a message shared, as the event names it. */
+type SharedFile = NonNullable<EventCallback["event"]["files"]>[number];
 
 /** A message a member addressed to the bot, as it is acted on. */
 interface SlackAddressed {
@@ -183,8 +248,10 @@ interface SlackAddressed {
   readonly ts: string;
   /** The thread the message stands in; none for a message that starts one. */
   readonly threadTs: string | undefined;
-  /** The member's words, the bot's mention taken out. */
+  /** The member's words, the bot's mention taken out; empty where the message shared images alone. */
   readonly text: string;
+  /** The images the message shared, by the type Slack names, as many as a message may carry; none where it shared none. */
+  readonly images: readonly SharedFile[];
 }
 
 /** Where the bot answers: the thread a message stands in, or the one it starts. */
@@ -243,12 +310,15 @@ function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
   if (kind !== SLACK_HEARD.APP_MENTION && kind !== SLACK_HEARD.DIRECT_MESSAGE) {
     return SLACK_DROP.NOT_ADDRESSED;
   }
-  if (event.subtype !== undefined) return SLACK_DROP.SUBTYPE;
+  if (event.subtype !== undefined && event.subtype !== SLACK_FILE_SHARE) return SLACK_DROP.SUBTYPE;
   if (event.bot_id !== undefined || event.user === undefined || event.user === botUserId) {
     return SLACK_DROP.FROM_BOT;
   }
   const text = withoutBotMention(event.text ?? "", botUserId);
-  if (text === "") return SLACK_DROP.EMPTY;
+  const images = (event.files ?? [])
+    .filter((file) => file.mimetype !== undefined && SHARED_IMAGE_TYPES.has(file.mimetype))
+    .slice(0, AGENT_BOUNDS.MAX_ATTACHMENTS);
+  if (text === "" && images.length === 0) return SLACK_DROP.EMPTY;
   return {
     teamId: callback.team_id,
     eventId: callback.event_id,
@@ -257,8 +327,49 @@ function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
     ts: event.ts,
     threadTs: event.thread_ts,
     text,
+    images,
   };
 }
+
+/** A shared image's name as a file's travels: its own on one line, bounded, or `image` where it has none. */
+function sharedImageName(file: SharedFile): string {
+  const name = (file.name ?? "")
+    .replace(/[\r\n]+/gu, " ")
+    .slice(0, AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS)
+    .trim();
+  return name === "" ? SHARED_IMAGE_NAME : name;
+}
+
+/**
+ * The images the message shared, read from Slack and made the files a
+ * message carries, in the order shared: each read whole where Slack says it
+ * is within one image's bound, else as its 1024-pixel thumbnail, sniffed by
+ * its bytes; one that failed, is no image, or would take the files past
+ * their bytes together is left out.
+ */
+const sharedImages = Effect.fnUntraced(function* (
+  bot: SlackBotService,
+  images: readonly SharedFile[],
+) {
+  const attachments: AgentAttachment[] = [];
+  let bytesTogether = 0;
+  for (const file of images) {
+    const url =
+      file.size !== undefined && file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES
+        ? file.url_private_download
+        : file.thumb_1024;
+    if (url === undefined) continue;
+    const read = yield* bot.download(url, AGENT_BOUNDS.MAX_IMAGE_BYTES);
+    if (Option.isNone(read)) continue;
+    const mediaType = sniffImageType(read.value);
+    if (mediaType === undefined) continue;
+    if (bytesTogether + read.value.byteLength > AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) continue;
+    bytesTogether += read.value.byteLength;
+    const data = Buffer.from(read.value).toString("base64");
+    attachments.push({ name: sharedImageName(file), mediaType, data });
+  }
+  return attachments;
+});
 
 /** Plain words as one reply in the thread. */
 function plainReply(text: string): SlackMessageContent {
@@ -330,7 +441,7 @@ function startPrompt(
   earlier: readonly { readonly user?: string; readonly bot: boolean; readonly text: string }[],
   permalink: Option.Option<string>,
 ): string {
-  const words = addressed.text.slice(0, PROMPT_BOUND / 2);
+  const words = addressed.text === "" ? IMAGES_ALONE : addressed.text.slice(0, PROMPT_BOUND / 2);
   const where = Option.match(permalink, {
     onNone: () => "in a Slack thread",
     onSome: (link) => `in a Slack thread (${link})`,
@@ -389,7 +500,7 @@ function followUpPrompt(addressed: SlackAddressed, permalink: Option.Option<stri
     onSome: (link) => `the Slack thread (${link})`,
   });
   return [
-    addressed.text.slice(0, PROMPT_BOUND / 2),
+    addressed.text === "" ? IMAGES_ALONE : addressed.text.slice(0, PROMPT_BOUND / 2),
     "---",
     `A member wrote this in ${where} you were started from. Your final message is posted back in that thread, so make it stand on its own.`,
   ].join("\n\n");
@@ -433,7 +544,8 @@ const agentTaking = Effect.fnUntraced(function* (userId: string, agentId: string
 /**
  * The ended agent continued in a new one as the member, as Continue and
  * `start_agent`'s `from` continue it: handed its work and its transcript, the
- * steps that do not fit summarized, with the member's message as its note.
+ * steps that do not fit summarized, with the member's message as its note
+ * and the images it shared as the note's files.
  * The thread moves to it, the message is marked heard, and one line in the
  * thread links it; a refusal is said instead.
  */
@@ -444,6 +556,7 @@ const continueFromSlack = Effect.fnUntraced(function* (
   userId: string,
   source: Agent,
   permalink: Option.Option<string>,
+  attachments: readonly AgentAttachment[],
 ) {
   const thread = threadOf(addressed);
   const place = placeOfAgent(source);
@@ -471,6 +584,7 @@ const continueFromSlack = Effect.fnUntraced(function* (
       choice: undefined,
       prompt: undefined,
       note: followUpPrompt(addressed, permalink),
+      attachments,
       from: { agentId: source.id },
       summaryModel,
       // Note that the replay hands on whatever the source heard, so words another account put there stay outside words.
@@ -519,6 +633,7 @@ const sendToAgent = Effect.fnUntraced(function* (
     return;
   }
   const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
+  const attachments = yield* sharedImages(bot, addressed.images);
   const sent = yield* Effect.result(
     steerAgent(
       yield* routedSessions(userId),
@@ -527,6 +642,7 @@ const sendToAgent = Effect.fnUntraced(function* (
       agent.value,
       {
         text: followUpPrompt(addressed, permalink),
+        attachments,
         // Only the member's own words hand the agent servers, never the note after them.
         serverWords: addressed.text,
         clientKey: addressed.eventId,
@@ -536,7 +652,15 @@ const sendToAgent = Effect.fnUntraced(function* (
     ),
   );
   if (Result.isFailure(sent) && sent.failure.error === HOSTED_API_ERROR.AGENT_RETIRED) {
-    yield* continueFromSlack(bot, addressed, organizationId, userId, agent.value, permalink);
+    yield* continueFromSlack(
+      bot,
+      addressed,
+      organizationId,
+      userId,
+      agent.value,
+      permalink,
+      attachments,
+    );
     return;
   }
   if (Result.isFailure(sent)) {
@@ -563,6 +687,7 @@ const startFromSlack = Effect.fnUntraced(function* (
     addressed.threadTs === undefined ? [] : yield* bot.threadMessages(addressed.channel, thread);
   const earlier = messages.filter((message) => Number(message.ts) < Number(addressed.ts));
   const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
+  const attachments = yield* sharedImages(bot, addressed.images);
   const started = yield* Effect.result(
     startAgent(routedSessions(userId), userId, {
       taskId: null,
@@ -571,6 +696,7 @@ const startFromSlack = Effect.fnUntraced(function* (
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: startPrompt(addressed, earlier, permalink),
+      attachments,
       // Note that a thread's earlier message by anyone but the writer, a bot's among them, is words they did not write.
       carried: slackLine(
         addressed,
@@ -600,7 +726,8 @@ const startFromSlack = Effect.fnUntraced(function* (
 /**
  * A reply in the Slack thread of a DM the bot wrote about an inbox thread,
  * posted on that thread as the member's own reply, as one in the app is,
- * under Slack's event id, and marked heard; from anyone but the member the
+ * with the images it shared as the reply's files, under Slack's event id,
+ * and marked heard; from anyone but the member the
  * DM went to, or a refusal, it is said in the thread instead.
  */
 const replyToThreadDm = Effect.fnUntraced(function* (
@@ -622,7 +749,7 @@ const replyToThreadDm = Effect.fnUntraced(function* (
     messageAsMember(storeWriter({ tools: CODER_TOOL_SET }), member.value, dm.itemId, {
       text: addressed.text,
       clientKey: addressed.eventId,
-      attachments: [],
+      attachments: yield* sharedImages(bot, addressed.images),
     }),
   );
   if (Result.isFailure(posted)) {
@@ -721,6 +848,29 @@ function turnOutcome(turn: SettledAgentTurn, words: string | undefined): SlackMe
   return { text: slackClipped(words, NOTIFICATION_CHARS), blocks: [slackMarkdownBlock(words)] };
 }
 
+/** The pictures and recordings the turn's `show_image` calls kept beside the transcript, in the order shown, each under its caption; one not kept is left out. */
+const shownUploads = Effect.fnUntraced(function* (
+  conversationId: string,
+  journal: StoredUIMessage,
+) {
+  const shown = journal.parts.flatMap((part) =>
+    isStoredToolPart(part) &&
+    storedToolName(part) === AGENT_TOOL.SHOW_IMAGE &&
+    part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+      ? shownPicturesOf(part.input as UnparsedWireValue, part.output as UnparsedWireValue)
+      : [],
+  );
+  const uploads: SlackUpload[] = [];
+  for (const { picture, name, caption } of shown.slice(0, TURN_UPLOADS)) {
+    if (picture === undefined) continue;
+    const kept = yield* readConversationPicture(conversationId, picture.id);
+    if (Option.isNone(kept)) continue;
+    const file = `${name}.${MEDIA_EXTENSION[kept.value.contentType]}`;
+    uploads.push({ name: file, title: caption === "" ? file : caption, bytes: kept.value.bytes });
+  }
+  return uploads;
+});
+
 /**
  * The agent put away once its turn finished well, under the rule an
  * automation's "Archive finished runs" archives by, read from how far its
@@ -755,9 +905,10 @@ const archivedWhenFinished = (agent: Agent) =>
 
 /**
  * Posts the settled turn in each Slack thread its agent was started from,
- * once per turn, with the agent's link, then archives the agent where the
- * turn finished well; nothing for an agent no thread started. A failure is
- * logged by its kind alone, never answered.
+ * once per turn, with the agent's link, the pictures it showed shared
+ * after it, then archives the agent where the turn finished well; nothing
+ * for an agent no thread started. A failure is logged by its kind alone,
+ * never answered.
  */
 export function postTurnToSlackThreads(
   turn: SettledAgentTurn,
@@ -788,9 +939,15 @@ export function postTurnToSlackThreads(
         },
       ],
     };
+    const uploads =
+      newest === undefined ? [] : yield* shownUploads(turn.conversationId, newest.message);
     yield* Effect.forEach(
       threads,
-      (thread) => bot.reply(thread.channelId, thread.threadTs, content),
+      (thread) =>
+        Effect.andThen(
+          bot.reply(thread.channelId, thread.threadTs, content),
+          bot.upload(thread.channelId, thread.threadTs, uploads),
+        ),
       { discard: true },
     );
     if (turn.status === TURN_STATUS.SETTLED) yield* archivedWhenFinished(agent.value);
