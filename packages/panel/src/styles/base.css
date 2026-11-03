@@ -16,8 +16,8 @@
   background: transparent;
   /* The palette every shared component draws in, the inks, grounds, fills,
      edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
-     (`tokens/palettes.css`), keyed on the root's `data-luke-profile` and
-     `data-luke-theme`: the desktop's theme is `system`, so it follows the
+     (`tokens/palettes.css`), keyed on the root's `data-ui-profile` and
+     `data-ui-theme`: the desktop's theme is `system`, so it follows the
      Mac's appearance and the app's own Theme setting through it, and the web's
      is the account's Theme setting resolved (`@luke/ui`'s
      `tokens/appearance.ts`). What stays here is the window's own: whose
@@ -309,13 +309,13 @@ body,
    nothing more particular lays it out is the window's, except where it is
    asked to fill its box (`fill`), which this unlayered size would otherwise
    beat. */
-.luke-product-mark:not([data-fill="true"]) {
+.ui-product-mark:not([data-fill="true"]) {
   width: 18px;
   height: 18px;
 }
 
 /* The mark handed to an auth card takes the artwork's size. */
-.luke-auth-mark .luke-product-mark {
+.ui-auth-mark .ui-product-mark {
   width: 52px;
   height: 52px;
 }
@@ -339,7 +339,7 @@ body,
   }
 }
 
-.state-glyph > svg:not(.luke-working-mark),
+.state-glyph > svg:not(.ui-working-mark),
 .state-glyph > img {
   width: 100%;
   height: 100%;

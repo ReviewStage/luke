@@ -56,8 +56,8 @@ const MERMAID_ROLES = {
 } as const satisfies Record<string, DiagramRole>;
 
 /** The attributes a surface wears its roles and its palette in (`@luke/ui`'s `surfaceAttributes`). */
-const PROFILE_ATTRIBUTE = "data-luke-profile";
-const THEME_ATTRIBUTE = "data-luke-theme";
+const PROFILE_ATTRIBUTE = "data-ui-profile";
+const THEME_ATTRIBUTE = "data-ui-theme";
 
 /** An sRGB colour as a computed style writes it: `rgb(r, g, b)`, or `rgba(r, g, b, a)` where it is translucent. */
 const SRGB = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/u;

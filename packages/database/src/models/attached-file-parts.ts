@@ -61,7 +61,7 @@ export const MENTIONED_HEADING =
   "Mentioned in this message, as it stood when the message was sent:";
 
 /** The data part the journal keeps a line's mentioned part as. */
-const MENTIONED_PART_TYPE = "data-luke-mentioned";
+const MENTIONED_PART_TYPE = "data-ui-mentioned";
 
 /** Whether a text part eve was handed is a line's mentioned part rather than its words. */
 export function isMentionedText(text: string): boolean {

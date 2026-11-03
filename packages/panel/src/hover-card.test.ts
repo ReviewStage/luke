@@ -72,19 +72,19 @@ function cornerWords(corner: Element | null): string | undefined {
 
 /** The one head of the card drawn in `within`, read part by part. */
 function headOf(within: ParentNode): HeadWords {
-  const heads = within.querySelectorAll(".luke-hover-card > .luke-hover-card-head");
+  const heads = within.querySelectorAll(".ui-hover-card > .ui-hover-card-head");
   assert.equal(heads.length, 1, "the card has one head");
   const head = heads[0];
   assert.ok(head);
   return {
-    glyph: head.querySelector(":scope > .luke-hover-card-glyph") !== null,
+    glyph: head.querySelector(":scope > .ui-hover-card-glyph") !== null,
     name:
-      head.querySelector(":scope > .luke-hover-card-title > .luke-hover-card-name")?.textContent ??
+      head.querySelector(":scope > .ui-hover-card-title > .ui-hover-card-name")?.textContent ??
       undefined,
     sub:
-      head.querySelector(":scope > .luke-hover-card-title > .luke-hover-card-sub")?.textContent ??
+      head.querySelector(":scope > .ui-hover-card-title > .ui-hover-card-sub")?.textContent ??
       undefined,
-    corner: cornerWords(head.querySelector(":scope > .luke-hover-card-corner")),
+    corner: cornerWords(head.querySelector(":scope > .ui-hover-card-corner")),
   };
 }
 
@@ -103,7 +103,7 @@ function hung(view: HTMLElement, selector: string): HTMLElement {
   const anchor = view.querySelector(selector);
   assert.ok(anchor, `${selector} is drawn`);
   restOn(anchor);
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card");
   assert.ok(card, "the card hangs");
   return card;
 }
@@ -153,10 +153,10 @@ test("a working agent's card says only how long its run has gone at its corner, 
     }),
   );
   await vi.waitFor(() =>
-    assert.equal(card.querySelector(".luke-hover-card-corner")?.textContent, "1m 5s"),
+    assert.equal(card.querySelector(".ui-hover-card-corner")?.textContent, "1m 5s"),
   );
   assert.equal(
-    card.querySelector("[data-agent-card] > .luke-visually-hidden")?.textContent,
+    card.querySelector("[data-agent-card] > .ui-visually-hidden")?.textContent,
     "Working",
     "a reader, whom the tile's mark is hidden from, hears that it works",
   );
@@ -273,7 +273,7 @@ test("a plan's, a skill's, an agent tab's, and a pull request's cards each name 
     corner: undefined,
   });
   assert.equal(
-    skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,
+    skill.querySelector(".ui-hover-card > .ui-hover-card-note")?.textContent,
     "Cut a release.",
   );
 });

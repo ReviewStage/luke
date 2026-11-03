@@ -468,7 +468,7 @@ export function ActorMark({
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
         // The app wears the working ink on its mark, the colour its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
         actor.kind === ACTOR_KIND.LUKE &&
-          "text-working [&_.luke-product-mark]:size-actor-mark-share! [&_.luke-product-mark]:text-inherit",
+          "text-working [&_.ui-product-mark]:size-actor-mark-share! [&_.ui-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
         // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
         leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",

@@ -207,7 +207,7 @@ it.effect(
       const profile = [...document.querySelectorAll('[role="menuitem"]')].find(
         (item): item is HTMLElement =>
           item instanceof HTMLElement &&
-          item.querySelector(".luke-menu-item-label")?.textContent === "Your profile",
+          item.querySelector(".ui-menu-item-label")?.textContent === "Your profile",
       );
       assert.ok(profile, "its menu offers Your profile");
       act(() => profile.click());

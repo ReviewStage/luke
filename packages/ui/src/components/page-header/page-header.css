@@ -5,7 +5,7 @@
    measure. */
 
 @layer components {
-  .luke-page-header {
+  .ui-page-header {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
@@ -17,7 +17,7 @@
      column leaves the acts on its first line, and one sized to its words
      takes the whole line and sends them under it, onto a row of their own
      that a hidden ⋯ leaves empty. */
-  .luke-page-header-heading {
+  .ui-page-header-heading {
     display: flex;
     flex: 1 1 calc(var(--ui-control-height) * 5);
     flex-direction: column;
@@ -25,7 +25,7 @@
     min-width: 0;
   }
 
-  .luke-page-header-actions {
+  .ui-page-header-actions {
     display: flex;
     flex: 0 1 auto;
     flex-wrap: wrap;
@@ -39,7 +39,7 @@
      actions take the margin rather than the button, because a button wider
      than its container by its own negative margin would be held to it and
      cut short. */
-  .luke-page-header[data-end="words"] > .luke-page-header-actions {
+  .ui-page-header[data-end="words"] > .ui-page-header-actions {
     margin-inline-end: calc(-1 * var(--ui-control-inset));
   }
 }

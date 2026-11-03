@@ -220,9 +220,9 @@ function BarButton({
  * tap presses rather than being spent as a hover.
  */
 const BAR =
-  "luke-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-ui-4 bg-[linear-gradient(transparent,var(--color-veil))] px-ui-6 pt-ui-24 pb-ui-4 text-on-veil transition-opacity duration-(--ui-duration-fast) ease-motion-exit " +
+  "ui-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-ui-4 bg-[linear-gradient(transparent,var(--color-veil))] px-ui-6 pt-ui-24 pb-ui-4 text-on-veil transition-opacity duration-(--ui-duration-fast) ease-motion-exit " +
   "group-data-[playing=true]/video-frame:[@media(hover:hover)]:opacity-0 group-data-[playing=true]/video-frame:group-hover/video-frame:opacity-100 group-data-[playing=true]/video-frame:[@media(hover:hover)]:group-focus-within/video-frame:opacity-100 " +
-  "[&_.luke-slider]:mx-ui-4 [&_.luke-slider]:h-ui-16 [&_.luke-slider]:accent-on-veil";
+  "[&_.ui-slider]:mx-ui-4 [&_.ui-slider]:h-ui-16 [&_.ui-slider]:accent-on-veil";
 
 /**
  * The frame the video and its bar stand in, on the veil while its first
@@ -234,14 +234,14 @@ const BAR =
  * would fill the width and run off the screen's foot.
  */
 const FRAME =
-  "luke-video-player-frame group/video-frame relative block max-h-[inherit] bg-veil focus:outline-none [&:fullscreen]:h-screen [&:fullscreen]:w-stage";
+  "ui-video-player-frame group/video-frame relative block max-h-[inherit] bg-veil focus:outline-none [&:fullscreen]:h-screen [&:fullscreen]:w-stage";
 
 /** The video at its own shape, as wide as its column and no taller than a picture, or the viewer's; filling the screen full screen. */
 const VIDEO =
-  "luke-video-player-video block h-auto w-auto max-w-full cursor-press group-[:fullscreen]/video-frame:size-full group-[:fullscreen]/video-frame:max-h-none group-[:fullscreen]/video-frame:max-w-none group-[:fullscreen]/video-frame:object-contain";
+  "ui-video-player-video block h-auto w-auto max-w-full cursor-press group-[:fullscreen]/video-frame:size-full group-[:fullscreen]/video-frame:max-h-none group-[:fullscreen]/video-frame:max-w-none group-[:fullscreen]/video-frame:object-contain";
 
 /** The player as its place holds it: hugging the video at most its column's width, and in the viewer no taller than the card. */
-const PLAYER = "luke-video-player relative block w-fit max-w-full";
+const PLAYER = "ui-video-player relative block w-fit max-w-full";
 
 /** The bar along a video's foot: play or pause, how far of how long, the scrubber, Expand, and Full screen. */
 function VideoBar({
@@ -267,7 +267,7 @@ function VideoBar({
         icon={playback.playing ? <PauseIcon /> : <PlayIcon />}
         onPress={onToggle}
       />
-      <span className="luke-video-player-time flex-none text-caption tabular-nums">{time}</span>
+      <span className="ui-video-player-time flex-none text-caption tabular-nums">{time}</span>
       <Slider
         label={VIDEO_LABEL.SEEK}
         value={playback.at}

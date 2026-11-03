@@ -16,7 +16,7 @@ and daily series).
 - Nothing here reaches an app: no `window.luke`, no `#shared/`, `#renderer/`,
   or `#main/` import. The desktop's bridge and the site's fetches stay in the
   app that mounts the component.
-- A component draws with its own `luke-*` classes over the `--ui-*` tokens,
+- A component draws with its own `ui-*` classes over the `--ui-*` tokens,
   or in Tailwind utilities over the one theme in `src/tailwind/theme.css`,
   whose every name (`bg-primary`, `text-muted-foreground`, `bg-switch-on`)
   aliases a `--ui-*` role. An app takes that theme and never maps those

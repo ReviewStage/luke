@@ -189,7 +189,7 @@ export function RemoteSurface({
   return (
     <canvas
       ref={held}
-      className="luke-remote-surface"
+      className="ui-remote-surface"
       aria-label={label}
       data-driving={driving ? "" : undefined}
       tabIndex={driving ? 0 : -1}

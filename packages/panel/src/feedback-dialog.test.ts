@@ -257,7 +257,7 @@ test("a note being written is nudged rather than closed by the first Escape, clo
 
 /** The counter the field's label line draws once the words near the cap, or nothing before. */
 function counter(): string | null {
-  return dialog()?.querySelector(".luke-length-counter")?.textContent ?? null;
+  return dialog()?.querySelector(".ui-length-counter")?.textContent ?? null;
 }
 
 /** Pastes `text` into the field, as the clipboard does. */

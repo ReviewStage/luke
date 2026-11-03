@@ -133,7 +133,7 @@ export interface InboxColumns {
 export const VIEW_OPTIONS = "View options";
 
 /** The ⋯ of a phone's page header (`phone-head.tsx`, `Toolbar`'s phone look), the one standing on screen. */
-const PHONE_HEAD_MORE = `.luke-toolbar[data-look="${TOOLBAR_LOOK.PHONE}"] > .luke-toolbar-actions button`;
+const PHONE_HEAD_MORE = `.ui-toolbar[data-look="${TOOLBAR_LOOK.PHONE}"] > .ui-toolbar-actions button`;
 
 /**
  * The list head's View options button, the list's one steady control,

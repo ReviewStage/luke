@@ -53,7 +53,7 @@ export function ClippedLine({
   const line = (
     <Element
       ref={measured}
-      className={className === undefined ? "luke-one-line" : `luke-one-line ${className}`}
+      className={className === undefined ? "ui-one-line" : `ui-one-line ${className}`}
       data-end={end}
       data-overflow={String(clipped)}
     >

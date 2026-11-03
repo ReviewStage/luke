@@ -127,7 +127,7 @@ export function SidebarFilters({
         <div
           ref={state.body}
           id={id}
-          className="luke-disclosure-body flex flex-col gap-list-gap"
+          className="ui-disclosure-body flex flex-col gap-list-gap"
           inert={state.leaving}
         >
           {children}

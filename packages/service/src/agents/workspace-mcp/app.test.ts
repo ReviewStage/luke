@@ -124,7 +124,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */

@@ -544,7 +544,7 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
   await settle();
   const label = block(container, "Steps").querySelector<HTMLLabelElement>(
-    ".luke-markdown-task > label",
+    ".ui-markdown-task > label",
   );
   assert.ok(label, "the box stands in its label");
 

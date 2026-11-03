@@ -76,7 +76,6 @@ const standing = Effect.gen(function* () {
         Effect.succeed(
           Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
         ),
-      eveOrigin: () => undefined,
     }),
   });
   yield* Effect.addFinalizer(() => Effect.promise(() => webhook.dispose()));

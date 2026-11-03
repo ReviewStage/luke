@@ -178,7 +178,7 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-row button[data-actor-ref][data-kind="agent"]',
+    '.ui-tooltip-card .ui-hover-card-row button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the pull request's card names the agent");
   return named;
@@ -217,11 +217,11 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
   );
   assert.ok(row, "the page has a row");
   hover(row);
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, funnel.title);
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, funnel.title);
   assert.equal(
-    card.querySelector(".luke-hover-card-sub"),
+    card.querySelector(".ui-hover-card-sub"),
     null,
     "a page's one version is not counted",
   );
@@ -283,9 +283,9 @@ test("the plan's row hangs the task's card, as the Plan tab does", () => {
   );
   assert.ok(row, "the plan has a row");
   hover(row);
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, task.name);
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, task.name);
 });
 
 test("the agent a pull request row's card names opens through the plan's door, which hands its column the keys", () => {
@@ -299,7 +299,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   const latestStep = (shown: "agent" | "plan") => {
     const { page } = mount(shown);
     hover(cardAgent(page));
-    const words = [...document.querySelectorAll(".luke-tooltip-card [data-agent-card]")]
+    const words = [...document.querySelectorAll(".ui-tooltip-card [data-agent-card]")]
       .map((card) => card.textContent ?? "")
       .join(" | ");
     act(() => root?.unmount());

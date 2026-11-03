@@ -4,11 +4,11 @@
    (`checkbox.tsx`, `../../shadcn/checkbox.tsx`). */
 
 @layer components {
-  .luke-checkbox {
+  .ui-checkbox {
     color: var(--ui-color-text);
   }
 
-  .luke-checkbox[data-disabled="true"] {
+  .ui-checkbox[data-disabled="true"] {
     color: var(--ui-color-text-muted);
   }
 
@@ -19,12 +19,12 @@
      words, under the row's own stacking, so a press of their own among
      them, such as the Inbox's addressee, stays theirs. */
   @media (pointer: coarse) {
-    .luke-checkbox[data-words="true"] {
+    .ui-checkbox[data-words="true"] {
       position: relative;
       isolation: isolate;
     }
 
-    .luke-checkbox[data-words="true"]::before {
+    .ui-checkbox[data-words="true"]::before {
       position: absolute;
       z-index: -1;
       top: 50%;

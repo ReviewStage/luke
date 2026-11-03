@@ -144,7 +144,7 @@ function cards(container: HTMLElement): [string | undefined, string][] {
   return [...container.querySelectorAll<HTMLElement>(".lone-link-card")].map((card) => [
     card.dataset.loneLink,
     card.querySelector("[data-inbox-code]")?.getAttribute("aria-label") ??
-      card.querySelector(".luke-list-row-title")?.textContent ??
+      card.querySelector(".ui-list-row-title")?.textContent ??
       "",
   ]);
 }
@@ -152,7 +152,7 @@ function cards(container: HTMLElement): [string | undefined, string][] {
 /** Each chip drawn in a paragraph of words, by the name it says. */
 function chipsInWords(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll("p [data-mention-ref]")].map(
-    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   );
 }
 
@@ -230,7 +230,7 @@ test("drawn as a document, pictures written next to each other stand side by sid
   const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
   assert.ok(press, "a picture is pressed to enlarge it");
   act(() => press.click());
-  assert.equal(document.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, "After.png");
+  assert.equal(document.querySelector<HTMLImageElement>(".ui-zoom-image")?.alt, "After.png");
 });
 
 test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read or drawn later joining once held and one whose read failed left out, and none of another item's", () => {
@@ -273,7 +273,7 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
+      card.querySelector<HTMLImageElement>(".ui-zoom-image")?.alt,
       viewerPlace(card) ?? "alone",
     ];
   };
@@ -321,7 +321,7 @@ test("a picture of another item stands as its link and is never asked for", () =
   assert.deepEqual(asked, []);
   assert.equal(container.querySelector("img"), null);
   assert.equal(
-    container.querySelector(".text-link-inert, .luke-text-link, a")?.textContent,
+    container.querySelector(".text-link-inert, .ui-text-link, a")?.textContent,
     "Another's",
   );
 });

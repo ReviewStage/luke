@@ -600,7 +600,7 @@ export function AttachmentViewer({
                         as={TEXT_ELEMENT.H2}
                         variant={TEXT_VARIANT.TOOLBAR_TITLE}
                         id={titleId}
-                        className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
+                        className={`ui-toolbar-title max-w-full ${TITLE_CLASS}`}
                       >
                         <OneLine>{file.name}</OneLine>
                       </Text>

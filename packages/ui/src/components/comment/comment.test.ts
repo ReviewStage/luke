@@ -39,16 +39,16 @@ test("a comment names its writer, says how long ago, and holds its trailing slot
     trailing: createElement("span", { "data-testid": "status" }, "Resolved"),
     children: "Rerunning the spec on WebKit.",
   });
-  assert.equal(wordsOf(markup, "luke-comment-name"), "Ada Lovelace");
-  assert.equal(wordsOf(markup, "luke-comment-time"), "2h");
+  assert.equal(wordsOf(markup, "ui-comment-name"), "Ada Lovelace");
+  assert.equal(wordsOf(markup, "ui-comment-time"), "2h");
   assert.match(markup, new RegExp(`<time[^>]*dateTime="${new Date(AT).toISOString()}"`, "u"));
-  assert.equal(wordsOf(markup, "luke-comment-trailing"), "Resolved");
-  assert.equal(wordsOf(markup, "luke-comment-body"), "Rerunning the spec on WebKit.");
+  assert.equal(wordsOf(markup, "ui-comment-trailing"), "Resolved");
+  assert.equal(wordsOf(markup, "ui-comment-body"), "Rerunning the spec on WebKit.");
 });
 
 test("with no picture the face stands the writer's letter, said once beside the name", () => {
   const markup = drawn({ author: { name: "Ada Lovelace" }, at: AT, now: NOW });
-  assert.equal(wordsOf(markup, "luke-comment-face"), "A");
+  assert.equal(wordsOf(markup, "ui-comment-face"), "A");
   assert.doesNotMatch(markup, /<img/u);
   assert.doesNotMatch(markup, /aria-label="Ada Lovelace"/u);
 });
@@ -56,7 +56,7 @@ test("with no picture the face stands the writer's letter, said once beside the 
 test("a glyph a condition left as nothing still leaves the writer's letter on the face", () => {
   for (const glyph of [null, false]) {
     const markup = drawn({ author: { name: "Ada Lovelace", glyph }, at: AT, now: NOW });
-    assert.equal(wordsOf(markup, "luke-comment-face"), "A");
+    assert.equal(wordsOf(markup, "ui-comment-face"), "A");
   }
 });
 
@@ -73,11 +73,11 @@ test("a name the caller draws as its own ref stands in the name's place", () => 
     now: NOW,
   });
   assert.match(markup, /class="person-chip">Ada<\/span>/u);
-  assert.equal(wordsOf(markup, "luke-comment-name"), "Ada");
+  assert.equal(wordsOf(markup, "ui-comment-name"), "Ada");
 });
 
 test("a draft not yet sent says no time", () => {
   const markup = drawn({ author: { name: "Ada Lovelace" }, children: "Draft" });
   assert.doesNotMatch(markup, /<time/u);
-  assert.equal(wordsOf(markup, "luke-comment-time"), undefined);
+  assert.equal(wordsOf(markup, "ui-comment-time"), undefined);
 });

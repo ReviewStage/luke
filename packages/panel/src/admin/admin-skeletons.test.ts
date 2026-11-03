@@ -103,7 +103,7 @@ test("the Cost chart's skeleton stands its own heading and legend, with no capti
   const heading = [...region.querySelectorAll("h3")].find(
     (title) => title.textContent === "Daily list-price equivalent by source, USD",
   );
-  const card = heading?.closest(".luke-card");
+  const card = heading?.closest(".ui-card");
   for (const source of ["Agents", "Vespin's own turns", "Dictation"]) {
     expect(card?.textContent).toContain(source);
   }
@@ -118,7 +118,7 @@ test("the Users roster stands its table and its sign-in methods while it is read
 
 test("the Workspaces page stands its four tiles over its table while it is read", async () => {
   const region = loadingRegion(await draw(createElement(WorkspacesScreen, QUIET)));
-  expect(region.querySelectorAll(".luke-card").length).toBeGreaterThanOrEqual(5);
+  expect(region.querySelectorAll(".ui-card").length).toBeGreaterThanOrEqual(5);
   const headers = Array.from(region.querySelectorAll("thead th"), (cell) => cell.textContent);
   expect(headers).toEqual(expect.arrayContaining(["Workspace", "Owner", "Created"]));
 });

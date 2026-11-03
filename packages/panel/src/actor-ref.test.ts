@@ -133,7 +133,7 @@ function cardOf(actor: Actor): Element {
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
   restOn(named);
   return (
-    document.querySelector('.luke-tooltip-card [data-actor-card="github"]') ??
+    document.querySelector('.ui-tooltip-card [data-actor-card="github"]') ??
     assert.fail("a card hangs")
   );
 }
@@ -166,28 +166,25 @@ test("someone on GitHub stands by their avatar, a person on a circle with their 
 
 test("someone on GitHub hangs a card saying who they are there and that a person is no member here, an App's bot that it is an app, and opens nothing", () => {
   const person = cardOf({ kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false });
-  assert.equal(person.querySelector(".luke-hover-card-name")?.textContent, "@octocat");
+  assert.equal(person.querySelector(".ui-hover-card-name")?.textContent, "@octocat");
   assert.equal(
-    person.querySelector(".luke-hover-card-sub")?.textContent,
+    person.querySelector(".ui-hover-card-sub")?.textContent,
     "GitHub user · Not in this workspace",
   );
-  assert.equal(person.querySelector(".luke-hover-card-corner"), null);
+  assert.equal(person.querySelector(".ui-hover-card-corner"), null);
   assert.equal(document.querySelector('[data-actor-ref][data-kind="github"]')?.tagName, "SPAN");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const bot = cardOf({ kind: ACTOR_KIND.GITHUB, login: "devin-ai-integration[bot]", bot: true });
   assert.equal(
-    bot.querySelector(".luke-hover-card-name .actor-card-name")?.firstChild?.textContent,
+    bot.querySelector(".ui-hover-card-name .actor-card-name")?.firstChild?.textContent,
     "devin-ai-integration",
   );
-  assert.equal(bot.querySelector(".luke-hover-card-name .actor-bot")?.textContent, "bot");
-  assert.equal(bot.querySelector(".luke-hover-card-sub")?.textContent, "GitHub App");
-  assert.equal(bot.querySelector(".luke-hover-card-corner"), null);
-  assert.equal(
-    document.querySelector(".luke-inline-ref-label")?.textContent,
-    "devin-ai-integration",
-  );
+  assert.equal(bot.querySelector(".ui-hover-card-name .actor-bot")?.textContent, "bot");
+  assert.equal(bot.querySelector(".ui-hover-card-sub")?.textContent, "GitHub App");
+  assert.equal(bot.querySelector(".ui-hover-card-corner"), null);
+  assert.equal(document.querySelector(".ui-inline-ref-label")?.textContent, "devin-ai-integration");
 });
 
 test("a picture GitHub serves is asked for at twice the size its disc is drawn", () => {
@@ -242,7 +239,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
   const [bot, person, luke] = [...view.querySelectorAll<HTMLElement>("[data-actor-ref]")];
 
   assert.equal(bot?.querySelector("img")?.getAttribute("src"), `${avatar}&s=32`);
-  assert.equal(bot?.querySelector(".luke-inline-ref-label")?.textContent, "dependabot");
+  assert.equal(bot?.querySelector(".ui-inline-ref-label")?.textContent, "dependabot");
   assert.equal(bot?.querySelector(".actor-bot")?.textContent, "bot");
   assert.equal(person?.querySelector(".actor-bot"), null, "a person wears no badge");
   assert.equal(luke?.querySelector(".actor-bot"), null, "Vespin reads as Vespin");
@@ -259,12 +256,12 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
   );
   restOn(pile.querySelector(".actor-stack-more") ?? assert.fail("the count stands"));
   const row =
-    document.querySelector('.luke-tooltip-card [data-actor-card="more"] [data-actor-more]') ??
+    document.querySelector('.ui-tooltip-card [data-actor-card="more"] [data-actor-more]') ??
     assert.fail("the count's card names the rest");
   assert.deepEqual(
     [
-      row.querySelector(".luke-hover-card-row-label")?.textContent,
-      row.querySelector(".luke-hover-card-row-end")?.textContent,
+      row.querySelector(".ui-hover-card-row-label")?.textContent,
+      row.querySelector(".ui-hover-card-row-end")?.textContent,
     ],
     ["dependabot\u00a0bot", "Commented"],
     "the badge keeps to its name's line, what the face says at the row's end",

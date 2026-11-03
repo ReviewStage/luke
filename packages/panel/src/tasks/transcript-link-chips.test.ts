@@ -106,7 +106,7 @@ function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement):
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   ]);
 }
 

@@ -336,7 +336,7 @@ export function Disclosure({
       <details
         {...props}
         {...details}
-        className="luke-disclosure min-w-0"
+        className="ui-disclosure min-w-0"
         data-look={framed ? undefined : skin}
         onToggle={(event) => {
           details.onToggle(event);
@@ -385,7 +385,7 @@ export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DIS
  * `hover:`, which only a fine pointer reaches.
  */
 const SUMMARY_ROW =
-  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-ui-4 pe-ui-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--ui-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.luke-disclosure-turn)]:min-w-0 [&>:not(svg,.luke-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
+  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-ui-4 pe-ui-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--ui-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.ui-disclosure-turn)]:min-w-0 [&>:not(svg,.ui-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the quiet row's, a transcript's in place of them. */
 const SUMMARY_LOOK = {
@@ -424,10 +424,10 @@ function summaryClass(
   const own = SUMMARY_LOOK[look];
   const ruled = look === DISCLOSURE_SUMMARY.ROW && open && frame === undefined;
   if (frame === undefined || look === DISCLOSURE_SUMMARY.TRANSCRIPT) {
-    return cn("luke-disclosure-summary", own, ruled && "border-b border-border");
+    return cn("ui-disclosure-summary", own, ruled && "border-b border-border");
   }
   return cn(
-    "luke-disclosure-summary",
+    "ui-disclosure-summary",
     own,
     "[&:hover]:bg-transparent",
     frame.lead && "ps-0",
@@ -522,7 +522,7 @@ function Frame({
   const cells = { lead: lead !== undefined, actions: actions !== undefined };
   return (
     <div
-      className="luke-disclosure-frame"
+      className="ui-disclosure-frame"
       data-look={look}
       data-fill={fill === DISCLOSURE_FILL.SUMMARY ? undefined : fill}
       onPointerDown={onPointerDown}
@@ -530,7 +530,7 @@ function Frame({
       {lead === undefined ? null : (
         // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
         // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
-        <div className="luke-disclosure-lead" onClick={groundPress}>
+        <div className="ui-disclosure-lead" onClick={groundPress}>
           {lead}
         </div>
       )}
@@ -538,7 +538,7 @@ function Frame({
       {actions === undefined ? null : (
         // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
         // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
-        <div className="luke-disclosure-actions" onClick={groundPress}>
+        <div className="ui-disclosure-actions" onClick={groundPress}>
           {actions}
         </div>
       )}
@@ -591,7 +591,7 @@ export function DisclosureChevron({ open: handed }: { open?: boolean }): React.J
   const open = handed ?? scoped?.open;
   if (open === undefined) throw new Error("A disclosure's chevron must be drawn inside one");
   return (
-    <span className="luke-disclosure-turn" data-open={open}>
+    <span className="ui-disclosure-turn" data-open={open}>
       <FoldChevronIcon />
     </span>
   );
@@ -625,7 +625,7 @@ export function DisclosureBody({
   return (
     <div
       ref={body}
-      className={cn("luke-disclosure-body", BODY_INSET[inset])}
+      className={cn("ui-disclosure-body", BODY_INSET[inset])}
       data-inset={inset}
       inert={leaving}
     >

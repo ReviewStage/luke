@@ -150,7 +150,7 @@ test("a version by a member hangs their card beside its row while the pointer re
   const row = view.querySelector<HTMLElement>('[aria-label="Version list"] button');
   assert.ok(row, "a version is listed");
   restOn(row);
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Lee Park");
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Lee Park");
   assert.match(card?.textContent ?? "", /lee@example\.com/u);
 });

@@ -198,7 +198,7 @@ function rowClassOf(
   index: number,
 ): string {
   const own = typeof rowClassName === "function" ? rowClassName(index) : rowClassName;
-  return own === undefined ? "luke-virtual-row" : `luke-virtual-row ${own}`;
+  return own === undefined ? "ui-virtual-row" : `ui-virtual-row ${own}`;
 }
 
 /** The row of the run that `target` stands in: the child of `block` holding it, none where it is outside every row. */
@@ -398,7 +398,7 @@ export function VirtualRows({
   const last = items.at(-1);
   const before = first === undefined ? 0 : first.start - margin;
   const after = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
-  const own = listItems ? "luke-virtual-rows luke-virtual-items" : "luke-virtual-rows";
+  const own = listItems ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
   const run = {
     ref: holdBlock,
     className: className === undefined ? own : `${own} ${className}`,

@@ -102,11 +102,7 @@ import {
   taskWorkspace,
   workspaceRepository,
 } from "../github/workspace-repository.js";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedStoreOrUnavailable,
-} from "../http/http-effect.js";
+import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import {
   ModelCatalog,
@@ -352,7 +348,6 @@ export const STOP_AGENT_REFUSAL = {
     "Not stopped: that agent is archived, and an archived agent's turn was stopped as it was archived.",
   NOT_READY:
     "Not stopped: that agent's turn is still coming up, so there is no turn to stop yet; call again in a moment.",
-  NO_SERVICE: "Not stopped: this deployment cannot reach the agents' service.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
   NATIVE_NOT_HERE:
@@ -392,7 +387,6 @@ export const START_AGENT_REFUSAL = {
     `Not started: start_agent no longer makes a task; make it with ${AGENT_TOOL.CREATE_TASK}, then ` +
     "start the agent on it by its taskId.",
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
-  NO_SERVICE: "Not started: this deployment cannot reach the agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   SOURCE_NO_REPOSITORY:
     "Not started: that agent works on no task and in no GitHub repository, so there is no " +
@@ -515,13 +509,13 @@ export const AGENT_CALLER = {
  */
 type AgentCaller = { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent };
 
-/** What a call of the agent tools runs under: who calls, eve as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
+/** What a call of the agent tools runs under: who calls, the agents' sessions as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
 export interface AgentCall {
   readonly caller: AgentCaller;
-  /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
-  readonly eve: AgentSessions | undefined;
-  /** eve as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it; nothing where the deployment names no secret or no origin for eve. */
-  readonly eveAs?: ((account: string) => AgentSessions) | undefined;
+  /** The agents' sessions as the deployment acting for the caller's member. */
+  readonly eve: AgentSessions;
+  /** The agents' sessions as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it. */
+  readonly eveAs: (account: string) => AgentSessions;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -1759,7 +1753,6 @@ export function runStartAgent(
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const named = asked.success.taskId;
   const ownTask = callerTask(caller);
-  if (eve === undefined) return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NO_SERVICE));
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
@@ -2275,13 +2268,13 @@ export function runUpdateTask(
   );
 }
 
-/** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
+/** A stop's refusal in the model's words: an agent gone meanwhile is none, and anything else is the service down. */
+function stopRefusalWords(refusal: HostedRefusal): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
   if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
     return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
   }
-  return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
+  return STOP_AGENT_REFUSAL.UNAVAILABLE;
 }
 
 /** Whether a Stop already stands on the turn, which is still ending. */
@@ -2298,11 +2291,10 @@ function stopStands(turn: AgentLatestTurn | undefined): boolean {
  * it stood on as the call began and still stands on, and its status read
  * after. A call run again finds the turn it stopped by its key and cancels
  * nothing, so a turn begun since, by a message the agent took meanwhile,
- * runs on. Note that eve is asked for only where there is a turn to cancel,
- * so a deployment with no eve still answers an idle agent as idle.
+ * runs on.
  */
 const stopOf = (
-  eve: AgentSessions | undefined,
+  eve: AgentSessions,
   writer: Effect.Effect<StoreWriter>,
   agent: Agent,
   key: string,
@@ -2313,8 +2305,9 @@ const stopOf = (
       turnStoppedUnderReached(agent.conversationId, key),
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
-    const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
-    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, { key, by });
+    const cancelled = earlier
+      ? false
+      : yield* cancelledTurn(Effect.succeed(eve), writer, agent, { key, by });
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,
@@ -2354,7 +2347,7 @@ export function runStopAgent(
       const stop = yield* Effect.result(
         stopOf(eve, call.writer, agent, call.clientKey, caller.agent.id),
       );
-      if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
+      if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
       // the developer's, and is answered as stopped so a call run again reads as it first did.
       const { stopped, status } = stop.success;

@@ -134,7 +134,7 @@ function press(target: HTMLElement): void {
 
 /** The buttons Tab stops on, in the order it meets them. */
 function tabStops(within: HTMLElement): HTMLButtonElement[] {
-  return [...within.querySelectorAll<HTMLButtonElement>(".luke-list button")].filter(
+  return [...within.querySelectorAll<HTMLButtonElement>(".ui-list button")].filter(
     (each) => each.tabIndex >= 0 && !each.disabled,
   );
 }
@@ -262,7 +262,7 @@ test("a row's lead stands on the line under its title, before the description's 
     container,
     "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
   );
-  const lead = row.querySelector(".luke-list-row-lead");
+  const lead = row.querySelector(".ui-list-row-lead");
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
@@ -285,7 +285,7 @@ test("a row's lead may stand on a line of its own over its title, read first wit
     container,
     "Billing usage alerts for every workspace2hRetry the webhook?Choice · 2 options",
   );
-  const lead = row.querySelector(".luke-list-row-lead");
+  const lead = row.querySelector(".ui-list-row-lead");
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
@@ -304,7 +304,7 @@ test("a row's lead may lead its description in plain words, read before the desc
     }),
   );
   const row = button(container, "Fix the flaky testNightly flaky-test sweep · Finished2h");
-  const lead = row.querySelector(".luke-list-row-lead");
+  const lead = row.querySelector(".ui-list-row-lead");
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
@@ -896,6 +896,6 @@ test("a regular row's description says it is cut short once its words run past i
     }),
   );
   act(() => resized());
-  const description = container.querySelector(".luke-list-row-description");
+  const description = container.querySelector(".ui-list-row-description");
   expect(description?.getAttribute("data-overflow")).toBe("true");
 });

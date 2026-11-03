@@ -231,18 +231,18 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
 
   await act(async () => add.click());
   assert.equal(newestToastSays(), "Adding to the plan…");
-  const card = document.querySelector(".luke-toast");
+  const card = document.querySelector(".ui-toast");
   await settled(() => /Added/u.test(newestToastSays() ?? ""));
 
   assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT]);
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
   assert.equal(newestToastSays(), "Added to the planUndo");
   assert.equal(
-    document.querySelectorAll(".luke-toast").length,
+    document.querySelectorAll(".ui-toast").length,
     1,
     "the working toast turned in place",
   );
-  assert.equal(document.querySelector(".luke-toast"), card);
+  assert.equal(document.querySelector(".ui-toast"), card);
 
   const undo = newestToastAction();
   assert.ok(undo);

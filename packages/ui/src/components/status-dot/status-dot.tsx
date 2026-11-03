@@ -29,13 +29,13 @@ export function StatusGlyph({
   return (
     <Tooltip label={label}>
       <span
-        className="luke-status-glyph relative inline-flex"
+        className="ui-status-glyph relative inline-flex"
         data-tone={tone}
         role="img"
         aria-label={label}
       >
         {children}
-        <span className="luke-status-glyph-dot" aria-hidden="true" />
+        <span className="ui-status-glyph-dot" aria-hidden="true" />
       </span>
     </Tooltip>
   );

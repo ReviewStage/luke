@@ -90,7 +90,7 @@ async function mountSidebar(): Promise<HTMLElement> {
 /** The row's press for the task named `name`, whose name stands in a line of its own. */
 function rowOf(sidebar: HTMLElement, name: string): HTMLElement {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
-    (each) => each.querySelector(".luke-list-row-title .luke-one-line")?.textContent === name,
+    (each) => each.querySelector(".ui-list-row-title .ui-one-line")?.textContent === name,
   );
   return row ?? assert.fail(`no ${name} row`);
 }
@@ -113,7 +113,7 @@ function pillOver(target: Element): string | undefined {
 test("a task name cut short by its row fades out where it is cut, and the row's hint says it whole", async () => {
   const sidebar = await mountSidebar();
   const row = rowOf(sidebar, LONG_NAME);
-  const name = row.querySelector<HTMLElement>(".luke-list-row-title .luke-one-line");
+  const name = row.querySelector<HTMLElement>(".ui-list-row-title .ui-one-line");
   assert.ok(name);
   assert.equal(name.dataset.overflow, "false");
 

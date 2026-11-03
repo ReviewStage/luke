@@ -14,13 +14,13 @@
  */
 
 /** The class the shared prose rules are drawn from, for a root no component can wrap. */
-export const PROSE_CLASS = "luke-prose";
+export const PROSE_CLASS = "ui-prose";
 
 /** A generated document's HTML, in the site's document type and rhythm. */
 export function Prose({ html }: { html: string }): React.JSX.Element {
   return (
     <div
-      className={`${PROSE_CLASS} luke-prose-document`}
+      className={`${PROSE_CLASS} ui-prose-document`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

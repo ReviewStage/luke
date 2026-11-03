@@ -10,10 +10,10 @@
  * shells below.
  *
  * A Start (`POST /api/plans/{id}/agents`) takes the one path a start takes
- * (`coder-host/start.ts`), reaching eve as the request's own caller
- * (`coder-host/stop.ts`'s `eveFor`), and answers 201 for the agent it made
- * or 200 for the one a retry under the same key made before; a blank one
- * hands the agent nothing and reaches no eve. A Start from an agent
+ * (`coder-host/start.ts`), reaching the agent's sessions for the account
+ * the request resolved to (`coder-host/runtime-sessions.ts`), and answers
+ * 201 for the agent it made or 200 for the one a retry under the same key
+ * made before; a blank one hands the agent nothing. A Start from an agent
  * (`POST /api/agents/{id}/agents`) takes the same path in the place that
  * agent stands in, its task or, with none, its workspace and repository,
  * and answers alike. The calls into an agent
@@ -107,7 +107,7 @@ import {
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
 import { rewoundAgent } from "./coder-host/rewind.js";
-import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
+import { routedSessions, runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   acceptedAgentChoice,
   placeOfAgent,
@@ -126,8 +126,6 @@ import {
 } from "./coder-host/status.js";
 import {
   continuedByOf,
-  type EveReach,
-  eveFor,
   standingsOf,
   standsStopped,
   stoppedForGood,
@@ -143,7 +141,7 @@ import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 
-export interface AgentsProcedureSeams extends EveReach, PublishedReach, SandboxStopReach {
+export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The agent's sandbox as the shells reach it: Vercel's in production, a script's in a test. */
   readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient>;
@@ -433,7 +431,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const started = yield* startRequestedAgent(
-        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        routedSessions<EveTypedTurn>(context.userId),
         context.userId,
         { taskId },
         input.body,
@@ -456,7 +454,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ? { taskId: null, organizationId, repository: null }
           : { taskId: null, organizationId, repository };
       const started = yield* startRequestedAgent(
-        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        routedSessions<EveTypedTurn>(context.userId),
         context.userId,
         place,
         request,
@@ -497,7 +495,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const place = placeOfAgent(source);
       if (place === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       const started = yield* startRequestedAgent(
-        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        routedSessions<EveTypedTurn>(context.userId),
         context.userId,
         place,
         input.body,
@@ -557,7 +555,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       if ("archived" in body) {
         if (body.archived) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-          yield* stoppedForGood(seams, writer, context.request, userId, agent);
+          yield* stoppedForGood(writer, userId, agent);
         }
         const archived = yield* hostedStoreOrUnavailable(
           archiveAgentCommitted(userId, agent.id, body.archived),
@@ -641,12 +639,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      */
     delete: signedIn.delete.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
-      const eveAt = yield* retiringReach(seams, context.request, userId);
-      yield* stoppedForGood(seams, writer, context.request, userId, agent);
+      const retiring = yield* retiringReach(userId);
+      yield* stoppedForGood(writer, userId, agent);
       const deleted = yield* hostedStoreOrUnavailable(
         deleteAgent(userId, agent.id, {
           standsStopped: agentStandsStopped,
-          beforeDelete: retiredBeforeDelete(eveAt),
+          beforeDelete: retiredBeforeDelete(retiring),
         }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
       );
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -656,7 +654,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
-      const stopped = yield* stoppedTurn(seams, writer, context.request, userId, agent);
+      const stopped = yield* stoppedTurn(writer, userId, agent);
       // Counted only where the Stop stopped a turn, under the member who pressed it.
       if (stopped) {
         yield* recordServerEvent(

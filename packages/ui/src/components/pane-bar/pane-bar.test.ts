@@ -74,7 +74,7 @@ test("the left pane's toggle, the lead, the middle, the actions, the ⋯, and th
       end: createElement("button", { type: "button", onClick: ignore }, "Show files"),
     }),
   );
-  const said = [...barOf(container).querySelectorAll("[data-part], .luke-one-line, button")].map(
+  const said = [...barOf(container).querySelectorAll("[data-part], .ui-one-line, button")].map(
     (part) => part.getAttribute("data-part") ?? part.getAttribute("aria-label") ?? part.textContent,
   );
   assert.deepEqual(said, [
@@ -125,8 +125,8 @@ test("the ⋯ drops the menu it was handed, and a choice in it acts and closes i
 
 test("a title the bar would cut under the readable floor stands on a row of its own", () => {
   const laid = layTitle({
-    room: ".luke-pane-bar-lead",
-    words: ".luke-pane-bar-title",
+    room: ".ui-pane-bar-lead",
+    words: ".ui-pane-bar-title",
     roomWidth: 64,
     whole: 203,
     floor: 120,

@@ -202,7 +202,7 @@ function chipOf(page: HTMLElement, key: string, standing: string): HTMLButtonEle
 /** Presses the item of the open menu whose label is `label`. */
 function pick(label: string): void {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
   );
   act(() => (item ?? assert.fail(`no ${label} item`)).click());
 }

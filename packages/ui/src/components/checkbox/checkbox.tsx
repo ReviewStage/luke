@@ -39,7 +39,7 @@ type Named =
  * region quiets from the components layer, where a utility would outrank it.
  */
 const CHECKBOX =
-  "luke-checkbox inline-flex items-start gap-icon-gap min-w-0 font-ui text-body cursor-press";
+  "ui-checkbox inline-flex items-start gap-icon-gap min-w-0 font-ui text-body cursor-press";
 
 /**
  * A box without words stands on no line of its own, and on a coarse
@@ -93,7 +93,7 @@ export function Checkbox({
     >
       <ShadcnCheckbox
         ref={box}
-        className={cn("luke-checkbox-box", words && BOX_ON_LINE)}
+        className={cn("ui-checkbox-box", words && BOX_ON_LINE)}
         id={id}
         name={name}
         checked={checked}
@@ -113,7 +113,7 @@ export function Checkbox({
           onChange(mixed ? true : next);
         }}
       />
-      {words ? <span className="luke-checkbox-words min-w-0 wrap-anywhere">{children}</span> : null}
+      {words ? <span className="ui-checkbox-words min-w-0 wrap-anywhere">{children}</span> : null}
     </label>
   );
 }

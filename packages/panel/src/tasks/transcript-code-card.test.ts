@@ -61,7 +61,7 @@ function buttonNamed(drawing: HTMLElement, name: string): HTMLButtonElement | un
 
 /** The lines the card shows now, less what it holds `hidden` and the newline that closes the last. */
 function shownLines(drawing: HTMLElement): string[] {
-  const body = drawing.querySelector(".luke-code-card pre")?.cloneNode(true);
+  const body = drawing.querySelector(".ui-code-card pre")?.cloneNode(true);
   if (!(body instanceof Element)) return assert.fail("No code card");
   for (const hidden of body.querySelectorAll("[hidden]")) hidden.remove();
   return (body.textContent ?? "").replace(/\n$/u, "").split("\n");
@@ -72,7 +72,7 @@ test("a long fence in a transcript is cut at 40 lines behind Show all, which sho
   const drawing = await drawn(createElement(TranscriptWords, { text: fenced(code) }));
 
   assert.equal(
-    drawing.querySelector(".luke-code-card figcaption")?.textContent?.startsWith("TypeScript"),
+    drawing.querySelector(".ui-code-card figcaption")?.textContent?.startsWith("TypeScript"),
     true,
   );
   assert.deepEqual(shownLines(drawing), code.split("\n").slice(0, 40));
@@ -102,7 +102,7 @@ test("an Inbox item's fence, drawn as a document, is the same card", async () =>
     createElement(TranscriptWords, { text: fenced(code), asDocument: true }),
   );
 
-  assert.equal(drawing.querySelectorAll(".luke-code-card").length, 1);
+  assert.equal(drawing.querySelectorAll(".ui-code-card").length, 1);
   assert.deepEqual(shownLines(drawing), code.split("\n").slice(0, 40));
   assert.ok(buttonNamed(drawing, "Show all"));
   assert.ok(buttonNamed(drawing, "Copy code"));
@@ -111,7 +111,7 @@ test("an Inbox item's fence, drawn as a document, is the same card", async () =>
 test("a fence naming no language is headed text", async () => {
   const drawing = await drawn(createElement(TranscriptWords, { text: "```\nplain words\n```\n" }));
   assert.equal(
-    drawing.querySelector(".luke-code-card figcaption")?.textContent?.startsWith("text"),
+    drawing.querySelector(".ui-code-card figcaption")?.textContent?.startsWith("text"),
     true,
   );
 });

@@ -1529,7 +1529,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history, New sub-task, Add relation, which
+ * the door its ⋯ asks, Version history, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -1553,7 +1553,7 @@ function taskCommandRows(
       item: PANEL_COMMAND.NEW_CHILD_TASK,
       run: () => tasks.onNewRelatedTask(task.id, TASK_CREATE_RELATION_KIND.SUB_TASK_OF),
     },
-    // Add relation opens the head's add menu on its first kind, whose pinned Relation row switches it.
+    // Add task relation opens the head's add menu on its first kind, whose pinned Relation row switches it.
     {
       item: PANEL_COMMAND.ADD_RELATION,
       run: () => tasks.onAddRelation(task.id, TASK_RELATION_KIND.SUB_TASK),

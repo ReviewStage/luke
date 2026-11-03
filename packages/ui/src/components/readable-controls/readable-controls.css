@@ -3,7 +3,7 @@
 
 @layer components {
   /* The region draws no box, so what holds it lays out its controls. */
-  .luke-readable-controls {
+  .ui-readable-controls {
     display: contents;
   }
 
@@ -12,13 +12,13 @@
      a field's name selects too, and its Optional, inside the label that
      keeps its own words from selecting as a label that presses what it
      names. */
-  .luke-readable-controls
+  .ui-readable-controls
   :is(
-    .luke-choice-label,
-    .luke-choice-detail,
-    .luke-checkbox-words,
-    .luke-field-words,
-    .luke-field-optional
+    .ui-choice-label,
+    .ui-choice-detail,
+    .ui-checkbox-words,
+    .ui-field-words,
+    .ui-field-optional
   ) {
     -webkit-user-select: text;
     user-select: text;

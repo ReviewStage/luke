@@ -30,7 +30,7 @@ export function BlockList({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Element className="luke-block-list" aria-label={label}>
+    <Element className="ui-block-list" aria-label={label}>
       {children}
     </Element>
   );
@@ -38,5 +38,5 @@ export function BlockList({
 
 /** One block of a `BlockList`: its parts one under another. */
 export function BlockListItem({ children }: { children: ReactNode }): React.JSX.Element {
-  return <li className="luke-block-list-item">{children}</li>;
+  return <li className="ui-block-list-item">{children}</li>;
 }

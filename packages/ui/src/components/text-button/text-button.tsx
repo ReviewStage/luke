@@ -70,7 +70,7 @@ export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTO
  * line it stands in.
  */
 const TEXT =
-  "luke-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start text-ellipsis cursor-press transition-[color,text-decoration-color] duration-(--ui-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
+  "ui-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start text-ellipsis cursor-press transition-[color,text-decoration-color] duration-(--ui-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
 
 /**
  * How many lines the words take. One is cut with an ellipsis; two wrap

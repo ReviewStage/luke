@@ -127,7 +127,7 @@ test("a list row's card, handed no place to hang, hangs past the row's end, not 
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card");
   assert.ok(card, "the card hangs");
   const placed = card.parentElement?.style.transform ?? "";
   const left = Number.parseFloat(/translate\(([-\d.]+)px/u.exec(placed)?.[1] ?? "");
@@ -208,7 +208,7 @@ function longPress(target: Element): boolean {
 }
 
 /** The card drawn, standing or on its way out, if one is. */
-const card = () => document.querySelector(".luke-tooltip-card");
+const card = () => document.querySelector(".ui-tooltip-card");
 
 /** Whether a card stands, drawn and not on its way out. */
 const cardStands = () => card() !== null && !card()?.hasAttribute("data-leaving");
@@ -338,10 +338,10 @@ test("a tap on a control inside hinted words works the control alone, and a long
   tap(page.querySelector("button") ?? assert.fail("the choice"));
 
   assert.deepEqual(chosen, ["Part of"]);
-  assert.equal(document.querySelector(".luke-tooltip") === null, true, "no hint stands");
+  assert.equal(document.querySelector(".ui-tooltip") === null, true, "no hint stands");
 
   assert.equal(longPress(page.querySelector("button") ?? assert.fail("the choice")), false);
-  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "Relation");
+  assert.equal(document.querySelector(".ui-tooltip")?.textContent, "Relation");
   assert.deepEqual(chosen, ["Part of"], "the hold chose nothing");
 });
 
@@ -450,7 +450,7 @@ function pass(ms: number): void {
 }
 
 const cards = () =>
-  [...document.querySelectorAll(".luke-tooltip-card")].map((card) => card.textContent);
+  [...document.querySelectorAll(".ui-tooltip-card")].map((card) => card.textContent);
 
 test("a pointer crossing a row in less than the wait mounts no card for it, and one resting the wait out mounts its own", () => {
   waiting();

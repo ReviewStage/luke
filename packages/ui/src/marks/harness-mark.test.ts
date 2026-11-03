@@ -18,7 +18,7 @@ function drawn(provider: ModelProvider): Element {
   page.innerHTML = renderToStaticMarkup(
     createElement(HarnessMark, { provider, codexArt: CODEX_ART }),
   );
-  return page.querySelector(".luke-harness-mark") ?? assert.fail("a mark is drawn");
+  return page.querySelector(".ui-harness-mark") ?? assert.fail("a mark is drawn");
 }
 
 test("Codex's mark is the picture the app serves, at one, two, and three device pixels to the pixel", () => {

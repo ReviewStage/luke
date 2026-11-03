@@ -6,35 +6,35 @@
    play them stand here. */
 
 @layer components {
-  .luke-glyph-slot[data-arrival] {
+  .ui-glyph-slot[data-arrival] {
     animation:
-      luke-glyph-slot-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
-      luke-glyph-slot-step var(--ui-duration-fast) var(--ui-spring-fast) backwards;
+      ui-glyph-slot-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-glyph-slot-step var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
-  .luke-glyph-slot[data-arrival="check"] {
-    animation-name: luke-glyph-slot-fade, luke-glyph-slot-check;
+  .ui-glyph-slot[data-arrival="check"] {
+    animation-name: ui-glyph-slot-fade, ui-glyph-slot-check;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .luke-glyph-slot[data-arrival] {
-      animation: luke-glyph-slot-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards;
+    .ui-glyph-slot[data-arrival] {
+      animation: ui-glyph-slot-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards;
     }
   }
 
-  @keyframes luke-glyph-slot-fade {
+  @keyframes ui-glyph-slot-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-glyph-slot-step {
+  @keyframes ui-glyph-slot-step {
     from {
       transform: scale(0.7);
     }
   }
 
-  @keyframes luke-glyph-slot-check {
+  @keyframes ui-glyph-slot-check {
     from {
       transform: scale(0.3);
     }

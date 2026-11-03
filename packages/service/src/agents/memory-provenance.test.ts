@@ -22,6 +22,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../core.js";
+import { recordingEve } from "../testing/recording-eve.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
@@ -128,9 +129,11 @@ const writeTurn = (
 
 /** A `remember` from the agent, as its tool door calls it. */
 const remember = (agent: Agent) => {
+  const { sessions } = recordingEve();
   const call: AgentCall = {
     caller: { kind: AGENT_CALLER.AGENT, agent },
-    eve: undefined,
+    eve: sessions,
+    eveAs: () => sessions,
     writer: Effect.die(new Error("a memory call writes no line")),
     clientKey: randomUUID(),
   };

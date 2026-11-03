@@ -20,7 +20,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * (`disclosure.css`) also draws an optional layer for a disclosure that
  * opens downward over content, which a caller asks for by marking the root
  * `data-disclosure` (`disclosureMotion`) and its body
- * `.luke-disclosure-body`, the root's own child: `opening` unrolls
+ * `.ui-disclosure-body`, the root's own child: `opening` unrolls
  * the body from its top edge as it fades in, `closing` fades it out.
  */
 

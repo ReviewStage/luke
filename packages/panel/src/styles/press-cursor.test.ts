@@ -31,7 +31,7 @@ function drawnAt(profile: Profile, element: ReactElement): HTMLElement {
     { only: ["@luke/ui/tokens.css", "./base.css", "@luke/ui/styles.css", "tailwind.css"] },
   );
   const surface = document.body.appendChild(document.createElement("div"));
-  surface.dataset.lukeProfile = profile;
+  surface.dataset.uiProfile = profile;
   const root = createRoot(surface);
   roots.push(root);
   act(() => root.render(element));

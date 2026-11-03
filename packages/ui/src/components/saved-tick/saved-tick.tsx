@@ -77,13 +77,13 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
   }, [standing, seen]);
 
   return (
-    <span className="luke-saved-tick-region inline-flex min-w-0">
+    <span className="ui-saved-tick-region inline-flex min-w-0">
       {standing ? (
         // Note that each write lands a tick of its own, so one landing while another stands starts its motion over.
         <span
           key={saves}
           ref={tick}
-          className="luke-saved-tick inline-flex items-center gap-ui-4 font-ui text-caption font-caption whitespace-nowrap text-muted-foreground [&>svg]:size-caption-leading [&>svg]:flex-none [&>svg]:text-complete"
+          className="ui-saved-tick inline-flex items-center gap-ui-4 font-ui text-caption font-caption whitespace-nowrap text-muted-foreground [&>svg]:size-caption-leading [&>svg]:flex-none [&>svg]:text-complete"
         >
           <CheckIcon />
           {SAVED}

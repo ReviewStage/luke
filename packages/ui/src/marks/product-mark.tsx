@@ -33,7 +33,7 @@ export function ProductMark({
 }: ProductMarkProps): React.JSX.Element {
   return (
     <svg
-      className="luke-product-mark"
+      className="ui-product-mark"
       viewBox={MARK_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"

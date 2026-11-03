@@ -212,7 +212,7 @@ async function pressChip(
 ): Promise<void> {
   const chip = [
     ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
-  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === name);
+  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent === name);
   assert.ok(chip, `no chip says ${name}`);
   act(() => {
     chip.dispatchEvent(

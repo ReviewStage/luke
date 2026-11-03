@@ -1,6 +1,6 @@
 /* palettes.css -- the semantic colours of each app, in its dark and its light theme.
 
-   A theme is an attribute beside the profile (`data-luke-theme`): `dark`,
+   A theme is an attribute beside the profile (`data-ui-theme`): `dark`,
    `light`, or, on the desktop, `system`, which follows the Mac's appearance
    (the app's own Theme setting drives it through `nativeTheme.themeSource`).
    Every role is set by both profiles in both themes.
@@ -30,15 +30,15 @@
    sidebar's ground (`--ui-color-sidebar`), so the sheet reads as lifted
    off it in either theme. */
 
-[data-luke-theme="dark"] {
+[data-ui-theme="dark"] {
   color-scheme: dark;
 }
 
-[data-luke-theme="light"] {
+[data-ui-theme="light"] {
   color-scheme: light;
 }
 
-[data-luke-theme="system"] {
+[data-ui-theme="system"] {
   color-scheme: light dark;
 }
 
@@ -46,11 +46,11 @@
    `surface.ts` refuses the pair), so a web surface marked `system` anyway
    keeps the light page's own controls rather than the machine's dark ones
    over a light page. */
-[data-luke-profile="web"][data-luke-theme="system"] {
+[data-ui-profile="web"][data-ui-theme="system"] {
   color-scheme: light;
 }
 
-[data-luke-profile="desktop"] {
+[data-ui-profile="desktop"] {
   /* Words on a fill of the text's own ink, which read in the ground's colour. */
   --ui-color-ink-inverse: var(--ui-color-ground);
 
@@ -139,8 +139,8 @@
 
 /* The site's light theme, drawn in the brand's light colours (`brand.css`).
    A page without a theme of its own is this one. */
-[data-luke-profile="web"],
-[data-luke-profile="web"][data-luke-theme="light"] {
+[data-ui-profile="web"],
+[data-ui-profile="web"][data-ui-theme="light"] {
   --ui-color-ink-inverse: var(--ui-color-ground);
 
   --ui-color-code-text: #1f2328;
@@ -220,7 +220,7 @@
 /* The site's dark ground, worn where the account's Theme setting (or the
    machine, under System) asks for it, as the app and the admin dashboard do,
    and where a page asks for it itself, as the OAuth cards do. The product's state palette on it verbatim. */
-[data-luke-profile="web"][data-luke-theme="dark"] {
+[data-ui-profile="web"][data-ui-theme="dark"] {
   --ui-color-ink-inverse: var(--ui-color-ground);
 
   --ui-color-code-text: #e6edf3;

@@ -58,7 +58,7 @@ export function ToolbarFrame({
   return (
     <header
       ref={frameRef}
-      className={place === undefined ? "luke-toolbar" : `luke-toolbar ${place}-head`}
+      className={place === undefined ? "ui-toolbar" : `ui-toolbar ${place}-head`}
       data-start={start}
       data-end={end}
       data-look={look}

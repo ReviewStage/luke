@@ -22,7 +22,7 @@ import { readTaskHeader } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
-import { Effect, Option, type Redacted, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -66,7 +66,6 @@ import {
   runUpdateAutomation,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
@@ -95,10 +94,6 @@ import { CODER_TOOL } from "./tool-set.js";
 export interface AgentDoorSeams {
   /** The writer over the coding agent's tool set, composed once per instance. */
   readonly writer: () => Effect.Effect<StoreWriter>;
-  /** The secret the deployment acts for an account under (`EVE_DEPLOYMENT_SECRET`, never the cron's), sealed; nothing while the environment names none. */
-  readonly deploymentSecret: () => Redacted.Redacted | undefined;
-  /** The deployment's own origin, which no request between agents carries; nothing on a machine neither configured nor deployed. */
-  readonly eveOrigin: () => string | undefined;
   /** How an agent this one starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
   readonly summaryModel?: SummaryModelOf;
 }
@@ -352,22 +347,11 @@ export function runAgentTools(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
-    // The agent asking is the one the conversation is, and eve is reached as its starter.
+    // The agent asking is the one the conversation is, and the sessions it reaches are its starter's.
     const sender = found.success;
-    const secret = seams.deploymentSecret();
-    const origin = seams.eveOrigin();
-    const compose = yield* eveSessionsComposer;
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
-    const route = yield* sessionsRouter;
-    const eveAs =
-      secret === undefined || origin === undefined
-        ? undefined
-        : (account: string) =>
-            route(
-              compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER }),
-              account,
-            );
-    const eve = eveAs?.(sender.userId);
+    const eveAs = yield* sessionsRouter;
+    const eve = eveAs(sender.userId);
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,

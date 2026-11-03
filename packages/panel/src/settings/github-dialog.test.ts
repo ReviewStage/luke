@@ -184,7 +184,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
   stored = KEPT;
   await mountAndOpen(false);
   const facts = [
-    ...(document.querySelector(".luke-settings-row-description .luke-inline")?.children ?? []),
+    ...(document.querySelector(".ui-settings-row-description .ui-inline")?.children ?? []),
   ].map((each) => each.textContent ?? "");
   const expiry = facts.find((each) => each.startsWith("Expires"));
   assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4} $/u);

@@ -169,14 +169,14 @@ test("the + raises a menu of Attachment and Integrations, whose servers popover 
   act(() => servers.click());
 
   const popover =
-    document.querySelector<HTMLElement>(".luke-menu-panel [role='dialog']") ??
+    document.querySelector<HTMLElement>(".ui-menu-panel [role='dialog']") ??
     assert.fail("the servers popover stands");
   const search = popover.querySelector<HTMLInputElement>("input") ?? assert.fail("it searches");
   assert.equal(document.activeElement, search);
   await act(async () => {
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  assert.equal(document.querySelector(".luke-menu-panel"), null);
+  assert.equal(document.querySelector(".ui-menu-panel"), null);
   assert.equal(document.activeElement, servers);
   assert.equal(box.container.querySelector('button[aria-label="Integrations"]'), null);
 });
@@ -211,9 +211,9 @@ test("a card too narrow for the model's words has its chip draw the harness's ma
     box.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the model chip stands");
   assert.equal(model().getAttribute("aria-label"), "Opus 5.5 High");
-  assert.notEqual(model().querySelector(".luke-harness-mark"), null);
+  assert.notEqual(model().querySelector(".ui-harness-mark"), null);
 
   laid.mockReturnValue(CARD.WIDE);
   act(() => relayout());
-  assert.equal(model().querySelector(".luke-harness-mark"), null);
+  assert.equal(model().querySelector(".ui-harness-mark"), null);
 });

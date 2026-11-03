@@ -59,7 +59,7 @@ const INSTALLED_ORDER = [TASK_SKILL_SOURCE.WORKSPACE, TASK_SKILL_SOURCE.PERSONAL
  * The installed skills a developer may choose beside the repository's: the
  * enabled ones a member may name, the workspace's and then their own, each
  * by name, any name an earlier one or any repository skill holds left out,
- * a model-only one included, as many as the list carries.
+ * a model-only one left out, as many as the list carries.
  */
 function mergedSkills(
   repository: readonly TaskSkill[],

@@ -3,13 +3,13 @@
    over the glyph rather than cut into it. */
 
 @layer components {
-  .luke-corner-count {
+  .ui-corner-count {
     position: relative;
     display: inline-grid;
     place-items: center;
   }
 
-  .luke-corner-count-mark {
+  .ui-corner-count-mark {
     position: absolute;
     top: calc(-1 * var(--ui-space-8));
     inset-inline-start: calc(100% - var(--ui-space-6));

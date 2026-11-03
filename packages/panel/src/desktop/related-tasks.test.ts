@@ -202,7 +202,7 @@ test("under a finger, a related task's row draws no ⋯, and a long press on it 
   assert.ok(row, "the task's row stands");
   assert.ok(row.querySelector('button[aria-label="Task actions"]') === null, "the row draws no ⋯");
   longPress(row.querySelector<HTMLElement>("[data-card-press]") ?? assert.fail("no press"));
-  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].map(
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");

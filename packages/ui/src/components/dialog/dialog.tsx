@@ -166,16 +166,16 @@ const DISMISSAL: ReadonlySet<DialogRoot.ChangeEventReason> = new Set([
  * composer's, on a phone, reaching back half the dimmed window's margin at
  * a card's snug inset), a picture's grow standing its entrance down, the
  * ring a drag it would take draws, the swell and the shake, and no ring of
- * its own, since it holds focus for its controls. `luke-dialog` names it
+ * its own, since it holds focus for its controls. `ui-dialog` names it
  * for what finds a card in the page.
  */
 const CARD_LOOK = [
-  "luke-dialog focus:outline-none",
+  "ui-dialog focus:outline-none",
   "data-[size=wide]:w-dialog-wide data-[size=wide]:gap-3",
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
-  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-ui-16 data-[size=window]:mb-ui-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-ui-48 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-ui-24",
+  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-ui-16 data-[size=window]:mb-ui-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/ui-dialog-room:data-[size=window]:mx-ui-48 @min-[1024px]/ui-dialog-room:data-[size=window]:mb-ui-24",
   "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-sheet-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
@@ -230,7 +230,7 @@ export function DialogCard({
 }): React.JSX.Element {
   return (
     <div
-      className={`luke-dialog-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-dialog border border-border-strong bg-popover text-popover-foreground shadow-dialog ${hug ? "max-h-full max-w-full min-w-dialog-media-min" : "size-full"}`}
+      className={`ui-dialog-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-dialog border border-border-strong bg-popover text-popover-foreground shadow-dialog ${hug ? "max-h-full max-w-full min-w-dialog-media-min" : "size-full"}`}
       data-hug={hug}
     >
       {children}
@@ -239,16 +239,16 @@ export function DialogCard({
 }
 
 /** The dimmed window under a bare dialog, which keeps its own margins (`CARD_LOOK`). */
-const WINDOW_ROOM = "luke-dialog-backdrop p-0";
+const WINDOW_ROOM = "ui-dialog-backdrop p-0";
 
 /** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin, and dims and clears on the sheet's own beat. */
 const SHEET_ROOM =
-  "luke-dialog-backdrop items-end justify-items-center p-0 animate-sheet-scrim data-ending-style:animate-sheet-leave";
+  "ui-dialog-backdrop items-end justify-items-center p-0 animate-sheet-scrim data-ending-style:animate-sheet-leave";
 
 /** The dimmed window's room by the card's size. */
 function roomOf(size: DialogSize): string {
   if (size === DIALOG_SIZE.WINDOW) return WINDOW_ROOM;
-  return size === DIALOG_SIZE.SHEET ? SHEET_ROOM : "luke-dialog-backdrop";
+  return size === DIALOG_SIZE.SHEET ? SHEET_ROOM : "ui-dialog-backdrop";
 }
 
 /** What a reader is told when a draft holds the card back. */

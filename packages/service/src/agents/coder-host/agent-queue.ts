@@ -46,13 +46,10 @@ import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../../http/http-effect.js";
-import { deploymentEve, deploymentEveForAccounts } from "../deployment-eve.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
-import { type AgentSessions, EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
+import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { routedSessions } from "./runtime-sessions.js";
 import { agentStatusOf, startedBlank } from "./status.js";
 import { steerAgentWritten } from "./steer.js";
-import { type EveReach, eveFor } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** eve as the service reaches it acting for one member, whose queued message goes as theirs, or the refusal where it cannot. */
@@ -63,24 +60,6 @@ export type QueueEve = (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 >;
-
-/**
- * eve for the queue a request changed, acting for each member whose queued
- * message it sends: the request's own caller as `eveFor` reaches them, and
- * any other member as the deployment acting for them, since a message
- * another member queued goes as theirs.
- */
-export function queueEveFor(reach: EveReach, request: Request, requester: string): QueueEve {
-  return (account) =>
-    account === requester
-      ? eveFor<EveTypedTurn>(reach, request, account)
-      : Effect.gen(function* () {
-          if (reach.eveAs !== undefined)
-            return yield* routedSessions(reach.eveAs(account), account);
-          const eveAs = yield* deploymentEve<EveTypedTurn>(reach.eveOrigin(), EVE_MOUNT.CODER);
-          return eveAs(account);
-        });
-}
 
 /**
  * The queue as the agent's own transcript carries it at `now`, on every
@@ -286,11 +265,7 @@ const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
  */
 export const queueAtNativeTurnEnd = (agent: Agent) =>
   Effect.gen(function* () {
-    const eveFor = yield* deploymentEveForAccounts<EveTypedTurn>(
-      deploymentEveOrigin(),
-      EVE_MOUNT.CODER,
-    );
-    yield* queueAtTurnEnd(eveFor, agent);
+    yield* queueAtTurnEnd(routedSessions, agent);
   });
 
 /** How many queues a sweep hands on at most, as each of the sweep's passes is bounded. */

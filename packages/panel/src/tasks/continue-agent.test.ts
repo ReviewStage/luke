@@ -272,7 +272,7 @@ async function drawnTab(input: {
       container.querySelector<HTMLElement>(".agent-end") ??
       container.querySelector<HTMLElement>("[data-ended]")?.parentElement ??
       null,
-    note: () => container.querySelector<HTMLElement>(".luke-composer-foot-note"),
+    note: () => container.querySelector<HTMLElement>(".ui-composer-foot-note"),
     continuedNote: () => container.querySelector<HTMLElement>(".continued-composer"),
     continuedIn: () => [...container.querySelectorAll<HTMLElement>("[data-continued]")],
     sendButton: () => container.querySelector<HTMLButtonElement>('button[aria-label="Send"]'),
@@ -282,7 +282,7 @@ async function drawnTab(input: {
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
       const words = container.querySelector<HTMLElement>(
-        "[data-ended] :is(.agent-end-words, .luke-failure-note-words)",
+        "[data-ended] :is(.agent-end-words, .ui-failure-note-words)",
       );
       const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
@@ -361,8 +361,7 @@ test("a failed turn's end line names no price, even from a service that sent the
     assert.fail("the box offers its model chip");
   act(() => chip.click());
   await settle();
-  const menu =
-    tab.container.querySelector(".luke-searchable-menu") ?? assert.fail("the menu opens");
+  const menu = tab.container.querySelector(".ui-searchable-menu") ?? assert.fail("the menu opens");
   assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });

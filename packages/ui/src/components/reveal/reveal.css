@@ -4,7 +4,7 @@
    (settings-section.css). */
 
 @layer components {
-  .luke-reveal {
+  .ui-reveal {
     display: flex;
     flex-direction: column;
     min-width: 0;

@@ -81,32 +81,32 @@ body {
 
 /* A brand whose one-colour mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
-[data-luke-theme="dark"]
+[data-ui-theme="dark"]
 :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
   color: #fff;
 }
 
-[data-luke-theme="dark"] .integration-mark-mercury {
+[data-ui-theme="dark"] .integration-mark-mercury {
   color: #f4f5f9;
 }
 
-[data-luke-theme="dark"] .integration-mark-neon {
+[data-ui-theme="dark"] .integration-mark-neon {
   color: #34d59a;
 }
 
-[data-luke-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
+[data-ui-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
   color: #000;
 }
 
-[data-luke-theme="light"] .integration-mark-mercury {
+[data-ui-theme="light"] .integration-mark-mercury {
   color: #272735;
 }
 
-[data-luke-theme="light"] .integration-mark-neon {
+[data-ui-theme="light"] .integration-mark-neon {
   color: #37c38f;
 }
 
-[data-luke-theme="light"] .integration-mark-sentry {
+[data-ui-theme="light"] .integration-mark-sentry {
   color: #181225;
 }
 
@@ -192,7 +192,7 @@ body {
   color: var(--ui-color-working);
 }
 
-.catalog-mark > .luke-product-mark {
+.catalog-mark > .ui-product-mark {
   width: 100%;
   height: 100%;
 }
@@ -473,8 +473,8 @@ body {
 /* The mark gives way to a narrow or short window, so the card that fits it
    never has to clip it: the window less the dimmed margin, the picture's
    inset, the card's edge, and, for its height, the bar above it. */
-.catalog-media-picture > .luke-product-mark,
-.catalog-window-picture > .luke-product-mark {
+.catalog-media-picture > .ui-product-mark,
+.catalog-window-picture > .ui-product-mark {
   width: min(
     480px,
     100vw -
@@ -578,7 +578,7 @@ body {
   min-height: var(--ui-control-height);
 }
 
-.catalog-inline-edit > .luke-inline-edit {
+.catalog-inline-edit > .ui-inline-edit {
   flex: 1;
 }
 
@@ -589,7 +589,7 @@ body {
   box-shadow: inset 0 0 0 1px var(--ui-color-border-selected);
 }
 
-.catalog-inline-edit-well > .luke-inline-edit {
+.catalog-inline-edit-well > .ui-inline-edit {
   width: 24ch;
 }
 
@@ -1011,14 +1011,14 @@ body {
   transform: none;
 }
 
-.catalog-drawer-stage[data-luke-drawer-drag] .catalog-drawer {
+.catalog-drawer-stage[data-ui-drawer-drag] .catalog-drawer {
   transform: translateX(calc((var(--ui-drawer-progress, 0) - 1) * 100%));
   transition: none;
 }
 
 /* A box the words inside answer the width of (`under`), as a card or a header does. */
 .catalog-room {
-  container: luke-room / inline-size;
+  container: ui-room / inline-size;
 }
 
 /* A card a band stands across the top of, as a review thread's card names
@@ -1110,13 +1110,13 @@ body {
 
 /* A transcript's fold skins its summary's line itself, as a pull request's
    section heading does. */
-.catalog-transcript-fold .luke-disclosure-summary {
+.catalog-transcript-fold .ui-disclosure-summary {
   display: flex;
   align-items: center;
   gap: var(--ui-icon-gap);
   color: var(--ui-color-text-muted);
 }
 
-.catalog-transcript-fold .luke-disclosure-summary:hover {
+.catalog-transcript-fold .ui-disclosure-summary:hover {
   color: var(--ui-color-text);
 }

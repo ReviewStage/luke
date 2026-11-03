@@ -4,29 +4,29 @@
 
 @layer components {
   /* The region draws no box, so what holds it lays out its controls. */
-  .luke-stepped-back {
+  .ui-stepped-back {
     display: contents;
   }
 
   /* A choice's rows step back to the outline a settled list's unpicked
-     rows wear, the same declarations as `.luke-choice[data-picked="false"]`. */
-  .luke-stepped-back .luke-choice {
+     rows wear, the same declarations as `.ui-choice[data-picked="false"]`. */
+  .ui-stepped-back .ui-choice {
     background: none;
     box-shadow: inset 0 0 0 1px var(--ui-color-border);
     color: var(--ui-color-text-muted);
   }
 
-  .luke-stepped-back :is(.luke-choice-detail, .luke-checkbox[data-read-only="true"]) {
+  .ui-stepped-back :is(.ui-choice-detail, .ui-checkbox[data-read-only="true"]) {
     color: var(--ui-color-text-muted);
   }
 
   /* A button keeps its shape, its words and edge going quiet rather than
      the whole of it fading, as an unavailable one does. */
-  .luke-stepped-back .luke-button {
+  .ui-stepped-back .ui-button {
     --ui-button-ink: var(--ui-color-text-muted);
   }
 
-  .luke-stepped-back .luke-button[data-variant="outline"] {
+  .ui-stepped-back .ui-button[data-variant="outline"] {
     --ui-button-edge: var(--ui-color-border);
   }
 }

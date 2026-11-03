@@ -93,7 +93,7 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
 /** Where the sidebar draws the Inbox's row and the Tasks list: whether each stands in the column's scroller. */
 function scrolled(sidebar: HTMLElement) {
   const scroller =
-    sidebar.querySelector(".sidebar-section .luke-scroll-area") ?? assert.fail("the scroller");
+    sidebar.querySelector(".sidebar-section .ui-scroll-area") ?? assert.fail("the scroller");
   const home =
     [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Inbox")) ??
     assert.fail("the Inbox's row");

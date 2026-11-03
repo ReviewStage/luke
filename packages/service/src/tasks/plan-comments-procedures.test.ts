@@ -117,7 +117,6 @@ const onHub = Effect.gen(function* () {
         Effect.succeed(
           Option.fromNullishOr(asked.headers.get("authorization")?.replace("Bearer ", "")),
         ),
-      eveOrigin: () => undefined,
     }),
   });
   /** The plan's comments read as the account, past the cursor where one is named. */

@@ -60,7 +60,7 @@ function DrawnLines(): React.JSX.Element {
 /** How the drawn file stands: its numbers, its wrap, and the type its scroller names. */
 function drawnLines(container: HTMLElement) {
   const scroller =
-    container.querySelector<HTMLElement>(".whole-file > .luke-scroll-area") ??
+    container.querySelector<HTMLElement>(".whole-file > .ui-scroll-area") ??
     assert.fail("the file is drawn");
   const pre =
     wholeFileRoot(container)?.querySelector("pre") ?? assert.fail("the file's lines are drawn");
@@ -292,6 +292,6 @@ test("on a phone a File tab draws no bar, and the task's header's ⋯ offers eve
 
   handed.press("Show files");
   assert.ok(handed.labels().includes("Hide files"), "the tree floats over the file");
-  const floated = container.querySelector('.luke-over-pane[aria-label="Files"]');
+  const floated = container.querySelector('.ui-over-pane[aria-label="Files"]');
   assert.equal(floated?.getAttribute("data-state"), "open", "the tree floats open over the file");
 });

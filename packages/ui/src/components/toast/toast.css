@@ -16,7 +16,7 @@
 @layer components {
   /* The stack's corner, a step in from the window's, above the on-screen
      keyboard while it is up. */
-  .luke-toast-stack {
+  .ui-toast-stack {
     right: var(--ui-space-16);
     bottom: calc(var(--ui-space-16) + var(--ui-keyboard-inset));
     width: min(340px, calc(var(--ui-stage-width) - 2 * var(--ui-space-16)));
@@ -25,7 +25,7 @@
   /* On a phone the stack keeps off the notch and the home indicator, since
      it is fixed to the page rather than the stage. The room is the document
      root's, because the stack is portalled out of the shell. */
-  :root[data-luke-room="narrow"] .luke-toast-stack {
+  :root[data-ui-room="narrow"] .ui-toast-stack {
     right: calc(var(--ui-space-8) + env(safe-area-inset-right, 0px));
     bottom: calc(
       max(var(--ui-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
@@ -47,15 +47,15 @@
      it is dragged or swept is one a drag writes alone and nothing
      transitions, so the card stays under the finger; it stays here beside
      the departures below, which carry it on from there. */
-  .luke-toast {
+  .ui-toast {
     pointer-events: none;
     translate: var(--ui-toast-drag, 0px) 0;
     animation:
-      luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
-      luke-toast-rise var(--ui-duration-fast) var(--ui-spring-fast);
+      ui-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
+      ui-toast-rise var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  .luke-toast[data-leaving="true"] {
+  .ui-toast[data-leaving="true"] {
     opacity: 0;
     transform: translateX(var(--ui-space-8));
     transition:
@@ -66,31 +66,31 @@
 
   /* One swiped away goes on off the side it was sent to, from where the
      drag let go of it, rather than back past where it stood. */
-  .luke-toast[data-leaving="true"][data-swiped="right"] {
+  .ui-toast[data-leaving="true"][data-swiped="right"] {
     transform: none;
     translate: calc(100% + var(--ui-space-16)) 0;
   }
 
-  .luke-toast[data-leaving="true"][data-swiped="left"] {
+  .ui-toast[data-leaving="true"][data-swiped="left"] {
     transform: none;
     translate: calc(-100% - var(--ui-space-16)) 0;
   }
 
   /* As its tone turns, the glyph it led with fades out under the one it now
      leads with, which grows in on the spring, in the one cell they share. */
-  .luke-toast-glyph > [data-turn="was"] {
-    animation: luke-toast-glyph-out var(--ui-duration-quick) var(--ui-motion-exit) forwards;
+  .ui-toast-glyph > [data-turn="was"] {
+    animation: ui-toast-glyph-out var(--ui-duration-quick) var(--ui-motion-exit) forwards;
   }
 
-  .luke-toast[data-turned="true"] .luke-toast-glyph > [data-turn="now"] {
+  .ui-toast[data-turned="true"] .ui-toast-glyph > [data-turn="now"] {
     animation:
-      luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
-      luke-toast-glyph-in var(--ui-duration-fast) var(--ui-spring-fast);
+      ui-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
+      ui-toast-glyph-in var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   /* Its words, turned with its tone, fade in anew in the place they held. */
-  .luke-toast[data-turned="true"] .luke-toast-text {
-    animation: luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit);
+  .ui-toast[data-turned="true"] .ui-toast-text {
+    animation: ui-toast-fade var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
   /* How much of its hold is left: the bar drains toward its start over the
@@ -98,31 +98,31 @@
      the hold's own; it stops while the card is held and holds still on
      --ui-wait-motion on a capture run. Under reduced motion it still says
      the time left, a notch a second rather than a glide. */
-  .luke-toast-countdown {
-    animation: luke-toast-drain var(--ui-toast-hold) linear forwards;
+  .ui-toast-countdown {
+    animation: ui-toast-drain var(--ui-toast-hold) linear forwards;
     animation-play-state: var(--ui-wait-motion);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .luke-toast-countdown {
+    .ui-toast-countdown {
       animation-timing-function: steps(var(--ui-toast-seconds), end);
     }
   }
 
-  .luke-toast[data-held="true"] .luke-toast-countdown {
+  .ui-toast[data-held="true"] .ui-toast-countdown {
     animation-play-state: paused;
   }
 
   /* A toast with an action is pointed at, so it takes the pointer that one
      with none lets pass through to whatever is under it. */
-  .luke-toast[data-action="true"] {
+  .ui-toast[data-action="true"] {
     pointer-events: auto;
   }
 
   /* A modal's question is answered before anything behind it changes, so
      while one stands an action toast lets the pointer through to the dimmed
      window, as the modal's own Tab already keeps focus off it. */
-  body:has(.luke-dialog-backdrop) .luke-toast[data-action="true"] {
+  body:has(.ui-dialog-backdrop) .ui-toast[data-action="true"] {
     pointer-events: none;
   }
 
@@ -130,7 +130,7 @@
      under the pointer or focus, as a Mac's own notifications do, so it takes
      no room in the row. At rest it lets the pointer through, so the part of
      it past the card's edge never stands in the way of what is under it. */
-  .luke-toast-dismiss {
+  .ui-toast-dismiss {
     opacity: 0;
     transform: scale(0.85);
     pointer-events: none;
@@ -139,14 +139,14 @@
       transform var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-toast:focus-within .luke-toast-dismiss {
+  .ui-toast:focus-within .ui-toast-dismiss {
     opacity: 1;
     transform: none;
     pointer-events: auto;
   }
 
   @media (hover: hover) {
-    .luke-toast:hover .luke-toast-dismiss {
+    .ui-toast:hover .ui-toast-dismiss {
       opacity: 1;
       transform: none;
       pointer-events: auto;
@@ -156,7 +156,7 @@
   /* A screen with no hover shows the × at rest, since no pointer rests on
      the card to bring it. */
   @media (hover: none) {
-    .luke-toast-dismiss {
+    .ui-toast-dismiss {
       opacity: 1;
       transform: none;
       pointer-events: auto;
@@ -166,47 +166,47 @@
   /* Note that the × must let the pointer through under a modal too, because
      one already under the pointer as the modal opens keeps its card hovered
      by taking the pointer itself, past the card's own `none` above. */
-  body:has(.luke-dialog-backdrop) .luke-toast[data-action="true"] .luke-toast-dismiss {
+  body:has(.ui-dialog-backdrop) .ui-toast[data-action="true"] .ui-toast-dismiss {
     pointer-events: none;
   }
 
   /* A close takes a finger's press up and down alone on a coarse pointer,
      never sideways, because beside it stand the words it would close, and a
      tap meant for a toast's words that lands near its end must not close
-     it. This reaches into `@luke/ui`'s Button through its `luke-button`
+     it. This reaches into `@luke/ui`'s Button through its `ui-button`
      class, its contract with a sheet that restyles it. */
   @media (pointer: coarse) {
-    .luke-toast-dismiss .luke-button::before {
+    .ui-toast-dismiss .ui-button::before {
       width: 100%;
     }
   }
 
-  @keyframes luke-toast-fade {
+  @keyframes ui-toast-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-toast-glyph-out {
+  @keyframes ui-toast-glyph-out {
     to {
       opacity: 0;
       transform: scale(0.6);
     }
   }
 
-  @keyframes luke-toast-glyph-in {
+  @keyframes ui-toast-glyph-in {
     from {
       transform: scale(0.6);
     }
   }
 
-  @keyframes luke-toast-drain {
+  @keyframes ui-toast-drain {
     to {
       transform: scaleX(0);
     }
   }
 
-  @keyframes luke-toast-rise {
+  @keyframes ui-toast-rise {
     from {
       transform: translateY(var(--ui-space-12));
     }

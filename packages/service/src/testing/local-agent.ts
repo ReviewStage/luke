@@ -129,7 +129,6 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 5).toString("base64")}`),
 });

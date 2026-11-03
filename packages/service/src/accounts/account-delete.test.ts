@@ -18,7 +18,7 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
@@ -26,7 +26,7 @@ import type { NativeAgentSessions } from "../agents/coder-host/runtime-sessions.
 import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
@@ -58,7 +58,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -71,11 +70,6 @@ interface Answer {
 /** The cookie a browser signed in to the account sends, as the fake auth service reads it. */
 function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
-}
-
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
-function deploymentFor(account: string): string {
-  return `deployment for ${account}`;
 }
 
 /** A harness as a deletion reaches it: every retire written down with whom it acted for, and nothing else a deletion asks. */
@@ -93,8 +87,6 @@ function retiringEve() {
   });
   return {
     retired,
-    eve: (authorization: Redacted.Redacted) => asked(Redacted.value(authorization)),
-    eveAs: (account: string) => asked(deploymentFor(account)),
     harness: scriptedHarnessLayer((account) => asked(harnessFor(account))),
   };
 }
@@ -120,11 +112,10 @@ const sessionOf = (
 
 /**
  * Two accounts, each behind its bearer and its browser's session cookie, and
- * the procedures answering on the test's database and clock over the eve given,
- * or, with none, over the eve the deployment composes itself, which names no
- * secret and reaches no network.
+ * the procedures answering on the test's database and clock over the harness
+ * given.
  */
-const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
+const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openUser;
@@ -142,8 +133,6 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       );
     const procedures = accountProcedures({
       resolveUserId: (incoming) => requestUserId(incoming, userInfo, session),
-      eveOrigin: () => ORIGIN,
-      ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
       standingSessions: (userId) => standingSessionsOf(userId),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
@@ -160,7 +149,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       owner,
       other,
       stands,
-      ask: (request: Request) => answer(procedures, request, eve?.harness ?? Layer.empty),
+      ask: (request: Request) => answer(procedures, request, eve.harness),
     };
   });
 
@@ -243,42 +232,6 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
-      }),
-  );
-
-  it.effect(
-    "over a browser's session cookie is refused as unavailable, erasing nothing, on a deployment that cannot reach eve as itself, while the bearer's deletion goes on with its retires a courtesy",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, stands, ask } = yield* openAccounts(undefined);
-        yield* sessionOf(owner, CONVERSATION_KIND.MAIN);
-        yield* sessionOf(other, CONVERSATION_KIND.MAIN);
-
-        assert.deepEqual(
-          yield* ask(
-            sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, HTTP_METHOD.POST, {
-              cookie: sessionCookieOf(owner),
-            }),
-          ),
-          {
-            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
-          },
-        );
-        assert.equal(yield* stands(owner), true, "the cookie's deletion erased nothing");
-        assert.deepEqual(
-          yield* ask(
-            sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, HTTP_METHOD.POST, {
-              authorization: `Bearer ${other}`,
-            }),
-          ),
-          { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
-        );
-        assert.equal(
-          yield* stands(other),
-          false,
-          "the bearer's went on though eve was out of reach",
-        );
       }),
   );
 });

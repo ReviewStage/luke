@@ -231,8 +231,8 @@ function chips(container: HTMLElement): [string | null, string | null][] {
   return [
     ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
   ].map((chip) => [
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
-    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-state")?.textContent ?? null,
   ]);
 }
 

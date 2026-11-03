@@ -232,7 +232,7 @@ export function Stack({
     Element,
     {
       ...named,
-      className: layoutClass("luke-stack flex-col", gap, align, justify, inset, className),
+      className: layoutClass("ui-stack flex-col", gap, align, justify, inset, className),
       role: listRole(Element),
       noValidate: browserUnchecked(Element),
       ...(moves ? motionRows() : {}),
@@ -272,7 +272,7 @@ export function Inline({
     {
       ...named,
       className: layoutClass(
-        cn("luke-inline", wrap && "flex-wrap", grow && "grow shrink basis-field-least"),
+        cn("ui-inline", wrap && "flex-wrap", grow && "grow shrink basis-field-least"),
         gap,
         align,
         justify,
@@ -338,7 +338,7 @@ export function Fill({
       ...rest,
       ref,
       className: cn(
-        "luke-fill flex min-h-0 min-w-0 flex-1",
+        "ui-fill flex min-h-0 min-w-0 flex-1",
         flow === FILL_FLOW.ROW ? "flex-row" : "flex-col",
         clip && "overflow-clip",
         className,
