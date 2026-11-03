@@ -65,6 +65,15 @@ const SETUP_PLACE = keptKey(
   Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
 );
 
+/**
+ * The accounts that finished setup on this device, by id: the account's own
+ * `setupFinished` read ahead of its preferences arriving.
+ */
+const SETUP_FINISHED = keptKey(
+  "app.setupFinished",
+  Schema.fromJsonString(Schema.Array(Schema.String)),
+);
+
 /** Where setup starts. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 
@@ -80,8 +89,13 @@ export function useSetupGate(
   finishedHere: boolean,
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
+  const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
   const finishedOnAccount = useAppSlice(APP_SETTINGS_VIEW)?.setupFinished === true;
-  const finished = finishedHere || finishedOnAccount;
+  // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
+  const finished =
+    finishedHere ||
+    finishedOnAccount ||
+    (accountId !== undefined && finishedOnDevice.includes(accountId));
   const { models, modelsRead, readModels, workspaces } = tasks.newTask;
   const fresh = welcomed(tasks);
   const candidate = fresh && accountId !== undefined && !finished;
@@ -160,6 +174,7 @@ export function SetupSteps({
 }): React.JSX.Element {
   const { tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
+  const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   const place = places[accountId] ?? SETUP_START;
   const { audience, team } = place;
   const [creating, setCreating] = useState(false);
@@ -190,6 +205,7 @@ export function SetupSteps({
     // Finished, the account's place is let go of, as setup stands no more on any machine.
     // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
     tell(ACT_KIND.SETTING_UPDATE, { field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
+    keepFinished((finished) => [...finished, accountId]);
     changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
   };
