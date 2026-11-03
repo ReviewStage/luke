@@ -32,7 +32,11 @@ export const RECORDING_CURSOR_FILE = {
  * spring (`--ui-spring-fast` over `--ui-duration-fast`), and once it arrives a
  * press presses it, with a ripple at the point, and typing bobs it; over a
  * dark page it is drawn in the panel's lighter grey, and near the page's
- * right or bottom edge it is mirrored about its tip. The panel's tokens are
+ * right or bottom edge it is mirrored about its tip. A key a viewer could
+ * not otherwise see, such as Enter, Tab, Escape, an arrow, or a shortcut,
+ * shows as key caps on a pill at the foot of the page, which fades a beat
+ * after the last one; a key that only types text never does, since the
+ * field shows that itself and it may be a password. The panel's tokens are
  * no part of the page, so their values are written out here: hold them to
  * `--agent-pointer`, `--agent-pointer-on-dark`, and `--agent-pointer-halo`,
  * and to the `.cloud-browser-cursor` rules. Note that it does not rock while
@@ -58,7 +62,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.2),transparent)}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:rgba(107,111,118,.9);stroke:rgba(107,111,118,.9);stroke-width:.6;stroke-linejoin:round;transform-origin:0 0}.c.dark .a{fill:rgba(206,209,214,.92);stroke:rgba(206,209,214,.92)}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1px solid rgba(107,111,118,.9);border-radius:50%;opacity:0}.r.dark{border-color:rgba(206,209,214,.92)}";
+  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.2),transparent)}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:rgba(107,111,118,.9);stroke:rgba(107,111,118,.9);stroke-width:.6;stroke-linejoin:round;transform-origin:0 0}.c.dark .a{fill:rgba(206,209,214,.92);stroke:rgba(206,209,214,.92)}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1px solid rgba(107,111,118,.9);border-radius:50%;opacity:0}.r.dark{border-color:rgba(206,209,214,.92)}.k{position:absolute;left:50%;bottom:24px;display:flex;gap:6px;padding:6px;border-radius:10px;background:rgba(31,35,40,.82);color:#fff;font:500 15px/1 system-ui,-apple-system,sans-serif;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{min-width:14px;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);text-align:center;white-space:nowrap}";
   // A constructed sheet, since a page's own style-src may refuse a style element.
   if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
     const sheet = new CSSStyleSheet();
@@ -83,7 +87,9 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   icon.append(path);
   flip.append(icon);
   arrow.append(halo, flip);
-  shadow.append(arrow);
+  const keys = document.createElement("div");
+  keys.className = "k";
+  shadow.append(arrow, keys);
   root.append(host);
   const stop = new AbortController();
   const on = { capture: true, passive: true, signal: stop.signal };
@@ -93,6 +99,9 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   let pressedAt = 0;
   let bob;
   let bobEnd;
+  let keysEnd;
+  const NAMED = { Enter: "\u23ce", Tab: "\u21e5", Backspace: "\u232b", Delete: "\u2326", Escape: "Esc", ArrowUp: "\u2191", ArrowDown: "\u2193", ArrowLeft: "\u2190", ArrowRight: "\u2192", Home: "Home", End: "End", PageUp: "PgUp", PageDown: "PgDn" };
+  const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
   // Whether the page is dark just inside the arrow's tip: the first background there that mostly covers what is under it, by its luminance.
   const darkAt = (x, y) => {
     if (typeof document.elementsFromPoint !== "function") return false;
@@ -141,6 +150,32 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
       bob = undefined;
     }, 700);
   };
+  // A key's caps, its modifiers first; none for a modifier alone or a key that only types text.
+  const capsOf = (event) => {
+    if (MODIFIERS.has(event.key)) return undefined;
+    const chord = event.metaKey || event.ctrlKey || event.altKey;
+    const named = Object.hasOwn(NAMED, event.key) ? NAMED[event.key] : /^F\\d{1,2}$/.test(event.key) ? event.key : undefined;
+    if (named === undefined && !chord) return undefined;
+    const code = event.code || "";
+    const key = named ?? (/^Key[A-Z]$/.test(code) ? code.slice(3) : /^Digit\\d$/.test(code) ? code.slice(5) : event.key === " " ? "Space" : event.key.toUpperCase());
+    return (event.ctrlKey ? "\u2303" : "") + (event.altKey ? "\u2325" : "") + (event.shiftKey ? "\u21e7" : "") + (event.metaKey ? "\u2318" : "") + key;
+  };
+  // The last three keys stand on the pill, which fades a beat after the last.
+  const showKeys = (event) => {
+    const caps = capsOf(event);
+    if (caps === undefined) return;
+    if (!host.isConnected && document.documentElement) document.documentElement.append(host);
+    const cap = document.createElement("span");
+    cap.textContent = caps;
+    keys.append(cap);
+    while (keys.childElementCount > 3) keys.firstElementChild.remove();
+    keys.classList.add("on");
+    clearTimeout(keysEnd);
+    keysEnd = setTimeout(() => {
+      keys.classList.remove("on");
+      keysEnd = setTimeout(() => keys.replaceChildren(), 200);
+    }, 1200);
+  };
   const middleOf = (target) => {
     if (!(target instanceof Element)) return undefined;
     const box = target.getBoundingClientRect();
@@ -155,7 +190,10 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     pressAt(event.clientX, event.clientY);
   }, on);
   window.addEventListener("beforeinput", bobOnce, on);
-  window.addEventListener("keydown", bobOnce, on);
+  window.addEventListener("keydown", (event) => {
+    bobOnce();
+    showKeys(event);
+  }, on);
   // Typing by ref focuses its field and a choice sets its dropdown, neither with the mouse, so the pointer goes to the field it lands in.
   window.addEventListener("focusin", (event) => {
     if (Date.now() - pressedAt < 400) return;
@@ -172,6 +210,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window.addEventListener("agent-recording-stop", () => {
     stop.abort();
     clearTimeout(bobEnd);
+    clearTimeout(keysEnd);
     host.remove();
     delete window[mark];
   }, { once: true });

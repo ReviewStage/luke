@@ -84,3 +84,26 @@ test("typing into a field by ref, which focuses it with no mouse, draws the poin
   assert.equal(hosts().length, 1, "the focus moved the pointer, which stands in the page again");
   field.remove();
 });
+
+test("a key a viewer could not see shows as key caps, and a key that only types text never does", () => {
+  // The caps stand in the pointer's closed shadow root, which the frames show and the page cannot reach, so the test keeps the root as it is made.
+  const attach = vi.spyOn(Element.prototype, "attachShadow");
+  run(RECORDING_CURSOR_SOURCE);
+  const shadow = attach.mock.results[0]?.value;
+  assert.ok(shadow instanceof ShadowRoot);
+  const field = document.createElement("input");
+  field.type = "password";
+  document.body.append(field);
+  const press = (init: KeyboardEventInit) =>
+    field.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+
+  for (const key of "hunter2") press({ key });
+  press({ key: "A", code: "KeyA", shiftKey: true });
+  press({ key: "Shift", shiftKey: true });
+  press({ key: "Enter", code: "Enter" });
+  press({ key: "k", code: "KeyK", metaKey: true });
+
+  const caps = [...shadow.querySelectorAll(".k span")].map((cap) => cap.textContent);
+  assert.deepEqual(caps, ["⏎", "⌘K"]);
+  field.remove();
+});
