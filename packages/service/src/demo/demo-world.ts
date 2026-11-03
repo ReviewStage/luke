@@ -1,3 +1,4 @@
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { INBOX_ASK, INBOX_FIELD, type InboxAsk } from "@luke/features/inbox-wire";
 import {
   TASK_PRIORITY,
@@ -36,6 +37,8 @@ export const DEMO_ID_KIND = {
   TOOL_CALL: "de300008",
   /** The key a member's write is taken under, so it is taken once. */
   CLIENT_KEY: "de300009",
+  /** The host the run starts on this Mac for Dean's agents. */
+  DEVICE: "de30000a",
   /** Anything else Better Auth writes for the seed. */
   AUTH_ROW: "de300007",
 } as const;
@@ -98,6 +101,20 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [DEMO_DEAN, DANA, JORDAN, PRIY
 
 /** The workspace everything happens in, which Dean owns. */
 export const DEMO_WORKSPACE_NAME = "acme";
+
+/* ----- The host ----- */
+
+/**
+ * The host `run.sh --demo` starts on this Mac for the length of a run, as
+ * Dean's own, on which every task runs its agents. Its name stands only
+ * until the host's first register renames it for the Mac's Computer Name.
+ */
+export const DEMO_HOST = {
+  id: demoId(DEMO_ID_KIND.DEVICE, 1),
+  name: "This Mac",
+  platform: DEVICE_PLATFORM.DARWIN,
+  arch: DEVICE_ARCH.ARM64,
+} as const;
 
 /* ----- The tasks ----- */
 
