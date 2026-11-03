@@ -15,8 +15,11 @@ import {
   slackMemberByEmail,
   slackMemberLookup,
   slackMemberOf,
+  slackStartRepositories,
   slackUnresolvedConnections,
   workspaceSlackInstallation,
+  writeSlackChannelRepository,
+  writeSlackDefaultRepository,
 } from "../slack-installation-store.js";
 
 /**
@@ -119,5 +122,37 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
       assert.equal(disconnected, true);
       assert.equal(Option.isNone(yield* slackMemberLookup(workspace, member)), true);
     }),
+  );
+
+  it.effect(
+    "a workspace reads only its own Slack repositories, and a channel's cleared one is gone",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openAccount;
+        const ours = yield* openWorkspace;
+        const theirs = yield* openWorkspace;
+        for (const organizationId of [ours, theirs]) {
+          yield* linkSlackInstallation({
+            organizationId,
+            teamId: "T0001",
+            teamName: "Team",
+            userId: member,
+          });
+        }
+
+        yield* writeSlackDefaultRepository(ours, "Acme/Relay");
+        yield* writeSlackChannelRepository(ours, "C0001", "Acme/Api");
+        yield* writeSlackChannelRepository(ours, "C0002", "Acme/Web");
+        yield* writeSlackChannelRepository(ours, "C0002", null);
+
+        assert.deepEqual(yield* slackStartRepositories(ours), {
+          defaultRepository: "Acme/Relay",
+          channels: [{ channelId: "C0001", repository: "Acme/Api" }],
+        });
+        assert.deepEqual(yield* slackStartRepositories(theirs), {
+          defaultRepository: null,
+          channels: [],
+        });
+      }),
   );
 });

@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { workspaceIdSchema } from "./task-wire.js";
 
 /**
@@ -12,7 +13,12 @@ import { workspaceIdSchema } from "./task-wire.js";
  * `POST /api/workspaces/slack-bot/disconnect` disconnects it, each answering
  * the same. `POST /api/workspaces/slack-bot/notifications` turns the
  * reader's own Slack notifications on or off, which is theirs alone and
- * holds in every workspace. No answer carries a Slack token.
+ * holds in every workspace. An owner or admin names the repository an agent
+ * started from Slack works in where its message names none, for the
+ * workspace (`POST /api/workspaces/slack-bot/repository`) and for each
+ * channel, where they also put the bot in a public channel or take it out of
+ * one (`POST /api/workspaces/slack-bot/channel`); the read answers them the
+ * team's channels. No answer carries a Slack token.
  */
 
 /** The query the read names its workspace by. */
@@ -35,17 +41,56 @@ export const workspaceSlackBotNotificationsRequestSchema = EffectSchema.Struct({
   notifications: EffectSchema.Boolean,
 });
 
+/** Slack's id for a channel, as the bot's channel list names it. */
+const slackChannelIdSchema = EffectSchema.String.check(
+  EffectSchema.isMinLength(1),
+  EffectSchema.isMaxLength(32),
+);
+
+/** The workspace's default repository for Slack starts named by an owner or admin, or cleared with null (POST body). */
+export const workspaceSlackBotRepositoryRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  repository: EffectSchema.NullOr(githubRepositoryFullNameSchema),
+});
+
+/**
+ * One channel changed by an owner or admin (POST body): the bot put in it or
+ * taken out of it (`member`, joining a public channel alone), and its
+ * default repository named or cleared with null, either or both.
+ */
+export const workspaceSlackBotChannelRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  channelId: slackChannelIdSchema,
+  member: EffectSchema.optionalKey(EffectSchema.Boolean),
+  repository: EffectSchema.optionalKey(EffectSchema.NullOr(githubRepositoryFullNameSchema)),
+});
+
+/** One channel of the team as Settings lists it: its name, whether it is private, whether the bot is in it, and its default repository where one is named. */
+export const slackBotChannelSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  name: EffectSchema.String,
+  private: EffectSchema.Boolean,
+  member: EffectSchema.Boolean,
+  repository: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type SlackBotChannel = typeof slackBotChannelSchema.Type;
+
 /**
  * A workspace's Slack bot as it stands: whether this deployment holds the
  * bot, without which nothing is offered, the team it is connected to,
  * absent while it is not, and whether the bot writes the reader the threads
  * that wait on them, which is on until they turn it off; absent from a
- * service before the switch.
+ * service before the switch. Where it is connected, the workspace's default
+ * repository for Slack starts, absent while none is named, and, to an owner
+ * or admin, the team's channels, absent where Slack could not be read.
  */
 export const workspaceSlackBotAnswerSchema = EffectSchema.Struct({
   configured: EffectSchema.Boolean,
   team: EffectSchema.optionalKey(slackTeamSchema),
   notifications: EffectSchema.optionalKey(EffectSchema.Boolean),
+  defaultRepository: EffectSchema.optionalKey(EffectSchema.String),
+  channels: EffectSchema.optionalKey(EffectSchema.Array(slackBotChannelSchema)),
 });
 
 export type WorkspaceSlackBot = typeof workspaceSlackBotAnswerSchema.Type;
