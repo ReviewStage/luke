@@ -296,6 +296,12 @@
     margin-top: 0;
   }
 
+  /* Under a page's closing rule, as on every page but the landing, whose
+     close stands between them, the links stand clear of it. */
+  .ui-landing-rule + .ui-landing-foot > .ui-landing-foot-links {
+    padding-top: 40px;
+  }
+
   .ui-landing-foot-links {
     padding: 0 var(--ui-landing-gutter) 40px;
   }

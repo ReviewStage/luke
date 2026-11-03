@@ -1,5 +1,7 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
+  BUTTON_VARIANT,
+  ButtonLink,
   IconButtonLink,
   MARK_PROVIDER,
   ProductMark,
@@ -14,7 +16,7 @@ import {
   TextLink,
   type TextLinkCurrent,
 } from "@repo/ui";
-import type { ReactNode } from "react";
+import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { PANEL_PATH } from "./app/web-address";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
@@ -62,19 +64,13 @@ function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurren
 
 /**
  * Shared between every page so navigation and branding never drift apart:
- * the wordmark and the links the banner holds, handed to PublicPage's
- * `banner`, or the landing's bar; `current` marks where the reader is, and
- * `calls` stand after the links. Every link stands the
+ * the wordmark, the links, and the way to sign in that the site's bar holds,
+ * handed to PublicPage's `banner` or the landing's `bar`; `current` marks
+ * where the reader is. Every link stands the
  * web's 44px tall inside the 64px banner, so its hit target is the contract's
  * without moving a word.
  */
-export function SiteNavigation({
-  current,
-  calls,
-}: ChromeProps & {
-  /** What stands after the links: the landing's way to sign in and its download. */
-  readonly calls?: ReactNode;
-}): React.JSX.Element {
+export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
       <TextLink
@@ -116,9 +112,27 @@ export function SiteNavigation({
             label={`${PRODUCT_NAME} on GitHub`}
           />
         </span>
-        {calls}
+        <TextLink href={WEB_APP_URL} variant={TEXT_VARIANT.LABEL} height={TEXT_LINK_HEIGHT.CONTROL}>
+          Sign in
+        </TextLink>
       </div>
     </nav>
+  );
+}
+
+/**
+ * The download, the call at the end of every page's bar and the landing's
+ * one call, counted wherever it is pressed.
+ */
+export function SiteDownload(): React.JSX.Element {
+  return (
+    <ButtonLink
+      variant={BUTTON_VARIANT.PRIMARY}
+      href={DMG_URL}
+      onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
+    >
+      Download for macOS
+    </ButtonLink>
   );
 }
 

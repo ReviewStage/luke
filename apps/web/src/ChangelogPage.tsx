@@ -28,7 +28,13 @@ import {
   changelogReleasePath,
   type Release,
 } from "./changelog-releases";
-import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+import {
+  REPOSITORY_URL,
+  SITE_PAGE,
+  SiteDownload,
+  SiteFooterLinks,
+  SiteNavigation,
+} from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
@@ -169,6 +175,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
   return (
     <PublicPage
       banner={<SiteNavigation current={place} />}
+      bannerCall={<SiteDownload />}
       footer={<SiteFooterLinks current={place} />}
       back={page ? undefined : { href: CHANGELOG_PATH, label: "Changelog" }}
       title={page ? "Changelog" : `${PRODUCT_NAME} ${view.release.version}`}

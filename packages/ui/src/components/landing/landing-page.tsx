@@ -1,21 +1,20 @@
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 import { MarkOrb } from "../../marks/mark-orb.js";
 import { LANDING_FIELD, LandingField, type LandingFieldPattern } from "./landing-field.js";
-import { LandingWordmark } from "./landing-wordmark.js";
 import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-scenes.js";
+import { SiteFrame, SiteRule } from "./site-frame.js";
 
 /**
  * landing-page.tsx -- the product's landing: a bar that floats once the page scrolls, the one line beside the copper ball, a section per feature each over a moving screen, and a close over the wordmark in dots.
  *
- * The page sets a margin grid: two hairline rails run its length at the
- * content's edges, and every section opens under a rule across them with a
- * cross where they meet. The bar spans the page at its top and, once the
- * reader scrolls, narrows into a floating pill on the ground's surface,
- * standing over the rails. A section is a heading and a sentence over a
+ * It stands in the site's frame (`site-frame.tsx`): the margin grid's
+ * rails, the bar that floats once the page scrolls, and the foot over the
+ * wordmark; every section opens under a rule across the rails with a cross
+ * where they meet. A section is a heading and a sentence over a
  * stage, a box of drifting copper dots holding the feature's screen, the
  * app's own components playing a short story (`landing-scenes.tsx`), with
  * an aside beside it where the caller gives one. The close carries the
- * page's last call, and the foot the site's links over the wordmark.
+ * page's last call.
  *
  * Its words and its links are the caller's; its art, scenes, and rhythm are
  * its own, drawn in the theme's roles and the web profile's display styles
@@ -23,15 +22,6 @@ import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-sc
  */
 
 export { LANDING_SCENE, type LandingScene };
-
-/**
- * How far the reader scrolls before the bar floats, and how near the top
- * they come back before it spans the page again, in CSS pixels. Note that
- * the two differ, because a phone's scroll bounces past the top and its
- * toolbar's collapse nudges the offset, which would flip one threshold back
- * and forth mid-animation.
- */
-const FLOAT = { AFTER: 24, BEFORE: 4 } as const;
 
 /** The field behind each scene's stage. */
 const SCENE_FIELD: Readonly<Record<LandingScene, LandingFieldPattern>> = {
@@ -41,29 +31,6 @@ const SCENE_FIELD: Readonly<Record<LandingScene, LandingFieldPattern>> = {
   [LANDING_SCENE.DEVICES]: LANDING_FIELD.FLOW,
   [LANDING_SCENE.MODELS]: LANDING_FIELD.WAVES,
 };
-
-/** Whether the page has scrolled past the bar's own height, so the bar floats. */
-function useFloating(): boolean {
-  const [floating, setFloating] = useState(false);
-  useEffect(() => {
-    const read = (): void =>
-      setFloating((was) => (was ? window.scrollY > FLOAT.BEFORE : window.scrollY > FLOAT.AFTER));
-    read();
-    window.addEventListener("scroll", read, { passive: true });
-    return () => window.removeEventListener("scroll", read);
-  }, []);
-  return floating;
-}
-
-/** A rule across the page, a cross where it meets each rail. */
-function Rule(): React.JSX.Element {
-  return (
-    <div className="ui-landing-rule" aria-hidden="true">
-      <i />
-      <i />
-    </div>
-  );
-}
 
 /** A feature: `title` and `lead` over its scene's stage, `aside` beside the stage where given. */
 export function LandingSection({
@@ -87,7 +54,7 @@ export function LandingSection({
   );
   return (
     <section className="ui-landing-section" aria-labelledby={titleId}>
-      <Rule />
+      <SiteRule />
       <div className="ui-landing-section-body">
         <h2 className="ui-landing-section-title" id={titleId}>
           {title}
@@ -151,17 +118,9 @@ export function LandingPage({
   /** The site's closing links and notices. */
   footer: ReactNode;
 }): React.JSX.Element {
-  const floating = useFloating();
   const closeId = `${useId()}close`;
   return (
-    <div className="ui-landing-page">
-      <div className="ui-landing-rails" aria-hidden="true" />
-      <header className="ui-landing-bar" data-floating={floating}>
-        <div className="ui-landing-bar-in">
-          {bar}
-          {barCall === undefined ? null : <span className="ui-landing-bar-call">{barCall}</span>}
-        </div>
-      </header>
+    <SiteFrame bar={bar} barCall={barCall} footer={footer}>
       <main>
         <div className="ui-landing-hero">
           <div className="ui-landing-hero-words">
@@ -174,7 +133,7 @@ export function LandingPage({
           </div>
         </div>
         {children}
-        <Rule />
+        <SiteRule />
         <section className="ui-landing-close" aria-labelledby={closeId}>
           <div>
             <h2 className="ui-landing-section-title" id={closeId}>
@@ -185,12 +144,6 @@ export function LandingPage({
           <div className="ui-landing-actions">{close.actions}</div>
         </section>
       </main>
-      <footer className="ui-landing-foot">
-        <div className="ui-landing-foot-links">{footer}</div>
-        <div className="ui-landing-foot-art">
-          <LandingWordmark />
-        </div>
-      </footer>
-    </div>
+    </SiteFrame>
   );
 }
