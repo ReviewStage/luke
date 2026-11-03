@@ -39,10 +39,11 @@ const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 /**
  * The arrowhead's outline, a dart along the diagonal like a map's location
  * arrow: its tip at (1, 1), where the view box starts, the one sharp corner,
- * pointing up and to the left; its two wings rounded; and its tail, at the
- * bottom right, notched.
+ * pointing up and to the left and opening 52 degrees, wide enough to read as a
+ * pointer at a glance; its two wings rounded; and its tail, at the bottom
+ * right, notched.
  */
-const ARROW = "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z";
+const ARROW = "M1 1 13.07 5.16Q15.2 5.89 13.56 6.58L8.64 8.64 6.58 13.56Q5.89 15.2 5.16 13.07Z";
 
 /** How far the arrow reaches from its tip, in CSS pixels: `--ui-space-16`, its drawn size. */
 const ARROW_REACH = 16;

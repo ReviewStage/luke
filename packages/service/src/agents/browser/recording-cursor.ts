@@ -106,7 +106,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   icon.setAttribute("class", "a");
   icon.setAttribute("viewBox", "1 1 16 16");
   const path = document.createElementNS(svg, "path");
-  path.setAttribute("d", "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z");
+  path.setAttribute("d", "M1 1 13.07 5.16Q15.2 5.89 13.56 6.58L8.64 8.64 6.58 13.56Q5.89 15.2 5.16 13.07Z");
   icon.append(path);
   flip.append(icon);
   arrow.append(halo, flip);
