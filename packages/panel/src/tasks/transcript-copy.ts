@@ -317,7 +317,7 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
     return `${COMMENT_LINE_LEAD} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
   }
   const slack = slackLineOf(message);
-  if (slack !== undefined) return `${SLACK_LINE_LEAD} ${SLACK_LINE_SUBJECT}\n\n${slack.words}`;
+  if (slack !== undefined) return `${SLACK_LINE_LEAD.OWN} ${SLACK_LINE_SUBJECT}\n\n${slack.words}`;
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
   return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]
