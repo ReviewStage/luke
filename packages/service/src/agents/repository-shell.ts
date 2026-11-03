@@ -70,8 +70,12 @@ const COMMAND_ENVIRONMENT = {
  * own, moved into place once whole. Note that a checkout
  * another call of the same session finished first is kept and this one's
  * dropped, so two first calls racing (the brain's and its
- * worker's) end on one checkout; and that a checkout of another repository,
- * where the task's changed, is removed first.
+ * worker's) end on one checkout; that a checkout of another repository,
+ * where the task's changed, is removed first; and that a repository with no
+ * commits yet has no branch to clone, so where the remote names no HEAD it
+ * is cloned empty, its HEAD left on the branch asked for with nothing on it
+ * yet, while a branch missing from a repository that has commits still fails
+ * the clone in git's own words.
  */
 const CHECKOUT_SCRIPT = [
   "set -e",
@@ -79,7 +83,13 @@ const CHECKOUT_SCRIPT = [
   `if [ "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" != "$${SANDBOX_VARIABLE.REPOSITORY}" ]; then rm -rf repository; fi`,
   'partial="repository.$$"',
   'rm -rf "$partial"',
-  `git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `if ! git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"; then`,
+  `  head="$(git ls-remote "$${SANDBOX_VARIABLE.URL}" HEAD)"`,
+  '  test -z "$head"',
+  '  rm -rf "$partial"',
+  `  git clone --quiet "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `  git -C "$partial" symbolic-ref HEAD "refs/heads/$${SANDBOX_VARIABLE.BRANCH}"`,
+  "fi",
   'if [ -d repository ]; then rm -rf "$partial"; else mv "$partial" repository; fi',
   `mkdir -p ${SANDBOX_STATE_FOLDER}`,
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
@@ -92,7 +102,9 @@ const CHECKOUT_SCRIPT = [
  * fetched, and the record rewritten under the name the caller keeps. Note
  * that a checkout that is missing, or whose record names another repository
  * than the refresh variable, exits before any fetch, so a sandbox opened
- * from the wrong snapshot never reads GitHub on it.
+ * from the wrong snapshot never reads GitHub on it; and that the empty
+ * checkout of a repository with no commits yet, whose remote still names no
+ * HEAD, is already as GitHub has it, so its fetch of no branch is no failure.
  */
 const REFRESH_SCRIPT = [
   "set -e",
@@ -100,8 +112,13 @@ const REFRESH_SCRIPT = [
   "test -d repository/.git",
   `test "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" = "$${SANDBOX_VARIABLE.REFRESH}"`,
   "cd repository",
-  `git fetch --quiet origin "$${SANDBOX_VARIABLE.BRANCH}"`,
-  `git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
+  `if git fetch --quiet origin "$${SANDBOX_VARIABLE.BRANCH}"; then`,
+  `  git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
+  "else",
+  "  if git rev-parse --quiet --verify HEAD >/dev/null; then exit 1; fi",
+  '  head="$(git ls-remote origin HEAD)"',
+  '  test -z "$head"',
+  "fi",
   "cd ..",
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
