@@ -25,7 +25,7 @@
  * taken is handed to the agent as its "Thread answer", and the DM is
  * rewritten to say the option chosen; a press on an ask already settled
  * rewrites the DM to say where it stands. Of a request nothing is logged
- * but a fixed line.
+ * but a fixed line: its kind as it is heard, and a refused bearer.
  */
 
 import { storeWriter } from "@repo/database/models/writer";
@@ -225,16 +225,24 @@ const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
     }
     const body = yield* readBodyBytesEffect(MAXIMUM_REQUEST_BYTES);
     if (!(yield* verified(verify, request.headers.authorization, body))) {
+      yield* Effect.logWarning("A Slack request was refused: Connect's bearer did not hold");
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     }
     const payload = yield* requestPayload(request.headers["content-type"], body);
     const check = readRequest(UrlVerificationSchema, payload);
     if (Result.isSuccess(check)) {
+      yield* Effect.logInfo("A Slack request was heard", {
+        kind: SLACK_REQUEST_TYPE.URL_VERIFICATION,
+      });
       return hostedJsonResponse(200, { challenge: check.success.challenge });
     }
     const press = readRequest(BlockActionsSchema, payload);
-    if (Result.isSuccess(press)) yield* answerPress(press.success);
-    else yield* actOnSlackEvent(payload, request.headers[SLACK_RETRY_HEADER] !== undefined);
+    if (Result.isSuccess(press)) {
+      yield* Effect.logInfo("A Slack request was heard", {
+        kind: SLACK_REQUEST_TYPE.BLOCK_ACTIONS,
+      });
+      yield* answerPress(press.success);
+    } else yield* actOnSlackEvent(payload, request.headers[SLACK_RETRY_HEADER] !== undefined);
     return hostedJsonResponse(200, {});
   });
 
