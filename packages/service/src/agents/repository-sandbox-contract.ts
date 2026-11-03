@@ -1,12 +1,14 @@
 /**
  * repository-sandbox-contract.ts -- where a repository's checkout stands in a sandbox and the variables its scripts read.
  *
- * A leaf of its own, importing nothing, because the coding agent's bounds
+ * A leaf of its own, importing only the state folder's leaf, because the coding agent's bounds
  * (`coder-host/bounds.ts`) name the checkout's path and every tool file of
  * the agent reads those bounds: kept in `repository-shell.ts`, the path
  * reached GitHub's App and the auth service with it, and each tool's own
  * bundle carried them.
  */
+
+import { SANDBOX_STATE_FOLDER } from "./sandbox-state-folder.js";
 
 /**
  * What the shell hands the sandbox, which is the whole of what a sandbox
@@ -19,8 +21,7 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   PATH: {
     WORKSPACE: "/workspace",
     CHECKOUT: "/workspace/repository",
-    // Note that the record keeps its old folder, because a persistent sandbox and a repository snapshot made before still hold it there, and a checkout whose record does not match is cloned again.
-    CHECKOUT_RECORD: ".luke/repository",
+    CHECKOUT_RECORD: `${SANDBOX_STATE_FOLDER}/repository`,
   },
   VARIABLE: {
     /** The repository the call is about, `owner/name`, read by the probe and the checkout. */

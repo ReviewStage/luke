@@ -27,6 +27,7 @@
 
 import { PLAYWRIGHT_PIN, SANDBOX_BROWSER_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const SANDBOX_BROWSER = {
@@ -37,8 +38,8 @@ export const SANDBOX_BROWSER = {
   /** The display's and the browser window's size. */
   WIDTH: 1280,
   HEIGHT: 800,
-  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. Note that it keeps its old folder, because a persistent sandbox made before still holds its profile there. */
-  STATE_DIRECTORY: ".luke/browser",
+  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. */
+  STATE_DIRECTORY: `${SANDBOX_STATE_FOLDER}/browser`,
   /** How long the start waits on Xvfb's socket and on the browser's DevTools, in tenths of a second. */
   DISPLAY_WAIT_TENTHS: 50,
   DEVTOOLS_WAIT_TENTHS: 300,
@@ -83,6 +84,7 @@ const START_SCRIPT = [
   "set -u",
   'port="$1" display="$2" width="$3" height="$4" state="$HOME/$5"',
   "shift 5",
+  `(cd "$HOME" && ${LINK_SANDBOX_STATE_FOLDER})`,
   'profile="$state/profile"',
   'mkdir -p "$profile" && chmod 700 "$state"',
   // Note that what the start leaves running closes the lock's descriptor, which would otherwise hold the lock for as long as the browser runs.
