@@ -236,6 +236,9 @@ notifications in Settings › Workspace turns your DMs off.
   ([#6192](https://github.com/ReviewStage/vespin/pull/6192),
   [#6195](https://github.com/ReviewStage/vespin/pull/6195),
   [#6229](https://github.com/ReviewStage/vespin/pull/6229))
+- A to-do step's command draws as a code card with its own Copy, its lines
+  kept as written, and copying it leaves the step unticked
+  ([#6472](https://github.com/ReviewStage/vespin/pull/6472))
 - A withdrawn or replaced ask reads as a line of its thread, as a resolved one
   does ([#6283](https://github.com/ReviewStage/vespin/pull/6283))
 - An agent that marks its task Done settles the task's open asks as your Done
