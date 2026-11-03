@@ -107,6 +107,22 @@ function release(opened: { readonly stream: MediaStream; readonly context?: Audi
   opened.context?.close().catch(() => undefined);
 }
 
+/**
+ * The meter's context, made and resumed in the press itself, because Safari on
+ * iOS runs a context only from a gesture and leaves one made after the
+ * microphone's await suspended: its bars stay at rest while the clip still
+ * records. Nothing where the page can make none, which the open reports.
+ */
+function pressedContext(): AudioContext | undefined {
+  try {
+    const context = new AudioContext();
+    context.resume().catch(() => undefined);
+    return context;
+  } catch {
+    return undefined;
+  }
+}
+
 export function useDictation(input: {
   /** The box's editor, which marks the caret and takes the words; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
@@ -217,7 +233,7 @@ export function useDictation(input: {
     input.editor.current?.focus();
   };
 
-  const open = async (asked: number, context: AudioContext) => {
+  const open = async (asked: number, context: AudioContext | undefined) => {
     // Note that the platform's own microphone permission and route are asked
     // only where it offers them: elsewhere the page's own ask is the whole of it.
     const routed = capabilityNow(HOST_CAPABILITY.MICROPHONE);
@@ -242,6 +258,10 @@ export function useDictation(input: {
     if (generation.current !== asked) {
       for (const track of stream.getTracks()) track.stop();
       return;
+    }
+    if (context === undefined) {
+      for (const track of stream.getTracks()) track.stop();
+      return fail(asked, DICTATION_NOTE.MICROPHONE_FAILED);
     }
     // Note that what follows the open can still throw, a recorder refusing the
     // format, so the microphone is let go there too rather than left lit.
@@ -293,16 +313,14 @@ export function useDictation(input: {
     setPhase(DICTATION_PHASE.RECORDING);
     // The caret stays in the box, so its keys are the strip's while the button that was pressed goes.
     box.focus();
-    // Note that the meter's context is made and resumed in the press itself, because
-    // Safari on iOS runs a context only from a gesture and leaves one made after the
-    // microphone's await suspended: its bars stay at rest while the clip still records.
-    const context = new AudioContext();
-    context.resume().catch(() => undefined);
+    const context = pressedContext();
     open(asked, context)
       .catch(() => fail(asked, DICTATION_NOTE.MICROPHONE_FAILED))
       // A context no recording took, the open failed or passed, is let go here.
       .finally(() => {
-        if (recording.current?.context !== context) context.close().catch(() => undefined);
+        if (context !== undefined && recording.current?.context !== context) {
+          context.close().catch(() => undefined);
+        }
       });
   };
 
