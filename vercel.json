@@ -320,6 +320,20 @@
           "continue": true
         },
         {
+          "src": "/changelog/page/1/?",
+          "status": 308,
+          "headers": {
+            "Location": "/changelog"
+          }
+        },
+        {
+          "src": "/(about|privacy|changelog|changelog/page/\\d+|changelog/\\d+\\.\\d+\\.\\d+)/",
+          "status": 308,
+          "headers": {
+            "Location": "/$1"
+          }
+        },
+        {
           "src": "/about",
           "dest": "/about.html"
         },

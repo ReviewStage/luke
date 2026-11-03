@@ -40,6 +40,7 @@ export default defineConfig({
         "accept-invitation": resolveEntry("./accept-invitation.html"),
         "desktop-session": resolveEntry("./desktop-session.html"),
         app: resolveEntry("./app.html"),
+        "404": resolveEntry("./404.html"),
       },
     },
   },

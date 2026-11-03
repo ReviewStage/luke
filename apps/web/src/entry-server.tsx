@@ -1,3 +1,4 @@
+import { LINK_ORIGIN } from "@repo/features/link-home";
 import { renderToString } from "react-dom/server";
 import { AboutPage } from "./AboutPage";
 import { App } from "./App";
@@ -8,7 +9,9 @@ import {
   changelogRoutes,
   type PageHead,
 } from "./changelog-releases";
+import { NotFoundPage } from "./NotFoundPage";
 import { PrivacyPage } from "./PrivacyPage";
+import { SITE_PAGE } from "./SiteChrome";
 
 /**
  * The pages a crawler should be able to read without running JavaScript,
@@ -22,6 +25,7 @@ const PRERENDERED_PAGES = {
   "index.html": App,
   "about.html": AboutPage,
   "privacy.html": PrivacyPage,
+  "404.html": NotFoundPage,
 } as const satisfies Readonly<Record<string, () => React.JSX.Element>>;
 
 export interface PrerenderedPage {
@@ -64,4 +68,29 @@ export function renderPrerenderedPages(): readonly PrerenderedPage[] {
 /** The changelog's RSS feed, and the built file it is written to, relative to the build's root. */
 export function renderChangelogFeed() {
   return { file: CHANGELOG_FEED_PATH.slice(1), xml: changelogFeed(RELEASES) };
+}
+
+/** The built file the sitemap is written to, which `public/robots.txt` names. */
+const SITEMAP_FILE = "sitemap.xml";
+
+/**
+ * The site's sitemap, and the built file it is written to: every page the
+ * site's chrome links to and every changelog page and release, each once,
+ * from the same routes the prerender writes, so a new release is listed by
+ * the build that publishes it.
+ */
+export function renderSitemap() {
+  const paths = new Set([
+    ...Object.values(SITE_PAGE),
+    ...changelogRoutes(RELEASES).map((route) => route.path),
+  ]);
+  const urls = [...paths].map((path) => `  <url><loc>${LINK_ORIGIN}${path}</loc></url>`);
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls,
+    "</urlset>",
+    "",
+  ].join("\n");
+  return { file: SITEMAP_FILE, xml };
 }
