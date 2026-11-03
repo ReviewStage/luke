@@ -66,7 +66,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * or a link drawn as one takes is answered with a pulse of its face, and a
  * submit's arrow lifts as it sends. A busy button refuses its press and is
  * named by `busyLabel` ("Saving") from the press on; once its press has been
- * out `--luke-settle-delay` (180ms) it keeps its width, its words standing
+ * out `--ui-settle-delay` (180ms) it keeps its width, its words standing
  * hidden under the one ring every wait turns (`SpinnerRing`), so an act that
  * lands at once never flashes one. Every kind of button, a split one's, a
  * folding one's, a provider's, takes the same two (`BusyProps`). A labelled
@@ -74,12 +74,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * its words stood, it refuses another press, and `onDone` hears once the
  * check has been seen, at once where no motion runs. A busy button told its
  * press `succeeded` as its ring leaves lands the same way for a moment: the
- * check stands in the ring's place for `--luke-confirm-delay`, a hold reduced
+ * check stands in the ring's place for `--ui-confirm-delay`, a hold reduced
  * motion keeps, so the check is still seen there without its spring, and then
  * fades out as its words fade back; one that failed just stops, its words back at once.
  * A button that `turns`, a refresh's or a retry's, turns its glyph once as a
  * press lands, beside the pulse of its face. The ring
- * holds still on `--luke-loop-motion`, as every endless loop does under reduced
+ * holds still on `--ui-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
  *
@@ -138,7 +138,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * Each is drawn by shadcn/ui's Base UI button (`../../shadcn/button.tsx`),
  * a native button, its box, type, and edge in Tailwind over the theme; a
  * link drawn as one wears the same classes (`buttonVariants`). Its look,
- * the `--luke-button-*` inks each variant and state sets, its motions, and
+ * the `--ui-button-*` inks each variant and state sets, its motions, and
  * what a container restyles it by stay in `button.css`, because a
  * container's sheet sets those inks from the components layer, which a
  * utility would outrank. It keeps the `luke-button` class and its `data-`

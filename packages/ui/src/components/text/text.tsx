@@ -29,7 +29,7 @@ export { TEXT_VARIANT, type TextVariant } from "./text-role.js";
  *   detail, a time, a count, any note beside what it is about.
  *
  * A badge's, a chip's, and a tooltip's words are the caption's size at the
- * `tag` weight (`--luke-type-tag-*`), which those components read themselves.
+ * `tag` weight (`--ui-type-tag-*`), which those components read themselves.
  *
  * Words that count or tell time, or change while a reader watches, are
  * drawn in tabular figures by the component that draws them (`Time`,

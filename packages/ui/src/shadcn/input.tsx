@@ -30,7 +30,7 @@ export const INPUT_CONTROL =
 
 /** What every field shares: its box, its type, its placeholder, and its invalid and disabled states. */
 export const INPUT_FIELD =
-  "m-0 box-border block w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-default disabled:opacity-disabled";
+  "m-0 box-border block w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--ui-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-default disabled:opacity-disabled";
 
 export function ShadcnInput({ className, type, ...props }: React.ComponentProps<"input">) {
   return (

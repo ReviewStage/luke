@@ -3,7 +3,7 @@
    Each is the ui's one statement of its motion: a fade is `luke-dialog-fade`,
    `luke-menu-arrive`, or `luke-menu-leave`, and these are the travels they do
    not cover. Their timing and easing belong to the rule that names them,
-   over the `--luke-duration-*` and `--luke-spring-fast` tokens. */
+   over the `--ui-duration-*` and `--ui-spring-fast` tokens. */
 
 @keyframes luke-card-grow {
   from {

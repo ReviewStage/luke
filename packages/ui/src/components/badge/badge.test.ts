@@ -59,9 +59,9 @@ test("a label filled with its colour is read by its name, its words lifted to re
   const view = render(createElement(Badge, { fill: "#1d1d1f", children: "needs design" }));
   const badge = view.querySelector<HTMLElement>(".luke-badge");
   assert.equal(view.textContent, "needs design");
-  assert.equal(badge?.style.getPropertyValue("--luke-badge-fill-light"), "#1d1d1f");
-  assert.notEqual(badge?.style.getPropertyValue("--luke-badge-words-dark"), "#1d1d1f");
-  assert.equal(badge?.style.getPropertyValue("--luke-badge-words-light"), "#ffffff");
+  assert.equal(badge?.style.getPropertyValue("--ui-badge-fill-light"), "#1d1d1f");
+  assert.notEqual(badge?.style.getPropertyValue("--ui-badge-words-dark"), "#1d1d1f");
+  assert.equal(badge?.style.getPropertyValue("--ui-badge-words-light"), "#ffffff");
 });
 
 test("a fill the badge cannot paint draws it as a neutral badge", () => {

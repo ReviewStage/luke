@@ -356,7 +356,7 @@ function ChangedLine({
   const editors = editorsOf(edits, marks.place);
   // Note that the line keeps the room it always had under "Edited by" and Dismiss overhangs it, so the button does not push the document down.
   return (
-    <p className="plan-changed-note -mt-luke-6 mb-luke-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
+    <p className="plan-changed-note -mt-ui-6 mb-ui-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
       <span className="actor-line">
         {changedLine(looks.changed.size, editors.length > 0)}
         {editors.length === 0 ? null : (
@@ -442,7 +442,7 @@ const UNIT_CLASS = "plan-unit";
 
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
 const CHANGED_CLASS =
-  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
+  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-ui-6 after:-inset-y-ui-2 after:-z-1 after:rounded-ui-6 after:bg-plan-changed";
 
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
@@ -667,12 +667,12 @@ function attributed(
   if (byline === null && menu === null) return drawn;
   // Note that the byline and the ⋯ share one row, because a row centres the
   // line on the button's box where two separately placed boxes never quite do.
-  // The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always
+  // The row hangs past the column's edge by `--ui-space-6`, as the ⋯ always
   // has, and takes no pointer itself, only its byline and its ⋯ do.
   return (
     <div className={UNIT_ATTRIBUTED_CLASS}>
       {drawn}
-      <div className="plan-unit-row pointer-events-none absolute top-0 -right-luke-6 flex h-control w-plan-unit-row items-center justify-end gap-tight-gap">
+      <div className="plan-unit-row pointer-events-none absolute top-0 -right-ui-6 flex h-control w-plan-unit-row items-center justify-end gap-tight-gap">
         {byline}
         {menu}
       </div>

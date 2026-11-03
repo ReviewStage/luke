@@ -171,7 +171,7 @@ type MarkInk = (typeof MARK_INK)[keyof typeof MARK_INK];
 /** A mark in a card's icon's seat, at the size and in the seat the Pull request tab's badge stands in. */
 function CardMark({ ink, children }: { ink: MarkInk; children: ReactNode }): React.JSX.Element {
   return (
-    <span className={`github-line-mark inline-grid place-items-center [&>svg]:size-luke-12 ${ink}`}>
+    <span className={`github-line-mark inline-grid place-items-center [&>svg]:size-ui-12 ${ink}`}>
       {children}
     </span>
   );

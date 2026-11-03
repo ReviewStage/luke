@@ -137,7 +137,7 @@ test("View settings on a File tab offers its lines' wrap, numbers, syntax theme,
   assert.deepEqual(drawnLines(container), {
     numbers: "true",
     wrap: "true",
-    font: "var(--luke-font-mono)",
+    font: "var(--ui-font-mono)",
     size: "11.5px",
     lineHeight: "1.6",
     features: "'liga' 0, 'calt' 0",

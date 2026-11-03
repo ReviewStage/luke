@@ -34,8 +34,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * press and stands under its ring as a busy Button does while the chevron still
  * opens the options, and one whose press `succeeded` lands on a check as a
  * busy Button's does. A toolbar short of room folds the main part's words
- * away with `--luke-fold: folded`, as it folds a FoldingButton's, leaving
- * its glyph and its name; shorter still, `--luke-fold: bare` leaves that
+ * away with `--ui-fold: folded`, as it folds a FoldingButton's, leaving
+ * its glyph and its name; shorter still, `--ui-fold: bare` leaves that
  * glyph alone, the chevron not drawn, so the options are reached some
  * other way the app offers.
  *
@@ -79,7 +79,7 @@ export interface SplitButtonMenu {
 
 /**
  * The halves joined into one control, drawn from the box: no edge or corner
- * between them, and the main part's fold, under a `--luke-fold` of `folded`
+ * between them, and the main part's fold, under a `--ui-fold` of `folded`
  * a square around its glyph, its words drawn nowhere though a reader still
  * has them, and of `bare` that square alone at the control's own corner,
  * the chevron not drawn. Note that each is a child selector of the box's,
@@ -103,7 +103,7 @@ const SPLIT_BOX = cn(
 
 /** A filled look's halves, parted by a rule in its own ink. */
 const SPLIT_FILLED_RULE =
-  "[&>.luke-button:last-child]:border-s-[color-mix(in_srgb,var(--luke-button-ink)_30%,transparent)]";
+  "[&>.luke-button:last-child]:border-s-[color-mix(in_srgb,var(--ui-button-ink)_30%,transparent)]";
 
 /** The looks drawn on a fill, whose halves a rule in their ink parts rather than a hairline. */
 const FILLED: ReadonlySet<ButtonVariant> = new Set([

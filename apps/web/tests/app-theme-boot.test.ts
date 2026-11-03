@@ -48,7 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   document.head.replaceChildren();
   document.documentElement.removeAttribute("data-luke-boot-sidebar");
-  document.documentElement.style.removeProperty("--luke-boot-sidebar-width");
+  document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
   localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -60,9 +60,7 @@ function firstFrame() {
   return {
     theme: document.documentElement.getAttribute("data-luke-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    ground: getComputedStyle(document.documentElement)
-      .getPropertyValue("--luke-color-ground")
-      .trim(),
+    ground: getComputedStyle(document.documentElement).getPropertyValue("--ui-color-ground").trim(),
   };
 }
 
@@ -102,7 +100,7 @@ function frameSidebar() {
   const root = document.documentElement;
   return {
     pinned: root.getAttribute("data-luke-boot-sidebar") === "pinned",
-    width: root.style.getPropertyValue("--luke-boot-sidebar-width") || undefined,
+    width: root.style.getPropertyValue("--ui-boot-sidebar-width") || undefined,
   };
 }
 
@@ -118,7 +116,7 @@ test("the frame pins the sidebar as the shell last drew it here, at the width ke
     localStorage.setItem("luke.sidebar-collapsed", "false");
     if (kept === undefined) localStorage.removeItem("luke.sidebar-width");
     else localStorage.setItem("luke.sidebar-width", kept);
-    document.documentElement.style.removeProperty("--luke-boot-sidebar-width");
+    document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
 
     assert.deepEqual(frameSidebar(), { pinned: true, width }, `kept ${kept}`);
   }

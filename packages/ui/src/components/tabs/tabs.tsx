@@ -76,7 +76,7 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * a wheel turned up and down running it sideways, with the chosen tab pinned
  * at whichever edge it would pass and a fade where tabs go on. All of that
  * is the stylesheet's (tabs.css): the strip measures nothing, and asks only
- * for its tabs' count, as `--luke-tab-count`, so it may ask for room for
+ * for its tabs' count, as `--ui-tab-count`, so it may ask for room for
  * every tab at its widest. A narrow tab other than the chosen one stands as
  * its glyph alone, or keeps a short label while the strip scrolls, as its
  * owner's `fold` says. A tab chosen, or reached by
@@ -121,7 +121,7 @@ const TAB_BUTTON =
 
 /** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
-  "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-motion-exit";
+  "absolute top-1/2 right-(--ui-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--ui-duration-hover) ease-motion-exit";
 
 /** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
@@ -409,7 +409,7 @@ export function Tabs({
       className={STRIP}
       data-ground={ground}
       data-fold={fold}
-      style={cssCustomProperties({ "--luke-tab-count": count })}
+      style={cssCustomProperties({ "--ui-tab-count": count })}
       onKeyDown={keyDown}
       onPointerDown={onPointerDown}
       onWheel={wheel}
@@ -515,7 +515,7 @@ export function Tab({
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
   const glyph = (
-    <span className="luke-tab-icon relative flex flex-none text-muted-foreground [--luke-glyph-size:var(--luke-control-icon)] [&_svg]:size-control-icon">
+    <span className="luke-tab-icon relative flex flex-none text-muted-foreground [--ui-glyph-size:var(--ui-control-icon)] [&_svg]:size-control-icon">
       {icon}
     </span>
   );
@@ -572,7 +572,7 @@ export function Tab({
           className={cn(
             "luke-tab-end-mark",
             END_SLOT,
-            "size-(--luke-tab-close) items-center justify-center",
+            "size-(--ui-tab-close) items-center justify-center",
           )}
         >
           {endMark}
@@ -687,7 +687,7 @@ export function TabCard({
       // the keys stay where they were while a switcher is held; one picked on
       // the click is a Tab stop, so the keys reach it.
       tabIndex={pickOnPress ? -1 : 0}
-      className="luke-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-luke-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
+      className="luke-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-ui-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
       data-here={here}
       onPointerEnter={onPoint}
       onPointerDown={
@@ -709,9 +709,9 @@ export function TabCard({
       }}
       onContextMenu={pickOnPress ? (event) => event.preventDefault() : undefined}
     >
-      <div className="luke-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-luke-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
+      <div className="luke-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-ui-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
         {still === undefined ? (
-          <span className="luke-tab-card-glyph inline-flex text-muted-foreground [--luke-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
+          <span className="luke-tab-card-glyph inline-flex text-muted-foreground [--ui-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
             {icon}
           </span>
         ) : (
@@ -723,7 +723,7 @@ export function TabCard({
           />
         )}
       </div>
-      <div className="luke-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--luke-glyph-size:var(--luke-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.luke-text]:min-w-0 [&>.luke-text]:flex-auto [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
+      <div className="luke-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--ui-glyph-size:var(--ui-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.luke-text]:min-w-0 [&>.luke-text]:flex-auto [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
         {icon}
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
           {label}

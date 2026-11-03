@@ -16,33 +16,33 @@
      the task rows it heads are. */
   .luke-nav-item {
     background: none;
-    color: var(--luke-color-sidebar-ink);
+    color: var(--ui-color-sidebar-ink);
   }
 
   .luke-nav-item:hover:not(:disabled),
   .luke-nav-item-frame:hover > .luke-nav-item:not(:disabled),
   .luke-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
-    background: var(--luke-color-fill-hover);
-    color: var(--luke-color-text);
+    background: var(--ui-color-fill-hover);
+    color: var(--ui-color-text);
   }
 
   /* The place standing open is drawn in the work sheet's ground, lifted
      by a hairline and a soft shadow. */
   .luke-nav-item:is([aria-current="page"], [aria-current="location"]) {
-    background: var(--luke-color-ground);
+    background: var(--ui-color-ground);
     box-shadow:
-      0 0 0 1px var(--luke-color-border),
-      0 1px 2px var(--luke-color-shadow-soft);
-    color: var(--luke-color-text);
+      0 0 0 1px var(--ui-color-border),
+      0 1px 2px var(--ui-color-shadow-soft);
+    color: var(--ui-color-text);
   }
 
   .luke-nav-item[data-unread="true"] {
-    color: var(--luke-color-text);
+    color: var(--ui-color-text);
   }
 
   /* Who or where stands in the primary ink. */
   .luke-nav-item[data-variant="identity"] {
-    color: var(--luke-color-text);
+    color: var(--ui-color-text);
   }
 
   /* A row's detail ends in an ellipsis where it is cut short. */
@@ -50,8 +50,8 @@
     min-width: 0;
     flex: 1 1 0;
     overflow: hidden;
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -60,12 +60,12 @@
      rather than giving way beside it. */
   .luke-nav-item[data-variant="step"] .luke-nav-item-detail {
     flex: none;
-    line-height: var(--luke-type-caption-leading);
+    line-height: var(--ui-type-caption-leading);
   }
 
   /* A step's glyph and end stand level with its name's first line. */
   .luke-nav-item[data-variant="step"] > :is(.luke-nav-item-glyph, .luke-nav-item-rest) {
-    height: var(--luke-type-label-leading);
+    height: var(--ui-type-label-leading);
   }
 
   /* A place's end stands at the row's end. */
@@ -74,20 +74,20 @@
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: var(--luke-space-6);
+    gap: var(--ui-space-6);
   }
 
   /* The count gives way to the actions on their own fade, so the two swap
      as one gesture rather than one snapping as the other fades. */
   .luke-nav-item-rest {
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-nav-item-count {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
     font-variant-numeric: tabular-nums;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-nav-item-count[data-shown="on-hover"] {
@@ -97,7 +97,7 @@
   /* A count of what waits on the reader is in the needs-you tone, as the
      rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
   .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
-    color: var(--luke-tone-ink);
+    color: var(--ui-tone-ink);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
@@ -115,7 +115,7 @@
      while the row is hovered or has the keyboard. */
   .luke-nav-item-shortcut {
     opacity: 0;
-    transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
   .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-shortcut {
@@ -161,12 +161,12 @@
      less the row's own inset the chord already stands in. */
   .luke-nav-item-frame[data-actions="true"] > .luke-nav-item > .luke-nav-item-shortcut {
     margin-inline-end: calc(
-      var(--luke-control-height) -
+      var(--ui-control-height) -
       2 *
-      var(--luke-space-2) +
+      var(--ui-space-2) +
       2 *
-      var(--luke-space-4) -
-      var(--luke-row-inset)
+      var(--ui-space-4) -
+      var(--ui-row-inset)
     );
   }
 
@@ -194,7 +194,7 @@
   .luke-nav-item-actions {
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-nav-item-frame:focus-within > .luke-nav-item-actions,
@@ -215,7 +215,7 @@
      centred in it, as a list row's is (`list-row.css`). */
   @media (pointer: coarse) {
     .luke-nav-item-actions .luke-button[data-size="compact"][data-icon-only="true"] {
-      min-width: var(--luke-touch-target);
+      min-width: var(--ui-touch-target);
     }
   }
 
@@ -238,11 +238,11 @@
   .luke-nav-item-fold {
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-nav-item-frame[data-folds="true"] .luke-nav-item-icon {
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-nav-item-frame:has(:focus-visible) > .luke-nav-item-fold {

@@ -106,8 +106,8 @@ const BODY_ROWS = `${BODY} px-0 [&>code]:block [&>code]:min-w-fit`;
 function runColours({ color, lightColor }: CodeToken): React.CSSProperties | undefined {
   if (color === undefined && lightColor === undefined) return undefined;
   const colours: Record<string, string> = {};
-  if (color !== undefined) colours["--luke-code-run-dark"] = color;
-  if (lightColor !== undefined) colours["--luke-code-run-light"] = lightColor;
+  if (color !== undefined) colours["--ui-code-run-dark"] = color;
+  if (lightColor !== undefined) colours["--ui-code-run-light"] = lightColor;
   return cssCustomProperties(colours);
 }
 

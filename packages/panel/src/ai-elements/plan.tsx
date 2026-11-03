@@ -91,7 +91,7 @@ export function PlanTitle({ label, previews = false, children }: TaskTitleProps)
       words={label === undefined ? children : `${label} · ${children}`}
     >
       {label === undefined ? null : <span className="text-muted-foreground">{label} · </span>}
-      <span className="font-luke-medium">{children}</span>
+      <span className="font-ui-medium">{children}</span>
     </OneLine>
   );
 }

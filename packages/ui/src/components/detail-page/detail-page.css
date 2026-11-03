@@ -14,14 +14,14 @@
 
 @layer components {
   .luke-detail-page {
-    --luke-detail-page-width: var(--luke-page-measure);
-    --luke-detail-page-secondary-width: 240px;
-    --luke-detail-page-inset: var(--luke-page-inset);
+    --ui-detail-page-width: var(--ui-page-measure);
+    --ui-detail-page-secondary-width: 240px;
+    --ui-detail-page-inset: var(--ui-page-inset);
   }
 
   [data-luke-profile="web"] .luke-detail-page {
-    --luke-detail-page-width: 1040px;
-    --luke-detail-page-secondary-width: 320px;
+    --ui-detail-page-width: 1040px;
+    --ui-detail-page-secondary-width: 320px;
   }
 
   /* What stands either side of the measure: the inset, or more in a room
@@ -29,9 +29,9 @@
      children, where the room is the page's own width and the inset is the
      one the narrow rule below may change. */
   .luke-detail-page > * {
-    --luke-detail-page-side: max(
-      var(--luke-detail-page-edge, var(--luke-detail-page-inset)),
-      (100cqi - var(--luke-detail-page-width)) /
+    --ui-detail-page-side: max(
+      var(--ui-detail-page-edge, var(--ui-detail-page-inset)),
+      (100cqi - var(--ui-detail-page-width)) /
       2
     );
   }
@@ -40,12 +40,12 @@
      read at the measure stand theirs, whatever the room; the page keeps its
      own inset above and below. */
   .luke-detail-page[data-inset="reading"] > * {
-    --luke-detail-page-edge: var(--luke-space-12);
+    --ui-detail-page-edge: var(--ui-space-12);
   }
 
   /* Across the whole room, the inset alone stands either side. */
   .luke-detail-page[data-width="full"] > * {
-    --luke-detail-page-side: var(--luke-detail-page-edge, var(--luke-detail-page-inset));
+    --ui-detail-page-side: var(--ui-detail-page-edge, var(--ui-detail-page-inset));
   }
 
   /* Under the window's own toolbar the page is a workspace's rather than a
@@ -59,19 +59,19 @@
      child makes the browser restyle the whole window for every element
      added under it. */
   .luke-detail-page[data-frame="toolbar"] > .luke-toolbar ~ .luke-detail-page-body {
-    --luke-detail-page-side: calc(var(--luke-space-12) + var(--luke-row-inset));
+    --ui-detail-page-side: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
     .luke-detail-page > * {
-      --luke-detail-page-inset: var(--luke-page-inset-narrow);
+      --ui-detail-page-inset: var(--ui-page-inset-narrow);
     }
   }
 
   /* Beside the header, the secondary column opens level with the title. */
   .luke-detail-page[data-frame="page"] .luke-detail-page-secondary > .luke-detail-page-content {
-    padding-top: var(--luke-detail-page-inset);
+    padding-top: var(--ui-detail-page-inset);
   }
 
   /* The columns under the bar: the main one takes what the secondary
@@ -85,7 +85,7 @@
   .luke-detail-page-body:has(> .luke-detail-page-secondary) {
     grid-template-columns:
       minmax(0, 1fr)
-      calc(var(--luke-detail-page-secondary-width) + var(--luke-detail-page-side));
+      calc(var(--ui-detail-page-secondary-width) + var(--ui-detail-page-side));
   }
 
   .luke-detail-page-main,
@@ -95,17 +95,17 @@
   }
 
   .luke-detail-page-main {
-    padding-inline: var(--luke-detail-page-side);
+    padding-inline: var(--ui-detail-page-side);
   }
 
   /* Beside a secondary column the main one ends a section's gap short of
      it. */
   .luke-detail-page-main:has(+ .luke-detail-page-secondary) {
-    padding-inline-end: var(--luke-space-32);
+    padding-inline-end: var(--ui-space-32);
   }
 
   .luke-detail-page-secondary {
-    padding-inline-end: var(--luke-detail-page-side);
+    padding-inline-end: var(--ui-detail-page-side);
   }
 
   /* A plain list in the content, straight or under one of its sections,
@@ -122,13 +122,13 @@
     > section
     > .luke-skeleton-region
     > .luke-list[data-variant="plain"][data-density="regular"] {
-    margin-inline: calc(-1 * var(--luke-space-12));
+    margin-inline: calc(-1 * var(--ui-space-12));
   }
 
   /* Under a toolbar each column opens a section's gap below its hairline,
      inside its own scroll so the wheel works right up to it. */
   .luke-detail-page[data-frame="toolbar"] .luke-detail-page-content {
-    padding-top: var(--luke-section-gap);
+    padding-top: var(--ui-section-gap);
   }
 
   /* A main column holding nothing but an empty or failed state (an
@@ -167,7 +167,7 @@
     .luke-detail-page-main:has(+ .luke-detail-page-secondary),
     .luke-detail-page-secondary {
       overflow: visible;
-      padding-inline: var(--luke-detail-page-side);
+      padding-inline: var(--ui-detail-page-side);
     }
 
     /* A lone empty or failed state fills the one scroll, as it fills the

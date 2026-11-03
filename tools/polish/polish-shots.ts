@@ -129,7 +129,7 @@ const EXIT_TIMEOUT_MS = 10_000;
 // A desktop picture is flattened onto the panel's frame colour, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
 const GROUND_SCRIPT = `(() => {
   const probe = document.createElement("div");
-  probe.style.cssText = "position:fixed;width:1px;height:1px;background-color:var(--luke-color-sidebar, var(--luke-color-ground, #fff))";
+  probe.style.cssText = "position:fixed;width:1px;height:1px;background-color:var(--ui-color-sidebar, var(--ui-color-ground, #fff))";
   document.body.append(probe);
   const colour = getComputedStyle(probe).backgroundColor;
   probe.remove();
@@ -149,19 +149,19 @@ const HIDE_CARET_SCRIPT = `document.head.append(Object.assign(document.createEle
 /** The capture run's zeroing of motion, laid on the root and the body, over whatever the token sheets say. */
 const STILL_MOTION_CSS = `
 :root, body {
-  --luke-duration-shape: 0s !important;
-  --luke-duration-exit: 0s !important;
-  --luke-duration-quick: 0s !important;
-  --luke-duration-fast: 0s !important;
-  --luke-duration-hover: 0s !important;
-  --luke-duration-pane: 0s !important;
-  --luke-row-stagger: 0s !important;
-  --luke-late-delay: 0s !important;
-  --luke-hint-delay: 0s !important;
-  --luke-settle-delay: 0s !important;
-  --luke-loop-motion: paused !important;
-  --luke-wait-motion: paused !important;
-  --luke-scroll-glide: auto !important;
+  --ui-duration-shape: 0s !important;
+  --ui-duration-exit: 0s !important;
+  --ui-duration-quick: 0s !important;
+  --ui-duration-fast: 0s !important;
+  --ui-duration-hover: 0s !important;
+  --ui-duration-pane: 0s !important;
+  --ui-row-stagger: 0s !important;
+  --ui-late-delay: 0s !important;
+  --ui-hint-delay: 0s !important;
+  --ui-settle-delay: 0s !important;
+  --ui-loop-motion: paused !important;
+  --ui-wait-motion: paused !important;
+  --ui-scroll-glide: auto !important;
 }`;
 
 /** A page script that lays the still motion and holds `theme` on the root, whatever the app wears there after. */
@@ -834,7 +834,7 @@ function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[])
       ? ""
       : `<p class="note">Mac-only, not shot here: ${skipped.map((scene) => escapeHtml(scene.title)).join(", ")}.</p>`;
   const flattenedNote = results.some((result) => result.shot.target === TARGET.DESKTOP)
-    ? `<p class="note">Desktop pictures are the whole window, flattened onto the theme's sidebar colour (<code>--luke-color-sidebar</code>) as the app's own capture mode paints its frame: the Mac's frosted sidebar material is not in them.</p>`
+    ? `<p class="note">Desktop pictures are the whole window, flattened onto the theme's sidebar colour (<code>--ui-color-sidebar</code>) as the app's own capture mode paints its frame: the Mac's frosted sidebar material is not in them.</p>`
     : "";
   const flagged = results.filter((result) => result.problems.length > 0).length;
   return `<!doctype html><meta charset="utf-8"><title>Polish capture</title>

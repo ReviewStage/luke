@@ -4,10 +4,10 @@
  * A search result's row, a review thread a link named, a message brought
  * into view, a unit of the plan as it settles, a diff's lines a chapter
  * points at: each wears `data-landed`, and `landed.css` lights it once. A
- * wash stands over it for `--luke-confirm-delay`, then fades over
- * `--luke-duration-shape`. Reduced motion zeroes the fade alone, so the wash
+ * wash stands over it for `--ui-confirm-delay`, then fades over
+ * `--ui-duration-shape`. Reduced motion zeroes the fade alone, so the wash
  * still stands, still, for the same hold, and a person jumped to a row can
- * see where they landed. The light is one inherited number, `--luke-landed`,
+ * see where they landed. The light is one inherited number, `--ui-landed`,
  * from 1 to 0, animated on the landed element itself, so its end is that
  * element's own `animationend` (`LANDED_ANIMATION`) and what it holds may
  * draw the light itself, as a diff's lines do inside their shadow root,
@@ -20,7 +20,7 @@ export const LANDED = {
   AROUND: "around",
   /** A step inside the box's edges, for a row flush to the card it stands in, so the wash keeps clear of the card's corner. */
   WITHIN: "within",
-  /** No wash of its own: what it holds draws `--luke-landed`, as a diff's lit lines do. */
+  /** No wash of its own: what it holds draws `--ui-landed`, as a diff's lit lines do. */
   HELD: "held",
 } as const;
 

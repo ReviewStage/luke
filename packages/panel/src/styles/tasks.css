@@ -13,8 +13,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: max(100%, var(--luke-touch-target));
-    height: var(--luke-touch-target);
+    width: max(100%, var(--ui-touch-target));
+    height: var(--ui-touch-target);
     transform: translate(-50%, -50%);
     content: "";
   }
@@ -24,22 +24,22 @@
    letters at the end of its heading's row (`plan-body.tsx`'s `bylineOf`).
    `--plan-byline-room` holds a face and the widest of those letters, a date
    such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
-   column with its ⋯, which hangs `--luke-space-6` past the column's edge.
+   column with its ⋯, which hangs `--ui-space-6` past the column's edge.
    The theme reads both (`plan-byline-room`, `plan-unit-row`), and so does
    the heading's room below. */
 .plan-body {
   --plan-byline-room: 64px;
   --plan-unit-row-room: calc(
     var(--plan-byline-room) +
-    var(--luke-space-4) +
-    var(--luke-control-height) -
-    var(--luke-space-6)
+    var(--ui-space-4) +
+    var(--ui-control-height) -
+    var(--ui-space-6)
   );
 }
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
 .plan-unit li.task-list-item input[type="checkbox"]:enabled {
-  cursor: var(--luke-cursor-press);
+  cursor: var(--ui-cursor-press);
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -54,7 +54,7 @@
 /* Where a section has no ⋯, its byline's row (`plan-body.tsx`'s
    `attributed`) keeps the ⋯'s room, so every byline ends at one edge. */
 .plan-unit-row:not(:has(.plan-unit-more)) {
-  padding-right: calc(var(--luke-control-height) + var(--luke-space-4));
+  padding-right: calc(var(--ui-control-height) + var(--ui-space-4));
 }
 
 /* A section's ⋯ (`plan-body.tsx`'s `UnitMenu`) stays drawn while its menu
@@ -72,18 +72,18 @@
    the room of the whole name as a gap after the chip it then cuts, washed
    where a version's change mark holds the chip. */
 .link-glued [data-mention-ref] {
-  max-width: var(--luke-inline-ref-pill-width);
+  max-width: var(--ui-inline-ref-pill-width);
 }
 
 .link-glued [data-mention-ref][data-stated] {
-  max-width: var(--luke-inline-ref-pill-stated-width);
+  max-width: var(--ui-inline-ref-pill-stated-width);
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
-  padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
+  padding-left: calc(var(--row-inset) + var(--ui-menu-inset));
 }
 
 /* The text open in its editor, in the document's own type, so the words do
@@ -145,11 +145,11 @@
    while its section is edited, so opening the section does not turn its
    chips into underlined words; its glyph is the read view's alone. */
 .plan-document-text a.plan-mention-link {
-  padding: 0 var(--luke-tight-gap);
+  padding: 0 var(--ui-tight-gap);
   color: inherit;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  font-weight: var(--luke-weight-medium);
+  border-radius: var(--ui-radius-6);
+  background: var(--ui-color-fill-strong);
+  font-weight: var(--ui-weight-medium);
   text-decoration: none;
   box-decoration-break: clone;
 }
@@ -160,7 +160,7 @@
 .plan-document-text > .is-empty::before {
   float: left;
   height: 0;
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
   content: attr(data-placeholder);
   pointer-events: none;
 }
@@ -186,7 +186,7 @@
   height: 0.95em;
   margin: 0;
   font: inherit;
-  accent-color: var(--luke-color-accent);
+  accent-color: var(--ui-color-accent);
 }
 
 .plan-document-text li[data-checked] > div {
@@ -200,8 +200,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: var(--luke-touch-target);
-    height: var(--luke-touch-target);
+    width: var(--ui-touch-target);
+    height: var(--ui-touch-target);
     transform: translate(-50%, -50%);
     content: "";
   }
@@ -211,7 +211,7 @@
    HTML, a footnote, a link's definition, a block of HTML. */
 .plan-raw-block {
   margin: 0;
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
   font: inherit;
   white-space: pre-wrap;
 }
@@ -221,7 +221,7 @@
    here rather than a utility, because it has to outrank the editor's own gap
    between its children above, which a utility's layer never would. */
 .plan-editor-note {
-  margin: var(--luke-item-gap) 0 0;
+  margin: var(--ui-item-gap) 0 0;
 }
 
 /* The rhythm of a transcript's log (../ai-elements/conversation.tsx) and of
@@ -233,19 +233,19 @@
    is set. */
 @layer components {
   .conversation-log > :not(:last-child) {
-    margin-block-end: var(--luke-block-gap);
+    margin-block-end: var(--ui-block-gap);
   }
 
   :where(.message-content > :not(:last-child)) {
-    margin-block: 0 var(--luke-control-gap);
+    margin-block: 0 var(--ui-control-gap);
   }
 }
 
 /* A message's actions, their glyphs the control icon whichever way each is
    drawn, a copy's glyph inside its own swap. */
 .luke-message-actions svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+  width: var(--ui-control-icon);
+  height: var(--ui-control-icon);
 }
 
 /* A crumb's tree (file-breadcrumbs.tsx), hung under the crumb on a menu's
@@ -261,7 +261,7 @@
 }
 
 .file-crumb-tree .file-tree-host {
-  --trees-bg-override: var(--luke-color-overlay);
+  --trees-bg-override: var(--ui-color-overlay);
 }
 
 /* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
@@ -283,15 +283,15 @@
    narrow for it (below). This says when it is drawn and its edge. */
 .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
   display: flex;
-  width: var(--luke-space-12);
+  width: var(--ui-space-12);
   flex: none;
-  border-left: 1px solid var(--luke-color-border);
+  border-left: 1px solid var(--ui-color-border);
 }
 
 /* The tree peeked from the strip, or opened over the list, floats on the
    window's floating surface (`OverPane`): its host takes that ground. */
 .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-host {
-  --trees-bg-override: var(--luke-color-overlay);
+  --trees-bg-override: var(--ui-color-overlay);
 }
 
 /* A panel too narrow for a tab and its pane side by side floats the pane
@@ -373,10 +373,10 @@
    steps aside while the page is picked in or a thread is open on it. */
 .page-comments-column {
   display: flex;
-  width: calc(var(--comment-card-width) + 2 * var(--luke-space-16));
+  width: calc(var(--comment-card-width) + 2 * var(--ui-space-16));
   flex: none;
-  border-left: 1px solid var(--luke-color-border);
-  background: var(--luke-color-ground);
+  border-left: 1px solid var(--ui-color-border);
+  background: var(--ui-color-ground);
 }
 
 @container side-panel (width < 640px) {
@@ -419,13 +419,13 @@
 
 .page-comment-hint {
   position: absolute;
-  top: var(--luke-space-12);
+  top: var(--ui-space-12);
   left: 50%;
   translate: -50% 0;
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
-  padding-inline-start: var(--luke-space-12);
+  gap: var(--ui-space-8);
+  padding-inline-start: var(--ui-space-12);
 }
 
 .page-comment-float {
@@ -453,14 +453,14 @@
 /* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
    an arrow over the drawn page, never in its frame, taking no pointer
    events. It stands at the agent's point, scaled onto the page by the
-   component, and glides to each new one over --luke-duration-fast on
-   --luke-spring-fast, about the beat its action waits; a still pointer jumps.
+   component, and glides to each new one over --ui-duration-fast on
+   --ui-spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
    typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
    lighter over a dark page, so it reads on any page, an accent button
    included. The rock and the bob are endless loops held by
-   --luke-loop-motion, so their periods may be literals (docs/DESIGN.md). */
+   --ui-loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-cursor {
   position: absolute;
   top: 0;
@@ -469,8 +469,8 @@
   opacity: 0;
   translate: var(--cloud-browser-cursor-x) var(--cloud-browser-cursor-y);
   transition:
-    translate var(--luke-duration-fast) var(--luke-spring-fast),
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
+    translate var(--ui-duration-fast) var(--ui-spring-fast),
+    opacity var(--ui-duration-quick) var(--ui-motion-exit);
 }
 
 .cloud-browser-cursor[data-shown] {
@@ -478,7 +478,7 @@
 }
 
 .cloud-browser-cursor[data-still] {
-  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
+  transition: opacity var(--ui-duration-quick) var(--ui-motion-exit);
 }
 
 .cloud-browser-cursor-rock {
@@ -501,13 +501,13 @@
 
 .cloud-browser-cursor[data-shown]:not([data-still]) .cloud-browser-cursor-rock {
   animation: cloud-browser-cursor-rock 1.2s ease-in-out infinite;
-  animation-play-state: var(--luke-loop-motion);
+  animation-play-state: var(--ui-loop-motion);
 }
 
 .cloud-browser-cursor-arrow {
   display: block;
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
+  width: var(--ui-space-16);
+  height: var(--ui-space-16);
   overflow: visible;
   fill: var(--agent-pointer);
   stroke: var(--agent-pointer);
@@ -529,36 +529,36 @@
    tip, which holds it apart from whatever the page draws under it. */
 .cloud-browser-cursor-halo {
   position: absolute;
-  top: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
-  left: calc(var(--luke-space-6) - var(--luke-space-40) / 2);
-  width: var(--luke-space-40);
-  height: var(--luke-space-40);
+  top: calc(var(--ui-space-6) - var(--ui-space-40) / 2);
+  left: calc(var(--ui-space-6) - var(--ui-space-40) / 2);
+  width: var(--ui-space-40);
+  height: var(--ui-space-40);
   border-radius: 50%;
   background: radial-gradient(closest-side, var(--agent-pointer-halo), transparent);
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
-  animation: cloud-browser-cursor-press var(--luke-duration-fast) var(--luke-motion-exit)
-    var(--luke-duration-fast) backwards;
+  animation: cloud-browser-cursor-press var(--ui-duration-fast) var(--ui-motion-exit)
+    var(--ui-duration-fast) backwards;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="type"]:not([data-still]) .cloud-browser-cursor-arrow {
   animation: cloud-browser-cursor-type 0.6s ease-in-out infinite;
-  animation-play-state: var(--luke-loop-motion);
+  animation-play-state: var(--ui-loop-motion);
 }
 
 .cloud-browser-cursor-ripple {
   position: absolute;
   top: 0;
   left: 0;
-  width: var(--luke-space-24);
-  height: var(--luke-space-24);
-  margin: calc(var(--luke-space-24) / -2);
-  border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
+  width: var(--ui-space-24);
+  height: var(--ui-space-24);
+  margin: calc(var(--ui-space-24) / -2);
+  border: calc(var(--ui-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
-  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) var(--luke-motion-exit)
-    var(--luke-duration-fast) backwards;
+  animation: cloud-browser-cursor-ripple var(--ui-duration-shape) var(--ui-motion-exit)
+    var(--ui-duration-fast) backwards;
 }
 
 @keyframes cloud-browser-cursor-rock {
@@ -590,7 +590,7 @@
     translate: 0 0;
   }
   50% {
-    translate: 0 calc(var(--luke-space-2) * -1);
+    translate: 0 calc(var(--ui-space-2) * -1);
   }
 }
 
@@ -616,23 +616,23 @@
   z-index: 3;
   top: var(--diff-offer-y);
   left: var(--diff-offer-x);
-  transform: translate(-50%, calc(-100% - var(--luke-space-4)));
+  transform: translate(-50%, calc(-100% - var(--ui-space-4)));
 }
 
 .diff-list-offer[data-below] {
-  transform: translate(-50%, var(--luke-space-4));
+  transform: translate(-50%, var(--ui-space-4));
 }
 
 /* Pierre's own container, which it draws the files into inside the scroller. */
 [data-diff-list-scroller] > :first-child {
-  padding-inline: var(--luke-list-inset);
+  padding-inline: var(--ui-list-inset);
 }
 
 /* A file's letter in its header stands at least a step wide. Note that this
    stays a rule, because the summary it stands in gives each of its children
    `min-w-0` through a child selector, which outranks a utility here. */
 .diff-list-head .file-view-status {
-  min-width: var(--luke-space-16);
+  min-width: var(--ui-space-16);
 }
 
 /* The file stage-cli's keys stand on is marked as a selected card is: the
@@ -642,7 +642,7 @@
    focus rings the control in the header that holds it, as every control is
    ringed (base.css), so the card never wears a second border or a ring. */
 .diff-list diffs-container:has(.diff-list-head[data-standing]) {
-  border-color: var(--luke-color-border-selected);
+  border-color: var(--ui-color-border-selected);
 }
 
 /* A changed image's pictures (image-diff.tsx), each on a checkerboard that
@@ -651,9 +651,9 @@
 .image-diff-stack {
   max-width: 100%;
   max-height: 480px;
-  border: 1px solid var(--luke-color-border);
+  border: 1px solid var(--ui-color-border);
   background:
-    repeating-conic-gradient(var(--luke-color-surface) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+    repeating-conic-gradient(var(--ui-color-surface) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 
 .image-diff-picture {
@@ -673,7 +673,7 @@
   height: 100%;
   grid-area: 1 / 1;
   border: 0;
-  background-color: var(--luke-color-code-ground);
+  background-color: var(--ui-color-code-ground);
 }
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
@@ -688,23 +688,23 @@
    ListRow `current`): the work sheet's ground here, its hairline and
    shadow in the tree's own sheet (`row-marks.ts`). */
 .file-tree-host {
-  --trees-bg-override: var(--luke-color-well);
-  --trees-bg-muted-override: var(--luke-color-fill-hover);
-  --trees-fg-override: var(--luke-color-text);
-  --trees-fg-muted-override: var(--luke-color-text-muted);
-  --trees-selected-bg-override: var(--luke-color-ground);
-  --trees-selected-fg-override: var(--luke-color-text);
-  --trees-selected-focused-border-color-override: var(--luke-color-focus-ring);
-  --trees-border-color-override: var(--luke-color-border);
-  --trees-focus-ring-color-override: var(--luke-color-focus-ring);
-  --trees-focus-ring-width-override: var(--luke-focus-ring-width);
-  --trees-focus-ring-offset-override: var(--luke-focus-ring-inset);
-  --trees-font-family-override: var(--luke-font-sans);
-  --trees-font-size-override: var(--luke-type-caption-size);
-  --trees-git-added-color-override: var(--luke-color-complete);
-  --trees-git-modified-color-override: var(--luke-color-attention);
-  --trees-git-deleted-color-override: var(--luke-color-danger-text);
-  --trees-git-renamed-color-override: var(--luke-color-working);
+  --trees-bg-override: var(--ui-color-well);
+  --trees-bg-muted-override: var(--ui-color-fill-hover);
+  --trees-fg-override: var(--ui-color-text);
+  --trees-fg-muted-override: var(--ui-color-text-muted);
+  --trees-selected-bg-override: var(--ui-color-ground);
+  --trees-selected-fg-override: var(--ui-color-text);
+  --trees-selected-focused-border-color-override: var(--ui-color-focus-ring);
+  --trees-border-color-override: var(--ui-color-border);
+  --trees-focus-ring-color-override: var(--ui-color-focus-ring);
+  --trees-focus-ring-width-override: var(--ui-focus-ring-width);
+  --trees-focus-ring-offset-override: var(--ui-focus-ring-inset);
+  --trees-font-family-override: var(--ui-font-sans);
+  --trees-font-size-override: var(--ui-type-caption-size);
+  --trees-git-added-color-override: var(--ui-color-complete);
+  --trees-git-modified-color-override: var(--ui-color-attention);
+  --trees-git-deleted-color-override: var(--ui-color-danger-text);
+  --trees-git-renamed-color-override: var(--ui-color-working);
 }
 
 /* The tree rings whichever row holds focus, a pressed one too, so until the
@@ -763,7 +763,7 @@
   /* The band a section's heading sticks at in the Conversation, never
      shorter than the controls it holds, so a finger's 44px filter on the
      web stands inside it rather than over what scrolls beneath. */
-  --pull-request-band: max(var(--luke-scroll-band), var(--luke-control-height));
+  --pull-request-band: max(var(--ui-scroll-band), var(--ui-control-height));
   /* Note that the tab isolates its stacking, so its header, raised over its
      own rows, rises over nothing outside the tab; and answers its own width,
      so its tabs' row folds by the room the tab has wherever it stands. */
@@ -779,18 +779,18 @@
    stands past it, with `clip` rather than `hidden`, and leaves a strip of
    one mark a chapter while hidden. */
 .chapters-view {
-  --chapter-rail-width: calc(var(--luke-space-64) * 4);
+  --chapter-rail-width: calc(var(--ui-space-64) * 4);
   /* The least the chapter reads at: its bar, three lines of its brief, and
      the least of its files (below). Its strip is as wide as keeps each mark
      clear of the edge it stands at, a window's or the panel's. */
-  --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
+  --chapter-brief-least: calc(3 * var(--ui-type-body-leading) + var(--ui-list-inset));
   --chapter-reading-least: calc(
     2 *
-    var(--luke-pane-bar-height) +
-    var(--luke-row-inset) +
+    var(--ui-pane-bar-height) +
+    var(--ui-row-inset) +
     var(--chapter-brief-least)
   );
-  --chapter-strip-width: var(--luke-space-20);
+  --chapter-strip-width: var(--ui-space-20);
 }
 
 /* Note that the body never stands shorter than the chapter's least, so a
@@ -815,15 +815,14 @@
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
-  border-right: 1px solid var(--luke-color-border);
+  border-right: 1px solid var(--ui-color-border);
 }
 
 /* Which model told the chapters, quiet under the rail's rows at its foot,
    its words where a row's title stands. */
 .chapter-rail-credit {
   flex: none;
-  padding: var(--luke-tight-gap) calc(var(--luke-list-inset) + var(--luke-row-inset))
-    var(--luke-list-inset);
+  padding: var(--ui-tight-gap) calc(var(--ui-list-inset) + var(--ui-row-inset)) var(--ui-list-inset);
 }
 
 .chapter-rail[data-leaving] {
@@ -831,7 +830,7 @@
   z-index: 1;
   inset-block: 0;
   left: 0;
-  background: var(--luke-color-well);
+  background: var(--ui-color-well);
 }
 
 /* Note that the rail hidden beside the chapter is hidden only where it can
@@ -853,7 +852,7 @@
   display: flex;
   width: var(--chapter-strip-width);
   flex: none;
-  border-right: 1px solid var(--luke-color-border);
+  border-right: 1px solid var(--ui-color-border);
 }
 
 .chapter-rail-toggle {
@@ -869,7 +868,7 @@
    squeezing them out past the body, and whatever they still cannot fit is
    cut at their own edge, never drawn over it. */
 .chapter-reading > .file-view {
-  min-height: var(--luke-pane-bar-height);
+  min-height: var(--ui-pane-bar-height);
   overflow: clip;
 }
 
@@ -878,7 +877,7 @@
 .chapter-list-tools {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--ui-space-2);
 }
 
 .chapter-list-tools:empty {
@@ -890,11 +889,11 @@
    bar's edge, and its heading and its words under the chapter's title,
    which stands a control's gap past the toggle. */
 .chapter-brief {
-  --chapter-glyph-inset: calc((var(--luke-control-height) - var(--luke-control-icon)) / 2);
-  --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--luke-control-gap));
+  --chapter-glyph-inset: calc((var(--ui-control-height) - var(--ui-control-icon)) / 2);
+  --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--ui-control-gap));
 
-  padding-inline: calc(var(--luke-list-inset) + var(--chapter-glyph-inset) - var(--luke-tight-gap))
-    var(--luke-list-inset);
+  padding-inline: calc(var(--ui-list-inset) + var(--chapter-glyph-inset) - var(--ui-tight-gap))
+    var(--ui-list-inset);
 }
 
 .chapter-brief .pull-request-section-fold > .luke-disclosure-summary {
@@ -903,8 +902,8 @@
 
 .chapter-brief-body {
   padding-inline-start: calc(
-    var(--luke-tight-gap) +
-    var(--luke-control-icon) +
+    var(--ui-tight-gap) +
+    var(--ui-control-icon) +
     var(--chapter-words-gap)
   );
 }
@@ -917,7 +916,7 @@
     display: flex;
     width: var(--chapter-strip-width);
     flex: none;
-    border-right: 1px solid var(--luke-color-border);
+    border-right: 1px solid var(--ui-color-border);
   }
 
   .chapter-rail-toggle[data-place="beside"] {
@@ -977,14 +976,14 @@
 /* off-scale: 650px, where Review's word stops fitting beside the tabs */
 @container pull-request-tab (width < 650px) {
   .pull-request-tab > .luke-pane-bar .pull-request-review {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
 /* off-scale: 560px, where the tabs' room is taken in */
 @container pull-request-tab (width < 560px) {
   .pull-request-tab > .luke-pane-bar {
-    --luke-fold: tight;
+    --ui-fold: tight;
   }
 }
 
@@ -1009,7 +1008,7 @@
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: var(--luke-control-gap);
+  gap: var(--ui-control-gap);
   /* Note that Tab walks a roomy row as it is drawn, the pill before the
      title's pencil, where the browser reads `reading-flow`, as the
      desktop's does; a narrow row is drawn in the markup's order (below). */
@@ -1024,21 +1023,21 @@
   order: -1;
   /* The pill, a badge's height, stands centred in a control's height, the
      height of the title's first line and of the controls. */
-  margin-block: calc((var(--luke-control-height) - var(--luke-space-20)) / 2);
+  margin-block: calc((var(--ui-control-height) - var(--ui-space-20)) / 2);
 }
 
 .pull-request-title-row > .pull-request-title,
 .pull-request-title-row > .pull-request-title-wait {
   min-width: 0;
   flex: 1 1 auto;
-  padding-block: calc((var(--luke-control-height) - var(--luke-type-dialog-leading)) / 2);
+  padding-block: calc((var(--ui-control-height) - var(--ui-type-dialog-leading)) / 2);
 }
 
 .pull-request-title-actions {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-control-gap);
+  gap: var(--ui-control-gap);
   margin-inline-start: auto;
 }
 
@@ -1081,7 +1080,7 @@
    for, so it reads the room; how the title row lays out is the header's
    own width's (above), in any room. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell .pull-request-header[data-folded] {
-  padding-block: var(--luke-item-gap);
+  padding-block: var(--ui-item-gap);
 }
 
 :where(:root)[data-luke-room="narrow"]
@@ -1123,14 +1122,14 @@
   .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   mask-origin: content-box;
   mask-repeat: no-repeat;
 }
 
 /* The Conversation's scroller ends a page's inset short of the foot. */
 .pull-request-page {
-  padding-bottom: var(--luke-page-inset);
+  padding-bottom: var(--ui-page-inset);
 }
 
 /* On the web, the Conversation's scroller (`.pull-request-page`) stands at
@@ -1156,8 +1155,8 @@
   top: 0;
   z-index: 1;
   box-sizing: border-box;
-  height: var(--luke-scroll-band);
-  background: var(--luke-color-well);
+  height: var(--ui-scroll-band);
+  background: var(--ui-color-well);
 }
 
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
@@ -1168,10 +1167,10 @@
 .pull-request-section-fold > .luke-disclosure-summary {
   display: flex;
   align-items: center;
-  gap: var(--luke-icon-gap);
+  gap: var(--ui-icon-gap);
   min-width: 0;
-  padding-inline: var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
+  padding-inline: var(--ui-tight-gap);
+  color: var(--ui-color-text-muted);
   white-space: nowrap;
 }
 
@@ -1184,25 +1183,25 @@
 .pull-request-section-fold > .luke-disclosure-summary::before {
   position: absolute;
   z-index: -1;
-  inset: calc((var(--luke-scroll-band) - var(--luke-control-height)) / 2) 0;
-  border-radius: var(--luke-control-radius);
+  inset: calc((var(--ui-scroll-band) - var(--ui-control-height)) / 2) 0;
+  border-radius: var(--ui-control-radius);
   content: "";
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .pull-request-section-fold > .luke-disclosure-summary:hover::before {
-  background: var(--luke-color-fill-strong);
+  background: var(--ui-color-fill-strong);
 }
 
 .pull-request-section-fold > .luke-disclosure-summary > .pull-request-heading {
   flex: 1 1 auto;
   margin: 0;
   padding: 0;
-  transition: color var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .pull-request-section-fold > .luke-disclosure-summary:hover > .pull-request-heading {
-  color: var(--luke-color-text);
+  color: var(--ui-color-text);
 }
 
 /* The cell beside the heading's row holding what stands at its end, on
@@ -1212,10 +1211,10 @@
   top: 0;
   z-index: 1;
   box-sizing: border-box;
-  height: var(--luke-scroll-band);
+  height: var(--ui-scroll-band);
   align-self: start;
-  padding-inline-end: var(--luke-tight-gap);
-  background: var(--luke-color-well);
+  padding-inline-end: var(--ui-tight-gap);
+  background: var(--ui-color-well);
 }
 
 /* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
@@ -1227,23 +1226,23 @@
 /* A foot inside the frame (`reply-form.tsx`) reaches the frame's own edge
    rather than the words' inset, as it does in every other frame. */
 .comment-editor-frame > .luke-composer-foot {
-  margin-inline: calc(-1 * var(--luke-control-inset));
+  margin-inline: calc(-1 * var(--ui-control-inset));
 }
 
 .comment-editor-frame:has(> .comment-editor-head) {
-  padding-inline-end: calc(var(--luke-control-height) + var(--luke-space-4));
+  padding-inline-end: calc(var(--ui-control-height) + var(--ui-space-4));
 }
 
 /* A suggested change is GitHub's ```suggestion block, drawn under its name
    rather than as code in a language, as the transcript heads one. */
 .comment-editor-text pre:has(> code.language-suggestion)::before {
   display: block;
-  margin-bottom: var(--luke-tight-gap);
-  color: var(--luke-color-text);
+  margin-bottom: var(--ui-tight-gap);
+  color: var(--ui-color-text);
   content: "Suggested change";
-  font-family: var(--luke-font-sans);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-type-caption-size);
+  font-weight: var(--ui-weight-medium);
 }
 
 /* Who opened it and when, one phrase after their face. */
@@ -1280,7 +1279,7 @@
 .pull-request-title.pull-request-title-editable {
   padding-inline-end: max(
     var(--row-inset),
-    calc(var(--luke-space-2) + var(--luke-space-24) - var(--column-inset))
+    calc(var(--ui-space-2) + var(--ui-space-24) - var(--column-inset))
   );
 }
 
@@ -1292,7 +1291,7 @@
 }
 
 .pull-request-title-row > .pull-request-title.pull-request-title-editable {
-  padding-inline-end: calc(var(--luke-space-2) + var(--luke-space-24));
+  padding-inline-end: calc(var(--ui-space-2) + var(--ui-space-24));
 }
 
 .pull-request-title-end {
@@ -1304,10 +1303,10 @@
   position: relative;
   width: 0;
   overflow: visible;
-  inset-inline-start: var(--luke-space-2);
+  inset-inline-start: var(--ui-space-2);
   vertical-align: middle;
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .pull-request-title-edit:has(:focus-visible) {
@@ -1333,8 +1332,8 @@
 }
 
 .pull-request-number {
-  color: var(--luke-color-text-muted);
-  font-weight: var(--luke-weight-regular);
+  color: var(--ui-color-text-muted);
+  font-weight: var(--ui-weight-regular);
 }
 
 /* Its branches, who opened it, its reviewers and its labels, one line
@@ -1344,13 +1343,13 @@
    which clips it, while a focus ring or a face's badge at a line's start
    stays within the room the clip leaves. */
 .changes-people.pull-request-people {
-  --people-gap: var(--luke-space-16);
-  gap: var(--luke-item-gap) var(--people-gap);
-  padding-block: var(--luke-item-gap) 0;
+  --people-gap: var(--ui-space-16);
+  gap: var(--ui-item-gap) var(--people-gap);
+  padding-block: var(--ui-item-gap) 0;
   padding-inline: 0;
   border-bottom: 0;
   overflow: clip;
-  overflow-clip-margin: var(--luke-space-4);
+  overflow-clip-margin: var(--ui-space-4);
 }
 
 .changes-people.pull-request-people > * {
@@ -1362,9 +1361,9 @@
   top: 50%;
   inset-inline-start: calc(var(--people-gap) / -2);
   width: 1px;
-  height: var(--luke-space-12);
+  height: var(--ui-space-12);
   translate: -50% -50%;
-  background: var(--luke-color-border-strong);
+  background: var(--ui-color-border-strong);
   content: "";
 }
 
@@ -1375,7 +1374,7 @@
    nothing runs past the row. It stands a control's height with or without
    a press, so a chip alone is level with the title's first line too. */
 .pull-request-section {
-  margin-top: var(--luke-space-20);
+  margin-top: var(--ui-space-20);
 }
 
 /* A part of the overview still being read: its blocks in the type its
@@ -1388,11 +1387,11 @@
 }
 
 .pull-request-skeleton > .luke-skeleton + .luke-skeleton {
-  margin-top: var(--luke-item-gap);
+  margin-top: var(--ui-item-gap);
 }
 
 .pull-request-title-row + .pull-request-failure {
-  margin-top: var(--luke-item-gap);
+  margin-top: var(--ui-item-gap);
 }
 
 /* A description with no words, where the member may write them, says so
@@ -1402,23 +1401,23 @@
 }
 
 .pull-request-description-text.plan-document-text > * + * {
-  margin-top: var(--luke-section-gap);
+  margin-top: var(--ui-section-gap);
 }
 
 .pull-request-description-text.plan-document-text > :is(h1, h2):first-child {
-  margin-top: var(--luke-block-gap);
+  margin-top: var(--ui-block-gap);
 }
 
 .pull-request-description-text.plan-document-text > :is(h3, h4, h5, h6):first-child {
-  margin-top: var(--luke-control-gap);
+  margin-top: var(--ui-control-gap);
 }
 
 .pull-request-description-text :is(ul, ol) {
-  padding-left: var(--luke-space-20);
+  padding-left: var(--ui-space-20);
 }
 
 .pull-request-description-text li + li {
-  margin-top: var(--luke-list-gap);
+  margin-top: var(--ui-list-gap);
 }
 
 .pull-request-description-text ul[data-type="taskList"] {
@@ -1428,7 +1427,7 @@
 .pull-request-description-text.plan-document-text li[data-checked] {
   display: flex;
   align-items: baseline;
-  gap: var(--luke-item-gap);
+  gap: var(--ui-item-gap);
 }
 
 .pull-request-description-text.plan-document-text li[data-checked] > label {
@@ -1443,7 +1442,7 @@
 }
 
 .pull-request-words li > .luke-markdown-task {
-  margin: 0 var(--luke-item-gap) 0 0;
+  margin: 0 var(--ui-item-gap) 0 0;
   vertical-align: middle;
 }
 
@@ -1477,9 +1476,8 @@
      note keeps the code's inset and comes in to the pane's narrower one
      where the row is under 440px (`annotation-card.tsx`), with no query
      on a container the note itself would have to be inside. */
-  padding: var(--luke-space-8)
-    clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
-  font-family: var(--luke-font-sans);
+  padding: var(--ui-space-8) clamp(var(--ui-space-8), (100% - 440px) * 999, var(--ui-space-12));
+  font-family: var(--ui-font-sans);
   white-space: normal;
   container: annotation luke-room / inline-size;
 }
@@ -1506,11 +1504,11 @@
   height: 0;
   flex-direction: row;
   align-items: flex-end;
-  translate: 0 calc(-1 * var(--luke-space-2));
+  translate: 0 calc(-1 * var(--ui-space-2));
 }
 
 .diff-thread-chip-faces > .actor-mark + .actor-mark {
-  margin-inline-start: calc(-1 * var(--luke-space-4));
+  margin-inline-start: calc(-1 * var(--ui-space-4));
 }
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
@@ -1521,10 +1519,10 @@
    after it, and the words' column after the faces, which the head's face
    and name and every comment's face and words read alike. */
 .annotation-card {
-  --annotation-inset: var(--luke-space-4);
-  --annotation-turn: var(--luke-space-24);
-  --annotation-gap: var(--luke-space-8);
-  --annotation-face: var(--luke-space-20);
+  --annotation-inset: var(--ui-space-4);
+  --annotation-turn: var(--ui-space-24);
+  --annotation-gap: var(--ui-space-8);
+  --annotation-face: var(--ui-space-20);
   --annotation-face-x: calc(
     var(--annotation-inset) +
     var(--annotation-turn) +
@@ -1539,14 +1537,14 @@
   min-width: 0;
   align-items: center;
   gap: var(--annotation-gap);
-  padding-top: var(--luke-item-gap);
-  padding-right: var(--luke-row-inset);
-  padding-bottom: var(--luke-item-gap);
+  padding-top: var(--ui-item-gap);
+  padding-right: var(--ui-row-inset);
+  padding-bottom: var(--ui-item-gap);
   padding-left: var(--annotation-inset);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  font-size: var(--ui-type-caption-size);
+  line-height: var(--ui-type-caption-leading);
   white-space: nowrap;
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 /* The head's fill reaches the ⋯ beside it (`DisclosureFrame`), which
@@ -1554,27 +1552,27 @@
 .annotation-card
 .luke-disclosure-frame:has(> .annotation-card-fold > .luke-disclosure-summary:hover)::before {
   border-radius: 0;
-  background: var(--luke-color-fill-hover);
+  background: var(--ui-color-fill-hover);
 }
 
 .annotation-card .luke-disclosure-frame:has(> :not(details):hover)::before {
   border-radius: 0;
-  background: var(--luke-color-fill-hover);
+  background: var(--ui-color-fill-hover);
 }
 
 .annotation-card .luke-disclosure-frame > .luke-disclosure-actions {
-  padding-inline-end: var(--luke-row-inset);
+  padding-inline-end: var(--ui-row-inset);
 }
 
 /* A narrow card's presses draw closer, at the pane's inset. */
 /* off-scale: 440px, where a card's age is drawn closer (annotation-card.tsx) */
 @container annotation (width < 440px) {
   .pull-request-thread-actions {
-    padding-inline: var(--luke-row-inset);
+    padding-inline: var(--ui-row-inset);
   }
 
   .pull-request-thread-actions-row {
-    gap: var(--luke-tight-gap);
+    gap: var(--ui-tight-gap);
   }
 }
 
@@ -1592,11 +1590,11 @@
 }
 
 .transcript-heading {
-  margin: var(--luke-control-gap) 0 var(--luke-tight-gap);
+  margin: var(--ui-control-gap) 0 var(--ui-tight-gap);
 }
 
 .transcript-heading:where([data-level="1"], [data-level="2"]) {
-  margin-top: var(--luke-block-gap);
+  margin-top: var(--ui-block-gap);
 }
 
 .transcript-markdown > :first-child {
@@ -1612,7 +1610,7 @@
    a model's reasoning, a todo list, a subagent's failure, a call's pictures)
    is set in to it, so it stands under the words rather than the icon. */
 :root {
-  --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
+  --transcript-gutter: calc(var(--ui-space-4) + 16px + var(--ui-icon-gap));
 }
 
 /* A tool call's chip (../ai-elements/tool.tsx) is held to the pill's own
@@ -1621,28 +1619,28 @@
    to the line's end; and with a preview after it, it keeps to half the line,
    so a long name never takes the preview's room. */
 .tool-chip:has(+ .tool-subject) {
-  max-width: min(50%, var(--luke-inline-ref-pill-width));
+  max-width: min(50%, var(--ui-inline-ref-pill-width));
 }
 
 /* A chip that opens its agent from a line that folds open: lifted with the
    line's hover as an inert one is, and pressed on its own hover, so it reads
    as the one target inside the line. */
 summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
-  background: var(--luke-color-fill-selected);
+  background: var(--ui-color-fill-selected);
 }
 
 summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
-  background: var(--luke-color-fill-pressed);
+  background: var(--ui-color-fill-pressed);
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
-   it, over the last `--luke-label-fade` as a cut label's (`@luke/ui`'s OneLine).
+   it, over the last `--ui-label-fade` as a cut label's (`@luke/ui`'s OneLine).
    Note that it is drawn without measuring the words, unlike a label's,
    because the subject's box takes the line's whole rest whatever it holds,
    so words that stop short end before the fade begins, and words still
    streaming in reach it without a resize to measure. */
 .tool-subject {
-  mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
 }
 
 /* An inline span of code, in a transcript, a to-do's step, a pull request's
@@ -1653,9 +1651,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .pull-request-description-text :not(pre) > code,
 .card-code {
   padding: 0.1em 0.4em;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-prose-tint, var(--luke-color-fill-hover));
-  font-family: var(--luke-font-mono);
+  border-radius: var(--ui-radius-6);
+  background: var(--ui-prose-tint, var(--ui-color-fill-hover));
+  font-family: var(--ui-font-mono);
   font-size: 0.9em;
 }
 
@@ -1696,8 +1694,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   mask-image: linear-gradient(
     to right,
     transparent,
-    #000 var(--luke-scroll-area-fade-start),
-    #000 calc(100% - var(--luke-scroll-area-fade-end)),
+    #000 var(--ui-scroll-area-fade-start),
+    #000 calc(100% - var(--ui-scroll-area-fade-end)),
     transparent
   );
   animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
@@ -1705,21 +1703,21 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   animation-fill-mode: both;
   animation-timeline: scroll(self inline), scroll(self inline);
   animation-range:
-    0 var(--luke-scroll-fade),
-    calc(100% - var(--luke-scroll-fade)) 100%;
+    0 var(--ui-scroll-fade),
+    calc(100% - var(--ui-scroll-fade)) 100%;
 }
 
 .transcript-table > table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--luke-type-body-size);
+  font-size: var(--ui-type-body-size);
   font-variant-numeric: tabular-nums;
-  line-height: var(--luke-type-body-leading);
+  line-height: var(--ui-type-body-leading);
 }
 
 .transcript-table :is(th, td) {
-  padding: var(--luke-item-gap) var(--luke-list-inset);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--ui-item-gap) var(--ui-list-inset);
+  border-bottom: 1px solid var(--ui-color-border);
   overflow-wrap: normal;
   text-align: left;
   vertical-align: top;
@@ -1734,9 +1732,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .transcript-table th {
-  border-bottom-color: var(--luke-color-border-strong);
-  color: var(--luke-color-text-muted);
-  font-weight: var(--luke-weight-medium);
+  border-bottom-color: var(--ui-color-border-strong);
+  color: var(--ui-color-text-muted);
+  font-weight: var(--ui-weight-medium);
   white-space: nowrap;
 }
 
@@ -1762,8 +1760,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-log-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+  gap: var(--ui-control-gap);
+  padding: var(--ui-section-gap) var(--ui-space-16) var(--ui-space-20);
 }
 
 /* Coding agents --------------------------------------------------------- */
@@ -1786,8 +1784,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 /* Note that the row sizes only a glyph that is its leading mark itself, so the two inside this one take the same size. */
 .agent-queue-lead > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+  width: var(--ui-control-icon);
+  height: var(--ui-control-icon);
 }
 .agent-queue-lead > :last-child,
 li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :first-child,
@@ -1819,7 +1817,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 /* A message's Forked to trail (fork-action.tsx) stands a list's gap under
    its foot. */
 [data-forked-to] {
-  margin-top: var(--luke-list-gap);
+  margin-top: var(--ui-list-gap);
 }
 
 /* A forked draft's chip over its box: what it forks, the message's opening
@@ -1831,7 +1829,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    to the line's end by its seat (fork-action.tsx). */
 .draft-fork-dock {
   container: fork-dock / inline-size;
-  padding: 0 var(--luke-space-16) var(--luke-row-inset);
+  padding: 0 var(--ui-space-16) var(--ui-row-inset);
 }
 
 .draft-fork-chip {
@@ -1839,10 +1837,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   min-height: 32px;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-tight-gap);
-  padding-inline: var(--luke-list-inset) var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
+  gap: var(--ui-tight-gap);
+  padding-inline: var(--ui-list-inset) var(--ui-tight-gap);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
   white-space: nowrap;
 }
 
@@ -1850,7 +1848,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  margin-inline-end: calc(var(--luke-icon-gap) - var(--luke-space-4));
+  margin-inline-end: calc(var(--ui-icon-gap) - var(--ui-space-4));
 }
 
 /* The words around the chips, Fork of and at, keep whole. The source's
@@ -1869,7 +1867,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 .draft-fork-quote {
   min-width: 4em;
   flex: 1 1 0;
-  color: var(--luke-color-text);
+  color: var(--ui-color-text);
 }
 
 .draft-fork-drop {
@@ -1895,13 +1893,13 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 /* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--luke-scroll-fade` just above it (its `ScrollArea`'s end
+   dissolve over `--ui-scroll-fade` just above it (its `ScrollArea`'s end
    fade), rather than being sliced short of the card. Its foot pads past the
    fade, so the newest line, scrolled to or followed, stands whole above it;
    the area's own scroll padding brings a control focused from below in
    past the fade as well. */
 .agent-log-over-composer {
-  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+  padding-bottom: calc(var(--ui-scroll-fade) + var(--ui-space-4));
 }
 
 /* A to-do list's glyphs (transcript-blocks.tsx's `TodoItems`) stand at 14px
@@ -1920,24 +1918,24 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    standing still under it, because the card's ground is translucent and a
    line passing over a list would show it through. */
 [data-todos-dock][data-disclosure="opening"] {
-  animation: todos-dock-unroll var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+  animation: todos-dock-unroll var(--ui-duration-pane) var(--ui-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="opening"] > summary {
-  animation: todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+  animation: todos-dock-rise var(--ui-duration-pane) var(--ui-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] {
-  animation: todos-dock-roll-up var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+  animation: todos-dock-roll-up var(--ui-duration-pane) var(--ui-motion-pane) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
-  animation: todos-dock-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+  animation: todos-dock-sink var(--ui-duration-pane) var(--ui-motion-pane) forwards;
 }
 
 /* Note that the list's fade is what the fold waits on before it lets the list go, so it runs as long as the sheet sinks, or the sink would be cut off. */
 [data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
-  animation: luke-disclosure-leave var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+  animation: luke-disclosure-leave var(--ui-duration-pane) var(--ui-motion-pane) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated
@@ -1977,16 +1975,16 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    as a textarea's lines stand, and the placeholder the field draws at the
    editor's own insets while the words are empty, dimmed with the editor
    while the box is held. In every room it stops growing short of two fifths
-   of what is seen (`--luke-stage-height`), so a short window, a laptop's
+   of what is seen (`--ui-stage-height`), so a short window, a laptop's
    with a dock, is not filled by its composer; a narrow room's keyboard
    takes a smaller share (desktop.css). */
 .agent-composer-field {
   position: relative;
-  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.4);
-  --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+  --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.4);
+  --agent-composer-field-block: calc(var(--ui-space-16) + var(--ui-space-8));
   --agent-composer-field-lines: calc(
     8 *
-    var(--luke-type-body-leading) +
+    var(--ui-type-body-leading) +
     var(--agent-composer-field-block)
   );
 }
@@ -1994,15 +1992,15 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 .agent-composer-input {
   box-sizing: border-box;
   width: 100%;
-  min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  min-height: calc(var(--ui-type-body-leading) + var(--agent-composer-field-block));
   max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
   overflow-x: hidden;
   overflow-y: auto;
-  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-row-inset);
+  padding: var(--ui-space-16) var(--ui-space-16) var(--ui-row-inset);
   background: transparent;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
+  color: var(--ui-color-text);
+  font-size: var(--ui-type-body-size);
+  line-height: var(--ui-type-body-leading);
   outline: none; /* no ring: the caret marks the field */
   user-select: text;
 }
@@ -2033,10 +2031,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   top: 0;
   right: 0;
   left: 0;
-  padding: var(--luke-space-16) var(--luke-space-16) 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
+  padding: var(--ui-space-16) var(--ui-space-16) 0;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-body-size);
+  line-height: var(--ui-type-body-leading);
   pointer-events: none;
 }
 
@@ -2103,7 +2101,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    End call both stay within the card. */
 .luke-composer-foot-bar:has(> .luke-composer-foot-strip + .luke-composer-foot-call) {
   flex-wrap: wrap;
-  row-gap: var(--luke-tight-gap);
+  row-gap: var(--ui-tight-gap);
 }
 
 .luke-composer-foot-strip:has(+ .luke-composer-foot-call) {
@@ -2158,11 +2156,11 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    mark comes off and it travels back on its transition, and the file walked
    to stands in its place at once. */
 .attachment-viewer-body {
-  transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
+  transition: translate var(--ui-duration-pane) var(--ui-motion-pane);
 }
 
 .attachment-viewer[data-luke-page-swipe] .attachment-viewer-body {
-  translate: var(--luke-page-swipe-offset, 0) 0;
+  translate: var(--ui-page-swipe-offset, 0) 0;
   transition: none;
 }
 
@@ -2170,10 +2168,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   width: min(
     100cqw -
     2px,
-    (100cqh - var(--luke-control-height) - 2 * var(--luke-space-4) - 3px) *
-    var(--luke-video-natural-width, 16) /
-    var(--luke-video-natural-height, 10),
-    var(--luke-video-natural-width, 1600) *
+    (100cqh - var(--ui-control-height) - 2 * var(--ui-space-4) - 3px) *
+    var(--ui-video-natural-width, 16) /
+    var(--ui-video-natural-height, 10),
+    var(--ui-video-natural-width, 1600) *
     2px
   );
 }
@@ -2188,9 +2186,9 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   width: min(
     100cqw,
     100cqh *
-    var(--luke-zoom-natural-width) /
-    var(--luke-zoom-natural-height),
-    var(--luke-zoom-natural-width) *
+    var(--ui-zoom-natural-width) /
+    var(--ui-zoom-natural-height),
+    var(--ui-zoom-natural-width) *
     2px
   );
   max-height: 100%;
@@ -2200,9 +2198,9 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   width: min(
     100cqw,
     100cqh *
-    var(--luke-video-natural-width) /
-    var(--luke-video-natural-height),
-    var(--luke-video-natural-width) *
+    var(--ui-video-natural-width) /
+    var(--ui-video-natural-height),
+    var(--ui-video-natural-width) *
     2px
   );
 }
@@ -2215,8 +2213,8 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    terminal (`terminal-theme.ts`), so the line it prints stays legible. */
 .terminal-tab-title [data-agent-ref] {
   flex: 0 1 auto;
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
+  color: var(--ui-color-text);
+  font-weight: var(--ui-weight-semibold);
 }
 
 /* A narrow panel leaves out the word "sandbox" the tab's name already
@@ -2229,19 +2227,19 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 
 /* A dot while a command runs in the shell, centred where the × steps in. */
 .terminal-shells-foot [data-agent-ref] .luke-harness-mark {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+  width: var(--ui-control-icon);
+  height: var(--ui-control-icon);
 }
 
 .terminal-shells-foot [data-agent-ref] {
-  --luke-working-mark-size: var(--luke-control-icon);
+  --ui-working-mark-size: var(--ui-control-icon);
 }
 
 /* A bar for a state that often heals at once, a dropped connection the host
    is already making again, shows only once it has held a second, so a blip
    is never seen. */
 .terminal-bar[data-late="true"] {
-  animation: terminal-bar-late 0s linear var(--luke-late-delay) both;
+  animation: terminal-bar-late 0s linear var(--ui-late-delay) both;
 }
 
 @keyframes terminal-bar-late {
@@ -2269,7 +2267,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   display: grid;
   flex: none;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto clamp(200px, var(--luke-stage-height) - 280px, 440px);
+  grid-template-rows: auto clamp(200px, var(--ui-stage-height) - 280px, 440px);
 }
 
 /* A pull request's colour for where it stands, in GitHub's colours: open in
@@ -2278,30 +2276,30 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    chip naming it wears the shared palette's tone for it
    (`PULL_REQUEST_TONE`). Its checks never change its colour. */
 [data-pull-request-state="open"] {
-  --pull-request-tone: var(--luke-color-complete);
+  --pull-request-tone: var(--ui-color-complete);
 }
 
 [data-pull-request-state="draft"] {
-  --pull-request-tone: var(--luke-color-text-muted);
+  --pull-request-tone: var(--ui-color-text-muted);
 }
 
 [data-pull-request-state="merged"] {
-  --pull-request-tone: var(--luke-color-merged);
+  --pull-request-tone: var(--ui-color-merged);
 }
 
 [data-pull-request-state="closed"] {
-  --pull-request-tone: var(--luke-color-danger);
+  --pull-request-tone: var(--ui-color-danger);
 }
 
 /* An open pull request GitHub holds in its merge queue, as its Pull request
    tab's pill says it: in the attention orange, with the merge's glyph. */
 [data-pull-request-state="queued"] {
-  --pull-request-tone: var(--luke-color-attention);
+  --pull-request-tone: var(--ui-color-attention);
 }
 
 .pull-request-mark {
-  width: var(--luke-icon-12);
-  height: var(--luke-icon-12);
+  width: var(--ui-icon-12);
+  height: var(--ui-icon-12);
   flex: 0 0 auto;
 }
 
@@ -2315,21 +2313,21 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    success green, closed as done in the merged purple, and closed as not
    planned in the muted ink. */
 .issue-mark {
-  width: var(--luke-icon-12);
-  height: var(--luke-icon-12);
+  width: var(--ui-icon-12);
+  height: var(--ui-icon-12);
   flex: 0 0 auto;
 }
 
 .issue-mark[data-issue-state="open"] {
-  color: var(--luke-color-complete);
+  color: var(--ui-color-complete);
 }
 
 .issue-mark[data-issue-state="closed"] {
-  color: var(--luke-color-merged);
+  color: var(--ui-color-merged);
 }
 
 .issue-mark[data-issue-state="not-planned"] {
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
 }
 
 /* The pull request's row pinned over the composer, a card of one row
@@ -2466,18 +2464,18 @@ svg.lucide {
    one and dimmed, so neither reads by its colour alone. The washes are the
    palette's finished green and its one red, which each appearance restates. */
 .markdown-inserted {
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--luke-color-complete) 24%, transparent);
+  border-radius: var(--ui-radius-6);
+  background: color-mix(in srgb, var(--ui-color-complete) 24%, transparent);
   color: inherit;
   text-decoration: none;
 }
 
 .markdown-deleted {
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
-  color: var(--luke-color-text-muted);
+  border-radius: var(--ui-radius-6);
+  background: color-mix(in srgb, var(--ui-color-danger) 16%, transparent);
+  color: var(--ui-color-text-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--ui-color-danger) 70%, transparent);
 }
 
 /* Words struck out and the words written in their place stand side by side,
@@ -2498,13 +2496,13 @@ svg.lucide {
 }
 
 .markdown-inserted > .picture-block .picture-frame {
-  outline: 2px solid color-mix(in srgb, var(--luke-color-complete) 75%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--ui-color-complete) 75%, transparent);
   outline-offset: 2px;
 }
 
 .markdown-deleted > .picture-block .picture-frame {
   opacity: 0.45;
-  outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
+  outline: 2px dashed color-mix(in srgb, var(--ui-color-danger) 70%, transparent);
   outline-offset: 2px;
 }
 
@@ -2519,8 +2517,8 @@ svg.lucide {
   border-radius: 2px;
   background: var(--comment-mark);
   color: inherit;
-  cursor: var(--luke-cursor-press);
-  transition: background var(--luke-duration-hover) var(--luke-motion-exit);
+  cursor: var(--ui-cursor-press);
+  transition: background var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .plan-comment-mark:hover,
@@ -2560,12 +2558,12 @@ svg.lucide {
 }
 
 .comment-slot {
-  animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
+  animation: luke-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) backwards;
 }
 
 /* A card leaving fades out where it last stood, out of reach, as the cards below take its room. */
 .comment-slot[data-leaving="true"] {
-  animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  animation: luke-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   pointer-events: none;
 }
 
@@ -2574,10 +2572,10 @@ svg.lucide {
    which stands in its place on a line holding threads. */
 .comment-block-button {
   position: absolute;
-  left: calc(100% + var(--luke-space-2));
+  left: calc(100% + var(--ui-space-2));
   translate: 0 -50%;
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .comment-block-button:focus-within {
@@ -2610,10 +2608,10 @@ svg.lucide {
    stands centred on the first line its words stand on, wherever they go on
    from there, so every count reads as the line it starts. */
 .comment-count {
-  --luke-control-inset: var(--luke-space-6);
-  --luke-icon-gap: var(--luke-space-4);
+  --ui-control-inset: var(--ui-space-6);
+  --ui-icon-gap: var(--ui-space-4);
   position: absolute;
-  right: calc(var(--luke-space-8) - var(--comment-gutter));
+  right: calc(var(--ui-space-8) - var(--comment-gutter));
   display: flex;
   translate: 0 -50%;
 }
@@ -2623,7 +2621,7 @@ svg.lucide {
 .comment-float {
   position: absolute;
   z-index: 3;
-  right: var(--luke-space-8);
+  right: var(--ui-space-8);
   display: flex;
   width: var(--comment-card-width);
   max-height: var(--comment-card-room);
@@ -2635,7 +2633,7 @@ svg.lucide {
 .comment-float-cards {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-tight-gap);
+  gap: var(--ui-tight-gap);
 }
 
 /* An open card over the plan stands no taller than the scroller it opens
@@ -2652,16 +2650,16 @@ svg.lucide {
 /* On a phone narrower than a card and the web's gutter, the open thread
    gives way to the column rather than start past its other edge. */
 [data-luke-profile="web"] .comment-float {
-  max-width: calc(100% - var(--luke-space-8));
+  max-width: calc(100% - var(--ui-space-8));
 }
 
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-time {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-type-caption-weight);
+  font-weight: var(--ui-type-caption-weight);
   white-space: nowrap;
 }
 
@@ -2670,9 +2668,9 @@ svg.lucide {
   position: relative;
   z-index: 1;
   display: flex;
-  margin-right: calc(var(--luke-space-6) * -1);
+  margin-right: calc(var(--ui-space-6) * -1);
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
 .comment-tools:focus-within,
@@ -2699,11 +2697,11 @@ svg.lucide {
 .comment-gone {
   display: flex;
   align-items: center;
-  gap: var(--luke-item-gap);
-  margin-bottom: var(--luke-tight-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-type-label-weight);
+  gap: var(--ui-item-gap);
+  margin-bottom: var(--ui-tight-gap);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
+  font-weight: var(--ui-type-label-weight);
 }
 
 .comment-gone svg {
@@ -2716,19 +2714,19 @@ svg.lucide {
    card's well, a first comment bare on the card. What stands here lays out
    what it holds. */
 .comment-field {
-  --comment-field-inline: var(--luke-space-8);
+  --comment-field-inline: var(--ui-space-8);
   /* The plain field's insets and height (`PlainCommentText`), the editor's below. */
-  --luke-text-area-inset-start: var(--luke-space-8);
-  --luke-text-area-inset-inline: var(--comment-field-inline);
-  --luke-text-area-inset-end: var(--luke-space-2);
-  --luke-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
-  margin-top: var(--luke-control-gap);
+  --ui-text-area-inset-start: var(--ui-space-8);
+  --ui-text-area-inset-inline: var(--comment-field-inline);
+  --ui-text-area-inset-end: var(--ui-space-2);
+  --ui-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
+  margin-top: var(--ui-control-gap);
 }
 
 /* The agent box's editor as a comment's field, its placeholder and its
    paragraphs at the comment field's padding. */
 .comment-field .agent-composer-placeholder {
-  padding: var(--luke-row-inset) var(--comment-field-inline) 0;
+  padding: var(--ui-row-inset) var(--comment-field-inline) 0;
 }
 
 .comment-field .agent-composer-field {
@@ -2741,7 +2739,7 @@ svg.lucide {
 
 .comment-field .agent-composer-input {
   min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
-  padding: var(--luke-row-inset) var(--comment-field-inline) var(--luke-space-2);
+  padding: var(--ui-row-inset) var(--comment-field-inline) var(--ui-space-2);
   line-height: 1.45;
 }
 
@@ -2750,13 +2748,13 @@ svg.lucide {
    dictation's strip stands at their height. */
 .comment-field-foot,
 .comment-field .luke-composer-foot {
-  --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
-  padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
+  --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  padding: var(--ui-space-2) var(--ui-item-gap) var(--ui-item-gap);
 }
 
 /* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */
 .comment-field .luke-composer-files {
-  padding: var(--luke-item-gap) var(--luke-item-gap) 0;
+  padding: var(--ui-item-gap) var(--ui-item-gap) 0;
 }
 
 .comment-field-foot {
@@ -2764,7 +2762,7 @@ svg.lucide {
   min-height: 26px; /* off-scale: as its tools */
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-item-gap);
+  gap: var(--ui-item-gap);
 }
 
 /* A thread's first comment is the card itself (`COMPOSER_LOOK.BARE`): its
@@ -2785,7 +2783,7 @@ svg.lucide {
    divider, the lines said ahead of it, a replay's card, a step apart as the
    log's own lines are. */
 .agent-log-row > :not(:last-child) {
-  margin-block-end: var(--luke-block-gap);
+  margin-block-end: var(--ui-block-gap);
 }
 
 /* A row of an agent's log after its first stands a step from the one
@@ -2794,9 +2792,9 @@ svg.lucide {
    on with the rows the piece before it cut (`turn-pieces.ts`), the step
    between a message's blocks, so a cut turn reads as one. */
 .agent-log-row-next {
-  padding-block-start: var(--luke-block-gap);
+  padding-block-start: var(--ui-block-gap);
 }
 
 .agent-log-row-continued {
-  padding-block-start: var(--luke-control-gap);
+  padding-block-start: var(--ui-control-gap);
 }

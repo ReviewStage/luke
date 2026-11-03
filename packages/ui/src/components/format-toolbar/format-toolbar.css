@@ -7,18 +7,18 @@
   .luke-format-toolbar-rule {
     flex: none;
     width: 1px;
-    height: var(--luke-space-16);
-    margin: 0 var(--luke-space-2);
-    background: var(--luke-color-border-strong);
+    height: var(--ui-space-16);
+    margin: 0 var(--ui-space-2);
+    background: var(--ui-color-border-strong);
   }
 
   .luke-format-toolbar .luke-button[aria-pressed="true"] {
-    --luke-button-fill: color-mix(in srgb, var(--luke-color-accent-text) 14%, transparent);
-    --luke-button-ink: var(--luke-color-accent-text);
+    --ui-button-fill: color-mix(in srgb, var(--ui-color-accent-text) 14%, transparent);
+    --ui-button-ink: var(--ui-color-accent-text);
   }
 
   .luke-format-toolbar .luke-button-trailing > svg {
-    width: var(--luke-space-12);
-    height: var(--luke-space-12);
+    width: var(--ui-space-12);
+    height: var(--ui-space-12);
   }
 }

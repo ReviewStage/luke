@@ -40,7 +40,7 @@ const ENLARGE_LABEL = "Enlarge";
 
 /** The press: no box of its own, hugging its picture or filling its room, the zooming pointer where a pointer's press opens it. */
 const TILE =
-  "luke-picture-tile group/picture-tile relative m-0 flex w-fit min-w-0 max-w-full cursor-zoom-in flex-col gap-luke-4 border-0 bg-transparent p-0 text-start text-inherit [font:inherit] data-[fill=true]:w-full data-[pointer-opens=false]:cursor-auto";
+  "luke-picture-tile group/picture-tile relative m-0 flex w-fit min-w-0 max-w-full cursor-zoom-in flex-col gap-ui-4 border-0 bg-transparent p-0 text-start text-inherit [font:inherit] data-[fill=true]:w-full data-[pointer-opens=false]:cursor-auto";
 
 /**
  * The face, the picture's shape, so the ring rounds as its frame does, which
@@ -49,7 +49,7 @@ const TILE =
  * button's share reads as a jump.
  */
 const FACE =
-  "luke-picture-tile-face relative block min-w-0 max-w-full rounded-control transition-transform duration-(--luke-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
+  "luke-picture-tile-face relative block min-w-0 max-w-full rounded-control transition-transform duration-(--ui-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
 
 /** What an app's hint hands the tile it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<

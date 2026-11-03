@@ -352,7 +352,7 @@ const CHAPTERS_TAB = lazyRoute(() =>
  * (`SCROLL_FADE_INSET.BAND`).
  */
 const VIEW_CLASS =
-  "pull-request-view [--luke-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
+  "pull-request-view [--ui-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
 
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
@@ -658,7 +658,7 @@ export function Section({
       {/* Note that the title is cut in a line of its own, since a flex row's bare words are never cut, and the count after it stays whole. */}
       <OneLine className="flex-initial">{title}</OneLine>
       {count === undefined ? null : (
-        <span className="pull-request-count flex-none font-luke-regular text-muted-foreground tabular-nums">
+        <span className="pull-request-count flex-none font-ui-regular text-muted-foreground tabular-nums">
           {count}
         </span>
       )}
@@ -1421,7 +1421,7 @@ function ThreadComments({
         ))}
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="annotation-card-more mr-0 mb-0 mt-luke-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
+        <p className="annotation-card-more mr-0 mb-0 mt-ui-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
           <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
@@ -2502,7 +2502,7 @@ function ConversationView({
     >
       {/* Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
       stands them, so the Conversation and the Checks read alike. */}
-      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--luke-page-measure)]">
+      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--ui-page-measure)]">
         <DescriptionPart
           agentId={agentId}
           part={parts.pullRequest}

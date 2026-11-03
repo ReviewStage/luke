@@ -179,7 +179,7 @@ test("the agent's pointer hides while a member drives the tab, and fades once th
 test.each(["1ms", "0s"])(
   "where the motion tokens stand at %s the agent's pointer is held still: it neither rocks, glides, nor ripples",
   async (duration) => {
-    document.documentElement.style.setProperty("--luke-duration-fast", duration);
+    document.documentElement.style.setProperty("--ui-duration-fast", duration);
     try {
       await paneOf(CLICKED);
       const drawn = pointer();
@@ -188,7 +188,7 @@ test.each(["1ms", "0s"])(
       assert.ok(drawn.hasAttribute("data-still"), "held still");
       assert.equal(drawn.querySelector(".cloud-browser-cursor-ripple"), null, "no ripple");
     } finally {
-      document.documentElement.style.removeProperty("--luke-duration-fast");
+      document.documentElement.style.removeProperty("--ui-duration-fast");
     }
   },
 );

@@ -66,6 +66,6 @@ export function wayBackGap(bar: HTMLElement, opening: HTMLElement): number {
   const back = bar.querySelector("button");
   if (back === null) throw new Error("the bar leads with no way back");
   const row = pixelsOf(bar, getComputedStyle(bar).minHeight);
-  const control = pixelsOf(back, "var(--luke-control-height)");
+  const control = pixelsOf(back, "var(--ui-control-height)");
   return (row - control) / 2 + pixelsOf(opening, getComputedStyle(opening).paddingTop);
 }

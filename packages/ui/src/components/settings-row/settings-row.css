@@ -17,18 +17,15 @@
      `settings-row-mark`, `settings-row-words-inset`, and
      `settings-row-indent`. */
   .luke-settings-row {
-    --luke-settings-row-mark-size: 20px;
-    --luke-settings-row-words-inset: calc(
-      var(--luke-settings-row-mark-size) +
-      var(--luke-space-12)
-    );
+    --ui-settings-row-mark-size: 20px;
+    --ui-settings-row-words-inset: calc(var(--ui-settings-row-mark-size) + var(--ui-space-12));
   }
 
   /* Note that the line's gap, the subject's share of it, and the title's
      wrap stay here rather than in utilities, because the rules below undo
      them, and a rule in this layer cannot undo a utility. */
   .luke-settings-row-line {
-    gap: var(--luke-space-12);
+    gap: var(--ui-space-12);
   }
 
   /* The words and the mark leading them, which stay on one line together
@@ -40,7 +37,7 @@
   /* The label and what rides its line, kept whole and wrapping between. */
   .luke-settings-row-title {
     flex-wrap: wrap;
-    gap: var(--luke-space-2) var(--luke-space-6);
+    gap: var(--ui-space-2) var(--ui-space-6);
   }
 
   /* Note that a card's or a list's row asks a legible stretch for its words
@@ -51,16 +48,12 @@
   .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
   .luke-settings-row-line {
     flex-wrap: wrap;
-    gap: var(--luke-space-8) var(--luke-space-12);
+    gap: var(--ui-space-8) var(--ui-space-12);
   }
 
   .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
     .luke-settings-row-subject {
-    flex-basis: calc(
-      var(--luke-settings-row-words-inset) +
-      var(--luke-space-96) +
-      var(--luke-space-24)
-    );
+    flex-basis: calc(var(--ui-settings-row-words-inset) + var(--ui-space-96) + var(--ui-space-24));
   }
 
   .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
@@ -97,10 +90,10 @@
       /* Note that the fade stands in padding, because a name that fits ends
          before it and keeps its last letter whole, and one cut short ends
          inside it. */
-      padding-inline-end: var(--luke-label-fade);
+      padding-inline-end: var(--ui-label-fade);
       overflow: hidden;
       white-space: nowrap;
-      mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+      mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
     }
 
     /* Note that a name an account's words follow (`AccountWords`) is a
@@ -108,7 +101,7 @@
        instead, a short step off it, rather than past the name's own fade. */
     .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
       .luke-settings-row-title:has(> .luke-account-words) {
-      column-gap: var(--luke-space-6);
+      column-gap: var(--ui-space-6);
     }
 
     .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])

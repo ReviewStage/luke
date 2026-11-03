@@ -6,5 +6,5 @@
 }
 
 .luke-remote-surface[data-driving] {
-  box-shadow: 0 0 0 1px var(--luke-color-border);
+  box-shadow: 0 0 0 1px var(--ui-color-border);
 }

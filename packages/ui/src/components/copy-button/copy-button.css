@@ -8,8 +8,8 @@
 @layer components {
   .luke-copy-glyph[data-turned] {
     animation:
-      luke-copy-glyph-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-copy-glyph-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      luke-copy-glyph-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-copy-glyph-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   .luke-copy-lead > .luke-copy-glyph {

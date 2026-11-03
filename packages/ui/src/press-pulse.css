@@ -3,7 +3,7 @@
    springs back from pressed inside a box that stands still, a small control
    whole, a row or a card a little, a row flush to its frame a little
    inside a fill that stands still, and words fade a little and come back.
-   Every one runs on `--luke-duration-fast`, which reduced motion and a
+   Every one runs on `--ui-duration-fast`, which reduced motion and a
    capture run hold still. Note that the whole shapes move by `scale` and
    the words by `opacity`, never `transform`, so a drag's or a swipe's
    transform the shape stands at goes on standing under it. Imported after
@@ -11,25 +11,25 @@
 
 @layer components {
   [data-pulse="face"] > [data-press-face] {
-    animation: luke-press-face var(--luke-duration-fast) var(--luke-spring-fast);
+    animation: luke-press-face var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   [data-pulse="control"] {
-    animation: luke-press-control var(--luke-duration-fast) var(--luke-spring-fast);
+    animation: luke-press-control var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   [data-pulse="quiet"] {
-    animation: luke-press-quiet var(--luke-duration-fast) var(--luke-spring-fast);
+    animation: luke-press-quiet var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   /* Note that only what the row holds moves, because the row's fill meets the
      frame around it, and a fill that gave would pull back from its edges. */
   [data-pulse="flush"] > * {
-    animation: luke-press-quiet var(--luke-duration-fast) var(--luke-spring-fast);
+    animation: luke-press-quiet var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   [data-pulse="words"] {
-    animation: luke-press-words var(--luke-duration-fast) var(--luke-motion-exit);
+    animation: luke-press-words var(--ui-duration-fast) var(--ui-motion-exit);
   }
 
   @keyframes luke-press-face {

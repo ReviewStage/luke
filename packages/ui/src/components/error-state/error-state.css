@@ -21,8 +21,8 @@
      outrank. */
   @container luke-error-state (width < 360px) {
     .luke-error-state-retry > .luke-button {
-      --luke-button-ink: var(--luke-color-text-muted);
-      width: var(--luke-control-height);
+      --ui-button-ink: var(--ui-color-text-muted);
+      width: var(--ui-control-height);
       padding: 0;
     }
 
@@ -41,8 +41,8 @@
      the label its type may size the glyphs in it by its own utilities, as
      `TextButton` does, and those must still win. */
   .luke-retry-row-label svg {
-    width: var(--luke-space-12);
-    height: var(--luke-space-12);
+    width: var(--ui-space-12);
+    height: var(--ui-space-12);
     flex: none;
     align-self: center;
   }

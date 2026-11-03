@@ -9,14 +9,14 @@
 @layer components {
   .luke-rolling-number-leaving {
     animation:
-      luke-rolling-number-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards,
-      luke-rolling-number-out-up var(--luke-duration-fast) var(--luke-spring-fast) forwards;
+      luke-rolling-number-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards,
+      luke-rolling-number-out-up var(--ui-duration-fast) var(--ui-spring-fast) forwards;
   }
 
   .luke-rolling-number-digit[data-roll] {
     animation:
-      luke-rolling-number-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-rolling-number-in-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      luke-rolling-number-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-rolling-number-in-up var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* A count that falls turns the wheel the other way. */

@@ -242,7 +242,7 @@ function GitHubPicture({
   }
   return state.kind === PICTURE_STATE.READY ? (
     <img
-      className="inline-block h-auto max-w-full rounded-luke-6 align-middle"
+      className="inline-block h-auto max-w-full rounded-ui-6 align-middle"
       src={state.url}
       alt={alt}
     />

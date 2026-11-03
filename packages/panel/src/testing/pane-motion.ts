@@ -23,8 +23,8 @@ interface RecordedMotion {
 export function playMotions() {
   const played: Played[] = [];
   const root = document.documentElement.style;
-  root.setProperty("--luke-duration-pane", "240ms");
-  root.setProperty("--luke-motion-pane", "ease-out");
+  root.setProperty("--ui-duration-pane", "240ms");
+  root.setProperty("--ui-motion-pane", "ease-out");
   Object.defineProperty(Element.prototype, "animate", {
     configurable: true,
     value(this: Element, keyframes: Keyframe[]) {
@@ -44,8 +44,8 @@ export function playMotions() {
   return {
     played,
     remove: () => {
-      root.removeProperty("--luke-duration-pane");
-      root.removeProperty("--luke-motion-pane");
+      root.removeProperty("--ui-duration-pane");
+      root.removeProperty("--ui-motion-pane");
       Reflect.deleteProperty(Element.prototype, "animate");
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     },
@@ -54,11 +54,11 @@ export function playMotions() {
 
 /** The list motion's tokens, as the app's sheets set them. */
 const LIST_MOTION_TOKENS = {
-  "--luke-duration-exit": "90ms",
-  "--luke-motion-exit": "ease",
-  "--luke-duration-shape": "460ms",
-  "--luke-spring": "ease-out",
-  "--luke-list-travel": "16px",
+  "--ui-duration-exit": "90ms",
+  "--ui-motion-exit": "ease",
+  "--ui-duration-shape": "460ms",
+  "--ui-spring": "ease-out",
+  "--ui-list-travel": "16px",
 };
 
 /**

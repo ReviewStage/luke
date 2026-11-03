@@ -41,10 +41,10 @@
      (`:dir()`), and Tailwind's mask utilities compose the gradient through
      variables rather than drawing it, which the label fade's test reads. */
   .luke-badge-line[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
   .luke-badge-line[data-overflow="true"]:dir(rtl) {
-    mask-image: linear-gradient(to right, transparent, #000 var(--luke-label-fade));
+    mask-image: linear-gradient(to right, transparent, #000 var(--ui-label-fade));
   }
 }

@@ -103,7 +103,7 @@ function AccountCellFrame({
   email: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-(--luke-space-12)">
+    <div className="flex items-center gap-(--ui-space-12)">
       <span className="flex shrink-0">{avatar}</span>
       {/* Note that the lines stand in a flex column, so a line's bone keeps its own line's room rather than sharing a collapsed margin with the next. */}
       <div className="flex min-w-0 flex-col">

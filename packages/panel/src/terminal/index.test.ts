@@ -163,7 +163,7 @@ function drawnFace(host: HTMLElement): string | undefined {
 /** A host whose window's monospace stack is a web font, as the web app's profile names it. */
 function webFontHost(): HTMLElement {
   const host = document.createElement("div");
-  host.style.setProperty("--luke-font-mono", '"JetBrains Mono Variable", monospace');
+  host.style.setProperty("--ui-font-mono", '"JetBrains Mono Variable", monospace');
   document.body.append(host);
   return host;
 }

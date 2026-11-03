@@ -3,13 +3,13 @@
 @layer components {
   .luke-drop-slot {
     box-sizing: border-box;
-    height: var(--luke-control-height);
-    border: 1px dashed var(--luke-color-border-strong);
-    border-radius: var(--luke-control-radius);
-    transition: border-color var(--luke-duration-hover) var(--luke-motion-exit);
+    height: var(--ui-control-height);
+    border: 1px dashed var(--ui-color-border-strong);
+    border-radius: var(--ui-control-radius);
+    transition: border-color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   [data-drop-target="true"] .luke-drop-slot {
-    border-color: var(--luke-color-focus-ring);
+    border-color: var(--ui-color-focus-ring);
   }
 }

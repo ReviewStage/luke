@@ -13,7 +13,7 @@ import { SkeletonBlock } from "../../shadcn/skeleton.js";
  * stand-in takes its size from the room the plot will stand in. Every block
  * breathes on one opacity loop, in step so a wait reads as one object, in
  * the strong fill, and holds still with every other endless loop on
- * `--luke-loop-motion` under reduced motion and a capture run. The blocks are
+ * `--ui-loop-motion` under reduced motion and a capture run. The blocks are
  * decoration: the region around them says what is being read, to a
  * reader and to nobody else.
  *
@@ -48,11 +48,11 @@ export type SkeletonShape = (typeof SKELETON_SHAPE)[keyof typeof SKELETON_SHAPE]
  */
 const SHAPE_CLASS: Record<SkeletonShape, string> = {
   [SKELETON_SHAPE.LINE]:
-    "luke-skeleton w-[var(--luke-skeleton-width,100%)] h-skeleton-line my-skeleton-line-gap rounded-skeleton",
+    "luke-skeleton w-[var(--ui-skeleton-width,100%)] h-skeleton-line my-skeleton-line-gap rounded-skeleton",
   [SKELETON_SHAPE.CONTROL]:
-    "luke-skeleton w-[var(--luke-skeleton-width,100%)] h-control rounded-control",
+    "luke-skeleton w-[var(--ui-skeleton-width,100%)] h-control rounded-control",
   [SKELETON_SHAPE.CIRCLE]:
-    "luke-skeleton w-[var(--luke-skeleton-width,var(--spacing-control))] aspect-square rounded-full",
+    "luke-skeleton w-[var(--ui-skeleton-width,var(--spacing-control))] aspect-square rounded-full",
   [SKELETON_SHAPE.BLOCK]: "luke-skeleton size-full rounded-control",
 };
 
@@ -70,7 +70,7 @@ export function Skeleton({ shape = SKELETON_SHAPE.LINE, width }: SkeletonProps):
       className={SHAPE_CLASS[shape]}
       data-shape={shape}
       style={
-        width === undefined ? undefined : cssCustomProperties({ "--luke-skeleton-width": width })
+        width === undefined ? undefined : cssCustomProperties({ "--ui-skeleton-width": width })
       }
       aria-hidden="true"
     />

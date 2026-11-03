@@ -5,12 +5,12 @@
  * the 16px icon seat: eight 3px cells lapped round a 3×3 grid, 2px apart.
  * Each cell steps to the next on one beat, so the motion is stepped frames of
  * `transform` alone and never lays anything out. Reduced motion and a capture
- * run hold it on `--luke-loop-motion`, on a frame chosen to show the chase
+ * run hold it on `--ui-loop-motion`, on a frame chosen to show the chase
  * mid-lap rather than its first. A capture that drops the animation outright
  * falls back on each pixel's own resting `transform`, the very same frame, so
  * a still mark always lights four cells and reads as working. The mark itself
  * is decorative; the seat it stands in names it. Its side is 16px unless a
- * container sets `--luke-working-mark-size`.
+ * container sets `--ui-working-mark-size`.
  *
  * It is drawn in the Tailwind theme's utilities: its size is fixed by the
  * `viewBox` the mark always carries, asked on the mark with that attribute

@@ -90,7 +90,7 @@ const SKELETON_ROWS = [
 ] as const;
 
 /** How wide a row's glyph stands while it is read: the glyph's own size. */
-const SKELETON_GLYPH = "var(--luke-control-icon)";
+const SKELETON_GLYPH = "var(--ui-control-icon)";
 
 /** What the foot says beside the agent's glyph: its sandbox where that is stopped or still starting, and the agent's name otherwise. */
 function footWords(subject: AgentSubject, sandbox: string | undefined): string {
@@ -253,7 +253,7 @@ function ShellRow({
         meta={
           shell.running ? (
             <span
-              className="terminal-shell-running me-block-gap block size-1.5 rounded-luke-full bg-working"
+              className="terminal-shell-running me-block-gap block size-1.5 rounded-ui-full bg-working"
               role="img"
               aria-label="Running"
             />
@@ -349,7 +349,7 @@ export function TerminalShells({
           surfaceOpen={surfaceOpen && (over === undefined ? !leaving : over.open)}
         />
       )}
-      <div className="terminal-shells-foot flex border-t border-border px-list-inset py-row-inset text-caption font-luke-semibold text-foreground">
+      <div className="terminal-shells-foot flex border-t border-border px-list-inset py-row-inset text-caption font-ui-semibold text-foreground">
         <AgentRef
           subject={subject}
           models={models}

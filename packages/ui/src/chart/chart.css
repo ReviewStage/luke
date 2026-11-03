@@ -3,7 +3,7 @@
    Recharts is the engine and draws the plot; what it paints in its stock
    greys (an axis tick, the grid, the hover cursor) is redrawn here in the
    shared palette, and the outlines of its inner parts are dropped. Every
-   value is a `--luke-*` token, so the chart reads the same in whichever app
+   value is a `--ui-*` token, so the chart reads the same in whichever app
    mounts it. */
 
 @layer components {
@@ -11,8 +11,8 @@
     display: flex;
     justify-content: center;
     aspect-ratio: 16 / 9;
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
   }
 
   /* A window's days (`daily-bars.tsx`): as wide as its frame and as tall as
@@ -23,21 +23,21 @@
   }
 
   .luke-chart.luke-daily-bars[data-opens] {
-    cursor: var(--luke-cursor-press);
+    cursor: var(--ui-cursor-press);
   }
 
   .luke-chart .recharts-cartesian-axis-tick text {
-    fill: var(--luke-color-text-muted);
+    fill: var(--ui-color-text-muted);
   }
 
   .luke-chart .recharts-cartesian-grid line[stroke="#ccc"] {
-    stroke: color-mix(in srgb, var(--luke-color-border) 50%, transparent);
+    stroke: color-mix(in srgb, var(--ui-color-border) 50%, transparent);
   }
 
   .luke-chart .recharts-curve.recharts-tooltip-cursor,
   .luke-chart .recharts-polar-grid [stroke="#ccc"],
   .luke-chart .recharts-reference-line [stroke="#ccc"] {
-    stroke: var(--luke-color-border);
+    stroke: var(--ui-color-border);
   }
 
   .luke-chart .recharts-dot[stroke="#fff"],
@@ -47,7 +47,7 @@
 
   .luke-chart .recharts-radial-bar-background-sector,
   .luke-chart .recharts-rectangle.recharts-tooltip-cursor {
-    fill: var(--luke-color-fill-hover);
+    fill: var(--ui-color-fill-hover);
   }
 
   /* Note that what recharts puts in the tab order, the plot (its
@@ -66,8 +66,8 @@
     .luke-chart .recharts-layer:focus-visible,
     .luke-chart .recharts-sector:focus-visible,
     .luke-chart .recharts-surface:focus-visible {
-      outline: var(--luke-focus-ring-width) solid transparent;
-      outline-offset: var(--luke-focus-ring-offset);
+      outline: var(--ui-focus-ring-width) solid transparent;
+      outline-offset: var(--ui-focus-ring-offset);
     }
   }
 
@@ -77,30 +77,30 @@
   .luke-chart-tooltip {
     display: grid;
     align-items: start;
-    gap: var(--luke-space-6);
-    min-width: calc(2 * var(--luke-space-64));
-    border: 1px solid color-mix(in srgb, var(--luke-color-border) 50%, transparent);
-    border-radius: var(--luke-card-radius);
-    background: var(--luke-color-overlay);
-    box-shadow: var(--luke-menu-shadow);
-    padding: var(--luke-space-6) var(--luke-space-8);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
+    gap: var(--ui-space-6);
+    min-width: calc(2 * var(--ui-space-64));
+    border: 1px solid color-mix(in srgb, var(--ui-color-border) 50%, transparent);
+    border-radius: var(--ui-card-radius);
+    background: var(--ui-color-overlay);
+    box-shadow: var(--ui-menu-shadow);
+    padding: var(--ui-space-6) var(--ui-space-8);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
   }
 
   .luke-chart-tooltip-label {
-    font-weight: var(--luke-type-label-weight);
+    font-weight: var(--ui-type-label-weight);
   }
 
   .luke-chart-tooltip-rows {
     display: grid;
-    gap: var(--luke-space-6);
+    gap: var(--ui-space-6);
   }
 
   .luke-chart-tooltip-row {
     display: flex;
     align-items: center;
-    gap: var(--luke-space-8);
+    gap: var(--ui-space-8);
     width: 100%;
   }
 
@@ -108,15 +108,15 @@
   .luke-chart-tooltip-swatch,
   .luke-chart-tooltip-row > svg {
     flex-shrink: 0;
-    width: var(--luke-space-8);
-    height: var(--luke-space-8);
-    color: var(--luke-color-text-muted);
+    width: var(--ui-space-8);
+    height: var(--ui-space-8);
+    color: var(--ui-color-text-muted);
   }
 
   /* Note that the corner is the scale's two-pixel step, because a swatch
      this small rounded at a control's corner would read as a dot. */
   .luke-chart-tooltip-swatch {
-    border-radius: var(--luke-space-2);
+    border-radius: var(--ui-space-2);
   }
 
   .luke-chart-tooltip-entry {
@@ -124,18 +124,18 @@
     flex: 1;
     align-items: center;
     justify-content: space-between;
-    gap: var(--luke-space-16);
+    gap: var(--ui-space-16);
     line-height: 1;
   }
 
   .luke-chart-tooltip-name {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   .luke-chart-tooltip-value {
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-mono);
-    font-weight: var(--luke-type-label-weight);
+    color: var(--ui-color-text);
+    font-family: var(--ui-font-mono);
+    font-weight: var(--ui-type-label-weight);
     font-variant-numeric: tabular-nums;
   }
 }

@@ -81,31 +81,31 @@ export function AuthPage({
           </div>
         ) : null}
         <h1
-          className="luke-auth-title mt-luke-16 first:mt-0 mb-0 mx-0 text-title font-title tracking-title text-balance"
+          className="luke-auth-title mt-ui-16 first:mt-0 mb-0 mx-0 text-title font-title tracking-title text-balance"
           id={titleId}
         >
           {title}
         </h1>
         {said(description) ? (
-          <p className="luke-auth-description m-0 mt-luke-8 text-muted-foreground text-label">
+          <p className="luke-auth-description m-0 mt-ui-8 text-muted-foreground text-label">
             {description}
           </p>
         ) : null}
         {Children.toArray(children).some(said) ? (
-          <div className="luke-auth-body flex flex-col self-stretch gap-luke-12 mt-luke-32 text-start">
+          <div className="luke-auth-body flex flex-col self-stretch gap-ui-12 mt-ui-32 text-start">
             {children}
           </div>
         ) : null}
-        <p className="luke-auth-error m-0 mt-luke-16 empty:mt-0 text-danger" role="alert">
+        <p className="luke-auth-error m-0 mt-ui-16 empty:mt-0 text-danger" role="alert">
           {error !== undefined && said(error.words) ? error.words : null}
         </p>
         {error !== undefined && said(error.words) && isReported(error.failure) ? (
-          <div className="luke-auth-error-copy mt-luke-4 flex justify-center">
+          <div className="luke-auth-error-copy mt-ui-4 flex justify-center">
             <FailureCopy failure={error.failure} size={BUTTON_SIZE.COMPACT} />
           </div>
         ) : null}
         {action === undefined ? null : (
-          <div className="luke-auth-action flex justify-center mt-luke-24">
+          <div className="luke-auth-action flex justify-center mt-ui-24">
             <ButtonLink
               href={action.href}
               variant={BUTTON_VARIANT.OUTLINE}
@@ -116,7 +116,7 @@ export function AuthPage({
           </div>
         )}
         {said(footnote) ? (
-          <p className="luke-auth-footnote m-0 mt-luke-16 text-muted-foreground text-caption">
+          <p className="luke-auth-footnote m-0 mt-ui-16 text-muted-foreground text-caption">
             {footnote}
           </p>
         ) : null}

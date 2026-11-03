@@ -40,8 +40,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * tile. In the viewer (`VIEWER`) the video plays at once, as wide as the
  * place makes the player, unless motion is held still (`motionHeld`: reduced
  * motion or a capture run), where it waits on its first frame for Play; once
- * its size is read it says it as `--luke-video-natural-width` and
- * `--luke-video-natural-height`, plain numbers the place may fit it by.
+ * its size is read it says it as `--ui-video-natural-width` and
+ * `--ui-video-natural-height`, plain numbers the place may fit it by.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's own), and play
@@ -220,9 +220,9 @@ function BarButton({
  * tap presses rather than being spent as a hover.
  */
 const BAR =
-  "luke-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-luke-4 bg-[linear-gradient(transparent,var(--color-veil))] px-luke-6 pt-luke-24 pb-luke-4 text-on-veil transition-opacity duration-(--luke-duration-fast) ease-motion-exit " +
+  "luke-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-ui-4 bg-[linear-gradient(transparent,var(--color-veil))] px-ui-6 pt-ui-24 pb-ui-4 text-on-veil transition-opacity duration-(--ui-duration-fast) ease-motion-exit " +
   "group-data-[playing=true]/video-frame:[@media(hover:hover)]:opacity-0 group-data-[playing=true]/video-frame:group-hover/video-frame:opacity-100 group-data-[playing=true]/video-frame:[@media(hover:hover)]:group-focus-within/video-frame:opacity-100 " +
-  "[&_.luke-slider]:mx-luke-4 [&_.luke-slider]:h-luke-16 [&_.luke-slider]:accent-on-veil";
+  "[&_.luke-slider]:mx-ui-4 [&_.luke-slider]:h-ui-16 [&_.luke-slider]:accent-on-veil";
 
 /**
  * The frame the video and its bar stand in, on the veil while its first
@@ -408,8 +408,8 @@ export function VideoPlayer({
           natural === undefined
             ? undefined
             : cssCustomProperties({
-                "--luke-video-natural-width": natural.width,
-                "--luke-video-natural-height": natural.height,
+                "--ui-video-natural-width": natural.width,
+                "--ui-video-natural-height": natural.height,
               })
         }
       >

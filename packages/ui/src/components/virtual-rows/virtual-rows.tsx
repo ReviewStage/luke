@@ -234,7 +234,7 @@ export function VirtualRows({
   keys: readonly string[];
   /** The height a row is taken to have before it is measured, in pixels. */
   estimate: number;
-  /** The room between two rows, in pixels, which the stylesheet sets as the run's `--luke-virtual-gap`. */
+  /** The room between two rows, in pixels, which the stylesheet sets as the run's `--ui-virtual-gap`. */
   gap?: number;
   overscan?: number | undefined;
   /** Which end keeps the reader's place: the last row, as a log's, unless said. */
@@ -406,7 +406,7 @@ export function VirtualRows({
     ...(moves ? motionRows() : {}),
     // Note that the spacers are the block's own padding rather than properties its rows inherit, because a property the rows inherit is read again for every element in them each time the drawn rows move.
     style: {
-      ...cssCustomProperties({ "--luke-virtual-gap": `${gap}px` }),
+      ...cssCustomProperties({ "--ui-virtual-gap": `${gap}px` }),
       paddingBlockStart: `${Math.max(0, before)}px`,
       paddingBlockEnd: `${Math.max(0, after)}px`,
     },

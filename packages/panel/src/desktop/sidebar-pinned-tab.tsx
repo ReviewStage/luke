@@ -444,7 +444,7 @@ function PinnedTabRow({
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
-          <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-16)] [&_svg]:size-luke-16">
+          <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-ui-16)] [&_svg]:size-ui-16">
             {glyph}
           </span>
         }

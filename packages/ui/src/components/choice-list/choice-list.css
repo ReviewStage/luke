@@ -15,7 +15,7 @@
    The fill is a registered colour, so it eases as the row lists it among
    its transitions. */
 
-@property --luke-choice-fill {
+@property --ui-choice-fill {
   syntax: "<color>";
   inherits: false;
   initial-value: transparent;
@@ -23,35 +23,35 @@
 
 @layer components {
   .luke-choice {
-    --luke-choice-fill: var(--luke-color-fill-hover);
-    background: var(--luke-choice-fill);
-    color: var(--luke-color-text);
+    --ui-choice-fill: var(--ui-color-fill-hover);
+    background: var(--ui-choice-fill);
+    color: var(--ui-color-text);
   }
 
   button.luke-choice:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-choice-fill: var(--luke-color-fill-strong);
+    --ui-choice-fill: var(--ui-color-fill-strong);
   }
 
   .luke-choice[aria-checked="true"],
   .luke-choice[data-picked="true"] {
-    --luke-choice-fill: var(--luke-color-fill-strong);
-    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+    --ui-choice-fill: var(--ui-color-fill-strong);
+    box-shadow: inset 0 0 0 1px var(--ui-color-border-selected);
   }
 
   .luke-choice[data-picked="false"] {
     background: none;
-    box-shadow: inset 0 0 0 1px var(--luke-color-border);
-    color: var(--luke-color-text-muted);
+    box-shadow: inset 0 0 0 1px var(--ui-color-border);
+    color: var(--ui-color-text-muted);
   }
 
   /* A pill is outlined at rest and tinted in the accent once picked. */
   .luke-choice-list[data-look="pill"] > .luke-choice {
-    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+    box-shadow: inset 0 0 0 1px var(--ui-color-border);
   }
 
   .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] {
-    --luke-choice-fill: color-mix(in srgb, var(--luke-color-accent) 16%, transparent);
-    box-shadow: inset 0 0 0 1px var(--luke-color-accent);
+    --ui-choice-fill: color-mix(in srgb, var(--ui-color-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px var(--ui-color-accent);
   }
 
   /* A card wears the row's box, its head's radio none. */
@@ -63,7 +63,7 @@
   }
 
   .luke-choice-detail {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   /* A finger picks a row by pressing it, so its key says nothing there, as a menu's keys do not (`menu-keys.css`). */

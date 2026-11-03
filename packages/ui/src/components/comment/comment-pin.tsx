@@ -79,7 +79,7 @@ export function CommentPin({
     <Tooltip label={label} card={preview}>
       <button
         type="button"
-        className={`luke-comment-pin inline-flex cursor-press items-center gap-luke-2 rounded-luke-full ${POINT[stands]} border border-border bg-popover p-luke-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--luke-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']`}
+        className={`luke-comment-pin inline-flex cursor-press items-center gap-ui-2 rounded-ui-full ${POINT[stands]} border border-border bg-popover p-ui-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--ui-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']`}
         aria-label={label}
         aria-expanded={open}
         onClick={onPress}
@@ -99,7 +99,7 @@ export function CommentPin({
           decorative
         />
         {count > 1 ? (
-          <span className="luke-comment-pin-count pe-luke-2 tabular-nums" aria-hidden="true">
+          <span className="luke-comment-pin-count pe-ui-2 tabular-nums" aria-hidden="true">
             {count}
           </span>
         ) : null}

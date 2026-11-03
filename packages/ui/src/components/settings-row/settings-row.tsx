@@ -248,7 +248,7 @@ export function SettingsRow({
               : "luke-settings-row-line flex items-center"
           }
         >
-          <div className="luke-settings-row-subject flex min-w-0 items-center gap-luke-12">
+          <div className="luke-settings-row-subject flex min-w-0 items-center gap-ui-12">
             {led ? (
               <ItemMedia className={lead === SETTINGS_ROW_LEAD.FACE ? FACE_LEAD : undefined}>
                 {leading}
@@ -274,8 +274,8 @@ export function SettingsRow({
           <div
             className={
               led
-                ? "luke-settings-row-below mt-luke-8 min-w-0 ps-settings-row-words-inset"
-                : "luke-settings-row-below mt-luke-8 min-w-0"
+                ? "luke-settings-row-below mt-ui-8 min-w-0 ps-settings-row-words-inset"
+                : "luke-settings-row-below mt-ui-8 min-w-0"
             }
             data-led={led}
           >
@@ -309,7 +309,7 @@ export type SettingsRowState = (typeof SETTINGS_ROW_STATE)[keyof typeof SETTINGS
 /** What each state draws: the finished session's dot before the words, the attention tint, or nothing. */
 const STATE_CLASS = {
   [SETTINGS_ROW_STATE.CONNECTED]:
-    "before:size-settings-row-state-dot before:flex-none before:rounded-luke-full before:bg-complete",
+    "before:size-settings-row-state-dot before:flex-none before:rounded-ui-full before:bg-complete",
   [SETTINGS_ROW_STATE.ATTENTION]: "text-attention",
   [SETTINGS_ROW_STATE.PLAIN]: "",
 } as const satisfies Record<SettingsRowState, string>;
@@ -336,13 +336,13 @@ export function SettingsRowStateLine({
   return (
     <span
       className={cn(
-        "luke-settings-row-state items-center gap-luke-6",
+        "luke-settings-row-state items-center gap-ui-6",
         // Note that an inline line stands at the top of its own line box, because on the baseline a connected line takes its baseline from the dot, a flex item with none of its own, and sits a pixel low, growing the row as its words land.
         block ? "flex w-fit" : "inline-flex align-top",
         // Note that the parts of a wrapping line are spaced by the spaces written between them, kept by `pre`: a flex gap beside the space a part ends in, trimmed at its end, would leave a wider gap after a separator than before it. The state's dot keeps its own.
         wrap && "flex-wrap gap-x-0 whitespace-pre",
         // Note that only the connected line draws a dot, so only its dot keeps its step off the words; another line's empty marker would push its words in.
-        wrap && state === SETTINGS_ROW_STATE.CONNECTED && "before:me-luke-6",
+        wrap && state === SETTINGS_ROW_STATE.CONNECTED && "before:me-ui-6",
         STATE_CLASS[state],
       )}
       data-state={state}
@@ -358,7 +358,7 @@ export function SettingsRowStateLine({
 /** A value a row ends in, in a column of its own: a member's role, as the shortcuts page sets a chord. */
 export function SettingsRowValue({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <span className="luke-settings-row-value min-w-luke-64 flex-none text-right text-body text-muted-foreground">
+    <span className="luke-settings-row-value min-w-ui-64 flex-none text-right text-body text-muted-foreground">
       {children}
     </span>
   );
@@ -387,7 +387,7 @@ export function SettingsFacts({
 /** The complete green's check a saved credential or a connected row ends in. */
 export function SettingsSavedMark(): React.JSX.Element {
   return (
-    <span className="luke-settings-saved-mark inline-flex text-complete in-[.luke-button]:ml-luke-4">
+    <span className="luke-settings-saved-mark inline-flex text-complete in-[.luke-button]:ml-ui-4">
       <CheckIcon />
     </span>
   );

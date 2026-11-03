@@ -59,7 +59,7 @@ function ShareList({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <ul aria-label={label} className="grid gap-(--luke-space-8)">
+    <ul aria-label={label} className="grid gap-(--ui-space-8)">
       {children}
     </ul>
   );
@@ -78,7 +78,7 @@ function ShareRowFrame({
   share: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--luke-space-12) tabular-nums">
+    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--ui-space-12) tabular-nums">
       <Text as={TEXT_ELEMENT.SPAN}>{label}</Text>
       {bar}
       <Text as={TEXT_ELEMENT.SPAN}>{count}</Text>
@@ -108,10 +108,10 @@ function ShareRow({
       bar={
         <span
           aria-hidden="true"
-          className="block h-2 overflow-hidden rounded-full bg-(--luke-color-fill-hover)"
+          className="block h-2 overflow-hidden rounded-full bg-(--ui-color-fill-hover)"
         >
           <span
-            className="block h-full rounded-full bg-(--luke-color-chart-1)"
+            className="block h-full rounded-full bg-(--ui-color-chart-1)"
             style={{ width: `${percent}%` }}
           />
         </span>

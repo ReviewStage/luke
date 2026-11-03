@@ -20,7 +20,7 @@ import { cn } from "../cn.js";
  * - Its `size` is our row density (`card`, `compact`, `list`) rather than
  *   `default`, `sm`, and `xs`: a card's padding and least height, a bare
  *   row's at a menu row's height, and a reference list's tighter ones, each
- *   a `--luke-settings-row-*` role. Its `variant` is dropped, because a
+ *   a `--ui-settings-row-*` role. Its `variant` is dropped, because a
  *   row's edge, corner, ground, and the rules between rows are its
  *   section's card's, never the row's own.
  * - None of shadcn's corner, border, `text-sm`, transition, focus ring, or
@@ -48,7 +48,7 @@ import { cn } from "../cn.js";
  */
 
 const itemVariants = cva(
-  "luke-settings-row-body box-border flex min-w-0 flex-col justify-center gap-luke-4",
+  "luke-settings-row-body box-border flex min-w-0 flex-col justify-center gap-ui-4",
   {
     variants: {
       size: {
@@ -100,7 +100,7 @@ function ItemContent({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="item-content"
       className={cn(
-        "luke-settings-row-copy flex min-w-0 grow basis-0 flex-col gap-luke-2 wrap-anywhere",
+        "luke-settings-row-copy flex min-w-0 grow basis-0 flex-col gap-ui-2 wrap-anywhere",
         className,
       )}
       {...props}

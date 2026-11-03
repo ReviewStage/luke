@@ -210,7 +210,7 @@ const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
  * search field's height; a narrowed mention list's crumb stands as one.
  */
 export const SERVER_PAGE_HEAD_CLASS =
-  "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
+  "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--ui-fold:folded]";
 
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
@@ -294,7 +294,7 @@ function ServerName({ name }: { name: string }): React.JSX.Element {
 /** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
   return (
-    <OneLine className="agent-servers-page-title text-section-inline font-luke-semibold text-foreground">
+    <OneLine className="agent-servers-page-title text-section-inline font-ui-semibold text-foreground">
       {name}
     </OneLine>
   );

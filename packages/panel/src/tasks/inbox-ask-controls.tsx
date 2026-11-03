@@ -80,11 +80,11 @@ import { useOpenLink } from "./use-open-link.js";
 export const INBOX_ASK_BOX = "inbox-ask min-w-0";
 
 /** An ask's kind at its head, in the label's weight. */
-export const INBOX_ASK_KIND = "inbox-ask-kind font-luke-medium text-foreground";
+export const INBOX_ASK_KIND = "inbox-ask-kind font-ui-medium text-foreground";
 
 /** Where an ask stands at its head, its glyph at the caption's glyph size before its words. */
 export const INBOX_ASK_STANDING =
-  "inbox-ask-standing inline-flex min-w-0 items-center gap-tight-gap [&>svg]:size-luke-12 [&>svg]:flex-none";
+  "inbox-ask-standing inline-flex min-w-0 items-center gap-tight-gap [&>svg]:size-ui-12 [&>svg]:flex-none";
 
 /** An ask's presses on one line, wrapping where the column is narrow. */
 const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";

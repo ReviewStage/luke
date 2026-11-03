@@ -73,9 +73,7 @@ function worn() {
   return {
     theme: document.documentElement.getAttribute("data-luke-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    ground: getComputedStyle(document.documentElement)
-      .getPropertyValue("--luke-color-ground")
-      .trim(),
+    ground: getComputedStyle(document.documentElement).getPropertyValue("--ui-color-ground").trim(),
   };
 }
 

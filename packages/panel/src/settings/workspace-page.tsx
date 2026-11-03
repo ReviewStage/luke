@@ -697,7 +697,7 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences m-0 pl-luke-16 text-body text-muted-foreground [&>li+li]:mt-luke-4">
+        <ul className="leave-consequences m-0 pl-ui-16 text-body text-muted-foreground [&>li+li]:mt-ui-4">
           <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}

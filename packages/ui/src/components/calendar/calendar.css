@@ -6,6 +6,6 @@
   /* Note that a day draws the keyboard's ring inside itself, because its
      neighbours stand against it on every side. */
   .luke-calendar-day {
-    outline-offset: var(--luke-focus-ring-inset);
+    outline-offset: var(--ui-focus-ring-inset);
   }
 }

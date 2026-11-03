@@ -130,7 +130,7 @@ export function MenuRow({
       <div
         className={
           row === undefined
-            ? "settings-row menu-row flex min-h-settings-row-pair items-center justify-between gap-luke-12"
+            ? "settings-row menu-row flex min-h-settings-row-pair items-center justify-between gap-ui-12"
             : "menu-row"
         }
         {...(anchor ? searchAnchorProps(anchor) : undefined)}

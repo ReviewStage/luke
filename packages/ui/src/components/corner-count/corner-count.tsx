@@ -59,7 +59,7 @@ export function CornerDot({
       {children}
       {shown ? (
         <span
-          className="luke-corner-dot-mark pointer-events-none absolute top-luke-4 right-luke-4 size-corner-dot rounded-disc bg-accent-ink"
+          className="luke-corner-dot-mark pointer-events-none absolute top-ui-4 right-ui-4 size-corner-dot rounded-disc bg-accent-ink"
           aria-hidden="true"
         />
       ) : null}
@@ -89,7 +89,7 @@ export function CornerBadge({
     <span className="luke-corner-badge relative inline-flex min-w-0">
       {children}
       <span
-        className="luke-corner-badge-mark pointer-events-none absolute -top-luke-6 -right-luke-6 inline-grid size-corner-badge place-items-center rounded-disc border border-border-strong bg-ground text-muted-foreground [&>svg]:size-corner-badge-glyph"
+        className="luke-corner-badge-mark pointer-events-none absolute -top-ui-6 -right-ui-6 inline-grid size-corner-badge place-items-center rounded-disc border border-border-strong bg-ground text-muted-foreground [&>svg]:size-corner-badge-glyph"
         aria-hidden="true"
       >
         {mark}

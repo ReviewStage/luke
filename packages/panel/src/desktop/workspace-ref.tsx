@@ -48,7 +48,7 @@ const NAME_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: "self-baseline py-workspace-ref-lift",
   [WORKSPACE_REF_SIZE.ROW]: undefined,
   [WORKSPACE_REF_SIZE.HEAD]:
-    "text-foreground text-section-size font-luke-semibold tracking-workspace-head",
+    "text-foreground text-section-size font-ui-semibold tracking-workspace-head",
 } as const;
 
 /** The tile each size of ref draws. */

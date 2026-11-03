@@ -24,6 +24,6 @@
   }
 
   .luke-zoom-image[data-glide="true"] {
-    transition: transform var(--luke-duration-quick) var(--luke-motion-exit);
+    transition: transform var(--ui-duration-quick) var(--ui-motion-exit);
   }
 }

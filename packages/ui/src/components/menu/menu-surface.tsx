@@ -79,10 +79,9 @@ export function MenuSurface({
         "luke-menu-surface",
         DROPDOWN_MENU_SURFACE,
         inset === MENU_SURFACE_INSET.NONE && "p-[0]",
-        flow !== MENU_SURFACE_FLOW.COLUMN && "flex-row items-center gap-luke-2",
+        flow !== MENU_SURFACE_FLOW.COLUMN && "flex-row items-center gap-ui-2",
         // A toolbar's buttons stand a hair from its edge, its corner a row's round that hair out, and it has no entrance of its own, since its owner shows it as the pointer or a selection comes.
-        flow === MENU_SURFACE_FLOW.TOOLBAR &&
-          "w-max rounded-menu-toolbar p-luke-2 whitespace-nowrap",
+        flow === MENU_SURFACE_FLOW.TOOLBAR && "w-max rounded-menu-toolbar p-ui-2 whitespace-nowrap",
         flow === MENU_SURFACE_FLOW.TOOLBAR && !leaving && "animate-none",
         className,
       ),

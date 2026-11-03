@@ -14,18 +14,18 @@
      admin's wider column on the web; the theme's `max-w-collection-page`
      and `px-collection-page-inset` read them. */
   .luke-collection-page {
-    --luke-collection-page-width: var(--luke-page-measure);
-    --luke-collection-page-inset: var(--luke-page-inset);
+    --ui-collection-page-width: var(--ui-page-measure);
+    --ui-collection-page-inset: var(--ui-page-inset);
   }
 
   [data-luke-profile="web"] .luke-collection-page {
-    --luke-collection-page-width: 1040px;
+    --ui-collection-page-width: 1040px;
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
     .luke-collection-page > * {
-      --luke-collection-page-inset: var(--luke-page-inset-narrow);
+      --ui-collection-page-inset: var(--ui-page-inset-narrow);
     }
   }
 
@@ -38,8 +38,8 @@
      properties, the measure as wide as the room, so whatever reads them
      answers it. */
   .luke-collection-page[data-frame="toolbar"] > * {
-    --luke-collection-page-width: 100%;
-    --luke-collection-page-inset: calc(var(--luke-space-12) + var(--luke-row-inset));
+    --ui-collection-page-width: 100%;
+    --ui-collection-page-inset: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
 
   /* Note that the filter line's display stays here rather than in a
@@ -66,7 +66,7 @@
      open on the title's edge and its fill runs out either side. */
   .luke-collection-page-content > .luke-list,
   .luke-collection-page-skeleton {
-    margin-inline: calc(-1 * var(--luke-space-12));
+    margin-inline: calc(-1 * var(--ui-space-12));
   }
 
   /* The rows of blocks a read in progress stands, where the caller hands no
@@ -76,25 +76,25 @@
   .luke-collection-page-skeleton {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-list-gap);
+    gap: var(--ui-list-gap);
   }
 
   /* A loading row stands as tall as a ListRow with a line under its title. */
   .luke-collection-page-skeleton-row {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-space-2);
-    padding: var(--luke-row-inset) var(--luke-list-inset);
+    gap: var(--ui-space-2);
+    padding: var(--ui-row-inset) var(--ui-list-inset);
   }
 
   .luke-collection-page-skeleton-title {
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
+    font-size: var(--ui-type-label-size);
+    line-height: var(--ui-type-label-leading);
   }
 
   .luke-collection-page-skeleton-description {
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
   }
 
   /* An empty or failed collection stands its notice a little above the

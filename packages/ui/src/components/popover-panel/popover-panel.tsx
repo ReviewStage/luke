@@ -30,7 +30,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * while an input method composes. Focus moving anywhere outside the panel
  * is handed to the owner too, who closes unless that is still its own, the
  * button that opened it among them. A card's height is bounded by the room
- * its side of the button leaves (`--luke-popover-room`), and it scrolls
+ * its side of the button leaves (`--ui-popover-room`), and it scrolls
  * within; a menu scrolls its own list.
  *
  * Whether it stands is its owner's (`open`). As `open` falls it fades out

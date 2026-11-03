@@ -8,8 +8,7 @@
   /* Note that the path clips past the keyboard's ring on a crumb, which no
      utility spells. */
   .luke-breadcrumbs {
-    overflow-clip-margin: padding-box
-      calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
+    overflow-clip-margin: padding-box calc(var(--ui-focus-ring-width) + var(--ui-focus-ring-offset));
   }
 
   /* Note that a crumb's and a chevron's display stay here, because the
@@ -34,17 +33,17 @@
      rise, and its tokens hold the fade still. */
   .luke-breadcrumbs li[data-motion="arriving"] {
     animation:
-      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-breadcrumb-rise var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      luke-breadcrumb-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-breadcrumb-rise var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   .luke-breadcrumbs li[data-motion="leaving"] {
-    animation: luke-breadcrumb-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+    animation: luke-breadcrumb-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .luke-breadcrumbs li[data-motion="arriving"] {
-      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
+      animation: luke-breadcrumb-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards;
     }
   }
 
@@ -56,7 +55,7 @@
 
   @keyframes luke-breadcrumb-rise {
     from {
-      transform: translateY(var(--luke-space-4));
+      transform: translateY(var(--ui-space-4));
     }
   }
 
@@ -78,9 +77,9 @@
      is the lesser of its floor and its words, and a path with room packs
      each crumb one chevron after the one before. */
   .luke-breadcrumbs[data-variant="caption"] li {
-    --luke-breadcrumb-floor: 2.5em;
-    --luke-breadcrumb-chevron-room: 0px;
-    flex: 1 0 calc(var(--luke-breadcrumb-floor) + var(--luke-breadcrumb-chevron-room));
+    --ui-breadcrumb-floor: 2.5em;
+    --ui-breadcrumb-chevron-room: 0px;
+    flex: 1 0 calc(var(--ui-breadcrumb-floor) + var(--ui-breadcrumb-chevron-room));
     min-width: 0;
     max-width: max-content;
   }
@@ -90,18 +89,18 @@
      nothing. It gives way to that floor only once the path has nothing left
      to fold (`crumb-fold.ts`); until then it keeps its whole width below. */
   .luke-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
-    --luke-breadcrumb-floor: 11em;
+    --ui-breadcrumb-floor: 11em;
   }
 
   .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
-    --luke-breadcrumb-chevron-room: 12px;
+    --ui-breadcrumb-chevron-room: 12px;
   }
 
   /* Note that a crumb whose chevron a width hides takes no chevron's room
      in its floor there, as below for the narrower widths. */
   .luke-breadcrumbs[data-variant="caption"]
   li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-    --luke-breadcrumb-chevron-room: 0px;
+    --ui-breadcrumb-chevron-room: 0px;
   }
 
   /* The last crumb, the page the reader stands on, takes the larger share of
@@ -152,12 +151,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-      --luke-breadcrumb-chevron-room: 12px;
+      --ui-breadcrumb-chevron-room: 12px;
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      --luke-breadcrumb-chevron-room: 0px;
+      --ui-breadcrumb-chevron-room: 0px;
     }
   }
 
@@ -181,12 +180,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      --luke-breadcrumb-chevron-room: 12px;
+      --ui-breadcrumb-chevron-room: 12px;
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
-      --luke-breadcrumb-chevron-room: 0px;
+      --ui-breadcrumb-chevron-room: 0px;
     }
   }
 }

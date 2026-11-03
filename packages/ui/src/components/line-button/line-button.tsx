@@ -60,10 +60,10 @@ const LINE_LAYOUT = "flex w-full min-w-0 items-center gap-icon-gap [&>svg]:flex-
  * of its own but its look's. Note that a summary draws no marker of its
  * own: a row's chevron, where it has one, is the caller's.
  */
-const LINE = `luke-line-button ${LINE_LAYOUT} m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-press transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit [&::-webkit-details-marker]:hidden`;
+const LINE = `luke-line-button ${LINE_LAYOUT} m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-press transition-[color,background-color,opacity] duration-(--ui-duration-hover) ease-motion-exit [&::-webkit-details-marker]:hidden`;
 
 /** A call's row's box, pressed or not: at least 28px tall, its words held in by a hairline at its ends, in the muted ink. */
-const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-luke-6 text-muted-foreground";
+const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-ui-6 text-muted-foreground";
 
 /**
  * Each look's own. A call's row is at least 28px tall (a finger's 44px on a

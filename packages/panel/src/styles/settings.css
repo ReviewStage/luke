@@ -10,7 +10,7 @@
    scrolls apart; where the page is too narrow for both, the column stands
    above the page, which still scrolls within its own bound. */
 .integration-tools-panel {
-  border-top: 1px solid var(--luke-color-border);
+  border-top: 1px solid var(--ui-color-border);
   container: integration-tools / inline-size;
 }
 
@@ -18,12 +18,12 @@
   display: grid;
   /* Note that the split takes a share of what is seen, because a fixed height
      overran a short window and left a tall one a thin strip. */
-  height: calc(var(--luke-stage-height) * 0.6);
+  height: calc(var(--ui-stage-height) * 0.6);
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
 }
 
 .integration-tools-split > .integration-tool-detail {
-  border-left: 1px solid var(--luke-color-border);
+  border-left: 1px solid var(--ui-color-border);
 }
 
 /* The column is too narrow for a title and a name both, so it says the
@@ -37,7 +37,7 @@
 }
 
 .integration-tools-panel .integration-tool-detail-body {
-  padding-top: var(--luke-space-2);
+  padding-top: var(--ui-space-2);
 }
 
 @container integration-tools (width < 480px) {
@@ -48,7 +48,7 @@
   }
 
   .integration-tools-split > .integration-tool-detail {
-    border-top: 1px solid var(--luke-color-border);
+    border-top: 1px solid var(--ui-color-border);
     border-left: 0;
   }
 
@@ -60,8 +60,8 @@
     height: auto;
     min-height: 40px;
     flex-wrap: wrap;
-    row-gap: var(--luke-space-2);
-    padding-block: var(--luke-space-8);
+    row-gap: var(--ui-space-2);
+    padding-block: var(--ui-space-8);
   }
 
   .integration-tools-panel .integration-tool-detail-title {

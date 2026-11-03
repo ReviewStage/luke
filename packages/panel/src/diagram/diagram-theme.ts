@@ -16,15 +16,15 @@ import { DIAGRAM_APPEARANCE, type DiagramAppearance } from "@luke/ui/diagram-con
 
 /** The palette's roles a diagram draws in, by the token each is read from. */
 const DIAGRAM_TOKENS = {
-  ground: "--luke-color-ground",
-  words: "--luke-color-text",
-  lines: "--luke-color-text-muted",
-  box: "--luke-color-chip",
-  raised: "--luke-color-chip-hover",
-  edge: "--luke-color-chip-edge-strong",
-  group: "--luke-color-well",
-  groupEdge: "--luke-color-chip-edge",
-} as const satisfies Record<string, `--luke-color-${string}`>;
+  ground: "--ui-color-ground",
+  words: "--ui-color-text",
+  lines: "--ui-color-text-muted",
+  box: "--ui-color-chip",
+  raised: "--ui-color-chip-hover",
+  edge: "--ui-color-chip-edge-strong",
+  group: "--ui-color-well",
+  groupEdge: "--ui-color-chip-edge",
+} as const satisfies Record<string, `--ui-color-${string}`>;
 
 type DiagramRole = keyof typeof DIAGRAM_TOKENS;
 

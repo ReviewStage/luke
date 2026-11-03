@@ -1482,7 +1482,7 @@ export function ActivityList({
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT}>
-      <div className="side-panel-no-tabs flex flex-col px-side-panel-no-tabs py-luke-48">
+      <div className="side-panel-no-tabs flex flex-col px-side-panel-no-tabs py-ui-48">
         <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             No tabs open

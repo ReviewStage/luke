@@ -11,13 +11,13 @@
      other components' boxes, whose own sheets a parent's child selector in
      the utilities layer would beat. */
   .luke-settings-section-card > * + * {
-    border-top: 1px solid var(--luke-color-border);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   /* The rows a setting reveals (reveal.css) are ruled as the card's own,
      and a reveal with none to draw stands nowhere, so it draws no rule. */
   .luke-settings-section-card .luke-reveal > * + * {
-    border-top: 1px solid var(--luke-color-border);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   .luke-settings-section-card .luke-reveal:empty {
@@ -29,8 +29,8 @@
      card's edge sets a card's apart. Note that this stays here rather than
      in a utility, because it falls on the section's sibling. */
   .luke-settings-section[data-frame="rows"] + .luke-settings-section[data-frame="rows"] {
-    padding-top: var(--luke-list-inset);
-    border-top: 1px solid var(--luke-color-border);
+    padding-top: var(--ui-list-inset);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   /* Note that the placeholders' boxes are drawn here rather than in
@@ -45,13 +45,13 @@
   }
 
   .luke-settings-skeleton-rows > * + * {
-    border-top: 1px solid var(--luke-color-border);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   .luke-settings-skeleton {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-page-section-gap);
+    gap: var(--ui-page-section-gap);
     min-width: 0;
   }
 }

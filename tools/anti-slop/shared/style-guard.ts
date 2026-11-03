@@ -69,7 +69,7 @@ export const STYLE_RULES: Readonly<
   },
   [STYLE_RULE.CURSOR]: {
     refuses:
-      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--ui-cursor-press`), a real link `cursor-link` (`--ui-cursor-link`)",
     backlog: false,
   },
   [STYLE_RULE.HAS_OVER_ANY]: {
@@ -311,7 +311,7 @@ const WIDE_KEYWORDS = /\b(?:inherit|initial|unset|revert|revert-layer)\b/gu;
 /**
  * A number left once tokens and keywords are out: a literal size, weight,
  * or radius. A zero is none, and a number with no unit is a factor of a
- * token (`calc(var(--luke-control-height) / 2)`) unless `unitless` says it
+ * token (`calc(var(--ui-control-height) / 2)`) unless `unitless` says it
  * is a value of its own, as a weight is.
  */
 function holdsLiteralNumber(value: string, unitless = false): boolean {
@@ -412,7 +412,7 @@ const EASING_KEYWORD =
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-[a-z-]+)?$/u;
 
 /** The play-state tokens an endless loop answers (docs/DESIGN.md's vocabulary). */
-const PLAY_STATE_TOKEN = /var\(\s*--(?:luke-)?loop-motion\b/u;
+const PLAY_STATE_TOKEN = /var\(\s*--(?:ui-)?loop-motion\b/u;
 
 /**
  * Whether a declaration is an animation the play-state exception covers:
@@ -470,7 +470,7 @@ const PROFILE_PICK = /luke-profile/u;
 /**
  * Whether a declaration chooses its own cursor where the one rule goes: the
  * hand spelled out, or any cursor set under a profile's selector, which is
- * the rule copied rather than read (profiles.css's `--luke-cursor-press`).
+ * the rule copied rather than read (profiles.css's `--ui-cursor-press`).
  */
 function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
   if (declaration.property !== "cursor") return false;
@@ -724,7 +724,7 @@ const COLOUR_UTILITY =
 const TYPE_SCALE = /^(?:xs|sm|base|lg|xl|\dxl)$/u;
 const WEIGHTS = /^(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/u;
 const RADIUS_UTILITY = /^rounded(?:-(?:t|r|b|l|tl|tr|br|bl|s|e|ss|se|es|ee|x|y))?(?:-(.+))?$/u;
-const TOKEN_ARBITRARY = /^(?:\[var\(--luke-[\w-]+\)\]|\(--luke-[\w-]+\))$/u;
+const TOKEN_ARBITRARY = /^(?:\[var\(--ui-[\w-]+\)\]|\(--ui-[\w-]+\))$/u;
 const LENGTH_ARBITRARY = /^\[(?:length:)?-?(?:\d*\.)?\d+[a-z%]*\]$/u;
 
 /** A class with its variants, important mark, negation, and modifier taken off. */

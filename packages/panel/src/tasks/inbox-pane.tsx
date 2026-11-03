@@ -453,7 +453,7 @@ function AnswerValues({
 function EarlierMessages({ by }: { by: ItemAgent }): React.JSX.Element {
   return (
     <li
-      className="inbox-thread-earlier relative pb-luke-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-luke-2 before:bg-border before:content-['']"
+      className="inbox-thread-earlier relative pb-ui-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-ui-2 before:bg-border before:content-['']"
       data-inbox-earlier=""
     >
       <ActorLine>

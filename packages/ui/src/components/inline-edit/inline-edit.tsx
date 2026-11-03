@@ -64,8 +64,8 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  */
 export const INLINE_EDIT_FIELD =
   "luke-inline-edit pointer-coarse:data-[look]:text-touch " +
-  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-luke-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:revert-layer] data-[look=field]:[line-height:revert-layer] " +
-  "data-[look=input]:-my-inline-edit-lift data-[look=input]:ms-inline-edit-reach data-[look=input]:h-luke-24 data-[look=input]:border-border data-[look=input]:px-luke-8 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
+  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-ui-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:revert-layer] data-[look=field]:[line-height:revert-layer] " +
+  "data-[look=input]:-my-inline-edit-lift data-[look=input]:ms-inline-edit-reach data-[look=input]:h-ui-24 data-[look=input]:border-border data-[look=input]:px-ui-8 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
   "data-[look=well]:inline-block data-[look=well]:h-auto data-[look=well]:w-auto data-[look=well]:rounded-none data-[look=well]:border-0 data-[look=well]:bg-transparent data-[look=well]:focus:bg-transparent data-[look=well]:p-0 data-[look=well]:text-inherit data-[look=well]:outline-none data-[look=well]:[font:inherit]";
 
 /** How an edit ended: the words to keep, if any changed, and whether a key ended it. */

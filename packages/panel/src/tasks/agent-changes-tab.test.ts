@@ -274,7 +274,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   for (const style of document.head.querySelectorAll("style")) style.remove();
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
 });
 
 /** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
@@ -2582,7 +2582,7 @@ function overToggle(): HTMLButtonElement {
 /** A narrow panel with the tree's toggle pressed, the pane's slide left to play out. */
 async function narrowTreeOpened(): Promise<void> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 300 });
   files = [changed("a.ts"), changed("b.ts")];
   const { tree } = heldTree(false);

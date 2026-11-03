@@ -3593,7 +3593,7 @@ test("on a phone an automation's page is headed by the way back to the list, its
   assert.ok(header, "the page's header stands");
   assert.equal(
     wayBackGap(head, header),
-    pixelsOf(header, "var(--luke-section-gap)"),
+    pixelsOf(header, "var(--ui-section-gap)"),
     "the name stands a section's gap under the way back",
   );
   assert.deepEqual(

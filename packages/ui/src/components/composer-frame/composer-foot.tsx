@@ -131,9 +131,9 @@ export interface ComposerNote {
  * with the words over it, since the card around it insets both.
  */
 const FOOT =
-  "luke-composer-foot flex flex-col gap-tight-gap px-luke-12 pt-0 pb-luke-12 " +
-  "group-data-[look=field]/composer:px-luke-6 group-data-[look=field]/composer:pt-luke-2 group-data-[look=field]/composer:pb-luke-6 " +
-  "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-2 group-data-[look=input]/composer:pb-luke-6 " +
+  "luke-composer-foot flex flex-col gap-tight-gap px-ui-12 pt-0 pb-ui-12 " +
+  "group-data-[look=field]/composer:px-ui-6 group-data-[look=field]/composer:pt-ui-2 group-data-[look=field]/composer:pb-ui-6 " +
+  "group-data-[look=input]/composer:px-ui-6 group-data-[look=input]/composer:pt-ui-2 group-data-[look=input]/composer:pb-ui-6 " +
   "group-data-[look=bare]/composer:px-0";
 
 /** The foot's own box: its bar and its note, stacked. */

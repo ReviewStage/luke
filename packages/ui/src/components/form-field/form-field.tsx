@@ -44,7 +44,7 @@ function said(words: ReactNode): boolean {
 }
 
 /** The muted caption Optional is set in after a label, a short step off it. */
-const OPTIONAL_MARK = "luke-field-optional ms-luke-6 text-caption font-text text-muted-foreground";
+const OPTIONAL_MARK = "luke-field-optional ms-ui-6 text-caption font-text text-muted-foreground";
 
 /** A control under `label`, described by `description`, and marked invalid by `error` while it says something. */
 export function FormField({

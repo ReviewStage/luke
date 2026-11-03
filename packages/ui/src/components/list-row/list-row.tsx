@@ -364,7 +364,7 @@ const LIST_CLASS =
 
 /** The row: a grid of five tracks, its parts centred on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
-  "luke-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+  "luke-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The fold's chevron, a control of its own standing over the leading mark's
@@ -400,7 +400,7 @@ const END_CLASS =
 
 /** A chevron at the end of a row that goes deeper, its room kept so nothing moves as it shows. */
 const CHEVRON_CLASS =
-  "luke-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--luke-duration-hover) ease-plain [&>svg]:size-luke-12";
+  "luke-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--ui-duration-hover) ease-plain [&>svg]:size-ui-12";
 
 /**
  * What a row belongs to: a small chip of a glyph and a name cut short at a
@@ -410,10 +410,10 @@ const CHEVRON_CLASS =
  */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
-    "luke-list-row-lead me-luke-4 inline-flex max-w-list-row-lead items-center gap-luke-2 rounded-luke-6 bg-fill-strong px-luke-4 py-0 align-bottom text-muted-foreground",
+    "luke-list-row-lead me-ui-4 inline-flex max-w-list-row-lead items-center gap-ui-2 rounded-ui-6 bg-fill-strong px-ui-4 py-0 align-bottom text-muted-foreground",
   [LIST_ROW_LEAD.INLINE]:
-    "luke-list-row-lead inline-flex max-w-full items-center gap-luke-4 align-bottom text-muted-foreground",
-  [LIST_ROW_LEAD.ABOVE]: "luke-list-row-lead flex min-w-0 items-center gap-luke-6",
+    "luke-list-row-lead inline-flex max-w-full items-center gap-ui-4 align-bottom text-muted-foreground",
+  [LIST_ROW_LEAD.ABOVE]: "luke-list-row-lead flex min-w-0 items-center gap-ui-6",
 } as const satisfies Record<ListRowLeadAt, string>;
 
 /** What stands between a lead's plain words and the description they lead. */
@@ -451,7 +451,7 @@ const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
 /** The custom properties a row's sheet reads: how deep it stands. */
 function rowProperties(depth: number): CSSProperties | undefined {
-  return depth === 0 ? undefined : cssCustomProperties({ "--luke-list-row-depth": depth });
+  return depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth });
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -792,7 +792,7 @@ export function ListRow({
       <span className="luke-list-row-text col-[text] min-w-0">
         {said(attachments) ? (
           <span
-            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
+            className="luke-list-row-attachments flex gap-ui-6 overflow-hidden"
             aria-hidden={attachmentsOpen ? undefined : "true"}
           >
             {attachments}
@@ -896,7 +896,7 @@ export function ListRow({
         <div
           role="group"
           aria-labelledby={titleId}
-          className="luke-list-row-actions row-1 flex items-center gap-luke-4"
+          className="luke-list-row-actions row-1 flex items-center gap-ui-4"
         >
           {actions}
         </div>

@@ -39,7 +39,7 @@ export function Swatch({
       aria-pressed={pressed}
       tabIndex={tabbable === false ? -1 : undefined}
       data-none={color === undefined || undefined}
-      style={color === undefined ? undefined : cssCustomProperties({ "--luke-swatch": color })}
+      style={color === undefined ? undefined : cssCustomProperties({ "--ui-swatch": color })}
       onClick={pulseOnPress(onClick)}
     />
   );

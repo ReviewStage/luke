@@ -9,7 +9,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: var(--luke-control-gap);
+    gap: var(--ui-control-gap);
   }
 
   /* Note that the title's share of the line starts at a least width rather
@@ -19,9 +19,9 @@
      that a hidden ⋯ leaves empty. */
   .luke-page-header-heading {
     display: flex;
-    flex: 1 1 calc(var(--luke-control-height) * 5);
+    flex: 1 1 calc(var(--ui-control-height) * 5);
     flex-direction: column;
-    gap: var(--luke-space-4);
+    gap: var(--ui-space-4);
     min-width: 0;
   }
 
@@ -31,8 +31,8 @@
     flex-wrap: wrap;
     align-items: center;
     min-width: 0;
-    gap: var(--luke-control-gap);
-    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
+    gap: var(--ui-control-gap);
+    margin-top: calc((var(--ui-type-title-leading) - var(--ui-control-height)) / 2);
   }
 
   /* A quiet act ends with its words on the content's edge. Note that the
@@ -40,6 +40,6 @@
      than its container by its own negative margin would be held to it and
      cut short. */
   .luke-page-header[data-end="words"] > .luke-page-header-actions {
-    margin-inline-end: calc(-1 * var(--luke-control-inset));
+    margin-inline-end: calc(-1 * var(--ui-control-inset));
   }
 }

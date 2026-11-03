@@ -9,7 +9,7 @@ import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
  * Something that saves itself (a setting written on change, a plan's words
  * saved as they are typed) has no Save button to answer, so its caller
  * counts the writes that landed (`saves`) and the tick says so each time the
- * count moves: it fades and springs in, stands for `--luke-confirm-delay`,
+ * count moves: it fades and springs in, stands for `--ui-confirm-delay`,
  * and fades out over the exit, held drawn through it and taken once it is
  * done. A count the tick first stands at says nothing, since no write landed
  * while it watched, and a write landing while one stands starts it over.
@@ -83,7 +83,7 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
         <span
           key={saves}
           ref={tick}
-          className="luke-saved-tick inline-flex items-center gap-luke-4 font-ui text-caption font-caption whitespace-nowrap text-muted-foreground [&>svg]:size-caption-leading [&>svg]:flex-none [&>svg]:text-complete"
+          className="luke-saved-tick inline-flex items-center gap-ui-4 font-ui text-caption font-caption whitespace-nowrap text-muted-foreground [&>svg]:size-caption-leading [&>svg]:flex-none [&>svg]:text-complete"
         >
           <CheckIcon />
           {SAVED}

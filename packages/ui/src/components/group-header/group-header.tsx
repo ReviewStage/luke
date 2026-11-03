@@ -155,7 +155,7 @@ const GIVES_WAY =
   "group-hover/head:opacity-0 group-focus-visible/lead:opacity-0 [@media(hover:none)]:opacity-0";
 
 /** A part's fade as it is brought or put away, on the hover's settle. */
-const FADE = "transition-[opacity] duration-(--luke-duration-hover) ease-plain";
+const FADE = "transition-[opacity] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The head's parts. Note that the glyph and the chevron share one cell, only
@@ -173,7 +173,7 @@ const PART = {
   MARK: "luke-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
   COUNT: `luke-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
   /* Each action waits for the pointer or the keyboard on its own (`group-header.css`), a row's acts' gap apart, so a head's acts stand over the rows' acts beneath it. */
-  ACTIONS: "luke-group-header-actions flex flex-none items-center gap-luke-4",
+  ACTIONS: "luke-group-header-actions flex flex-none items-center gap-ui-4",
 } as const;
 
 /** An editing head's lead, laid out as a head's lead with nothing to press, and its field, bare in the group role's type in the label's place. */
@@ -181,7 +181,7 @@ const EDITOR = {
   LEAD: "luke-group-header-editor-lead flex h-control min-w-0 flex-auto items-center gap-icon-gap px-row-inset text-group font-group text-foreground",
   /* The glyph's control is a compact button, a step wider than the glyph, so it overhangs the cell by that step and the field stands where the label stood. */
   GLYPH:
-    "luke-group-header-editor-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:-m-luke-4",
+    "luke-group-header-editor-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:-m-ui-4",
   FIELD: `${INLINE_EDIT_FIELD} data-[look=well]:min-w-0 data-[look=well]:flex-auto`,
 } as const;
 
@@ -197,7 +197,7 @@ const PRESSED_AS_ROW = {
  * the head's.
  */
 const HEAD_BOX =
-  "group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+  "group/head flex min-w-0 items-center gap-ui-2 rounded-control pr-ui-4 transition-[background-color] duration-(--ui-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
 
 const HEAD = `luke-group-header-head ${HEAD_BOX}`;
 
@@ -211,9 +211,9 @@ const STICKS = "sticky top-0 z-3 bg-ground";
  * which the fold draws, must be a subgrid too.
  */
 const SUBGRID = {
-  ROOT: "grid col-span-full grid-cols-subgrid gap-y-luke-2",
+  ROOT: "grid col-span-full grid-cols-subgrid gap-y-ui-2",
   HEAD: "col-span-full",
-  BODY: "grid col-span-full grid-cols-subgrid gap-y-luke-2 *:col-span-full",
+  BODY: "grid col-span-full grid-cols-subgrid gap-y-ui-2 *:col-span-full",
 } as const;
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */

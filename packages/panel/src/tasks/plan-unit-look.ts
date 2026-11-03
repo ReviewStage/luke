@@ -14,7 +14,7 @@ export const UNIT_ATTRIBUTED_CLASS = "plan-unit-attributed group/unit relative";
 
 /** What a unit's byline and its ⋯ wear to be shown only while their unit is pointed at or focused. */
 const UNIT_REVEAL_CLASS =
-  "opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-focus-within/unit:opacity-100 group-hover/unit:opacity-100 no-hover:opacity-100";
+  "opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-focus-within/unit:opacity-100 group-hover/unit:opacity-100 no-hover:opacity-100";
 
 /**
  * A section's byline: a face and a short date, clipped past the ring an
@@ -22,7 +22,7 @@ const UNIT_REVEAL_CLASS =
  * writer's card and its time take the pointer although the line fades out,
  * because a pointer on them is on their section, which shows it.
  */
-export const UNIT_BYLINE_CLASS = `plan-unit-byline actor-line min-w-0 max-w-plan-byline-room overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground pointer-events-none [&>:is([data-actor-ref],button)]:pointer-events-auto ${UNIT_REVEAL_CLASS}`;
+export const UNIT_BYLINE_CLASS = `plan-unit-byline actor-line min-w-0 max-w-plan-byline-room overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-caption text-muted-foreground pointer-events-none [&>:is([data-actor-ref],button)]:pointer-events-auto ${UNIT_REVEAL_CLASS}`;
 
 /** A unit's ⋯, at its row's end, shown as the byline is. */
 export const UNIT_MORE_CLASS = `plan-unit-more pointer-events-auto flex flex-none ${UNIT_REVEAL_CLASS}`;

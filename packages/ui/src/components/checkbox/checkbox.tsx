@@ -50,7 +50,7 @@ const BOX_ALONE =
   "relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:size-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']";
 
 /** The box beside words, stood on their first line. */
-const BOX_ON_LINE = "mt-[calc((var(--luke-type-body-leading)-14px)/2)]";
+const BOX_ON_LINE = "mt-[calc((var(--ui-type-body-leading)-14px)/2)]";
 
 /** A box and its words, checked while `checked`, answering a change with the value asked for. */
 export function Checkbox({

@@ -6,7 +6,7 @@
  * once, or a pointer held still, stands the token at the one the setting leaves.
  */
 
-const DURATION_FAST = "--luke-duration-fast";
+const DURATION_FAST = "--ui-duration-fast";
 
 /** Holds motion still on the document, as reduced motion does; undone by `releaseMotion`. */
 export function holdMotion(): void {

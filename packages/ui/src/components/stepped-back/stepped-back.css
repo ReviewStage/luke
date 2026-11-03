@@ -12,21 +12,21 @@
      rows wear, the same declarations as `.luke-choice[data-picked="false"]`. */
   .luke-stepped-back .luke-choice {
     background: none;
-    box-shadow: inset 0 0 0 1px var(--luke-color-border);
-    color: var(--luke-color-text-muted);
+    box-shadow: inset 0 0 0 1px var(--ui-color-border);
+    color: var(--ui-color-text-muted);
   }
 
   .luke-stepped-back :is(.luke-choice-detail, .luke-checkbox[data-read-only="true"]) {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   /* A button keeps its shape, its words and edge going quiet rather than
      the whole of it fading, as an unavailable one does. */
   .luke-stepped-back .luke-button {
-    --luke-button-ink: var(--luke-color-text-muted);
+    --ui-button-ink: var(--ui-color-text-muted);
   }
 
   .luke-stepped-back .luke-button[data-variant="outline"] {
-    --luke-button-edge: var(--luke-color-border);
+    --ui-button-edge: var(--ui-color-border);
   }
 }

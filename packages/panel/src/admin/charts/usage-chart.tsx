@@ -6,7 +6,7 @@ import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
 export const USAGE_CHART = {
-  calls: { label: "Hosted calls", color: "var(--luke-color-chart-1)" },
+  calls: { label: "Hosted calls", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 /** The plot's height, which the chart and its skeleton both stand. */

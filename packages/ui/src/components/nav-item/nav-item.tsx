@@ -81,7 +81,7 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-luke-6";
+  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--ui-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-ui-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-ui-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
@@ -95,7 +95,7 @@ const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
 
 /** A menu's chevron at the end is the small, muted one a chip's is, centred in a glyph's room so it stands on the column the row ends' glyphs share. */
 const MARK =
-  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-luke-2 [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
+  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-ui-2 [&>svg.settings-chevron]:size-ui-12 [&>svg.settings-chevron]:text-muted-foreground";
 
 /** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
@@ -450,7 +450,7 @@ export function NavItem({
       {press}
       {fold === undefined ? null : <FoldToggle fold={fold} />}
       {said(actions) ? (
-        <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+        <span className="luke-nav-item-actions absolute inset-y-0 end-ui-4 flex items-center">
           {actions}
         </span>
       ) : null}

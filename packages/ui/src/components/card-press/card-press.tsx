@@ -89,7 +89,7 @@ const PRESS =
  * clicks instead.
  */
 const REACH =
-  "luke-card-press-reach absolute inset-0 rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit group-data-[corner=menu]/card-press:rounded-menu group-data-[reach=card]/card-press:pointer-events-none group-data-[selected=true]/card-press:bg-fill-selected group-[:active:not(:disabled)]/card-press:bg-fill-pressed";
+  "luke-card-press-reach absolute inset-0 rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit group-data-[corner=menu]/card-press:rounded-menu group-data-[reach=card]/card-press:pointer-events-none group-data-[selected=true]/card-press:bg-fill-selected group-[:active:not(:disabled)]/card-press:bg-fill-pressed";
 
 /** How a press reaches its card: lying over it, or hearing through it. */
 export const CARD_PRESS_REACH = {

@@ -126,7 +126,7 @@ export function LineComment({
         onClose();
       }}
     >
-      <p className="line-comment-head m-0 text-caption-inline font-luke-semibold text-muted-foreground">
+      <p className="line-comment-head m-0 text-caption-inline font-ui-semibold text-muted-foreground">
         {LINE_WORDS.on(commentLinesLabel(lines))}
       </p>
       <CommentEditor

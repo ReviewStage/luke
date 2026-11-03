@@ -8,10 +8,10 @@ import { cn } from "../cn.js";
  * changes: lucide's `Loader2Icon`, a dependency the repository refuses, is
  * swapped for our ring, a `span` drawn as an arc in the ink around it
  * (`border-t-current`) over a faint track of that ink, its stroke the one
- * `spinner.css` reads from `--luke-spinner-stroke`; the ring fills the box it stands in (`size-full`)
+ * `spinner.css` reads from `--ui-spinner-stroke`; the ring fills the box it stands in (`size-full`)
  * rather than taking shadcn's `size-4`, because `@luke/ui`'s `Spinner` sizes
  * the box; it turns on `spinner.css`'s `luke-spinner-ring` rule rather than
- * `animate-spin`, because that turn holds still on `--luke-loop-motion`
+ * `animate-spin`, because that turn holds still on `--ui-loop-motion`
  * under reduced motion and a capture run, at the ring's own 900ms; and it
  * is hidden from a reader rather than a `role="status"` named "Loading",
  * because what a wait says is said by the status line `@luke/ui`'s

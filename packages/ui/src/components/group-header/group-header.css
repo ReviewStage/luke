@@ -12,12 +12,12 @@
      light page. */
   .luke-group-header-action[data-state="active"]::after {
     position: absolute;
-    top: var(--luke-space-4);
-    right: var(--luke-space-4);
+    top: var(--ui-space-4);
+    right: var(--ui-space-4);
     width: 5px; /* off-scale: a status dot */
     height: 5px; /* off-scale: a status dot */
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-accent-text);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-accent-text);
     content: "";
     pointer-events: none;
   }
@@ -26,8 +26,8 @@
      because one that is on stands while the rest wait, and the row's
      opacity would hide it with them. */
   .luke-group-header-actions[data-shown="on-hover"] > * {
-    opacity: var(--luke-group-header-shown, 0);
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    opacity: var(--ui-group-header-shown, 0);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   /* They come in while the head holds the focus, its own menu stands, or a
@@ -43,7 +43,7 @@
   }
 
   .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) {
-    --luke-group-header-shown: 1;
+    --ui-group-header-shown: 1;
   }
 
   @media (hover: hover) {
@@ -64,7 +64,7 @@
      rather than splitting the room their presses overlap in (`button.css`). */
   @media (pointer: coarse) {
     .luke-group-header-actions .luke-button[data-size="compact"][data-icon-only="true"] {
-      min-width: var(--luke-touch-target);
+      min-width: var(--ui-touch-target);
     }
   }
 }

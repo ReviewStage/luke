@@ -97,7 +97,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * reads at the time's height.
  */
 const INBOX_ROW_ATTENTION =
-  "inbox-row-attention inline-flex [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small";
+  "inbox-row-attention inline-flex [&_.attention-mark]:size-ui-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {

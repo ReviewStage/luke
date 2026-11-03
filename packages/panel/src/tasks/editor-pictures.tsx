@@ -296,7 +296,7 @@ function PictureTools({
     <MenuSurface
       as={MENU_SURFACE_ELEMENT.SPAN}
       flow={MENU_SURFACE_FLOW.TOOLBAR}
-      className="picture-tools absolute top-0 left-0 z-1 -translate-y-[calc(100%+var(--luke-space-8))] data-[above=false]:top-luke-8 data-[above=false]:left-luke-8 data-[above=false]:translate-none data-[worded=false]:[--luke-fold:folded]"
+      className="picture-tools absolute top-0 left-0 z-1 -translate-y-[calc(100%+var(--ui-space-8))] data-[above=false]:top-ui-8 data-[above=false]:left-ui-8 data-[above=false]:translate-none data-[worded=false]:[--ui-fold:folded]"
       role="toolbar"
       aria-label="Picture"
       data-worded={String(worded)}

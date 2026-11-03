@@ -23,7 +23,7 @@
 
   .luke-task-mark-cut {
     fill: none;
-    stroke: var(--luke-color-ground);
+    stroke: var(--ui-color-ground);
     stroke-width: 1.5;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -31,15 +31,15 @@
 
   /* A status is in its tone's ink (`tokens/status-tone.css`). */
   .luke-task-status-mark {
-    color: var(--luke-tone-ink);
+    color: var(--ui-tone-ink);
   }
 
   .luke-task-priority-mark {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   .luke-task-priority-mark[data-priority="none"] {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   .luke-task-priority-mark [data-lit="false"] {
@@ -47,11 +47,11 @@
   }
 
   .luke-task-priority-mark[data-priority="urgent"] {
-    color: var(--luke-color-attention-fill);
+    color: var(--ui-color-attention-fill);
   }
 
   .luke-task-priority-mark[data-priority="urgent"] .luke-task-mark-cut {
-    stroke: var(--luke-color-on-attention);
+    stroke: var(--ui-color-on-attention);
     stroke-width: 1.6;
   }
 }

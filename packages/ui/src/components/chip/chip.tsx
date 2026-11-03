@@ -188,7 +188,7 @@ export type ChipProps = ButtonChipProps | LinkChipProps | RemovableChipProps;
 
 /** What every chip draws: a control's box, its words at the label's type, and the group its parts answer. */
 const CHIP_BASE =
-  "luke-chip group/chip m-0 inline-flex items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
+  "luke-chip group/chip m-0 inline-flex items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * Each look's face at rest and under the pointer, while its menu is open,
@@ -346,7 +346,7 @@ function faceAttributes({
 
 /** The × ending a removable chip: a round press inside its capsule, lighting under the pointer. */
 const REMOVE =
-  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
+  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
 
 /** A removable chip's words as a press of their own, which opens what it names: no box of their own, so the chip's face is the one drawn. */
 const OPEN_FACE = "m-0 border-0 bg-transparent p-0 text-inherit font-[inherit] cursor-press";

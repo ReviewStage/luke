@@ -282,7 +282,7 @@ function FindBar({
   return (
     <MenuSurface
       ref={surface}
-      className="find-bar absolute top-luke-8 right-column-inset z-3"
+      className="find-bar absolute top-ui-8 right-column-inset z-3"
       flow={MENU_SURFACE_FLOW.ROW}
       leaving={leaving}
       role="search"

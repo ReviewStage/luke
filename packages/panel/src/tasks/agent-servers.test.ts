@@ -825,7 +825,7 @@ test("a server that connects glides from Not connected into Connected, followed 
 test("with motion held still, a server that connects takes its place and nothing plays", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     const { container, render } = await opened();

@@ -820,11 +820,11 @@ function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;
   const tokens = {
-    "--luke-duration-exit": "90ms",
-    "--luke-motion-exit": "ease",
-    "--luke-duration-shape": "460ms",
-    "--luke-spring": "ease-out",
-    "--luke-list-travel": "16px",
+    "--ui-duration-exit": "90ms",
+    "--ui-motion-exit": "ease",
+    "--ui-duration-shape": "460ms",
+    "--ui-spring": "ease-out",
+    "--ui-list-travel": "16px",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {
@@ -1300,9 +1300,9 @@ test("the Addressed to chip scales in as a teammate is chosen and out as its × 
   world.members = SHARED_MEMBERS;
   const played = playListMotions();
   // Note that a chip arriving rides the quick beat, which the list's tokens leave out.
-  document.documentElement.style.setProperty("--luke-duration-quick", "140ms");
+  document.documentElement.style.setProperty("--ui-duration-quick", "140ms");
   onTestFinished(() => {
-    document.documentElement.style.removeProperty("--luke-duration-quick");
+    document.documentElement.style.removeProperty("--ui-duration-quick");
   });
   const { page } = mount();
   await settle();

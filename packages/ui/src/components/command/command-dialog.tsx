@@ -31,7 +31,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * dialog away, and hands focus back to whatever held it once it has gone.
  * The card stands high in the window rather than in its middle, so the
  * field stays where it is while the rows under it come and go, and it
- * fades out over `--luke-duration-exit` as it closes, inert while it does,
+ * fades out over `--ui-duration-exit` as it closes, inert while it does,
  * as every dialog does.
  * In a narrow room, a phone's, it is a sheet hung from the top of what is
  * seen rather than a card floating in it: the screen's whole width, its
@@ -99,21 +99,21 @@ const ROOT = "flex min-h-0 flex-1 flex-col outline-none";
 
 /** The search row: a magnifier, then the field, over a hairline. */
 const SEARCH =
-  "flex h-touch flex-none items-center gap-icon-gap border-b border-border px-luke-16 text-muted-foreground [&_svg]:size-menu-glyph [&_svg]:flex-none";
+  "flex h-touch flex-none items-center gap-icon-gap border-b border-border px-ui-16 text-muted-foreground [&_svg]:size-menu-glyph [&_svg]:flex-none";
 
 /** The field: borderless and ringless, since it always holds the caret, at the body's size. */
 const FIELD =
   "h-full min-w-0 flex-1 border-0 bg-transparent p-0 font-sans text-body text-foreground outline-none placeholder:text-muted-foreground";
 
 /** A band under the field the caller fills, such as a row of filters. */
-const BAND = "min-w-0 flex-none border-b border-border px-luke-12 py-luke-8";
+const BAND = "min-w-0 flex-none border-b border-border px-ui-12 py-ui-8";
 
 /** The foot the caller fills, such as the keys' hints, in a caption's words; not drawn under a finger, which has no keys to press. */
 const FOOT =
-  "flex min-w-0 flex-none items-center gap-luke-16 border-t border-border px-luke-16 py-luke-8 text-caption text-muted-foreground [@media(hover:none)_and_(pointer:coarse)]:hidden";
+  "flex min-w-0 flex-none items-center gap-ui-16 border-t border-border px-ui-16 py-ui-8 text-caption text-muted-foreground [@media(hover:none)_and_(pointer:coarse)]:hidden";
 
 /** A group's note after its rows: a quiet caption at the rows' inset. */
-const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foreground";
+const NOTE = "px-row-inset pt-ui-4 pb-ui-8 text-caption text-muted-foreground";
 
 /** Where a group's heading stands, as a list's group heading does. */
 const HEADING = cn("block", COMBOBOX_HEADING);

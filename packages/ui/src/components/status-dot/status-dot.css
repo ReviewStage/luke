@@ -7,7 +7,7 @@
 
 @layer components {
   .luke-status-glyph {
-    --status-glyph-dot: var(--luke-space-6);
+    --status-glyph-dot: var(--ui-space-6);
     --status-glyph-centre: calc(100% - var(--status-glyph-dot) / 2);
     --status-glyph-hole: calc(var(--status-glyph-dot) / 2 + 1.5px);
   }
@@ -26,7 +26,7 @@
     bottom: 0;
     width: var(--status-glyph-dot);
     height: var(--status-glyph-dot);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-tone-ink);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-tone-ink);
   }
 }

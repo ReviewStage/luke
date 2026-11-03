@@ -155,7 +155,7 @@ const LINE = {
     actions: "max-w-full flex-[0_1_auto] flex-wrap justify-end ms-auto",
   },
   [ERROR_STATE_PLACEMENT.ROWS]: {
-    line: "w-auto mt-luke-4 mr-luke-4 mb-luke-4 ml-row-inset flex-wrap items-start @container/luke-error-state",
+    line: "w-auto mt-ui-4 mr-ui-4 mb-ui-4 ml-row-inset flex-wrap items-start @container/luke-error-state",
     words: "min-w-1/2 flex-[1_1_0]",
     actions: "max-w-full flex-[0_1_auto] flex-wrap justify-end ms-auto",
   },
@@ -268,7 +268,7 @@ export function RetryRowLabel({ failure }: { failure: string }): React.JSX.Eleme
   return (
     <>
       <span role="alert">{failure}</span>{" "}
-      <span className="luke-retry-row-label ml-luke-4 inline-flex items-baseline gap-luke-4 font-emphasis">
+      <span className="luke-retry-row-label ml-ui-4 inline-flex items-baseline gap-ui-4 font-emphasis">
         <RetryIcon />
         {WORDS.RETRY}
       </span>

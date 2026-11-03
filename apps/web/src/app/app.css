@@ -39,10 +39,10 @@
    stands, a phone's, a signed-out browser's, or a first visit's, the frame
    is the work column alone, and the product's
    mark comes up in its middle once the wait has run long enough to notice
-   (`--luke-hint-delay`), so a quick load never flashes it. */
+   (`--ui-hint-delay`), so a quick load never flashes it. */
 .boot-frame {
   container-type: inline-size;
-  --sidebar-width: var(--luke-boot-sidebar-width, var(--sidebar-width-default));
+  --sidebar-width: var(--ui-boot-sidebar-width, var(--sidebar-width-default));
 }
 
 .boot-frame .desktop-shell {
@@ -69,16 +69,16 @@
 
 .boot-frame-row::before,
 .boot-frame-row::after {
-  height: var(--luke-space-8);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-strong);
+  height: var(--ui-space-8);
+  border-radius: var(--ui-radius-full);
+  background: var(--ui-color-fill-strong);
   content: "";
 }
 
 .boot-frame-row::before {
-  border-radius: var(--luke-radius-6);
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
+  border-radius: var(--ui-radius-6);
+  width: var(--ui-menu-glyph);
+  height: var(--ui-menu-glyph);
 }
 
 .boot-frame-row::after {
@@ -91,8 +91,8 @@
 
 .boot-frame-mark {
   margin: auto;
-  animation: boot-frame-mark-arrive var(--luke-duration-fast) var(--luke-motion-pane)
-    var(--luke-hint-delay) both;
+  animation: boot-frame-mark-arrive var(--ui-duration-fast) var(--ui-motion-pane)
+    var(--ui-hint-delay) both;
 }
 
 @keyframes boot-frame-mark-arrive {

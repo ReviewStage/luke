@@ -27,7 +27,7 @@
   }
 
   .luke-banner[data-look="strip"] .luke-banner-words[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
   /* Narrow, the presses leave the words' line for one of their own beneath

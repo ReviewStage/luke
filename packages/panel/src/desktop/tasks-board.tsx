@@ -246,7 +246,7 @@ const COLUMN_TABS = "Columns";
  * otherwise scroll flush against the page's side.
  */
 const BOARD =
-  "tasks-board relative -me-collection-page-inset flex min-h-0 min-w-min flex-[1_1_0] gap-block-gap pe-collection-page-inset leading-[normal] [--carried-ground:var(--luke-color-surface)]";
+  "tasks-board relative -me-collection-page-inset flex min-h-0 min-w-min flex-[1_1_0] gap-block-gap pe-collection-page-inset leading-[normal] [--carried-ground:var(--ui-color-surface)]";
 
 /** A card, raised off its column's well, a draft's as a task's. */
 const BOARD_CARD =
@@ -254,11 +254,11 @@ const BOARD_CARD =
 
 /** The status's mark before the name, on the name's first line; the name wraps beside it. */
 const BOARD_CARD_TITLE =
-  "tasks-board-card-title flex min-w-0 items-start gap-luke-4 [&>:last-child]:min-w-0 [&>:last-child]:flex-auto";
+  "tasks-board-card-title flex min-w-0 items-start gap-ui-4 [&>:last-child]:min-w-0 [&>:last-child]:flex-auto";
 
 /** A card's name, whole under its line in the label's weight, wrapping to three lines at most. */
 const BOARD_NAME =
-  "tasks-board-name line-clamp-3 text-label font-luke-medium text-foreground wrap-anywhere";
+  "tasks-board-name line-clamp-3 text-label font-ui-medium text-foreground wrap-anywhere";
 
 /** What did not land, under a card. */
 const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
@@ -273,7 +273,7 @@ const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
  * status mark line up on one edge of the card.
  */
 const BOARD_CARD_KEY =
-  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--luke-space-4))] group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
+  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--ui-space-4))] group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
 
 /** A card's foot, standing over its press, which lets the pointer through between its pills. */
 const BOARD_CARD_FOOT =
@@ -281,7 +281,7 @@ const BOARD_CARD_FOOT =
 
 /** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon and its sub-tasks' count, which are no presses and let one through to the card's. */
 const BOARD_CARD_PILLS =
-  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark,.luke-progress-count)]:pointer-events-auto";
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-ui-6 [&>:not(.task-agents-mark,.luke-progress-count)]:pointer-events-auto";
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its
@@ -405,7 +405,7 @@ function TaskBoardCard({
       data-editing={rename.editing ? "true" : undefined}
     >
       {/* Note that the first line stands under the card's press, but for the creator's face, which hangs their card. */}
-      <span className="tasks-board-card-head flex min-h-luke-20 items-center gap-item-gap text-muted-foreground">
+      <span className="tasks-board-card-head flex min-h-ui-20 items-center gap-item-gap text-muted-foreground">
         {drawn(TASK_PROPERTY.KEY) ? (
           <span className={BOARD_CARD_KEY}>
             <TaskKey workspaceName={workspaceName} number={task.number} decorative />
@@ -442,7 +442,7 @@ function TaskBoardCard({
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
         ) : null}
         {rename.editing ? (
-          <span className="tasks-board-name flex overflow-visible text-label font-luke-medium text-foreground wrap-anywhere">
+          <span className="tasks-board-name flex overflow-visible text-label font-ui-medium text-foreground wrap-anywhere">
             <InlineEdit
               value={rename.asked ?? task.name}
               label="Task name"
@@ -706,7 +706,7 @@ function TaskBoardColumnView({
           <Text
             variant={TEXT_VARIANT.CAPTION}
             tone={TEXT_TONE.MUTED}
-            className="tasks-board-empty px-item-gap pt-luke-2 pb-item-gap"
+            className="tasks-board-empty px-item-gap pt-ui-2 pb-item-gap"
           >
             {NO_TASKS}
           </Text>
@@ -923,7 +923,7 @@ export function TasksBoard({
         </SelectionRegion>
       </ListMotion>
       {/* Note that the bar floats over the columns' feet, taking no height from them, and stays across the page's width however far the board scrolls sideways. */}
-      <div className="tasks-board-selection pointer-events-none sticky bottom-luke-16 left-0 z-4 h-0 w-[100cqw]">
+      <div className="tasks-board-selection pointer-events-none sticky bottom-ui-16 left-0 z-4 h-0 w-[100cqw]">
         <div className="absolute inset-x-0 bottom-0 flex justify-center *:pointer-events-auto">
           <SelectionBar
             count={selection.selected.size}
