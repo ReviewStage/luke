@@ -314,6 +314,64 @@
     overflow: hidden;
   }
 
+  /* The 404: the numerals in dots over the line, centred in the rails, the
+     page's room under the bar and over the foot's rule. */
+  .ui-landing-lost {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 64px var(--ui-landing-gutter) 96px;
+    text-align: center;
+  }
+
+  .ui-landing-lost-art {
+    position: relative;
+    width: min(100%, 720px);
+    aspect-ratio: 3 / 1;
+  }
+
+  .ui-landing-dot-words {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ui-color-accent);
+    font-family: var(--ui-font-display);
+  }
+
+  .ui-landing-lost-words {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 640px;
+    margin-top: 40px;
+  }
+
+  .ui-landing-lost-address {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    color: var(--ui-color-text-muted);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
+  }
+
+  .ui-landing-lost-address > :first-child {
+    color: var(--ui-color-accent);
+  }
+
+  .ui-landing-lost-address > * + *::before {
+    margin-right: 10px;
+    content: "·";
+  }
+
+  .ui-landing-lost .ui-landing-actions {
+    justify-content: center;
+  }
+
   /* A message arriving in a scene rises into place. */
   .ui-landing-enter {
     animation: ui-landing-enter var(--ui-duration-shape) var(--ui-motion-pane) both;
@@ -918,6 +976,10 @@
      words, each stage under its heading, and the phone nearer the window. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
+    .ui-landing-lost {
+      padding: 32px var(--ui-landing-gutter) 72px;
+    }
+
     .ui-landing-page > * {
       --ui-landing-inset: 16px;
       --ui-landing-gutter: calc(var(--ui-landing-inset) + 12px);
