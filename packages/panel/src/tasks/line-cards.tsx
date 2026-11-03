@@ -223,7 +223,7 @@ function checksStanding(line: GitHubLineMetadata, words: string): CheckState {
   return nonePassed ? CHECK_STATE.SKIPPED : CHECK_STATE.PASSED;
 }
 
-/** What a GitHub line wears in its card's icon's seat: a review's verdict as the Pull request tab's badge, a comment's speech mark, or a check event's one failed glyph, a skip's quiet slash, or a pass's check. */
+/** What a GitHub line wears in its card's icon's seat: a review's verdict as the Pull request tab's badge, a comment's speech mark, a check event's one failed glyph, a skip's quiet slash, or a pass's check, or the failed glyph for the merge queue taking the pull request out. */
 function GitHubLineMark({
   line,
   words,
@@ -245,6 +245,8 @@ function GitHubLineMark({
     case GITHUB_LINE_EVENT.CHECK_FAILED:
     case GITHUB_LINE_EVENT.CHECKS_COMPLETED:
       return <ChecksMark standing={checksStanding(line, words)} />;
+    case GITHUB_LINE_EVENT.DEQUEUED:
+      return <ChecksMark standing={CHECK_STATE.FAILED} />;
   }
 }
 

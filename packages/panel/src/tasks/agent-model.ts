@@ -1755,6 +1755,9 @@ const REVIEWED = "reviewed";
 /** What a comment on the pull request, not a review, reads as. */
 const COMMENTED = "commented on";
 
+/** What the merge queue taking the pull request out without merging it reads as, in GitHub's own word. */
+const DEQUEUED = "dequeued";
+
 /** How a check a GitHub line names ended, in words, as its row on the line's card says it. */
 export const CONCLUSION_WORDS = {
   [GITHUB_CHECK_CONCLUSION.SUCCESS]: "Passed",
@@ -1835,8 +1838,9 @@ function checksDid(line: GitHubLineMetadata, words: string): string {
 
 /**
  * A GitHub line's head, as its card draws it and a copy or a find reads
- * it: who reviewed by their verdict, or commented; or, for a check event,
- * how many of the checks it names failed, or whether any did; then the
+ * it: who reviewed by their verdict, commented, or took the pull request
+ * out of the merge queue; or, for a check event, how many of the checks it
+ * names failed, or whether any did; then the
  * pull request by its number, else its checks. The card names a reviewer
  * by their chip, so it reads what they did alone (`does`); a copy reads
  * them by their login (`event`), and a check event as its words alone.
@@ -1855,6 +1859,8 @@ export function githubLineHead(line: GitHubLineMetadata, words: string): GitHubL
       const does = checksDid(line, words);
       return { event: `${does.charAt(0).toUpperCase()}${does.slice(1)}`, does, target };
     }
+    case GITHUB_LINE_EVENT.DEQUEUED:
+      return { event: `@${line.by} ${DEQUEUED}`, does: DEQUEUED, target };
   }
 }
 
