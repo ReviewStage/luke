@@ -24,7 +24,7 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * the API of a Better Auth over its own database.
  */
 
-/** The metadata the plugin stores on the workspace made for an account, as JSON text; only the server writes it, and nothing reads it to behave differently. */
+/** The metadata the plugin stores on the workspace made for an account, as JSON text; only the server writes it, and only a racing ensure reads it, to adopt the account's own. */
 export const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
 
 /** What a workspace is created with: its name and slug, the account that will own it, and the metadata the plugin stores as JSON text. */
