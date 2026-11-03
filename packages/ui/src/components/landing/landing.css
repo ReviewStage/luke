@@ -95,16 +95,25 @@
   }
 
   /* The bar: across the page at its top, then, once the page scrolls, a
-     narrower pill floating on the surface over the rails. */
+     narrower pill floating on the surface over the rails. The header keeps
+     one height whatever the bar does, and the bar stands in it out of the
+     page's flow, so floating never moves the page under it nor lays out
+     more than the bar; the bar drops into place by a transform, and its
+     corners round to half its height, a radius the transition can ease
+     toward rather than one it reaches in a frame. */
   .ui-landing-bar {
     position: sticky;
     top: 0;
     z-index: 5;
-    padding-top: 0;
-    transition: padding-top var(--ui-duration-shape) var(--ui-motion-pane);
+    height: 64px;
+    contain: layout;
   }
 
   .ui-landing-bar-in {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -118,7 +127,10 @@
     border-bottom-color: var(--ui-color-border);
     border-radius: 0;
     background: var(--ui-color-ground);
-    transition-property: max-width, height, padding, border-radius, border-color, background-color;
+    white-space: nowrap;
+    transition-property:
+      transform, left, right, max-width, height, padding, border-radius, border-color,
+      background-color;
     transition-duration: var(--ui-duration-shape);
     transition-timing-function: var(--ui-motion-pane);
   }
@@ -127,21 +139,14 @@
     flex: 1;
   }
 
-  .ui-landing-bar-in {
-    white-space: nowrap;
-  }
-
-  .ui-landing-bar[data-floating="true"] {
-    padding-top: 12px;
-  }
-
   .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
     max-width: 760px;
     height: 52px;
     padding: 0 8px 0 18px;
     border-color: var(--ui-color-border-strong);
-    border-radius: var(--ui-radius-full);
+    border-radius: var(--ui-display-bar-radius);
     background: var(--ui-color-surface);
+    transform: translateY(12px);
   }
 
   /* The hero: the one line and its calls to the left, the ball to the right. */
@@ -696,13 +701,11 @@
       display: none;
     }
 
-    .ui-landing-bar[data-floating="true"] {
-      padding: 10px 10px 0;
-    }
-
     .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
-      max-width: 100%;
-      padding: 0 6px 0 14px;
+      right: 10px;
+      left: 10px;
+      padding: 0 14px;
+      transform: translateY(10px);
     }
 
     .ui-landing-hero {
