@@ -4,7 +4,12 @@ import {
   type AgentAgentAnswer,
   type AgentDefaultAnswer,
 } from "@luke/features/agent-view";
-import type { AgentAttachment, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
+import {
+  AGENT_MACHINE,
+  type AgentAttachment,
+  type AgentSummary,
+  type TasklessAgent,
+} from "@luke/features/agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -131,7 +136,12 @@ import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { APP_SETTINGS_VIEW, useAppSlice, useExperiment } from "../use-app-state.js";
+import {
+  APP_SETTINGS_VIEW,
+  useAppSlice,
+  useExperiment,
+  useStartsWithoutRepository,
+} from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -1378,12 +1388,18 @@ export function useTasksTab(input: {
           }),
     [openDocument, viewed.activeTaskId],
   );
+  // A task with no repository starts its agents where the service runs such a Start, on a host alone.
+  const startsWithoutRepository = useStartsWithoutRepository();
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useAgents({
     acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
+    startsWithoutRepository:
+      startsWithoutRepository &&
+      openDocument?.id === viewed.activeTaskId &&
+      openDocument?.runsOn?.machine === AGENT_MACHINE.DEVICE,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,

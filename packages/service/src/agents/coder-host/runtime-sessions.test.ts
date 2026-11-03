@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   type Agent,
   createAgent,
@@ -9,6 +9,7 @@ import {
   readAgentByKey,
   readAgentRouting,
 } from "@luke/database/models/agent-store";
+import { deviceAgentLinesWaiting } from "@luke/database/models/device-agent-store";
 import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
@@ -36,7 +37,11 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_SETUP,
+  deviceAgentLaunchPayloadSchema,
+} from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -47,7 +52,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
@@ -58,6 +63,11 @@ import {
   type HostedRefusal,
   localAgentRefused,
 } from "../../http/http-effect.js";
+import {
+  LOCAL_DEMO_ENVIRONMENT,
+  LOCAL_DEMO_ON,
+  localDemoFromEnvironment,
+} from "../../local/local-demo.js";
 import { type ModelChoiceRefused, modelCatalogOf } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
@@ -65,6 +75,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
+import { localAgentSessions } from "../../testing/local-agent.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
@@ -1428,6 +1439,104 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               yield* readAgentRouting(owner, started.success.agent.id),
             );
             assert.deepEqual([routing.runtime, routing.payer], each.runs, each.name);
+          }
+        }),
+    );
+
+    it.effect(
+      "a Start on a task with no repository runs only in the local demo, on its starter's host, whose launch line names no repository; with no flag, with the flag beside a Vercel variable or a database off this machine, and in the cloud in the demo, it is refused as naming no repository, as ever, and leaves no agent",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(false);
+          const deviceId = randomUUID();
+          yield* registerDevice(owner, {
+            id: deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            signedIn: { claudeCode: true },
+          });
+          const onHost = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invitations",
+            repository: null,
+            runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
+          });
+          const inCloud = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invitations",
+            repository: null,
+          });
+          const ON_LOOPBACK = "postgres://luke:luke@127.0.0.1:54329/luke";
+          const DEMO = { [LOCAL_DEMO_ENVIRONMENT.FLAG]: LOCAL_DEMO_ON, DATABASE_URL: ON_LOOPBACK };
+          const cases = [
+            { name: "no flag", variables: { DATABASE_URL: ON_LOOPBACK }, task: onHost },
+            {
+              name: "beside VERCEL_ENV",
+              variables: { ...DEMO, VERCEL_ENV: "preview" },
+              task: onHost,
+            },
+            {
+              name: "over a database off this machine",
+              variables: { ...DEMO, DATABASE_URL: "postgres://luke:luke@ep-demo.example.com/luke" },
+              task: onHost,
+            },
+            { name: "in the cloud", variables: DEMO, task: inCloud },
+            { name: "on the host", variables: DEMO, task: onHost },
+          ];
+          // The host's own Claude Code sessions, which queue a launch line for its Mac, over the test's store.
+          const store = yield* Effect.context<DatabaseServices>();
+          const native = Layer.succeed(NativeAgentSessions, {
+            sessions: (_runtime, account) =>
+              Option.some(
+                localAgentSessions(account).pipe(
+                  Effect.provide(environment()),
+                  Effect.provideContext(store),
+                ),
+              ),
+          });
+          for (const each of cases) {
+            const { eve } = runtimes();
+            const ask = startOn(each.task.id, "anthropic/claude-opus-5.5");
+            const started = yield* Effect.result(
+              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+                Effect.provide(
+                  Layer.mergeAll(
+                    CATALOG,
+                    native,
+                    localDemoFromEnvironment.pipe(
+                      Layer.provide(
+                        ConfigProvider.layer(ConfigProvider.fromEnvRecord(each.variables)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            const made = yield* readAgentByKey(owner, ask.idempotencyKey);
+            const launches = (yield* deviceAgentLinesWaiting(owner, deviceId)).filter(
+              (line) => line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH,
+            );
+
+            if (each.name !== "on the host") {
+              assert.deepEqual(started, Result.fail(HOSTED_REFUSAL.NO_REPOSITORY), each.name);
+              assert.ok(Option.isNone(made), each.name);
+              assert.deepEqual(launches, [], each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(started), each.name);
+            assert.deepEqual(
+              Option.map(made, (agent) => [agent.machine, agent.deviceId, agent.repository]),
+              Option.some([AGENT_MACHINE.DEVICE, deviceId, null]),
+            );
+            assert.deepEqual(heard(eve), [], "nothing reaches eve");
+            // The host makes the launch's folder empty, since the line names no repository to check out.
+            const [launch] = launches;
+            assert.equal(launches.length, 1);
+            assert.ok(launch !== undefined);
+            const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(
+              launch.payload,
+            );
+            assert.deepEqual([payload.repository, payload.identity], [null, undefined]);
           }
         }),
     );

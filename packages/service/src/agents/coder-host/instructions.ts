@@ -402,10 +402,11 @@ const NOT_TOLD_EDIT_PLAN: EditPlanTold = { decided: "", updating: "" };
 /** How `edit_plan` takes notes and what for, said alike to every agent on a task, up to where the agent names what it decided. */
 const EDIT_PLAN_NOTES = `\`${AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan of the task its \`taskId\` names, your own task or any other of your workspace, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided`;
 
-/** An agent that builds names what it decided in its pull request's description too; a pilot only where it opened one on a task it did itself. */
+/** An agent that builds names what it decided in its pull request's description too; a pilot only where it opened one on a task it did itself; an agent with no repository, which opens none, in its message alone. */
 const EDIT_PLAN_WORDS = {
   builder: `${EDIT_PLAN_NOTES}, and name it in the pull request's description.`,
   pilot: `${EDIT_PLAN_NOTES}, and, on a task you do yourself, name it in your pull request's description.`,
+  repositoryless: `${EDIT_PLAN_NOTES}.`,
 } as const;
 
 /**
@@ -1059,7 +1060,11 @@ export function coderInstructions(
   const editing = editPlanTold(
     brief,
     taskLink !== null,
-    pilot ? EDIT_PLAN_WORDS.pilot : EDIT_PLAN_WORDS.builder,
+    repository === null
+      ? EDIT_PLAN_WORDS.repositoryless
+      : pilot
+        ? EDIT_PLAN_WORDS.pilot
+        : EDIT_PLAN_WORDS.builder,
   );
   const sections = pilot ? PILOT_SECTION_WORDS : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}

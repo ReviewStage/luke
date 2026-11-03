@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { AGENT_BRIEF, AGENT_KIND, type AgentBrief } from "@luke/features/agent-wire";
+import {
+  AGENT_BRIEF,
+  AGENT_KIND,
+  type AgentBrief,
+  type AgentKind,
+} from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
 import { Schema } from "effect";
 import { test } from "vitest";
@@ -317,6 +322,25 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
   assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, false, false]);
+});
+
+test("an agent on a task with no repository names what it decided in its message, never in a pull request's description, which it opens none of", () => {
+  const IN_PULL_REQUEST = "pull request's description";
+  const decided = (repository: string | null, kind: AgentKind) =>
+    coderInstructions(
+      repository,
+      AGENT_BRIEF.PLAN,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+      kind,
+    ).includes(IN_PULL_REQUEST);
+  for (const kind of [AGENT_KIND.CODER, AGENT_KIND.PILOT]) {
+    assert.deepEqual([decided("Acme/Relay", kind), decided(null, kind)], [true, false], kind);
+  }
 });
 
 test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {

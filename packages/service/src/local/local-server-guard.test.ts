@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { localServerRefusal } from "../server/local-server-guard";
+import { localServerRefusal } from "./local-server-guard.js";
 
 const ON_LOOPBACK = "postgres://luke:luke@127.0.0.1:54329/luke";
 const OFF_MACHINE = "postgres://luke:luke@ep-demo.example.com:5432/luke";

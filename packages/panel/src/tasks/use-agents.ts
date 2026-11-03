@@ -322,7 +322,7 @@ export interface AgentsControl {
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
-    /** Whether a Start could run now: the task names a repository. */
+    /** Whether a Start could run now: the task names a repository, or runs where a Start runs without one. */
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
@@ -569,10 +569,10 @@ function sameFiles(a: readonly AgentAttachment[], b: readonly AgentAttachment[])
   return a.length === b.length && a.every((file, index) => file === b[index]);
 }
 
-/** Why a Start cannot run on the open task, while it cannot: it names no repository. */
-function startReason(taskId: string | undefined, repository: string | null): string | undefined {
+/** Why a Start cannot run on the open task, while it cannot: it names no repository, and runs nowhere a Start runs without one. */
+function startReason(taskId: string | undefined, starts: boolean): string | undefined {
   if (taskId === undefined) return undefined;
-  return repository === null ? START_NEEDS_REPOSITORY : undefined;
+  return starts ? undefined : START_NEEDS_REPOSITORY;
 }
 
 /** A list as read: the plan's agents, or the one agent read as its page, with its workspace, its repository, and the run that started it. */
@@ -659,6 +659,13 @@ export function useAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
+  /**
+   * Whether a Start runs on the open task though it names no repository:
+   * where the service says such a Start runs, as it does in the local demo
+   * alone (the account's access), and the task's agents run on a host. None
+   * everywhere else, where a task naming no repository starts nothing.
+   */
+  startsWithoutRepository?: boolean | undefined;
   /** How a task is worked, by its id, as the task list names it; none before the list names the task. */
   modeOf?: ((taskId: string) => TaskMode | undefined) | undefined;
   /**
@@ -726,9 +733,12 @@ export function useAgents(input: {
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
   const startsOn = taskId ?? agentId;
-  // Whether a Start from one of the agents could run: on a task naming a repository, or on an agent's
+  // Whether a Start could run on the open task: one naming a repository, or one the service runs without.
+  const taskStarts =
+    taskId !== undefined && (repository !== null || input.startsWithoutRepository === true);
+  // Whether a Start from one of the agents could run: on a task a Start runs on, or on an agent's
   // page, where the service reads the repository off the agent started from.
-  const startsFrom = startsOn !== undefined && (taskId === undefined || repository !== null);
+  const startsFrom = startsOn !== undefined && (taskId === undefined || taskStarts);
   // Each place's draft's key and chip, by the plan's id or the page's agent's; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
   const heldDraft = startsOn === undefined ? undefined : drafts.get(startsOn);
@@ -920,7 +930,7 @@ export function useAgents(input: {
   };
 
   const pressStart = async (choice?: ModelChoice): Promise<StartFailure | undefined> => {
-    if (taskId === undefined || repository === null || starting) return undefined;
+    if (taskId === undefined || !taskStarts || starting) return undefined;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -1221,7 +1231,7 @@ export function useAgents(input: {
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
-    if (taskId === undefined || repository === null)
+    if (taskId === undefined || !taskStarts)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
     const answer = await askStart(taskId, {
       idempotencyKey: draftId,
@@ -1627,8 +1637,8 @@ export function useAgents(input: {
     onUnarchive: undefined,
     continueAgent: startsFrom ? steadyContinueAgent : undefined,
     start: {
-      available: taskId !== undefined && repository !== null,
-      reason: startReason(taskId, repository),
+      available: taskStarts,
+      reason: startReason(taskId, taskStarts),
       busy: starting,
       onPress: pressStart,
       pending: pressedHere,
