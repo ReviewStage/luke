@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { RESERVED_WORKSPACE_SLUGS } from "./link-home.js";
 import {
   PICTURE_TYPE,
   type Picture,
@@ -87,6 +88,9 @@ export const ASSIGNABLE_ROLE = {
   ADMIN: WORKSPACE_ROLE.ADMIN,
   MEMBER: WORKSPACE_ROLE.MEMBER,
 } as const;
+
+// Note that the set stands in `link-home.ts`, which imports nothing, so the link grammar reads it without a cycle through here.
+export { RESERVED_WORKSPACE_SLUGS };
 
 export const WORKSPACE_BOUNDS = {
   /** The most characters a workspace's name may spell, after its ends are trimmed. */
