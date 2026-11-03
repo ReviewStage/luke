@@ -100,6 +100,8 @@ interface Standing {
   readonly unsaved?: boolean | undefined;
   /** Whether the Admin place stands, the view standing, and its section list standing alone. */
   readonly admin?: { readonly view: AdminView } | undefined;
+  /** How many times a door naming a thing opened it in the side panel, as the real one counts them. */
+  readonly opened?: number | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -164,7 +166,9 @@ function tasksTab(
       fullScreen: at.panel.open && narrow,
       fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,
-      onShow: (_taskId, tab) => panel({ open: true, tab }),
+      opened: at.opened ?? 0,
+      onShow: (_taskId, tab) =>
+        patch((held) => ({ ...held, panel: { open: true, tab }, opened: (held.opened ?? 0) + 1 })),
       onSetOpen: setOpen,
       onToggle: () => panel({ open: !at.panel.open, tab: at.panel.tab }),
       onToggleFullScreen: () => (narrow ? shut() : undefined),
@@ -613,11 +617,11 @@ test("on a narrow stage a Settings page a link opened has no list behind it, so 
   assert.equal(window.at().tab, PANEL_TAB.TASKS, "Back leaves Settings for the task");
 });
 
-test("on the desktop's width none of a narrow room's panes is a step: the side panel opened, the Inbox's first item, a Settings page, and a version", () => {
+test("on the desktop's width none of a narrow room's panes is a step: the side panel opened by its toggle, the Inbox's first item, a Settings page, and a version", () => {
   const moves: readonly [Standing, (window: Window) => void][] = [
     [
-      ON_TASK,
-      (window) => window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB)),
+      { ...ON_TASK, panel: { open: false, tab: PAGE_TAB } },
+      (window) => window.press(() => window.shown().sidePanel.onToggle()),
     ],
     [
       { ...ON_TASK, inbox: { open: true, chosen: undefined } },
@@ -823,7 +827,7 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   assert.equal(window.held.current().at, 1, "the history stands back on it");
 });
 
-test("on a narrow stage another tab chosen in the side panel standing over the plan is a step of its own, which Back shows again", () => {
+test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));

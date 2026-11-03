@@ -700,6 +700,8 @@ export interface SidePanelControl {
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
   width: number;
+  /** How many times a door naming a thing opened it here, a link, a pin, a notification, or a file named in place, as against a tab chosen in the strip, so the history takes each such open as a step of its own (`navigation-history.ts`). */
+  opened: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
   /** Shows or hides the panel as asked, as a task being started does; hiding it leaves full screen too. */
@@ -809,6 +811,8 @@ export interface OpenTask {
   files?: FileReads | undefined;
   /** Where a page opened here stands, as its tab saves it. */
   pages?: PagePlace | undefined;
+  /** The stop the panel stands at, where it is not the task itself, as an Inbox item of the task is one; a new stop starts with the panel shut. */
+  stop?: string | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files opened on it. */
@@ -1930,8 +1934,12 @@ export function useSidePanel(
   // The plan, or the agent's page, whose toggle or ⌘T asked for the "+" menu with nothing to show, which hangs from the toggle.
   const [toggleAskedOn, setToggleAskedOn] = useState<string | undefined>(undefined);
   const [seen, setSeen] = useState<OpenTask>(task);
-  // The tab a pin or a notification asked for, while it is still the one chosen.
-  const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
+  // The tab a pin, a notification, or a step of the history asked for, while it is still the one chosen, and whether it was asked for on another stop than the one standing, which it is carried to.
+  const [asked, setAsked] = useState<
+    { task: string; tab: SidePanelTab; carry: boolean } | undefined
+  >(undefined);
+  // How many times a door naming a thing opened it here (`SidePanelControl.opened`).
+  const [opened, setOpened] = useState(0);
   const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
   const taskId = task.id;
   const { files: fileReads, pages: pagePlace } = task;
@@ -2019,23 +2027,17 @@ export function useSidePanel(
   // shown with nothing in it.
   const narrow = room === SHELL_ROOM.NARROW;
   const shown = state.open && strip.length > 0;
-  // Note that a plan left while the panel stood hidden by its empty strip
-  // shuts it, so the next plan with a tab does not show it unasked: it opens
-  // again only when something is opened into it or its toggle is pressed.
-  // The Inbox's bare panel, which draws only what its item names, leaves it
-  // as it stood.
-  const [standing, setStanding] = useState({ taskId, shown, bare: task.bare === true });
-  if (standing.taskId !== taskId) {
-    const hidden =
-      standing.taskId !== undefined && !standing.shown && !standing.bare && task.bare !== true;
-    // A tab shown on the plan arrived on, as a link or a pin opens one there, was asked for, so it stands.
-    const shownHere = asked !== undefined && asked.task === taskId;
-    if (hidden && !shownHere && state.open) {
-      update((held) => (held.open ? { ...held, open: false } : held));
-    }
-    setStanding({ taskId, shown: false, bare: task.bare === true });
-  } else if (standing.shown !== shown) {
-    setStanding({ taskId, shown, bare: task.bare === true });
+  // Note that the panel belongs to the stop it was opened at, so a new stop
+  // starts with it shut: a task, an agent's page, or an Inbox item, two
+  // items of one task being two stops. A tab asked for on the stop arrived
+  // at, as a link, a pin, or a step of the history opens one there, was
+  // asked for, so it stands.
+  const stop = task.stop ?? taskId;
+  const [standing, setStanding] = useState(stop);
+  if (standing !== stop) {
+    if (asked?.carry === true && asked.task === taskId) setAsked({ ...asked, carry: false });
+    else if (state.open) update((held) => (held.open ? { ...held, open: false } : held));
+    setStanding(stop);
   }
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
@@ -2120,7 +2122,8 @@ export function useSidePanel(
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
       if (tab === SIDE_PANEL_TAB.INBOX) return;
-      setAsked({ task: on, tab });
+      setAsked({ task: on, tab, carry: on !== taskId || stop !== taskId });
+      setOpened((was) => was + 1);
       update((held) => {
         const here =
           on === taskId
@@ -2129,7 +2132,7 @@ export function useSidePanel(
         return { ...withTab(here, tab, on), open: true };
       });
     },
-    [update, drawn, taskId],
+    [update, drawn, taskId, stop],
   );
   const onClose = useCallback(
     (tab: SidePanelTab) =>
@@ -2144,13 +2147,16 @@ export function useSidePanel(
     [update],
   );
   const onOpenFile = useCallback(
-    (ref: CodeRef, commit?: string, reads?: FileReads) =>
-      update((held) => withFileAsked(held, ref, commit, drawn, taskId, reads ?? fileReads)),
+    (ref: CodeRef, commit?: string, reads?: FileReads) => {
+      setOpened((was) => was + 1);
+      update((held) => withFileAsked(held, ref, commit, drawn, taskId, reads ?? fileReads));
+    },
     [update, drawn, taskId, fileReads],
   );
   const onPreview = useCallback(
     (tab: SidePanelTab) => {
       setAsked(undefined);
+      setOpened((was) => was + 1);
       update((held) => ({
         ...withPreview(held, tab, drawn, (from) =>
           withPagePlaced(
@@ -2165,13 +2171,15 @@ export function useSidePanel(
     [update, drawn, taskId, pagePlace],
   );
   const onPreviewFile = useCallback(
-    (ref: CodeRef, commit?: string, reads?: FileReads) =>
+    (ref: CodeRef, commit?: string, reads?: FileReads) => {
+      setOpened((was) => was + 1);
       update((held) => ({
         ...withPreview(held, { file: ref.path }, drawn, (from) =>
           withFileAsked(from, ref, commit, drawn, taskId, reads ?? fileReads),
         ),
         open: true,
-      })),
+      }));
+    },
     [update, drawn, taskId, fileReads],
   );
   const onKeep = useCallback(
@@ -2318,6 +2326,7 @@ export function useSidePanel(
     tab: shownIn(state, drawn),
     preview: previewOf(state, drawn),
     width: state.width,
+    opened,
     fullScreen: shown && (fullScreen || narrow),
     fullScreenOnly: shown && narrow,
     newTabAsked: shown && newTabAsked,

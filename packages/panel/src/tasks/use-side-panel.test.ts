@@ -18,6 +18,7 @@ import {
 
 const TASK = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const OTHER_TASK = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
+const BARE_TASK = "6c8e0a2b-4d6f-4b8c-8e2a-3c5d7e9f1a2b";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER_AGENT = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
@@ -321,22 +322,30 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.equal(panel.control().toggleAsked, false);
 });
 
-test("a plan whose strip holds no tab draws no panel, and leaving it shuts the panel, so the next plan with a tab draws none until asked", () => {
+test("a new stop starts with the panel shut, whatever its strip holds, unless a tab was asked for there, as a pin or a link opens one, and a plan whose strip holds no tab draws none", () => {
   const panel = launch({ task: TASK, taskAgents: [] });
   act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   assert.equal(panel.control().open, true);
 
-  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
-  assert.deepEqual(panel.control().strip, []);
-  assert.equal(panel.control().open, false);
-
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS]);
+  assert.equal(
+    panel.control().open,
+    false,
+    "another task starts shut though its strip holds a tab",
+  );
   panel.render({ task: TASK, taskAgents: [] });
-  assert.equal(panel.control().open, false, "a tab standing in the strip does not open it");
-  act(() => panel.control().onToggle());
-  assert.equal(panel.control().open, true);
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(panel.control().open, false, "and coming back does not open it");
 
-  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  act(() => panel.control().onShow(OTHER_TASK, SIDE_PANEL_TAB.COMMENTS));
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.equal(panel.control().open, true, "a tab asked for on the stop arrived at stands");
+  panel.render({ task: TASK, taskAgents: [] });
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.equal(panel.control().open, false, "once only");
+
+  panel.render({ task: BARE_TASK, taskAgents: [], bare: true });
+  assert.deepEqual(panel.control().strip, []);
   act(() => panel.control().onToggle());
   assert.equal(panel.control().open, false, "with nothing to show it is never drawn");
   assert.equal(panel.control().toggleAsked, true);
@@ -346,6 +355,32 @@ test("a plan whose strip holds no tab draws no panel, and leaving it shuts the p
   assert.equal(panel.control().toggleAsked, true, "⌘T asks at the toggle too");
   panel.render({ task: TASK, taskAgents: [] });
   assert.equal(panel.control().toggleAsked, false, "an ask stands only on its plan");
+});
+
+test("each Inbox item is a stop of its own, so the panel a link opened beside one is shut beside the next, though both are one task's", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ item }: { item: string }) {
+    control = useSidePanel(
+      undefined,
+      { id: TASK, holds: {}, bare: true, stop: item },
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (item: string) => act(() => root.render(createElement(Probe, { item })));
+  const panel = () => control ?? assert.fail("the panel is held");
+
+  render("item-1");
+  act(() => panel().onPreview({ changes: AGENT }));
+  assert.equal(panel().open, true);
+  render("item-2");
+  assert.deepEqual(panel().strip, [{ changes: AGENT }]);
+  assert.equal(panel().open, false);
 });
 
 test("beside the window's Inbox the panel stands for the item's plan with none of its fixed tabs, holds what the item opens there, and the plan's page finds its strip as it left it, a fixed tab it closed still closed and one it opened still open", () => {

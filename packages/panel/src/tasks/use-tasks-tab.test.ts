@@ -3122,6 +3122,21 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("another tab chosen in the task's column is a stop of its own, so the side panel shuts, while the tab already shown leaves it open", async () => {
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
+  await settle();
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  assert.equal(tab.control().sidePanel.open, true);
+
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.open, false);
+
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
+  assert.equal(tab.control().sidePanel.open, true);
+});
+
 test("archiving a task's last agent takes its tab at once, and a refused archive brings it back", async () => {
   const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_ARCHIVE>>();
   const tab = mount(
@@ -3910,11 +3925,12 @@ it.effect(
       yield* passing(Duration.minutes(50));
       tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
-      // The panel filling the window over the column keeps the tab from being viewed again on return.
+      // The panel filling the window over the column keeps the tab from being viewed again on return, the task opened on its tab as a pin opens it.
       act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
+      act(() => tab.control().sidePanel.onShow(TASK.id, SIDE_PANEL_TAB.COMMENTS));
       tab.stand({ tasks: withAgents(IDLE_AGENTS) });
       yield* passing(Duration.minutes(30));
       assert.deepEqual(
