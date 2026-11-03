@@ -26,7 +26,7 @@ function mailService() {
   const mailed: { subject?: unknown }[] = [];
   const recorded: { url: string; body: string }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (String(url).startsWith(POSTHOG_HOST)) {
+    if (new URL(String(url)).origin === POSTHOG_HOST) {
       recorded.push({ url: String(url), body: String(init?.body) });
       return new Response("{}", { status: 200 });
     }
