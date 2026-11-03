@@ -95,8 +95,8 @@ import { TaskActions, type TaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   ACTIVITY_BACK,
+  HOME_BACK,
   TASK_PANE,
-  TASKS_BACK,
   TaskHead,
   type TaskHeadBack,
   type TaskPane,
@@ -1365,7 +1365,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
   room?: ShellRoom;
-  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); the Tasks page where none is handed. */
+  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); Home where none is handed. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   // A task New task is starting with its agent stands as its page until the start answers.
@@ -1377,7 +1377,7 @@ export const DesktopTasks = memo(function DesktopTasks({
         summary={summary}
         phoneAway={
           room === SHELL_ROOM.NARROW
-            ? (away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen })
+            ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
             : undefined
         }
       />
@@ -1397,16 +1397,13 @@ export const DesktopTasks = memo(function DesktopTasks({
             looks={looks}
             summary={summary}
             room={room}
-            away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
+            away={away ?? { label: HOME_BACK, onPress: tasks.onGoHome }}
           />
         </SkillFiles>
       );
     // With no task open the column is Home, and ⌘N's dialog stands over it
     // as it stands over a task.
     case TASKS_PAGE.HOME:
-      // A launch reopening the task last open draws the window's ground
-      // alone until it opens, so Home never flashes before it.
-      if (tasks.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />

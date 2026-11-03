@@ -200,14 +200,6 @@ function onAutomations(
   });
 }
 
-test("a launch that reopens the plan last open leaves nothing behind it to go back to", () => {
-  const window = mount(tasksControl({ restoring: true }));
-  window.stand(
-    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
-  );
-  assert.equal(window.history().canGoBack, false);
-});
-
 test("leaving a plan for Home is a step Back returns from", () => {
   const window = mount(
     tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),

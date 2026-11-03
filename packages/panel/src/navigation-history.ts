@@ -843,7 +843,7 @@ export interface WindowHistory extends NavigationHistory {
    * Leaves the page standing for the nearest step behind it on another page,
    * passing over the page's own panes and tabs, as a phone's way back out of
    * a task goes back to the list it was opened from and pushes nothing;
-   * where none stands, as on a task a link loaded, it opens the Tasks page.
+   * where none stands, as on a task a link loaded, it opens Home.
    */
   onLeave: () => void;
 }
@@ -1200,6 +1200,7 @@ export function useWindowHistory(input: {
     | "listFailed"
     | "onRestoreTask"
     | "onLeaveTask"
+    | "onGoHome"
     | "history"
     | "inboxView"
     | "agentView"
@@ -1209,7 +1210,6 @@ export function useWindowHistory(input: {
     | "boardView"
     | "unknownWorkspace"
     | "adminView"
-    | "restoring"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1268,9 +1268,7 @@ export function useWindowHistory(input: {
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
   const adminAccess = adminOn || adminPending;
-  // A launch reopening the task last open stands nowhere until it opens, so
-  // the home page it waits on is no place to go back to.
-  const known = input.known && !tasks.restoring;
+  const known = input.known;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const task of tasks.tasks) everListed.add(task.id);
@@ -1552,7 +1550,7 @@ export function useWindowHistory(input: {
       }
       up({ kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } }, shut);
     },
-    // Note that a task with no step behind it, as one a launch reopened or a link loaded, is left as ever.
+    // Note that a task with no step behind it, as one a reloaded tab or a link loaded, is left as ever.
     task: () => {
       if (!stepBack()) tasks.onLeaveTask();
     },
@@ -1564,7 +1562,7 @@ export function useWindowHistory(input: {
       tasks.history.onClose();
     },
     onLeave: () => {
-      if (!stepAway()) tasks.boardView.onOpen();
+      if (!stepAway()) tasks.onGoHome();
     },
     lists,
   });

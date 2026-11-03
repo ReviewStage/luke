@@ -838,6 +838,31 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
+test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
+    },
+  );
+  await settle();
+  const away = tab.history().away;
+
+  act(() => tab.history().onLeave());
+  tab.stand({ tasks: listRead([listed()]) });
+  await settle();
+  const left = {
+    closed: tab.told.includes(ACT_KIND.TASKS_CLOSE),
+    board: tab.control().boardView.open,
+  };
+  act(() => tab.history().onBack());
+
+  assert.equal(away, undefined, "no page stands behind the task");
+  assert.deepEqual(left, { closed: true, board: false });
+  assert.equal(tab.control().boundFor, TASK.id, "Back opens the task again");
+});
+
 test("in a narrow room a Vespin link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
@@ -2408,125 +2433,10 @@ function withAgents(agents: readonly AgentSummary[]): TasksView {
   return { ...OPEN, tasks: [listed()], taskAgents: agents };
 }
 
-/** The view a launch starts on: nothing open, and the list not yet read. */
-const LAUNCHING: TasksView = { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READING };
-
 /** The view once the list is read with nothing open, holding `plans`. */
 function listRead(tasks: TasksView["tasks"]): TasksView {
   return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks };
 }
-
-/** A select's payload, read back as the act's own schema admits it. */
-const readSelect = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
-
-/** The tasks the launch asked the host to open, in order. */
-function selected(tab: ReturnType<typeof mount>): string[] {
-  return tab.payloads
-    .filter((each) => each.kind === ACT_KIND.TASKS_SELECT)
-    .flatMap((each) => Option.toArray(readSelect(each.payload)).map((read) => read.taskId));
-}
-
-/** A run that had the task open when it quit. */
-function quitWithTaskOpen(account = "dev@example.com") {
-  mount({ shown: true, account, tasks: { ...OPEN, tasks: [listed()] } });
-}
-
-test("a launch opens the plan the account had open at quit, drawing no home page until the host has it open", () => {
-  quitWithTaskOpen();
-  const tab = mount(
-    { shown: true, tasks: LAUNCHING },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
-  assert.equal(tab.control().page, TASKS_PAGE.HOME);
-  assert.equal(tab.control().restoring, true, "the list is still being read");
-
-  tab.stand({ tasks: listRead([listed()]) });
-  assert.deepEqual(selected(tab), [TASK.id]);
-  assert.equal(tab.control().restoring, true, "the host has not opened it yet");
-
-  tab.stand({ tasks: { ...OPEN, tasks: [listed()] } });
-  assert.equal(tab.control().page, TASKS_PAGE.DOCUMENT);
-  assert.equal(tab.control().restoring, false);
-});
-
-test("a plan deleted since the quit, or kept by another account, leaves the launch on the home page", () => {
-  for (const [why, account, tasks] of [
-    ["deleted", "dev@example.com", []],
-    ["another account", "other@example.com", [listed()]],
-  ] as const) {
-    quitWithTaskOpen();
-    const tab = mount({ shown: true, account, tasks: LAUNCHING });
-    tab.stand({ tasks: listRead(tasks) });
-    assert.deepEqual(selected(tab), [], why);
-    assert.equal(tab.control().restoring, false, why);
-    closeWindow();
-    window.localStorage.clear();
-  }
-});
-
-test("a plan the list no longer holds is let go, so it is not opened when it comes back", () => {
-  quitWithTaskOpen();
-  mount({ shown: true, tasks: LAUNCHING }).stand({ tasks: listRead([]) });
-  const tab = mount({ shown: true, tasks: LAUNCHING });
-  tab.stand({ tasks: listRead([listed()]) });
-  assert.deepEqual(selected(tab), []);
-});
-
-test("leaving the plan for the home page lets it go, so the next launch rests on the home page", () => {
-  const before = mount({ shown: true, tasks: { ...OPEN, tasks: [listed()] } });
-  before.stand({ tasks: listRead([listed()]) });
-
-  const tab = mount({ shown: true, tasks: LAUNCHING });
-  assert.equal(tab.control().restoring, false);
-  tab.stand({ tasks: listRead([listed()]) });
-  assert.deepEqual(selected(tab), []);
-});
-
-test("a window reloaded over a plan the host still holds asks for nothing", () => {
-  quitWithTaskOpen();
-  const tab = mount({ shown: true, tasks: { ...OPEN, tasks: [listed()] } });
-  assert.deepEqual(selected(tab), []);
-  assert.equal(tab.control().restoring, false);
-});
-
-test("a refused reopen takes its ask back and rests on the home page", async () => {
-  quitWithTaskOpen();
-  const tab = mount(
-    { shown: true, tasks: LAUNCHING },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(false) },
-  );
-  tab.stand({ tasks: listRead([listed()]) });
-  await act(settle);
-  assert.deepEqual(selected(tab), [TASK.id]);
-  assert.equal(tab.control().restoring, false);
-});
-
-test("a launch whose list read failed rests on the home page, and opens the plan once Try again reads it", () => {
-  quitWithTaskOpen();
-  const tab = mount(
-    { shown: true, tasks: LAUNCHING },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
-  tab.stand({ tasks: { ...LAUNCHING, listStatus: TASKS_READ.FAILED } });
-  assert.deepEqual(selected(tab), []);
-  assert.equal(tab.control().restoring, false);
-
-  tab.stand({ tasks: listRead([listed()]) });
-  assert.deepEqual(selected(tab), [TASK.id]);
-});
-
-test("another account signing in after a sign-out keeps its own plan, and has it opened", () => {
-  quitWithTaskOpen("other@example.com");
-  closeWindow();
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
-  tab.stand({ signedIn: false, tasks: IDLE_TASKS_VIEW });
-  tab.stand({ signedIn: true, account: "other@example.com", tasks: LAUNCHING });
-  tab.stand({ tasks: listRead([listed()]) });
-  assert.deepEqual(selected(tab), [TASK.id]);
-});
 
 test("while a page stands its ask, a way out asks instead of going, Leave goes where was asked, and once the ask is down the doors go at once", () => {
   const tab = mount({ shown: true, tasks: listRead([listed()]) });

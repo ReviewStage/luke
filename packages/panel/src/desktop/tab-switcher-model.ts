@@ -214,7 +214,7 @@ export interface WindowStanding {
     | undefined;
   readonly board: boolean;
   readonly automations: boolean;
-  /** Whether Home stands, with no task open and nothing in its place, and no launch reopening a task. */
+  /** Whether Home stands, with no task open and nothing in its place. */
   readonly home: boolean;
   /** The task the window is on, or on its way to; none on Home. */
   readonly boundFor: string | undefined;

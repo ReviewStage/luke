@@ -175,7 +175,6 @@ import type { ThreadReveal } from "./thread-reveal.js";
 import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useLastTask } from "./use-last-task.js";
 import {
   type MainTab,
   type MainTabsControl,
@@ -556,8 +555,6 @@ export interface NewTaskStart {
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
-  /** Whether a launch is still opening the task last open, while the page with no task open waits rather than flash before it (`use-last-task.ts`). */
-  restoring: boolean;
   /**
    * The line New task's agent start under way opens its agent on, which the
    * window draws on a task's page in its shape until the start answers
@@ -2230,15 +2227,6 @@ export function useTasksTab(input: {
   // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
   const restoreNow = useRef(restoreStatuses);
   restoreNow.current = restoreStatuses;
-  const { restoring, forgo: forgoReopen } = useLastTask({
-    staged: fixture !== undefined,
-    account: input.account,
-    tasks: tasks.tasks,
-    listStatus: tasks.listStatus,
-    openTaskId,
-    boundFor,
-    select,
-  });
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -3048,12 +3036,10 @@ export function useTasksTab(input: {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
     switch (place.kind) {
-      // Note that a workspace's Home, and its Board, stand over the launch's reopen of the task last open, since a fresh tab's
-      // address may name either; a step naming no workspace of the reader's, by id, slug, or former slug, is not there for
-      // them, so it stands as not found rather than opening the listed workspace or where the window rests.
+      // A step naming no workspace of the reader's, by id, slug, or former slug, is not there for them, so it stands as not
+      // found rather than opening the listed workspace or where the window rests.
       case LINK_PLACE.HOME:
       case LINK_PLACE.BOARD:
-        forgoReopen();
         if (
           viewed.workspaces.length > 0 &&
           workspaceOfSlug(viewed.workspaces, workspace) === undefined
@@ -3418,7 +3404,6 @@ export function useTasksTab(input: {
 
   return useSteadyDoors({
     page,
-    restoring,
     starting,
     shown,
     signedIn,
