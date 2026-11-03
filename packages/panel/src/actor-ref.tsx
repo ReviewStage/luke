@@ -781,8 +781,7 @@ export function automationRunActor(run: AutomationRunSummary, name: string): Act
 /**
  * An automation's card: the glyph of what fires it, its name over those words
  * and whose it is, when it runs next, and how its last run went, and at
- * its foot, under a rule, who made it and when, as a channel's card says
- * it; one whose maker the members around it do not name has no foot. Note
+ * its foot, under a rule, who made it and when; one whose maker the members around it do not name has no foot. Note
  * that it offers no way to the automation's page under a rule, because
  * the name it hangs from opens that page on a press; hung from a control
  * whose press does something else, the Inbox's group header, which folds,

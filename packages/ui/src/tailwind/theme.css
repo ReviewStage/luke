@@ -585,7 +585,7 @@
 
   /* Banner, ScrollArea, and Pagination. */
   --color-attention: var(--ui-color-attention);
-  /* A post that needs the reader, in a channel's stream: the attention ink's tint and nothing else. */
+  /* A post that needs the reader: the attention ink's tint and nothing else. */
   --color-attention-tint: var(--ui-color-attention-tint);
   --color-body-foreground: var(--ui-color-text-body);
   /* A strip's tint and hairline, mixed from the ink of the tone the banner

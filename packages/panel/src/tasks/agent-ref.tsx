@@ -248,7 +248,7 @@ export interface AgentLine {
  * else by the name an agent no read names goes by. Its
  * card says it is not found once the list has been read and no line names
  * it, and nothing more before. Every place drawing an Inbox thread's agent
- * names it through here, its pane and its channel post alike, so no two
+ * names it through here, its pane and its messages alike, so no two
  * name one agent two ways.
  */
 export function agentSubject(

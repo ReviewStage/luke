@@ -79,9 +79,8 @@ copy the plan into Claude Code, Codex, or any other agent.
   integration's event, or a webhook.
 - **Experiments** in Settings › Experimental, each off until you turn it on:
   Pilot, which plans a new task, splits it into sub-tasks, and runs an agent on
-  each; Channels, which lists a workspace's threads by topic; Memory, facts
-  agents keep about how your team works and recall later; Skills; and Bring
-  your own host, below.
+  each; Memory, facts agents keep about how your team works and recall later;
+  Skills; and Bring your own host, below.
 
 ![The Inbox: a coding agent asks whether invite links should expire after 7 or 14 days, over the two lines of code that decide it, with your pick and your reply.](apps/web/public/changelog/0.13.0/the-inbox-one-item-at-a-time.png)
 

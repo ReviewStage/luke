@@ -23,7 +23,7 @@
  *   reader stands on. A place that wears its glyph is the trail's folding
  *   way back, whose words fold away as the bar's acts do.
  * - `detail` follows the title on its last baseline: quiet words saying
- *   what the page is beside its name (a channel's purpose), on one line
+ *   what the page is beside its name, on one line
  *   that gives way, cut short, before the title does.
  * - `tag` follows the title on its last baseline: a capsule naming the
  *   page's state (an experiment), or a switch of its view.

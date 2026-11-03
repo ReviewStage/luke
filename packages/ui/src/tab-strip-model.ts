@@ -27,7 +27,7 @@
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox, the
- * channel's thread the side panel holds beside its stream, a draft agent's tab and the "+" row that opens one, an agent the window holds
+ * thread the side panel holds beside the window's Inbox, a draft agent's tab and the "+" row that opens one, an agent the window holds
  * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */

@@ -16,7 +16,7 @@ const REPOSITORY_ROOT = path.resolve(
 const HOOK_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/use-host-read.ts");
 const NEW_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/not-on-the-list.ts");
 const LISTED_FILE = path.join(REPOSITORY_ROOT, Object.keys(UNMIGRATED_FOLLOWS)[0] ?? "");
-const STREAM = "streamFrom(() => askAct(ACT_KIND.CHANNELS_FOLLOW, { workspaceId }), take);\n";
+const STREAM = "streamFrom(() => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { workspaceId }), take);\n";
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -30,12 +30,12 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
     // A file on the list, until its step moves it.
     { code: STREAM, filename: LISTED_FILE },
     // An act that opens no follow, and a follow kind a fixture answers rather than opens.
-    { code: "askAct(ACT_KIND.CHANNELS_LIST, { workspaceId });", filename: NEW_FILE },
-    { code: "const answers = { [ACT_KIND.CHANNELS_FOLLOW]: () => pushed };", filename: NEW_FILE },
+    { code: "askAct(ACT_KIND.AUTOMATIONS_LIST, { workspaceId });", filename: NEW_FILE },
+    { code: "const answers = { [ACT_KIND.AUTOMATIONS_FOLLOW]: () => pushed };", filename: NEW_FILE },
     // A test stands in for the host.
     {
       code: STREAM,
-      filename: path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/use-channels.test.ts"),
+      filename: path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/use-automations.test.ts"),
     },
     // Code outside the panel is no business of the rule's.
     { code: STREAM, filename: path.join(REPOSITORY_ROOT, "packages/host/src/example.ts") },
