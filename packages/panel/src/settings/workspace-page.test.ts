@@ -2498,7 +2498,7 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
 
-test("an installed workspace's Sentry names its organization, its Disconnect button asks first, and a member sees it read only", async () => {
+test("an installed workspace's Sentry names its organization, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(admin.page), "Sentry");
