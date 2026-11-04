@@ -8,6 +8,8 @@
  * instance never share a list); the auth route records the list once Better
  * Auth has answered (`recordAuthCount`, from `auth-app.ts`), so each count is
  * made where every other counted event is, after the write and past the answer.
+ * The same route makes a signed-up account's personal workspace from its
+ * sign-up count, before the answer leaves.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
