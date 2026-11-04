@@ -11,10 +11,13 @@ import {
 } from "@repo/service/agents/session-sandboxes";
 import { agentSandboxLayer } from "@repo/service/agents/terminal/agent-sandbox";
 import { auth } from "@repo/service/auth/auth";
+import { authDeployment } from "@repo/service/auth/auth-deployment";
 import { resolveHostedUserId } from "@repo/service/auth/bearer";
 import { resolveBrowserSessionUserId } from "@repo/service/auth/browser-session";
 import { githubUnlink } from "@repo/service/github/github-unlink";
 import { integrationsAppSeams } from "@repo/service/integrations/integration-seams";
+import { clientConsentDelete } from "@repo/service/member-mcp/client-consents";
+import { memberMcpResourceUrl } from "@repo/service/member-mcp/resource";
 import { type HostedFetch, hostedFetch } from "@repo/service/orpc/handler";
 import { type HostedRouterSeams, hostedRouter } from "@repo/service/orpc/router";
 import type { Route } from "@repo/service/route";
@@ -64,6 +67,8 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   resolveUserId: resolveHostedUserId,
   resolveSessionUserId: resolveBrowserSessionUserId,
   unlinkGitHub: githubUnlink(auth.api),
+  deleteClientConsent: clientConsentDelete(auth.api),
+  memberMcpServerUrl: memberMcpResourceUrl(authDeployment(process.env).baseURL),
   workspaces: workspaceSeams(auth.api),
   sandbox: agentSandboxLayer,
   agentBrowser: agentBrowserServices,

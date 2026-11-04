@@ -143,6 +143,7 @@
     "./maintenance/maintenance-app": "./src/maintenance/maintenance-app.js",
     "./member-mcp/admission": "./src/member-mcp/admission.js",
     "./member-mcp/app": "./src/member-mcp/app.js",
+    "./member-mcp/client-consents": "./src/member-mcp/client-consents.js",
     "./member-mcp/resource": "./src/member-mcp/resource.js",
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",

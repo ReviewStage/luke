@@ -125,6 +125,8 @@
     "./words": "./src/words.js",
     "./sign-in-provider": "./src/sign-in-provider.js",
     "./oauth-consent": "./src/oauth-consent.js",
+    "./mcp-client-wire": "./src/mcp-client-wire.js",
+    "./mcp-client-view": "./src/mcp-client-view.js",
     "./skill-file": "./src/skill-file.js",
     "./skill-paste": "./src/skill-paste.js",
     "./connect-github-step": "./src/connect-github-step.js",
