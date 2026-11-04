@@ -7,6 +7,7 @@ import {
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
+  HostedMcpClientsClient,
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
@@ -166,6 +167,30 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const focus = yield* windowFocus;
     /** Every row the composers' reads hold, once, and the writes drawn over them (`@repo/sync`). */
     const pool = yield* entityPool();
+    // Note that the integrations stand before the tasks, which ask GitHub's standing of them again once a GitHub connect or disconnect answers.
+    const integrations = yield* served(
+      composeIntegrations({
+        kernel,
+        account,
+        accountId,
+        focus,
+        client: new HostedIntegrationsClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
+        mcpClients: new HostedMcpClientsClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+          sessionCredential: account.sessionCredential,
+        }),
+        // Note that a refusal's reason is not reported, because it may carry the address.
+        openExternal: (url) =>
+          Effect.map(
+            kernel.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
+            (result) => result.status === NODE_CAPABILITY_STATUS.OK,
+          ),
+      }),
+    );
     const tasks = yield* served(
       composeTasks({
         kernel,
@@ -174,6 +199,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         kept,
         focus,
         pool,
+        githubMoved: integrations.githubMoved,
         client: Object.assign(
           new HostedTaskClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -222,23 +248,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
         }),
-      }),
-    );
-    const integrations = yield* served(
-      composeIntegrations({
-        kernel,
-        account,
-        focus,
-        client: new HostedIntegrationsClient({
-          serviceBaseUrl: kernel.hostedServiceBaseUrl,
-          credential: account.credential,
-        }),
-        // Note that a refusal's reason is not reported, because it may carry the address.
-        openExternal: (url) =>
-          Effect.map(
-            kernel.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
-            (result) => result.status === NODE_CAPABILITY_STATUS.OK,
-          ),
       }),
     );
     const macCommands = platform.has(HOST_PLATFORM_CONCERN.MAC_COMMANDS)

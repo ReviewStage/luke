@@ -99,8 +99,10 @@
     --ui-button-ink: var(--ui-color-on-veil);
   }
 
-  .ui-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --ui-button-fill: color-mix(in srgb, var(--ui-color-on-veil) 18%, transparent);
+  @media (hover: hover) {
+    .ui-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-on-veil) 18%, transparent);
+    }
   }
 
   .ui-button[data-variant="media"]:active:not(:disabled, [aria-disabled="true"]) {
@@ -120,12 +122,19 @@
   /* A row, a card's act drawn as a menu's row (its box is the `row` size's),
      lit by the menu row's fill under the pointer and the keyboard alike,
      never ringed. */
-  .ui-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
+  .ui-button[data-variant="row"]:is(:focus-visible, [aria-expanded="true"]):not(
     :disabled,
     [aria-disabled="true"]
   ) {
     outline: none; /* no ring: the row's fill marks it, as a menu's does */
     --ui-button-fill: var(--ui-color-fill-strong);
+  }
+
+  @media (hover: hover) {
+    .ui-button[data-variant="row"]:hover:not(:disabled, [aria-disabled="true"]) {
+      outline: none;
+      --ui-button-fill: var(--ui-color-fill-strong);
+    }
   }
 
   /* A danger toggle is quiet while off, and on the danger tint while on. */
@@ -150,7 +159,6 @@
      does over its panes, names the opaque ground they rest on, so what
      passes beneath never shows through the fill. */
   .ui-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
-    :hover:not(:disabled, [aria-disabled="true"]),
     [aria-haspopup][aria-expanded="true"],
     [aria-pressed="true"]
   ) {
@@ -160,12 +168,22 @@
       var(--ui-button-ground, transparent);
   }
 
+  @media (hover: hover) {
+    .ui-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
+      :hover:not(:disabled, [aria-disabled="true"])
+    ) {
+      --ui-button-fill: var(--ui-color-fill-selected);
+      --ui-button-ink: var(--ui-color-text);
+      background: linear-gradient(var(--ui-button-fill), var(--ui-button-fill))
+        var(--ui-button-ground, transparent);
+    }
+  }
+
   /* A quiet mark standing in a row, a compact one or a row's ⋯ at any
      size (`button.tsx`'s `lights`), lights its glyph alone, under the
      pointer, while its menu is open, and while a toggle stands on, because
      the row it stands in is already lit. */
   .ui-button[data-icon-only="true"][data-lights="glyph"]:where(
-    :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
     [aria-pressed="true"]
   ),
@@ -177,6 +195,15 @@
     background: transparent;
   }
 
+  @media (hover: hover) {
+    .ui-button[data-icon-only="true"][data-lights="glyph"]:where(
+      :hover:not(:disabled, [aria-disabled="true"])
+    ) {
+      --ui-button-fill: transparent;
+      background: transparent;
+    }
+  }
+
   /* A button that goes to the page on show reads in the full ink, as one
      under the pointer does, without a fill: the page is where it stands,
      not a state it holds. */
@@ -184,12 +211,14 @@
     --ui-button-ink: var(--ui-color-text);
   }
 
-  .ui-button[data-variant="danger"][aria-pressed="false"]:hover:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
-    --ui-button-fill: var(--ui-color-fill-selected);
-    --ui-button-ink: var(--ui-color-text);
+  @media (hover: hover) {
+    .ui-button[data-variant="danger"][aria-pressed="false"]:hover:not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+      --ui-button-fill: var(--ui-color-fill-selected);
+      --ui-button-ink: var(--ui-color-text);
+    }
   }
 
   .ui-button[data-variant="danger"][aria-pressed="false"]:active:not(
@@ -199,23 +228,25 @@
     --ui-button-fill: var(--ui-color-fill-pressed);
   }
 
-  .ui-button[data-variant="danger"][aria-pressed="true"]:hover:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
-    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 24%, transparent);
-  }
+  @media (hover: hover) {
+    .ui-button[data-variant="danger"][aria-pressed="true"]:hover:not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 24%, transparent);
+    }
 
-  .ui-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --ui-button-fill: color-mix(in srgb, var(--ui-color-working) 22%, transparent);
-  }
+    .ui-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-working) 22%, transparent);
+    }
 
-  .ui-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 22%, transparent);
-  }
+    .ui-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 22%, transparent);
+    }
 
-  .ui-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 12%, transparent);
+    .ui-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 12%, transparent);
+    }
   }
 
   .ui-button:is(
@@ -228,11 +259,13 @@
       var(--ui-button-ground, transparent);
   }
 
-  .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
-    filter: brightness(1.1);
+  @media (hover: hover) {
+    .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+      filter: brightness(1.1);
+    }
   }
 
   .ui-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):active:not(

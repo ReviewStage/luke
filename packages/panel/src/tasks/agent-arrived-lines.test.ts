@@ -10,7 +10,6 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -18,6 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -121,10 +121,10 @@ async function drawnTab(
   status: AgentStatus,
 ): Promise<HTMLElement> {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
-  });
+  fakeActPort({});
+  handMembers(() => ({
+    rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
+  }));
   const control = agentsControl({
     agents: [agentOf(status)],
     me: DEAN.userId,

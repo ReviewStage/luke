@@ -56,6 +56,8 @@ interface PickerProps {
   valueLabel: string;
   /** The chosen value's mark, where values carry one. */
   valueIcon?: React.ReactNode;
+  /** Whether the chip draws that mark alone, its words read as its name and its hover, where its place is too narrow for them. */
+  iconOnly?: boolean | undefined;
   rows: readonly MenuRow[];
   /** Present, the menu opens on a search over the rows; absent, the list is short enough to read whole. */
   placeholder?: string | undefined;
@@ -96,6 +98,7 @@ export function Picker({
   value,
   valueLabel,
   valueIcon,
+  iconOnly = false,
   rows,
   placeholder,
   noMatch,
@@ -137,11 +140,12 @@ export function Picker({
       className="settings-picker relative inline-flex min-w-0 flex-initial items-center"
       ref={row}
     >
-      <Tooltip label={open ? undefined : hint}>
+      <Tooltip label={open ? undefined : (hint ?? (iconOnly ? valueLabel : undefined))}>
         <Chip
           ref={chip}
           look={look}
           width={width}
+          iconOnly={iconOnly && valueIcon != null}
           chevron={look === CHIP_LOOK.FIELD}
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}

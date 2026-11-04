@@ -10,7 +10,8 @@
  * comments, its plan's own threads or with `&page=` one page's, as their
  * threads, entries, and files; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
- * statements its pages are read from; and the
+ * statements its pages are read from, and the run of an automation that
+ * started it, as one statement; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
  * claimed, as one statement; and one plan's inbox, or one agent's, named by
  * `?id=`, as its items, their threads, and their files; and the account's
@@ -20,7 +21,9 @@
  * pending invitations, to an owner or an admin of it, with the origin each
  * accept link is built on; and one coding agent's pull request's newest
  * chapters, the agent named by `?id=` and the pull request by `&number=`,
- * with whether the reader can generate them. Each
+ * with whether the reader can generate them; and every integration row the
+ * account holds, with the providers it is offered and those that take
+ * several accounts. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -35,11 +38,13 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
+import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
+import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
@@ -204,6 +209,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_PAGES }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
+  agentOrigin: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_ORIGIN }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(agentOriginLiveAnswerSchema)),
   taskHistory: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)
@@ -288,4 +297,8 @@ export const liveContract = {
     )
     .input(livePullRequestChaptersSchema)
     .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
+  integrationStatuses: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
+    .input(liveReadSchema)
+    .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
 };

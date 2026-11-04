@@ -80,6 +80,10 @@ import {
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
 import { type LiveProcedureSeams, liveProcedures } from "../live/live-procedures.js";
+import {
+  type McpClientsProcedureSeams,
+  mcpClientsProcedures,
+} from "../member-mcp/clients-procedures.js";
 import { type SlackBotProcedureSeams, slackBotProcedures } from "../slack/slack-bot-procedures.js";
 import {
   type PlanCommentsProcedureSeams,
@@ -119,6 +123,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   LiveProcedureSeams &
   DeviceAgentsProcedureSeams &
   MacCommandsProcedureSeams &
+  McpClientsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
   PlanCommentsProcedureSeams &
@@ -157,6 +162,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     live: liveProcedures(seams),
     deviceAgents: deviceAgentsProcedures(seams),
     macCommands: macCommandsProcedures(seams),
+    mcpClients: mcpClientsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
     planComments: planCommentsProcedures(seams),

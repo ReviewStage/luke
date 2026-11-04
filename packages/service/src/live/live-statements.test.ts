@@ -13,12 +13,14 @@ import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -53,6 +55,7 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
     "agent.pages": Option.getOrThrow(agentPagesLiveStatements(USER_ID, randomUUID())).pages,
+    "agent.origin": Option.getOrThrow(agentOriginLiveStatements(USER_ID, randomUUID())).origin,
     "task.browserTabs": Option.getOrThrow(
       browserTabsLiveStatement(USER_ID, { taskId: randomUUID() }),
     ),
@@ -69,6 +72,9 @@ function liveStatements() {
     ),
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
+    ),
+    "account.integrations": Option.getOrThrow(
+      integrationStatusesLiveStatement(USER_ID, new Date(0)),
     ),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),

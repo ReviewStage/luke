@@ -54,7 +54,7 @@ export const DROPDOWN_MENU_ITEM =
  * A phone's sheet of a menu's rows, which stand in no Base UI menu, wears it too.
  */
 export const DROPDOWN_MENU_ITEM_LIT =
-  "[&:is(:hover,:focus-visible,[data-popup-open]):not(:disabled,[aria-disabled=true])]:bg-secondary data-[variant=destructive]:[&:is(:hover,:focus-visible):not(:disabled)]:bg-destructive/16";
+  "hover:not-disabled:not-aria-disabled:bg-secondary focus-visible:not-disabled:not-aria-disabled:bg-secondary data-popup-open:not-disabled:not-aria-disabled:bg-secondary data-[variant=destructive]:hover:not-disabled:bg-destructive/16 data-[variant=destructive]:focus-visible:not-disabled:bg-destructive/16";
 
 /** The surface every menu stands on, a list its owner hangs and keys itself included. */
 export const DROPDOWN_MENU_SURFACE =

@@ -381,11 +381,12 @@ export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DIS
  * type, muted until the pointer is over it, its words wrapping rather than
  * running past a narrow pane, an unbroken name among them, pressed as a
  * Mac's list is on the desktop, without the web's pointing hand. Note that
- * the fill answers `:hover` itself, as the row did, rather than Tailwind's
- * `hover:`, which only a fine pointer reaches.
+ * the hover fill is Tailwind's `hover:`, which only a pointer that hovers
+ * reaches, because a touch screen leaves the last tap hovered; a tap is
+ * drawn by `active:` instead, in the pressed fill.
  */
 const SUMMARY_ROW =
-  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-ui-4 pe-ui-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--ui-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.ui-disclosure-turn)]:min-w-0 [&>:not(svg,.ui-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
+  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-ui-4 pe-ui-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--ui-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden hover:bg-fill-strong hover:text-foreground active:bg-fill-pressed [&>:not(svg,.ui-disclosure-turn)]:min-w-0 [&>:not(svg,.ui-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the quiet row's, a transcript's in place of them. */
 const SUMMARY_LOOK = {
@@ -398,7 +399,7 @@ const SUMMARY_LOOK = {
   // A chip at the end of its row, as wide as what it says, on the surface inside a hairline.
   [DISCLOSURE_SUMMARY.CHIP]: cn(
     SUMMARY_ROW,
-    "ms-auto w-fit min-h-0 border border-border bg-surface py-ui-2 ps-ui-6 pe-ui-6 [&:hover]:bg-surface [&>svg]:size-ui-12",
+    "ms-auto w-fit min-h-0 border border-border bg-surface py-ui-2 ps-ui-6 pe-ui-6 hover:bg-surface [&>svg]:size-ui-12",
   ),
   // A card's head: a 32px line in the card's own ink, inset as its body is, its corners the card's clip; a finger's press is 44px tall.
   [DISCLOSURE_SUMMARY.HEAD]: cn(
@@ -429,7 +430,7 @@ function summaryClass(
   return cn(
     "ui-disclosure-summary",
     own,
-    "[&:hover]:bg-transparent",
+    "hover:bg-transparent active:bg-transparent",
     frame.lead && "ps-0",
     frame.actions && "pe-0",
   );

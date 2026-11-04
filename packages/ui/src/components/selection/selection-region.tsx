@@ -21,9 +21,9 @@ export { selectionRun } from "./list-selection.js";
  * layout stands as it was. Where its rows stand in runs side by side, a
  * board's columns, each run wears `selectionRun`, and a ⇧-press reaches only
  * across its own. A region drawing only the rows near the view
- * (`VirtualRows`) is handed every row's key in order (`order`), so ⇧-click,
- * ⇧↑↓, and ⌘A reach the rows it leaves undrawn, and the door that draws one
- * (`bringIn`), so ⇧↑↓ take the focus on to it.
+ * (`VirtualRows`) is handed every row's key in order, run by run (`order`),
+ * so ⇧-click, ⇧↑↓, and ⌘A reach the rows it leaves undrawn, and the door
+ * that draws one (`bringIn`), so ⇧↑↓ take the focus on to it.
  */
 
 /** A region whose `CardPress` rows are chosen together, kept by `selection`'s owner. */
@@ -38,8 +38,8 @@ export function SelectionRegion({
   id: string;
   /** Which rows are chosen and what hears the next set. */
   selection: ListSelection;
-  /** Every choosable row's key, in order, where the region draws only some of them; the rows drawn are read where none is given. */
-  order?: readonly string[] | undefined;
+  /** Every choosable row's key, in order, run by run, where the region draws only some of them: one run where its rows stand in none; the rows drawn are read where none is given. */
+  order?: readonly (readonly string[])[] | undefined;
   /** Brings the row keyed `key` into view, drawing it, and calls `then` once it is drawn; answers whether any row has that key. */
   bringIn?: ((key: string, then: () => void) => boolean) | undefined;
   children: ReactNode;

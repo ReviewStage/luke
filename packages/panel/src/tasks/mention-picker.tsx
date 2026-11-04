@@ -1889,7 +1889,7 @@ export function useMentionPicker({
   // The list says it is reading, never that nothing matches, while a read it draws rows from is out.
   const reading =
     open &&
-    (directory.membersReading ||
+    (directory.reading ||
       (readAgents !== undefined && wantsAgents) ||
       (read === undefined &&
         !pathsFailed &&
@@ -1900,9 +1900,7 @@ export function useMentionPicker({
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
     ? [
-        ...(directory.membersRefused
-          ? [{ read: MENTION_READ.MEMBERS, retry: directory.retry }]
-          : []),
+        ...(directory.refused ? [{ read: MENTION_READ.MEMBERS, retry: directory.retry }] : []),
         ...(readAgents !== undefined && agentsFailed
           ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
           : []),

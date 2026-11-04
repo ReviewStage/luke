@@ -19,6 +19,7 @@ import {
   agentSourceSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
+  type ListedAgent,
   NATIVE_AGENT_RUNTIMES,
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
@@ -546,17 +547,22 @@ function firstStarted(a: AgentLiveRow, b: AgentLiveRow): number {
 
 /**
  * Every agent on a plan, the archived ones among them, each as the plan's
- * own list of agents names it with its status read at `now`, the first
- * started first: what the open plan's tabs draw, and what the desktop's
+ * own list of agents names it with its status read at `now`, and with the
+ * workspace and repository its own row names, the first
+ * started first: what the open plan's tabs and its agents' pages draw, and what the desktop's
  * ledger of agents reads, the archived left out, where it once listed each
  * plan's agents again on a clock.
  */
-export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): readonly AgentSummary[] {
+export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): readonly ListedAgent[] {
   const continued = continuationsOf(rows.agents);
   return rows.agents
     .filter((row) => row.planId !== null)
     .toSorted(firstStarted)
-    .map((row) => agentSummaryOf(row, now, continued));
+    .map((row) => ({
+      ...agentSummaryOf(row, now, continued),
+      workspaceId: row.workspaceId,
+      repository: row.repository,
+    }));
 }
 
 /**

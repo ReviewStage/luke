@@ -11,7 +11,6 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@repo/ui";
 import {
@@ -31,9 +30,11 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
+import { layScrollerOut } from "../testing/scroller.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -108,7 +109,8 @@ beforeEach(() => {
     openWeb: (url) => pages.push(url),
   });
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {
@@ -325,6 +327,24 @@ test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and �
   assert.equal(focusedTask(), "t-33", "← from the first column wraps to the last");
   pressHere("ArrowRight");
   assert.equal(focusedTask(), "t-36");
+});
+
+test("End reaches the last card of a column taller than the window, though it is not drawn until then", async () => {
+  // Note that jsdom lays nothing out, so each card is taken at its estimate and the column's view at the
+  // window's 768px: a column of forty cards draws its first dozen or so, the latest moved first.
+  const chores = Array.from({ length: 40 }, (_, at) =>
+    task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
+  );
+  const board = await mountBoard(chores);
+  const backlog =
+    board.querySelector<HTMLElement>('[data-task-column="backlog"] .ui-scroll-area') ??
+    assert.fail("Backlog scrolls its own cards");
+  layScrollerOut(backlog, 768, 40 * 70);
+  assert.ok(!columns(board)[0]?.[1].includes("ACME-40"), "the last task's card is not drawn");
+
+  act(() => cardOf(board, "t-1").focus());
+  pressHere("End");
+  assert.equal(focusedTask(), "t-40");
 });
 
 test("a refresh that failed after the tasks were read keeps the columns drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {

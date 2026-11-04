@@ -199,7 +199,7 @@ export function automationListCollections(
       }),
     );
     const automations: HeldRows<AutomationRow> = yield* dependencies.pool.stand(AUTOMATION, {
-      redraw: Effect.suspend(() => drawn),
+      redraw: () => Effect.suspend(() => drawn),
       confirmation: () => {
         const wait = dependencies.txWait();
         return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);

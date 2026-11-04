@@ -1313,7 +1313,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   const settled = answeredBy(BUMP, READER, "Retry once", "Run /release first.", 2_000);
   handState(experimentsOn(EXPERIMENT.SKILLS));
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
-  world.pageAgents = new Map([
+  world.tasklessAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
   ]);
   const opened = skillReads();

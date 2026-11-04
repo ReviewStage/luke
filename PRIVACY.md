@@ -902,9 +902,14 @@ token opens only our MCP server, never the account routes the Mac app uses.
 What the app then receives is whatever the server's tools answer it, as the
 Mac app would read the same: your workspaces, and, as tools are added, your
 tasks and their plans, your agents' transcripts, and your inbox threads. The
-app keeps what it receives under its maker's own policy. The client record,
-your consent, and the tokens go when you delete your account; Settings does
-not yet list or revoke them. To hold the registration and sign-in limits, our
+app keeps what it receives under its maker's own policy. Settings ›
+Integrations lists each app you allowed, with its name, where its sign-in
+returns to, when you allowed it, and when it last refreshed its access. Revoke
+deletes the app's tokens and your consent, so it can no longer refresh and
+must ask you again before it connects; an access token it already holds keeps
+working until it expires, fifteen minutes at most. The client record, your
+consent, and the tokens go when you delete your account. To hold the
+registration and sign-in limits, our
 service keeps the network address and the path of each request to the
 sign-in service for the length of its limit's window, a minute at most.
 

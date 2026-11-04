@@ -118,6 +118,8 @@ export const FAILURE_SURFACE = {
   INTEGRATIONS_READ: "integrations.read",
   INTEGRATION_DISCONNECT: "integration.disconnect",
   INTEGRATION_RENAME: "integration.rename",
+  MCP_CLIENTS_READ: "mcp_clients.read",
+  MCP_CLIENT_REVOKE: "mcp_client.revoke",
   MEMBERS_READ: "members.read",
   MEMORIES_READ: "memories.read",
   MEMORY_FORGET: "memory.forget",

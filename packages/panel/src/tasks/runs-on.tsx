@@ -221,16 +221,19 @@ export function newTaskRunsOn(device: MacOffer | undefined): TaskRunsOnRequest {
     : { machine: AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
 }
 
-/** New task's Runs on chip: Cloud or the device picked, dropping the menu. */
+/** New task's Runs on chip: Cloud or the device picked, its glyph alone in a card too narrow for its words, dropping the menu. */
 export function NewTaskRunsOnChip({
   devices,
   device,
   disabled,
+  narrow,
   onChoose,
 }: {
   devices: readonly MacOffer[];
   device: MacOffer | undefined;
   disabled: boolean;
+  /** Whether the card is too narrow for its words, so it draws its glyph alone. */
+  narrow: boolean;
   onChoose: (deviceId: string | undefined) => void;
 }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
@@ -248,6 +251,7 @@ export function NewTaskRunsOnChip({
           : offerStateWords(device, book, machineName(device, devices, thisMac))
       }
       valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
+      iconOnly={narrow}
       rows={runsOnRows(devices, book, thisMac)}
       noMatch={RUNS_ON_WORDS.NO_MATCH}
       align={POPOVER_ALIGN.START}

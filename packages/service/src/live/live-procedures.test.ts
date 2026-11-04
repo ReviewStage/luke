@@ -21,8 +21,15 @@ import {
   startTask,
 } from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
+import {
+  integrationLiveRowsOf,
+  integrationStatusesLiveAnswerSchema,
+} from "@repo/features/integration-live";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
@@ -66,6 +73,7 @@ import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -74,6 +82,10 @@ import {
   postInboxThread,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+} from "../integrations/integration-store.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -82,6 +94,11 @@ import {
   type InstallationFixture,
 } from "../testing/github-app-fake.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  firstIntegrationAccount,
+  integrationConnectOf,
+} from "../testing/integration-connect.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
 
@@ -109,7 +126,14 @@ function readOf(path: string, forUser: string | undefined): URL {
   return url;
 }
 
-/** The procedures answering one request as `bearer`, over the test's database. */
+/** A deployment that offers every provider but Granola, Notion alone taking several accounts, and asks Connect nothing. */
+const INTEGRATION_CONNECT = integrationConnectOf((provider) => ({
+  ...CONNECTOR_ASKED_NOTHING,
+  configured: provider !== INTEGRATION_PROVIDER.GRANOLA,
+  multipleAccounts: provider === INTEGRATION_PROVIDER.NOTION,
+}));
+
+/** The procedures answering one request as `bearer`, over the test's database and `INTEGRATION_CONNECT`. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
@@ -122,6 +146,7 @@ const ask = (options: {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      INTEGRATION_CONNECT,
     );
     const procedures = liveProcedures({
       resolveUserId: (incoming) => {
@@ -492,6 +517,52 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
+      }),
+  );
+
+  it.effect(
+    "an automation's agent's origin is answered polled to a member, with who asked for the run, not found for a stranger, and no row of the statement reaches one",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const workspaceId = yield* openWorkspace(dana);
+        yield* joinWorkspace(workspaceId, teammate);
+        const started = yield* createAgent(dana, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: "Triage the inbox.",
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          automationOrigin: {
+            name: "Daily triage",
+            firing: { kind: AUTOMATION_FIRING.MANUAL, userId: dana },
+            prompt: "Triage the inbox.",
+          },
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const agentId = Option.getOrThrow(started).agent.id;
+        const path = "/api/live/agent-origin";
+
+        const polled = yield* askTask({ bearer: teammate, taskId: agentId, path });
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(agentOriginLiveAnswerSchema)(polled.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(agentOriginOfLive(answer.queries.origin.rows ?? []), {
+          prompt: "Triage the inbox.",
+          runBy: { userId: dana, name: "Test User" },
+        });
+        assert.deepEqual(yield* askTask({ bearer: stranger, taskId: agentId, path }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        const statement = Option.getOrThrow(agentOriginLiveStatements(stranger, agentId)).origin;
+        const sql = yield* SqlClient.SqlClient;
+        assert.deepEqual(yield* sql.unsafe(statement.sql, [...statement.params]), []);
       }),
   );
 
@@ -1236,6 +1307,52 @@ const askChapters = (options: {
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
+
+it.layer(getTestDB())("the account's integrations' live read", (it) => {
+  it.effect(
+    "an account is answered its own rows polled, each where it stands as stored and a sign-in past its window not pending, with the providers it is offered; another account's never, and a read naming another account is signed out",
+    () =>
+      Effect.gen(function* () {
+        const { LINEAR, NOTION, POSTHOG } = INTEGRATION_PROVIDER;
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        // A first sign-in begun sixteen minutes before the read, past its window, never completed; and one begun five minutes before it, within it.
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, POSTHOG), "state-lapsed");
+        yield* TestClock.adjust(Duration.minutes(11));
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, LINEAR), "state-linear");
+        yield* completeIntegrationSignIn(dana, LINEAR, "state-linear", "Acme");
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, NOTION), "state-notion");
+        yield* beginIntegrationSignIn(eli, firstIntegrationAccount(eli, LINEAR), "state-eli");
+        yield* TestClock.adjust(Duration.minutes(5));
+
+        const answered = yield* ask({ bearer: dana, path: "/api/live/integration-statuses" });
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(answered.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          integrationLiveRowsOf(answer.queries.connections.rows ?? [])
+            .map((row) => [row.connection, row.label, row.status])
+            .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+          [
+            [LINEAR, "Acme", INTEGRATION_STATUS.CONNECTED],
+            [NOTION, null, INTEGRATION_STATUS.PENDING],
+            [POSTHOG, null, INTEGRATION_STATUS.DISCONNECTED],
+          ],
+        );
+        assert.ok(!answer.offered.includes(INTEGRATION_PROVIDER.GRANOLA));
+        assert.ok(answer.offered.includes(LINEAR));
+        assert.deepEqual(answer.multiple, [NOTION]);
+        assert.deepEqual(
+          yield* ask({ bearer: dana, forUser: eli, path: "/api/live/integration-statuses" }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+          "a read naming another account is signed out",
+        );
+      }),
+  );
+});
 
 it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   it.effect(

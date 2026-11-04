@@ -12,7 +12,11 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -27,9 +31,11 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handHostReads, handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
+import { layScrollerOut } from "../testing/scroller.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { useInboxWaiting } from "./places-waiting.js";
@@ -100,7 +106,8 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {
@@ -881,22 +888,7 @@ test("End reaches the last task of a List longer than the window, though its row
     task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
   );
   const page = await mountPage(chores);
-  const box = scroller(page);
-  let top = 0;
-  // The scroller shows the window's height of rows, and a write to it is heard as a scroll, as the browser hears one.
-  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 768 });
-  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 40 * 36 });
-  Object.defineProperty(box, "scrollTop", {
-    configurable: true,
-    get: () => top,
-    set: (to: number) => {
-      top = to;
-      box.dispatchEvent(new Event("scroll"));
-    },
-  });
-  box.scrollTo = ((options: ScrollToOptions) => {
-    box.scrollTop = options.top ?? top;
-  }) as typeof box.scrollTo;
+  layScrollerOut(scroller(page), 768, 40 * 36);
   const drawn = () => groups(page).flatMap(([, keys]) => keys);
   assert.ok(!drawn().includes("ACME-40"), "the last task's row is not drawn");
 
@@ -1357,14 +1349,25 @@ test("the Filter's Repository rows each hang the repository's card, its name wit
 });
 
 test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([
-        { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
+  handMembers(() => ({
+    rows: {
+      members: [
+        {
+          userId: "user-maya",
+          name: "Maya Okafor",
+          email: "maya@acme.dev",
+          role: WORKSPACE_ROLE.MEMBER,
+        },
         ...MEMBERS,
-        { userId: "user-charles", name: "Charles Pan", email: "charles@acme.dev", role: "member" },
-      ]),
-  });
+        {
+          userId: "user-charles",
+          name: "Charles Pan",
+          email: "charles@acme.dev",
+          role: WORKSPACE_ROLE.MEMBER,
+        },
+      ],
+    },
+  }));
   const page = await mountPage();
   listWorkspace({ ...ACME, memberCount: 3 });
   await act(async () => undefined);
@@ -1408,11 +1411,11 @@ test("the Filter's Assignee and Creator list the members as every people menu do
 });
 
 test("the Filter's Assignee says the members could not be read, with Retry, in the people's place, and Retry reads them again and leaves the menu standing", async () => {
-  let reads = 0;
+  const reads = handHostReads({ members: { [ACME.id]: { failed: true } } });
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
-      reads += 1;
-      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
+      reads.deliverMembers({ [workspaceId]: { rows: { members: MEMBERS } } });
+      return Promise.resolve();
     },
   });
   const page = await mountPage();

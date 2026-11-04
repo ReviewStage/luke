@@ -42,7 +42,9 @@
 
 @container integration-tools (width < 480px) {
   .integration-tools-split {
-    height: 560px;
+    /* Note that it follows what is seen too, as the wide split does, because
+       a fixed height ran past a small phone's screen and trapped its scroll. */
+    height: min(560px, calc(var(--ui-stage-height) * 0.7));
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 180px minmax(0, 1fr);
   }

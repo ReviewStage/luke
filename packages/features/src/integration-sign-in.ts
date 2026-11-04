@@ -14,8 +14,9 @@ import {
  *
  * Settings › Integrations and the composer's MCP servers popover draw it
  * alike (`packages/panel/src/integration-statuses.ts` holds it). A sign-in happens in the
- * browser, and the window learns how it went only by reading where the
- * provider stands again, so this is what each read says of it. A read that
+ * browser, and the window learns how it went only from where the host's
+ * read of the provider stands as it moves, so this is what each read says
+ * of it. A read that
  * finds it connected ends it. A read that names it among the service's
  * sign-in failures ends it as failed with that reason: canceled on Vercel
  * Connect's own page, or refused with Connect's own line where the service
@@ -23,9 +24,8 @@ import {
  * never came back. A read that finds it no longer pending otherwise ends it
  * as failed with no reason, as a sign-in the browser came back from without
  * a grant. The window also stops waiting on its own: each sign-in has its
- * own deadline, three minutes after the press or a few seconds after the
- * developer comes back to the window, and any read past it that still finds
- * it pending ends it as unfinished. A failed or unfinished sign-in stands
+ * own deadline, three minutes after the press, and the read as it stands
+ * past it, still finding it pending, ends it as unfinished. A failed or unfinished sign-in stands
  * until it is begun again, until a later read says why it failed, or until
  * a later read finds the provider connected after all.
  */
@@ -73,9 +73,6 @@ export type SignIn =
 /** How long a sign-in waits on the browser before the window stops waiting on it. */
 export const SIGN_IN_WAIT = Duration.minutes(3);
 
-/** How long a sign-in still under way is given to land once the developer is back in the window. */
-export const SIGN_IN_GRACE = Duration.seconds(10);
-
 /** What a row offers for a sign-in. */
 export const SIGN_IN_ACTION = {
   CANCEL: "Cancel",
@@ -102,12 +99,6 @@ export function signInBegun(mark: number, at: number, seenPending: boolean): Sig
     deadline: at + Duration.toMillis(SIGN_IN_WAIT),
     seenPending,
   };
-}
-
-/** A sign-in as the developer's return to the window at `at` leaves it: one still waited on has the grace at most. */
-export function signInGraced(signIn: SignIn, at: number): SignIn {
-  if (signIn.kind !== SIGN_IN.WAITING) return signIn;
-  return { ...signIn, deadline: Math.min(signIn.deadline, at + Duration.toMillis(SIGN_IN_GRACE)) };
 }
 
 /**

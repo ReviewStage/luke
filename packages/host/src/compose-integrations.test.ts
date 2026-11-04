@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import type { IntegrationStatusesLiveAnswer } from "@repo/features/integration-live";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
@@ -11,6 +12,8 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { MCP_CLIENTS_CALL_FAILURE } from "@repo/features/mcp-client-view";
+import type { McpClient } from "@repo/features/mcp-client-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -19,19 +22,39 @@ import {
 } from "@repo/gateway";
 import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Effect } from "effect";
-import { composeIntegrations, type IntegrationsClient } from "./compose-integrations.js";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AppIntegrations } from "./app-state.js";
+import {
+  composeIntegrations,
+  type IntegrationsClient,
+  type McpClientsClient,
+} from "./compose-integrations.js";
+import { INTEGRATION_SETTLE_EVERY } from "./integrations-follow.js";
+import { polledLive } from "./testing/polled-live.js";
 import { windowFocus } from "./window-focus.js";
+
+/**
+ * The account's integrations as the host asks the service for them: behind
+ * a closed account gate nothing is asked or opened; a server's tools a
+ * window holds are kept from their last read; and where the integrations
+ * stand, which a window holds, is followed live, the service asked to
+ * settle a sign-in only while a row stands pending. Synthetic accounts and
+ * rows throughout.
+ */
 
 /** The sign-in address the service answers, which must reach the browser and no window. */
 const SIGN_IN = "https://vercel.com/connect/authorize/request-1";
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
 
-// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
-const UNAVAILABLE = Object.fromEntries(
-  INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
-) as Record<IntegrationProvider, IntegrationStatus>;
+/** The account signed in, which the held integrations are followed under. */
+const USER_ID = "user-dana";
+
+/** One row as the live statement delivers it. */
+function row(connection: string, provider: IntegrationProvider, status: IntegrationStatus) {
+  return { id: `id-${connection}`, connection, provider, label: connection, status };
+}
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -43,17 +66,42 @@ interface ServiceScript {
   connectRefused?: boolean;
   /** What a read of a server's tools answers; Linear's tools where none is given. */
   tools?: IntegrationToolsView;
+  /** The outside MCP clients the account allowed, as the service holds them. */
+  clients?: McpClient[];
+  /** Whether a revoke fails before it finishes, as one whose session lapsed does. */
+  revokeFails?: boolean;
 }
 
-/** The service as a script over one account's connection, and what it was asked about. */
+/** The member MCP server's address, as the service answers it. */
+const SERVER_URL = "https://app.test/api/mcp";
+
+/** An outside MCP client a member allowed, as the service lists it. */
+const CLAUDE: McpClient = {
+  clientId: "client-claude",
+  name: "Claude",
+  redirectUris: ["https://claude.test/cb"],
+  allowedAt: 1_000,
+  lastRefreshedAt: null,
+};
+
+/** The service as a script over one account's connection, its live rows, and its outside MCP clients, and what it was asked about. */
 function fakeService(script: ServiceScript) {
   const opened: string[] = [];
   const asked: IntegrationProvider[] = [];
+  let settles = 0;
+  const live = polledLive(["connections"] as const);
+  const beside = { offered: INTEGRATION_PROVIDER_LIST, multiple: [] };
   const client: IntegrationsClient = {
-    statuses: () =>
-      Effect.sync(() => ({
-        integrations: { ...UNAVAILABLE, linear: script.status },
-      })),
+    statusesLive: (_userId, poll, after) =>
+      Effect.map(
+        poll ? live.poll(after) : Effect.succeed(live.first()),
+        (answer): IntegrationStatusesLiveAnswer => ({ ...answer, ...beside }),
+      ),
+    settle: () =>
+      Effect.sync(() => {
+        settles += 1;
+      }),
+    github: () => Effect.succeed({ status: INTEGRATION_STATUS.DISCONNECTED }),
     connect: (provider) =>
       Effect.sync(() => {
         asked.push(provider);
@@ -87,7 +135,17 @@ function fakeService(script: ServiceScript) {
         };
       }),
   };
-  return { client, opened, asked };
+  const mcpClients: McpClientsClient = {
+    list: () =>
+      Effect.sync(() => ({ serverUrl: SERVER_URL, clients: [...(script.clients ?? [])] })),
+    revoke: (clientId) =>
+      Effect.sync(() => {
+        if (script.revokeFails) return { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED };
+        script.clients = (script.clients ?? []).filter((each) => each.clientId !== clientId);
+        return { serverUrl: SERVER_URL, clients: [...script.clients] };
+      }),
+  };
+  return { client, mcpClients, opened, asked, live, settles: () => settles };
 }
 
 function subject(
@@ -97,17 +155,26 @@ function subject(
   return Effect.gen(function* () {
     const service = fakeService(script);
     const focus = yield* windowFocus;
-    // Every telling of the servers' tools the host holds for the windows, whole, in order.
+    // Every telling of the servers' tools, and of where the integrations stand, the host holds for the windows, whole, in order.
     const told: WireValue[] = [];
+    const integrations: AppIntegrations[] = [];
+    // Every telling of the outside MCP clients the host holds for the windows, whole, in order.
+    const clients: WireValue[] = [];
     const composer = yield* composeIntegrations({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED) told.push(payload);
+          // SAFETY: the host tells its own slice as built, in this process.
+          if (kind === GATEWAY_EVENT.INTEGRATIONS_CHANGED)
+            integrations.push(payload as AppIntegrations);
+          if (kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED) clients.push(payload);
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => USER_ID,
       client: service.client,
+      mcpClients: service.mcpClients,
       focus,
       openExternal: (url) =>
         Effect.sync(() => {
@@ -120,12 +187,15 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, opened: service.opened, asked: service.asked, told, focus };
+    return { ...service, call, told, integrations, clients, focus };
   });
 }
 
 /** Every step a held read has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
+
+/** Every step a follow has to take, taken, after the clock moved on by `by`. */
+const after = (by: Duration.Input) => Effect.andThen(TestClock.adjust(by), settled);
 
 it.effect(
   "behind a closed account gate, or on a run that sends nothing, nothing is asked or opened",
@@ -135,7 +205,6 @@ it.effect(
         const script = { status: INTEGRATION_STATUS.CONNECTED };
         const { call, opened, asked } = yield* subject(script, options);
         for (const method of [
-          GATEWAY_METHOD.INTEGRATIONS_STATUS,
           GATEWAY_METHOD.INTEGRATIONS_CONNECT,
           GATEWAY_METHOD.INTEGRATIONS_CANCEL,
           GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
@@ -145,7 +214,8 @@ it.effect(
           });
         }
         yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
-        yield* settled;
+        yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+        yield* after(INTEGRATION_SETTLE_EVERY);
         assert.deepEqual(opened, []);
         assert.deepEqual(asked, []);
         assert.equal(script.status, INTEGRATION_STATUS.CONNECTED);
@@ -177,5 +247,63 @@ it.effect(
       yield* focus.raise;
       yield* settled;
       assert.deepEqual(told.at(-1), { linear: { rows: mended } });
+    }),
+);
+
+it.effect("the held integrations are settled only while a row stands pending", () =>
+  Effect.gen(function* () {
+    const { call, integrations, settles, live } = yield* subject({
+      status: INTEGRATION_STATUS.CONNECTED,
+    });
+    const drawn = () =>
+      integrations.at(-1)?.[USER_ID]?.rows?.integrations[INTEGRATION_PROVIDER.LINEAR];
+    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+    yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+    yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
+    assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
+    assert.equal(settles(), 0, "nothing pending, nothing settled");
+
+    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
+    yield* after(Duration.millis(500));
+    assert.equal(drawn(), INTEGRATION_STATUS.PENDING);
+    yield* after(INTEGRATION_SETTLE_EVERY);
+    yield* after(INTEGRATION_SETTLE_EVERY);
+    assert.equal(settles(), 2, "settled once each interval while the row stands pending");
+
+    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+    yield* after(Duration.millis(500));
+    assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
+    yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
+    assert.equal(settles(), 2, "a sign-in settled is settled no more");
+    yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+  }),
+);
+
+it.effect(
+  "a revoke that lands lays the held clients it answered before it answers, and one that did not finish answers so and leaves the client held",
+  () =>
+    Effect.gen(function* () {
+      const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED, clients: [CLAUDE] };
+      const { call, clients } = yield* subject(script);
+      yield* call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW);
+      yield* settled;
+      const held = (listed: readonly McpClient[]) => ({
+        "user-dana": { rows: { serverUrl: SERVER_URL, clients: listed } },
+      });
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+
+      script.revokeFails = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
+        { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED },
+      );
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+
+      script.revokeFails = false;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
+        { serverUrl: SERVER_URL, clients: [] },
+      );
+      assert.deepEqual(clients.at(-1), held([]));
     }),
 );

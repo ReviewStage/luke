@@ -189,7 +189,7 @@ function TaskAssigneePicker({
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
-  const { members, readerId, membersReading, membersRefused, retry } = useMemberDirectory();
+  const { members, readerId, reading, refused, retry } = useMemberDirectory();
   const person = usePerson(assignee);
   return (
     <Picker
@@ -207,11 +207,11 @@ function TaskAssigneePicker({
       placeholder="Assign to…"
       noMatch={noMatchWords(TERM.MEMBER)}
       note={
-        membersRefused ? (
+        refused ? (
           <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={retry}>
             {readFailedWords(TERM.MEMBER.many)}
           </ErrorState>
-        ) : membersReading ? (
+        ) : reading ? (
           <Spinner delay label="Reading members" />
         ) : undefined
       }

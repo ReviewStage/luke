@@ -20,7 +20,6 @@ import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
   type TaskBrowserTabsFollow,
-  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -28,8 +27,6 @@ import {
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
-  type TasksBrowserTabsAnswer,
-  type TasksBrowserTabsParams,
   type TasksChangeRelationAnswer,
   type TasksChangeRelationParams,
   type TasksCommentActParams,
@@ -116,14 +113,12 @@ export interface TasksProceduresDependencies {
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
     tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
-    tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
     tasksBrowserTabOpen(
       params: TasksBrowserTabOpenParams,
     ): Effect.Effect<TasksBrowserTabOpenAnswer>;
-    /** A task's Browser tabs followed at the host, their changes heard through `onTaskBrowserTabsChanged`. */
+    /** A task's or agent's Browser tabs held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-    onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
     tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
@@ -193,8 +188,8 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<never> = MutableHashMap.empty();
-  /** How many streams stand open of each agent's or task's Browser tabs, by its id. */
-  const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each agent's or task's Browser tabs, by its id, which never collide. */
+  const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
   const openComments: OpenFollows<never, CommentsHeld> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
@@ -455,15 +450,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       if ("issue" in answer) return answer.issue;
       return yield* Effect.fail(errors.REFUSED());
     }),
-    // Likewise an agent's or a task's Browser tabs: a service that did not answer is refused, never read as no tab.
-    [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TABS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const answer = yield* host.tasksBrowserTabs(input);
-        if ("tabs" in answer) return answer;
-        return yield* Effect.fail(errors.REFUSED());
-      },
-    ),
     // A tab opened in an agent's browser answers why none opened as the panel's own answer, for its words.
     [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN].effect(
       function* ({ input, context, errors }) {
@@ -471,26 +457,24 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksBrowserTabOpen(input);
       },
     ),
-    // An agent's or a task's Browser tabs followed for its side panel: two panels on one share one follow at the host.
+    // An agent's or a task's Browser tabs held for its side panel: two panels on one share one follow at the host.
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actPort[
       TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const tabs = followedStream(
+      // Note that nothing is heard down the hold, since the held tabs reach the panel on app state.
+      const hold = followedStream(
         {
           keyOf: (scope: TaskBrowserTabsFollow) => browserTabsPlaceId(scope),
           follow: host.tasksBrowserTabsFollow,
           unfollow: host.tasksBrowserTabsUnfollow,
-          onChanged: host.onTaskBrowserTabsChanged,
-          valueOf: (changed: TaskBrowserTabsFollowed, scope: TaskBrowserTabsFollow) =>
-            browserTabsPlaceId(changed) === browserTabsPlaceId(scope)
-              ? Option.some(changed.view)
-              : Option.none(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
         },
         openBrowserTabs,
         input,
       );
-      return streamed(yield* Stream.toAsyncIterableEffect(tabs));
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
     }),
     [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOR_CODE].effect(function* ({
       input,

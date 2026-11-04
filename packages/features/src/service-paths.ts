@@ -40,6 +40,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_MEMORIES: "/api/account/memories",
   /**
+   * The outside MCP clients the account allowed: read them (GET), or revoke
+   * one by its client id in the query (DELETE). `mcp-client-wire.ts`
+   * declares both.
+   */
+  ACCOUNT_MCP_CLIENTS: "/api/account/mcp-clients",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.
@@ -53,6 +59,8 @@ export const HOSTED_SERVICE_PATH = {
    * The read settles only for a bearer, so a browser's cookie settles here.
    */
   ACCOUNT_INTEGRATIONS_SETTLE: "/api/account/integrations/settle",
+  /** Where GitHub stands for the account as an integration (GET): connected while its GitHub sign-in yields a token. `integration-wire.ts` declares the answer. */
+  ACCOUNT_INTEGRATIONS_GITHUB: "/api/account/integrations/github",
   /**
    * Where Vercel Connect returns the browser from an integration's sign-in
    * (GET), with the sign-in's own state, which names the provider too: the
@@ -91,6 +99,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_PAGES: "/api/live/task-pages",
   /** One coding agent's own pages, on no task, under `?id=`, on the terms a task's are. */
   LIVE_AGENT_PAGES: "/api/live/agent-pages",
+  /** The run of an automation that started one coding agent under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its row inline, none for an agent no run started; or `not-found`. `agent-origin-live.ts` declares the answer. */
+  LIVE_AGENT_ORIGIN: "/api/live/agent-origin",
   /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
   /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `plan-comment-live.ts` declares the answer. */
@@ -123,6 +133,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
+  /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */
+  LIVE_INTEGRATION_STATUSES: "/api/live/integration-statuses",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

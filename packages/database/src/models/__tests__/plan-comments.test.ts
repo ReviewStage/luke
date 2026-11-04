@@ -100,6 +100,13 @@ function threadOf(outcome: PlanCommentOutcome): PlanCommentThread {
   return outcome.answer.thread;
 }
 
+/** An outcome without the transaction its write committed in, which no two runs share. */
+function withoutTxid(outcome: PlanCommentOutcome): PlanCommentOutcome {
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE) return outcome;
+  const { txid: _txid, ...said } = outcome;
+  return said;
+}
+
 /** The words a thread's anchor stands over in the text, or nothing where it stands nowhere. */
 function anchoredIn(text: string, thread: PlanCommentThread | undefined): string | undefined {
   return thread?.anchor === undefined
@@ -179,6 +186,45 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
       assert.equal(again.id, first.id);
       assert.equal(Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId)).length, 1);
     }),
+  );
+
+  it.effect(
+    "a thread is made under the id its client chose, once however often it is sent under it, and an id another task's thread holds is taken",
+    () =>
+      Effect.gen(function* () {
+        const { owner, outsider, taskId } = yield* openSharedTask;
+        const { id: elsewhere } = yield* createTask(outsider, {
+          organizationId: yield* openWorkspace(outsider),
+          name: "Elsewhere",
+        });
+        yield* savePlanText(outsider, elsewhere, PLAN_TEXT);
+        const id = randomUUID();
+
+        const made = yield* startPlanCommentThread(member(owner), taskId, {
+          ...startOn(PLAN_TEXT, "teammate", "Or a guest?"),
+          id,
+        });
+        const again = yield* startPlanCommentThread(member(owner), taskId, {
+          ...startOn(PLAN_TEXT, "teammate", "Or a guest?"),
+          id,
+        });
+        const taken = yield* startPlanCommentThread(member(outsider), elsewhere, {
+          ...startOn(PLAN_TEXT, "teammate", "Mine now"),
+          id,
+        });
+
+        assert.equal(threadOf(made).id, id);
+        assert.ok(made.status === PLAN_COMMENT_OUTCOME.DONE && made.txid !== undefined);
+        assert.equal(threadOf(again).id, id);
+        assert.ok(again.status === PLAN_COMMENT_OUTCOME.DONE && again.txid === undefined);
+        assert.deepEqual(taken, { status: PLAN_COMMENT_OUTCOME.ID_TAKEN });
+        const threads = Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId));
+        assert.deepEqual(
+          threads.map((thread) => thread.entries.map((entry) => entry.words)),
+          [["Or a guest?"]],
+        );
+        assert.deepEqual(Option.getOrThrow(yield* readPlanCommentThreads(outsider, elsewhere)), []);
+      }),
   );
 
   it.effect("an anchor naming no words of the text it was measured in is refused", () =>
@@ -406,16 +452,20 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
       assert.ok(comment);
 
       assert.deepEqual(
-        yield* actOnPlanCommentThread(member(teammate), taskId, first.id, {
-          action: PLAN_COMMENT_ACTION.DELETE,
-          entry: comment.id,
-        }),
+        withoutTxid(
+          yield* actOnPlanCommentThread(member(teammate), taskId, first.id, {
+            action: PLAN_COMMENT_ACTION.DELETE,
+            entry: comment.id,
+          }),
+        ),
         { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: first.id } },
       );
       assert.deepEqual(
-        yield* actOnPlanCommentThread(member(teammate), taskId, second.id, {
-          action: PLAN_COMMENT_ACTION.DELETE_THREAD,
-        }),
+        withoutTxid(
+          yield* actOnPlanCommentThread(member(teammate), taskId, second.id, {
+            action: PLAN_COMMENT_ACTION.DELETE_THREAD,
+          }),
+        ),
         { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: second.id } },
       );
       assert.deepEqual(Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId)), []);
@@ -475,11 +525,11 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
           [theirs.id, agents.id].sort(),
           "the refused delete left the thread standing",
         );
-        assert.deepEqual(yield* deleteWhole(member(teammate), theirs.id), {
+        assert.deepEqual(withoutTxid(yield* deleteWhole(member(teammate), theirs.id)), {
           status: PLAN_COMMENT_OUTCOME.DONE,
           answer: { deleted: theirs.id },
         });
-        assert.deepEqual(yield* deleteWhole(member(owner), agents.id), {
+        assert.deepEqual(withoutTxid(yield* deleteWhole(member(owner), agents.id)), {
           status: PLAN_COMMENT_OUTCOME.DONE,
           answer: { deleted: agents.id },
         });
@@ -612,9 +662,11 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         assert.ok(Option.isNone(yield* readPlanAttachment(owner, taskId, fileId)));
 
         assert.deepEqual(
-          yield* actOnPlanCommentThread(member(teammate), taskId, reply.id, {
-            action: PLAN_COMMENT_ACTION.DELETE_THREAD,
-          }),
+          withoutTxid(
+            yield* actOnPlanCommentThread(member(teammate), taskId, reply.id, {
+              action: PLAN_COMMENT_ACTION.DELETE_THREAD,
+            }),
+          ),
           { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: reply.id } },
         );
         assert.ok(Option.isNone(yield* readPlanCommentFile(owner, taskId, fileId)));

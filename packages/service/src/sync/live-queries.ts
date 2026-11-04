@@ -40,6 +40,7 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
+  integrationConnectionSync,
   invitationSync,
   macCommandSync,
   memberSync,
@@ -67,6 +68,7 @@ import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
@@ -81,6 +83,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -234,6 +237,33 @@ export const macCommandsLive = defineLiveQuery({
     Option.map(macCommandsLiveStatement(userId, macCommandKindsRead(kinds)), (commands) => ({
       commands,
     })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * Every integration row the account holds, where each stands as stored,
+ * woken on the account's integrations topic alone, which a sign-in begun,
+ * completed, or ended, a label, an expiry, and a disconnect each name. Note
+ * that a sign-in counts as under way while it began at `issuedSince` or
+ * later, which its procedure binds from the clock, since a live statement
+ * reads none; one that lapses with no write turns not pending only as the
+ * read is looked at again. Which providers the account is offered, and
+ * which take several accounts, come from the deployment and the account's
+ * email, which no statement reads, so the procedure answers them beside the
+ * rows on every poll.
+ */
+export const integrationStatusesLive = defineLiveQuery({
+  name: LIVE_READ.INTEGRATIONS,
+  params: ["userId", "issuedSince"],
+  reads: [integrationConnectionSync],
+  topics: ({ userId }) => [[TOPIC.ACCOUNT_INTEGRATIONS, userId]],
+  statements: ({ userId, issuedSince }) =>
+    Option.map(
+      integrationStatusesLiveStatement(userId, instantParam(issuedSince)),
+      (connections) => ({
+        connections,
+      }),
+    ),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -525,6 +555,32 @@ export const agentPagesLive = defineLiveQuery({
 });
 
 /**
+ * The run of an automation that started one coding agent, with the name of
+ * the member who asked for it where one did, woken by the agent's own row,
+ * which nothing moves the run on once the agent is made, and by what admits
+ * the reader to it. Note that a runner's own name wakes no origin, as the
+ * history's editor's wakes no history: a rename shows at the hold's end.
+ */
+export const agentOriginLive = defineLiveQuery({
+  name: "agentOrigin",
+  params: ["userId", "agentId"],
+  reads: [
+    agentSync,
+    userSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) => agentOriginLiveStatements(userId, agentId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
  * One task's newest page of plan history, woken by a revision written or
  * moved on, and by the task and its agents, all of which name the task.
  * Note that an editor's own name, read beside each revision, wakes no
@@ -763,6 +819,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   tasksLive,
   workspacesLive,
   macCommandsLive,
+  integrationStatusesLive,
   inboxLive,
   inboxItemsLive,
   taskInboxLive,
@@ -775,6 +832,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskRecordLive,
   taskPagesLive,
   agentPagesLive,
+  agentOriginLive,
   taskHistoryLive,
   taskCommentsLive,
   taskBrowserTabsLive,

@@ -1,7 +1,7 @@
 /**
  * integrations.ts -- the account's integrations (`integration-wire.ts`), as procedures.
  *
- * Where every provider stands, read or settled, and the five calls about one
+ * Where every provider stands, read or settled, where GitHub stands, and the five calls about one
  * account at a provider: a sign-in begun or canceled, a connection ended,
  * the tools its server offers, and its name. Vercel Connect's return to the
  * browser (`/api/account/integrations/connected`) is a redirect, not a
@@ -19,8 +19,8 @@
  * each account and failure in turn.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   INTEGRATION_QUERY,
@@ -116,6 +116,11 @@ export const integrationsContract = {
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE }),
     )
     .output(EffectSchema.flip(integrationStatusesReadSchema)),
+  github: hostedProcedure
+    .meta(
+      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_GITHUB }),
+    )
+    .output(EffectSchema.flip(integrationStatusAnswerSchema)),
   connect: providerPost("connect")
     .input(accountInput)
     .output(EffectSchema.flip(integrationConnectAnswerSchema)),

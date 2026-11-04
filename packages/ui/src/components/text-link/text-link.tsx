@@ -70,15 +70,15 @@ const LINK_BASE =
 const LOOK_CLASS = {
   [TEXT_LINK_LOOK.QUIET]: {
     rest: "text-muted-foreground no-underline",
-    lit: "[&:hover]:text-foreground [&[aria-current]]:text-foreground",
+    lit: "hover:text-foreground [&[aria-current]]:text-foreground",
   },
   [TEXT_LINK_LOOK.UNDERLINED]: {
-    rest: "text-inherit underline decoration-link-underline decoration-1 underline-offset-[0.24em] [&:is(:hover,:focus-visible)]:decoration-current",
+    rest: "text-inherit underline decoration-link-underline decoration-1 underline-offset-[0.24em] hover:decoration-current focus-visible:decoration-current",
     lit: "",
   },
   [TEXT_LINK_LOOK.HEADING]: {
     rest: "text-foreground no-underline",
-    lit: "[&:hover]:text-accent-ink",
+    lit: "hover:text-accent-ink",
   },
 } as const satisfies Record<TextLinkLook, { rest: string; lit: string }>;
 

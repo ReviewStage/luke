@@ -23,9 +23,8 @@ import { cn } from "../cn.js";
  *   a native button by its caller: the pill's padding, radius, and muted ink,
  *   lit in the selected fill under the pointer and while what it opens
  *   stands open, and drawn in the text ink while it is the current page. Its
- *   hover is a plain `:hover`, as the pill's was, rather than Tailwind's
- *   hover-capable one. On the desktop it claims its presses back from the
- *   window's drag strip (`-webkit-app-region: no-drag`), because a bar it
+ *   hover is Tailwind's, which only a pointer that hovers reaches. On the
+ *   desktop it claims its presses back from the window's drag strip (`-webkit-app-region: no-drag`), because a bar it
  *   stands on, the toolbar's heading among them, drags the window, and
  *   Electron hands a drag region's clicks to the window rather than the page.
  * - `BreadcrumbPage` is a crumb of words: it says it is the current page
@@ -69,7 +68,7 @@ function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProp
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]",
+          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]",
           className,
         ),
       },

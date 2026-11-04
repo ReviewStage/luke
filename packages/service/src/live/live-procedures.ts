@@ -83,6 +83,10 @@
  * the newest messages (`cursor`) is answered only those written or amended
  * past it (`liveCursorParts`). Its answers are measured
  * (`transcript-metrics.ts`).
+ * `GET /api/live/agent-origin?id=` answers the run of an automation that
+ * started one coding agent as one statement (`agent-origin-live.ts`), after
+ * the agent is read as the account, so one it does not reach is not found,
+ * woken by the agent's own row (`agentOriginLive`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -110,6 +114,16 @@
  * beside it, which no statement can read. It is woken by a claim, finish,
  * or failure in the agent's workspace (`pullRequestChaptersLive`), so
  * another member's Generate reaches an open view without a Refresh.
+ *
+ * `GET /api/live/integration-statuses` answers every integration row the
+ * account holds, each where it stands as stored, a sign-in counted under
+ * way within its window from the instant the read is answered, with the
+ * providers the deployment offers the account and those that take several
+ * accounts beside them, which no statement can read. It is woken by a
+ * sign-in begun, completed, or ended, a label, an expiry, or a disconnect
+ * (`integrationStatusesLive`), so a sign-in finished in the browser reaches
+ * an open view with no focus. GitHub's standing is
+ * `/api/account/integrations/github`'s, read beside it.
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
@@ -126,6 +140,7 @@ import {
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
@@ -150,10 +165,13 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { accountIntegrationConnect } from "../integrations/integration-connect.js";
+import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentBrowserTabsLive,
   agentInboxLive,
+  agentOriginLive,
   agentPagesLive,
   agentTranscriptLive,
   automationRunsLive,
@@ -161,6 +179,7 @@ import {
   automationWorkspaceRunsLive,
   inboxItemsLive,
   inboxLive,
+  integrationStatusesLive,
   macCommandsLive,
   PLAN_THREADS,
   pullRequestChaptersLive,
@@ -768,6 +787,13 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
+    agentOrigin: signedIn.agentOrigin.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* pathUuid(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(agentOriginLive, { userId: context.userId, agentId }, input);
+    }),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
@@ -924,6 +950,22 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
       return { ...sealed, generatable };
+    }),
+    integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(context.userId));
+      const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
+      const now = yield* Clock.currentTimeMillis;
+      const sealed = yield* liveQueryParts(
+        integrationStatusesLive,
+        { userId: context.userId, issuedSince: String(signInIssuedSince(now)) },
+        input,
+      );
+      return {
+        ...sealed,
+        offered,
+        multiple: offered.filter((provider) => connect[provider].multipleAccounts),
+      };
     }),
   };
 }

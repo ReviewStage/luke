@@ -2,7 +2,7 @@ import { LEGACY_APP_WORD, literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { agentMessageRequestSchema } from "./agent-wire.js";
 import { pageVersionNumberSchema } from "./page-wire.js";
-import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { chosenIdSchema, countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { TASK_BOUNDS } from "./task-wire.js";
 import { filledText } from "./text-schema.js";
 
@@ -236,9 +236,12 @@ const ANCHOR_TEXT = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUN
  * words it is anchored to, and the plan's text the anchor is measured in,
  * which the service carries over to the text as it stands, so a thread
  * started in an editor with words not yet saved lands on the same words. The
- * comment may carry files under its words.
+ * comment may carry files under its words, and the start may name the
+ * thread's id, minted by its client so it draws the thread before the
+ * service answers; without one the service mints it.
  */
 const planCommentPlanStartSchema = EffectSchema.Struct({
+  id: EffectSchema.optionalKey(chosenIdSchema),
   clientKey: planCommentClientKeySchema,
   scope: EffectSchema.Literals([PLAN_COMMENT_SCOPE.WORDS, PLAN_COMMENT_SCOPE.BLOCK]),
   quote: filledText(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
@@ -254,9 +257,11 @@ const planCommentPlanStartSchema = EffectSchema.Struct({
  * they picked in its frame, or that holds the words they selected there,
  * where they did, by its path, its words or those selected, and the heading
  * of the section it stands in. The service takes the page's
- * title as the quote of a thread on the whole page.
+ * title as the quote of a thread on the whole page. It may name the
+ * thread's id as a start on the plan does.
  */
 const planCommentPageStartSchema = EffectSchema.Struct({
+  id: EffectSchema.optionalKey(chosenIdSchema),
   clientKey: planCommentClientKeySchema,
   page: EffectSchema.Struct({ id: wireUuidSchema, version: pageVersionNumberSchema }),
   element: EffectSchema.optionalKey(
@@ -350,14 +355,18 @@ export const PLAN_COMMENT_REFUSAL = {
 
 export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN_COMMENT_REFUSAL];
 
+/** The transaction a write committed in, which a reader following the thread waits for before it takes the write as shown; absent where it wrote nothing, and from a service before it was answered. */
+const writtenTxidSchema = EffectSchema.optionalKey(EffectSchema.String);
+
 /** What a write to a thread answers: the thread as it now stands, that it was deleted, or why nothing was taken. */
 export const planCommentThreadAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     thread: planCommentThreadSchema,
     /** The ones a comment's mentions asked who could not take the thread, an agent whose session is not running say; absent where every one did. */
     unsent: EffectSchema.optionalKey(EffectSchema.Array(planCommentAskedSchema)),
+    txid: writtenTxidSchema,
   }),
-  EffectSchema.Struct({ deleted: wireUuidSchema }),
+  EffectSchema.Struct({ deleted: wireUuidSchema, txid: writtenTxidSchema }),
   EffectSchema.Struct({ refused: EffectSchema.Literals(Object.values(PLAN_COMMENT_REFUSAL)) }),
 ]);
 

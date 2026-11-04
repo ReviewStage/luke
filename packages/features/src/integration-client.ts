@@ -1,30 +1,28 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { type CallCredential, resolvedCredential } from "./account-call.js";
-import type { integrationStatusesReadSchema } from "./contract/integrations.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import type { CallCredential } from "./account-call.js";
+import {
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
+import type { IntegrationStatusesLiveAnswer } from "./integration-live.js";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
   type IntegrationCallFailure,
-  type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
 } from "./integration-view.js";
 import {
   INTEGRATION_ADD_ACCOUNT,
-  INTEGRATION_PROVIDER_LIST,
   INTEGRATION_QUERY,
-  INTEGRATION_STATUS,
-  type IntegrationAccount,
   type IntegrationConnectAnswer,
   type IntegrationProvider,
-  type IntegrationSignInFailure,
-  type IntegrationStatus,
-  integrationAccountSchema,
-  integrationProviderSchema,
-  integrationSignInFailureSchema,
 } from "./integration-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
@@ -48,80 +46,6 @@ export interface HostedIntegrationsClientOptions {
 type Failed = { readonly failure: IntegrationCallFailure };
 
 const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
-
-const STATUSES: ReadonlySet<string> = new Set(Object.values(INTEGRATION_STATUS));
-
-/**
- * Every provider's status from an answer read leniently: a provider the
- * service left out, or named in a status this build does not know, stands
- * unavailable, which is what a service that offers no such connection means.
- * One provider's absence never hides the others.
- */
-function integrationStatusesFromRead(
-  read: typeof integrationStatusesReadSchema.Type,
-): Record<IntegrationProvider, IntegrationStatus> {
-  const statusOf = (provider: IntegrationProvider): IntegrationStatus => {
-    const word = read.integrations[provider];
-    // SAFETY: membership in the set built from INTEGRATION_STATUS's values is what the union names.
-    return word !== undefined && STATUSES.has(word)
-      ? (word as IntegrationStatus)
-      : INTEGRATION_STATUS.UNAVAILABLE;
-  };
-  // SAFETY: the entries are one per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
-  return Object.fromEntries(
-    INTEGRATION_PROVIDER_LIST.map((provider) => [provider, statusOf(provider)]),
-  ) as Record<IntegrationProvider, IntegrationStatus>;
-}
-
-/** The sign-in failures this build reads, each alone, so one it cannot read hides none of the others. */
-function signInFailuresFromRead(
-  read: typeof integrationStatusesReadSchema.Type,
-): readonly IntegrationSignInFailure[] {
-  return (read.signInFailures ?? []).flatMap((failure) =>
-    Option.toArray(Schema.decodeUnknownOption(integrationSignInFailureSchema)(failure)),
-  );
-}
-
-/** The accounts this build reads, each alone, so one naming a provider or a status this build does not know hides none of the others. */
-function accountsFromRead(
-  read: typeof integrationStatusesReadSchema.Type,
-): readonly IntegrationAccount[] {
-  return (read.accounts ?? []).flatMap((account) =>
-    Option.toArray(Schema.decodeUnknownOption(integrationAccountSchema)(account)),
-  );
-}
-
-/** The providers this build knows among those the read says the account may add another account at. */
-function addableFromRead(
-  read: typeof integrationStatusesReadSchema.Type,
-): readonly IntegrationProvider[] {
-  return (read.addable ?? []).flatMap((provider) =>
-    Option.toArray(Schema.decodeUnknownOption(integrationProviderSchema)(provider)),
-  );
-}
-
-/** Where every provider stands, as the window hears it, with its accounts, where it may add one, and the sign-in failures the read found where it found any. */
-function integrationStatusesViewOf(
-  read: typeof integrationStatusesReadSchema.Type,
-): IntegrationStatusesView {
-  const accounts = accountsFromRead(read);
-  const addable = addableFromRead(read);
-  const signInFailures = signInFailuresFromRead(read);
-  return {
-    integrations: integrationStatusesFromRead(read),
-    ...(accounts.length > 0 ? { accounts } : undefined),
-    ...(addable.length > 0 ? { addable } : undefined),
-    ...(signInFailures.length > 0 ? { signInFailures } : undefined),
-  };
-}
-
-/** Whether a read holds a sign-in still under way, at a provider's first account or any other. */
-function holdsPending(read: typeof integrationStatusesReadSchema.Type): boolean {
-  return (
-    Object.values(read.integrations).includes(INTEGRATION_STATUS.PENDING) ||
-    accountsFromRead(read).some((account) => account.status === INTEGRATION_STATUS.PENDING)
-  );
-}
 
 /** Which account a call is about, and on a Connect whether it signs in a new one: none named is the provider's first. */
 export interface IntegrationAccountTarget {
@@ -161,10 +85,8 @@ function answerOf<Answer>(
 /** The window's reads and changes of the account's integrations. */
 export class HostedIntegrationsClient {
   readonly #hosted: HostedClient;
-  readonly #credential: CallCredential;
 
   constructor(options: HostedIntegrationsClientOptions) {
-    this.#credential = options.credential;
     this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
@@ -173,24 +95,45 @@ export class HostedIntegrationsClient {
   }
 
   /**
-   * Where every provider's connection stands. Note that a caller with no
-   * bearer, a browser tab on its cookie session, reads a sign-in under way
-   * as stored, because the service settles none on a GET a cookie carries;
-   * so where that read holds one pending, the settling POST is asked as
-   * well and its answer stands. A bearer's GET has settled already.
+   * Every integration row the account holds, sealed for following over Neon
+   * Realtime, with the providers it is offered and those that take several
+   * accounts, or with `poll` its rows inline, held past `after`; signed out
+   * where the session is not the account `userId` names.
    */
-  statuses(): Effect.Effect<IntegrationStatusesView, never, HttpClient.HttpClient> {
-    const integrations = this.#hosted.integrations;
-    const credential = this.#credential;
-    return Effect.gen(function* () {
-      const stored = yield* answerOf(askHosted(integrations.statuses, undefined));
-      if ("failure" in stored) return stored;
-      if (!holdsPending(stored)) return integrationStatusesViewOf(stored);
-      const { authorization } = yield* resolvedCredential(credential);
-      if (authorization !== undefined) return integrationStatusesViewOf(stored);
-      const settled = yield* answerOf(askHosted(integrations.settle, undefined));
-      return integrationStatusesViewOf("failure" in settled ? stored : settled);
-    });
+  statusesLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    IntegrationStatusesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.catch(
+      askLive(this.#hosted.live.integrationStatuses, { [LIVE_USER_QUERY]: userId }, poll, after),
+      (failed) =>
+        Effect.succeed(
+          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+            ? LIVE_SIGNED_OUT
+            : failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.UNAVAILABLE
+              ? { failure: INTEGRATION_CALL_FAILURE.UNAVAILABLE }
+              : UNANSWERED,
+        ),
+    );
+  }
+
+  /**
+   * Every sign-in under way settled with Connect, for any caller, a
+   * cookie's among them. Note that what it answers is not read, since what
+   * it settles is written to the rows a live read follows.
+   */
+  settle(): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.asVoid(answerOf(askHosted(this.#hosted.integrations.settle, undefined)));
+  }
+
+  /** Where GitHub stands for the account, from its GitHub sign-in. */
+  github(): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
+    return answerOf(askHosted(this.#hosted.integrations.github, undefined));
   }
 
   /** A browser sign-in to one account at a provider begun, or to a new one: the address the browser opens, which the caller opens and never shows, and the account it signs in. */

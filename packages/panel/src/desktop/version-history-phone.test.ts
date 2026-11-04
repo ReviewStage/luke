@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,6 +12,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
@@ -60,10 +60,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-  });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
 });
 
 afterEach(() => {

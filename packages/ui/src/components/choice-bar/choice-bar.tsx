@@ -249,7 +249,7 @@ const OPTION = cn(
   "outline-offset-[var(--ui-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
   "[transition:background-color_var(--ui-duration-hover)_var(--ui-motion-exit),color_var(--ui-duration-hover)_var(--ui-motion-exit)]",
   "cursor-press disabled:cursor-default disabled:opacity-disabled",
-  "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
+  "hover:not-disabled:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );
 
 /**
@@ -271,7 +271,7 @@ const OPTION_LOOK = {
 } as const satisfies Record<ChoiceBarLook, Record<ChoiceBarSize, string>>;
 
 const OPTION_LOOK_STATE = {
-  fill: "rounded-control [&:hover:not(:disabled):not([aria-selected=true],[aria-checked=true])]:bg-muted",
+  fill: "rounded-control hover:not-disabled:not-aria-selected:not-aria-checked:bg-muted",
   segmented: "rounded-choice-segment [[data-ui-profile=web]_&]:text-foreground",
 } as const satisfies Record<ChoiceBarLook, string>;
 

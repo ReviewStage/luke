@@ -20,6 +20,7 @@ import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
+import { McpClientsSections } from "./mcp-clients-section.js";
 import { MemorySection } from "./memory-page.js";
 import { MicrophoneSection } from "./microphone-section.js";
 import { PrivacySection } from "./privacy-section.js";
@@ -130,7 +131,11 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
-        <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
+        <>
+          <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
+          {/* The outside agents the account allowed in, and how to connect one, under the integrations and apart from their search. */}
+          {signedIn ? <McpClientsSections /> : null}
+        </>
       ) : null}
 
       {view !== SETTINGS_VIEW.SKILLS ? null : signedIn ? (
