@@ -44,6 +44,7 @@
     "@repo/gateway": "workspace:*",
     "@repo/runtime": "workspace:*",
     "@repo/settings": "workspace:*",
+    "@repo/sync": "workspace:*",
     "@repo/wire": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",

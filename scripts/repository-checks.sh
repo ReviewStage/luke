@@ -52,7 +52,8 @@ fi
 # doors the host names (its barrel and `/snapshot`), since the account's
 # sign-in lives there: the loopback consent sits behind
 # `@repo/credentials/node`, handed to the host as its `SignInConsent` seam.
-# Every other package a walk reaches is still left unchecked here.
+# It crosses into `@repo/sync` too, since every row the host holds lives in
+# its pool. Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
@@ -81,7 +82,7 @@ node --input-type=module -e '
       ],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@repo\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
-      follows: ["@repo/credentials"],
+      follows: ["@repo/credentials", "@repo/sync"],
     },
   ];
   const repository = process.argv[1];
