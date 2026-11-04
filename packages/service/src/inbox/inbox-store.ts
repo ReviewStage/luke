@@ -350,6 +350,7 @@ const READ = {
   userId: qualified(inboxItemRead, inboxItemRead.userId),
   readThrough: qualified(inboxItemRead, inboxItemRead.readThrough),
   markedUnread: qualified(inboxItemRead, inboxItemRead.markedUnread),
+  snoozedUntil: qualified(inboxItemRead, inboxItemRead.snoozedUntil),
 };
 
 /**
@@ -363,6 +364,21 @@ const READ = {
 function unreadFor(readerId: string): SQL<boolean> {
   const noMarker = sql`${ITEM_UPDATED_AT} > coalesce(${ITEM_READ_THROUGH}, '-infinity'::timestamptz)`;
   return sql<boolean>`coalesce((select ${READ.markedUnread} or ${ITEM_UPDATED_AT} > coalesce(greatest(${READ.readThrough}, ${ITEM_READ_THROUGH}), '-infinity'::timestamptz) from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), ${noMarker})`;
+}
+
+/** Until when the reader snoozed the item, as their marker holds it; null where they did not, or keep no marker. */
+function snoozedUntilFor(readerId: string): SQL<Date | null> {
+  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId})`;
+}
+
+/** `snoozedUntilFor` in epoch milliseconds, as the wire carries an instant; null where the reader did not snooze the item. */
+function snoozedUntilMillisFor(readerId: string): SQL<number | null> {
+  return sql<number | null>`floor(extract(epoch from ${snoozedUntilFor(readerId)}) * 1000)::float8`;
+}
+
+/** Whether the reader's snooze of the item has come due, so marking it read takes the snooze off; a write reads the clock, as no live read may. */
+function snoozeDueFor(readerId: string): SQL<boolean> {
+  return sql<boolean>`coalesce(${snoozedUntilFor(readerId)} <= now(), false)`;
 }
 
 /**
@@ -397,6 +413,7 @@ function inboxColumns(readerId: string) {
   return {
     ...INBOX_ITEM_COLUMNS,
     unread: unreadFor(readerId),
+    snoozedUntil: snoozedUntilMillisFor(readerId),
   };
 }
 
@@ -510,6 +527,7 @@ const InboxRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  snoozedUntil: Schema.NullOr(Schema.Number),
 });
 
 type InboxRow = typeof InboxRowSchema.Type;
@@ -551,6 +569,7 @@ function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
       ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
       unread: row.unread,
+      ...(row.snoozedUntil === null ? undefined : { snoozedUntil: row.snoozedUntil }),
     },
     answerKey: row.answerKey,
   };
@@ -1178,6 +1197,7 @@ const WaitingRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
+  snoozedUntil: Schema.NullOr(Schema.Number),
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -1201,6 +1221,7 @@ const findWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
+          snoozedUntil: snoozedUntilMillisFor(userId),
         })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
@@ -1228,6 +1249,7 @@ const TasklessRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
+  snoozedUntil: Schema.NullOr(Schema.Number),
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
@@ -1254,6 +1276,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
+          snoozedUntil: snoozedUntilMillisFor(userId),
         })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
@@ -1451,7 +1474,11 @@ export function accountInboxLiveStatements(
           unread: unreadFor(userId),
           asking: ASKING,
         },
-        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+        {
+          postedAt: inboxItem.postedAt,
+          updatedAt: inboxItem.updatedAt,
+          snoozedUntil: snoozedUntilFor(userId),
+        },
       ),
     )
     .from(inboxItem)
@@ -1476,7 +1503,11 @@ export function accountInboxLiveStatements(
           unread: unreadFor(userId),
           asking: ASKING,
         },
-        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+        {
+          postedAt: inboxItem.postedAt,
+          updatedAt: inboxItem.updatedAt,
+          snoozedUntil: snoozedUntilFor(userId),
+        },
       ),
     )
     .from(inboxItem)
@@ -1641,6 +1672,7 @@ function itemsLiveStatements(
           {
             postedAt: inboxItem.postedAt,
             updatedAt: inboxItem.updatedAt,
+            snoozedUntil: snoozedUntilFor(readerId),
             // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
             settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
           },
@@ -1750,7 +1782,7 @@ function accountItemsOf(
             channelId: inboxItem.organizationId,
             messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
           },
-          { updatedAt: inboxItem.updatedAt },
+          { updatedAt: inboxItem.updatedAt, snoozedUntil: snoozedUntilFor(userId) },
         ),
       )
       .from(inboxItem)
@@ -1922,18 +1954,25 @@ function excluded(column: AnyPgColumn): SQL {
 
 /**
  * A read written over a marker that stands: read through the later of the
- * two changes and no longer marked unread. Note that it never moves a
- * marker back, because the change a read selected may be older than one a
- * write of the member's own, such as their answer, recorded while the read
- * waited on the marker's lock.
+ * two changes, no longer marked unread, and no longer snoozed. Note that it
+ * never moves a marker back, because the change a read selected may be
+ * older than one a write of the member's own, such as their answer,
+ * recorded while the read waited on the marker's lock.
  */
 const READ_ON = {
   readThrough: sql`greatest(${inboxItemRead.readThrough}, ${excluded(inboxItemRead.readThrough)})`,
   markedUnread: false,
+  snoozedUntil: null,
 };
 
-/** Whether a read moves the marker that stands: it was marked unread, or the read reaches a later change than it had read through. */
-const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)}`;
+/**
+ * Whether a read moves the marker that stands: it was marked unread, the
+ * read reaches a later change than it had read through, or the item came
+ * back from a snooze. Note that a read of a snoozed item that nothing woke
+ * moves nothing, so opening it in the Snoozed list leaves it snoozed, while
+ * a read once a change woke it takes the snooze off with the rest.
+ */
+const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)} or ${inboxItemRead.snoozedUntil} <= now()`;
 
 const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
 
@@ -1999,6 +2038,46 @@ const upsertUnread = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The member's marker on the item read through its last change and snoozed
+ * until the instant, or no longer snoozed where none is named, where the
+ * account reaches the item. Snoozing marks it read, so a change after it
+ * makes it unread, which ends the snooze (`snoozedUntil` on the wire).
+ */
+const upsertSnooze = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    until: Schema.NullOr(Schema.Date),
+  }),
+  Result: MarkedSchema,
+  execute: ({ userId, itemId, until }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxItemRead)
+        .select(
+          db
+            .select({
+              itemId: inboxItem.id,
+              userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
+              readThrough: inboxItem.updatedAt,
+              markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
+              snoozedUntil:
+                sql<Date | null>`${until === null ? null : until.toISOString()}::timestamptz`.as(
+                  inboxItemRead.snoozedUntil.name,
+                ),
+            })
+            .from(inboxItem)
+            .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
+        )
+        .onConflictDoUpdate({
+          target: [inboxItemRead.itemId, inboxItemRead.userId],
+          set: { ...READ_ON, snoozedUntil: excluded(inboxItemRead.snoozedUntil) },
+        })
+        .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
+    ),
+});
+
 /** The item's id, where the account reaches it. */
 const findReachedItem = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
@@ -2033,7 +2112,7 @@ const upsertAllRead = SqlSchema.findAll({
               and(
                 itemVisibleTo(userId),
                 workspaceId === null ? undefined : eq(inboxItem.organizationId, workspaceId),
-                unreadFor(userId),
+                or(unreadFor(userId), snoozeDueFor(userId)),
               ),
             ),
         )
@@ -2730,6 +2809,23 @@ export function markInboxItemUnread(
 ): InboxStoreEffect<InboxMarked | false> {
   const request = { userId, itemId };
   return Effect.flatMap(upsertUnread(request), (marked) => markerFound(marked, request));
+}
+
+/**
+ * The item snoozed for the member until `until`, which marks it read for
+ * them, or its snooze ended where `until` is null; the transaction that
+ * wrote it, or false where the account reaches no such item. Another
+ * member's marker is never touched.
+ */
+export function snoozeInboxItem(
+  userId: string,
+  itemId: string,
+  until: Date | null,
+): InboxStoreEffect<InboxMarked | false> {
+  const request = { userId, itemId };
+  return Effect.flatMap(upsertSnooze({ ...request, until }), (marked) =>
+    markerFound(marked, request),
+  );
 }
 
 /**

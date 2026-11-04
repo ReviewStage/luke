@@ -606,6 +606,11 @@ function fakeService() {
         asked.push(`inbox-unread:${itemId}`);
         return { id: itemId, unread: true, ...committedIn };
       }),
+    snoozeInboxItem: (itemId, until) =>
+      Effect.sync(() => {
+        asked.push(`inbox-snooze:${itemId}:${until ?? "none"}`);
+        return { id: itemId, unread: false, ...committedIn };
+      }),
     markInboxRead: (request) =>
       Effect.sync(() => {
         asked.push(`inbox-read-all:${request?.workspaceId ?? ""}`);

@@ -9,8 +9,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { type ActHandle, firstRefusal, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
 import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
+import { type InboxSnoozer, snoozeWords } from "./inbox-snooze.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
@@ -57,6 +58,8 @@ export interface InboxReadMarks {
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
   /** Marks every item given that is unread as read, each on its own, as a task's are marked, the rest of the workspace's left as they are. */
   readonly onMarkEach: (items: readonly InboxItem[]) => void;
+  /** Snoozes one item until an instant, which marks it read, offering Undo, or ends its snooze where none is given; a refusal is toasted. */
+  readonly onSnooze: InboxSnoozer;
 }
 
 /** What one toast says of read marks given to several items: how many the service took, and how many not. */
@@ -66,6 +69,9 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
   const kept = `${countWords(landed, TERM.INBOX_ITEM)} marked ${state}`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
+
+/** What a toast says of a snooze the service did not take. */
+const SNOOZE_REFUSED = "Could not snooze the item";
 
 /** What a mark the act channel refused hears, as the service not answering. */
 const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
@@ -135,7 +141,31 @@ export function useInboxReadMarks({
     },
     [onMark, workspaceId, refused],
   );
-  return useMemo(() => ({ onMark, onMarkAll, onMarkEach }), [onMark, onMarkAll, onMarkEach]);
+  // Note that a snooze reaches the reader alone and is undone by ending it, so it asks nothing and offers Undo, as the panel's other such acts do.
+  const onSnooze = useCallback(
+    (item: InboxItem, until: number | null): void => {
+      void act(ACT_KIND.AGENTS_INBOX_SNOOZE, { itemId: item.id, until })
+        .catch(unreached)
+        .then((answer) => {
+          if ("failure" in answer) {
+            refused(SNOOZE_REFUSED, answer, { inboxItemId: item.id, workspaceId });
+            return;
+          }
+          if (until !== null) {
+            toast(
+              undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () =>
+                onSnooze(item, null),
+              ),
+            );
+          }
+        });
+    },
+    [act, workspaceId, refused, toast],
+  );
+  return useMemo(
+    () => ({ onMark, onMarkAll, onMarkEach, onSnooze }),
+    [onMark, onMarkAll, onMarkEach, onSnooze],
+  );
 }
 
 /**

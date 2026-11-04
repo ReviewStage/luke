@@ -32,6 +32,7 @@ import {
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
   type AgentInboxScope,
+  type AgentInboxSnoozeParams,
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
@@ -913,6 +914,7 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxSnooze(params: AgentInboxSnoozeParams): Effect.Effect<AgentInboxReadStateView>;
   /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
   agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
@@ -2350,6 +2352,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
           itemId: params.itemId,
           unread: params.unread,
+        }),
+        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
+      ),
+    agentInboxSnooze: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, {
+          itemId: params.itemId,
+          until: params.until,
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),

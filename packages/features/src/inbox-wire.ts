@@ -880,6 +880,14 @@ export const inboxItemSchema = EffectSchema.Struct({
    * which the desktop reads as read.
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * Until when the member reading it snoozed the item, in epoch
+   * milliseconds, which snoozing marked it read for them: it stays out of
+   * their Inbox while it is read and this is ahead, and comes back unread
+   * once this passes. Absent where they did not snooze it, and from a
+   * service before snoozing.
+   */
+  snoozedUntil: EffectSchema.optionalKey(countedNumber),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;
@@ -1128,6 +1136,13 @@ export const inboxReadStateSchema = EffectSchema.Struct({
   unread: EffectSchema.Boolean,
   ...writtenIn,
 });
+
+/** Snoozing an item for the member until an instant, in epoch milliseconds, or ending its snooze where none is named. */
+export const inboxSnoozeRequestSchema = EffectSchema.Struct({
+  until: EffectSchema.NullOr(countedNumber),
+});
+
+export type InboxSnoozeRequest = typeof inboxSnoozeRequestSchema.Type;
 
 /**
  * Marking every item of the reader's Inbox read: every item it lists, in

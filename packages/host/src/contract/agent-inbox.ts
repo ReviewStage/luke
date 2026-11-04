@@ -33,6 +33,7 @@ import {
   agentInboxReadStateParamsSchema,
   agentInboxReadStateViewSchema,
   agentInboxScopeSchema,
+  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
 } from "@repo/features/agent-view";
@@ -81,6 +82,11 @@ export const agentInboxActsContract = {
     "Could not mark the inbox item on this system.",
   )
     .input(exactInput(agentInboxReadStateParamsSchema))
+    .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_SNOOZE]: actProcedure(
+    "Could not snooze the inbox item on this system.",
+  )
+    .input(exactInput(agentInboxSnoozeParamsSchema))
     .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: actProcedure(
     "Could not find the inbox item on this system.",

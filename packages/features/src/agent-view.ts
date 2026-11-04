@@ -70,6 +70,7 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
+import { countedNumber } from "./service-wire.js";
 import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
@@ -693,6 +694,14 @@ export const agentInboxReadStateParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentInboxReadStateParams = typeof agentInboxReadStateParamsSchema.Type;
+
+/** One item snoozed for the account until an instant, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null. */
+export const agentInboxSnoozeParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  until: EffectSchema.NullOr(countedNumber),
+});
+
+export type AgentInboxSnoozeParams = typeof agentInboxSnoozeParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const agentInboxReadStateViewSchema = EffectSchema.Union([inboxReadStateSchema, failed]);

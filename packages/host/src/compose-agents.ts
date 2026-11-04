@@ -19,6 +19,7 @@ import {
   type AgentInboxReadAllParams,
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
+  type AgentInboxSnoozeParams,
   type AgentInboxReadStateView,
   type AgentListAnswer,
   type AgentMessagesAnswerView,
@@ -50,6 +51,7 @@ import {
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
   agentInboxScopeSchema,
+  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMessageParamsSchema,
@@ -304,6 +306,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
+  | "snoozeInboxItem"
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -894,6 +897,12 @@ function composed(
     ({ itemId, unread }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread }),
     ({ itemId, unread }) =>
       asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
+  );
+  /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
+  const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
+    ({ itemId }) => [itemId],
+    ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
+    ({ itemId, until }) => asked(client.snoozeInboxItem(itemId, until)),
   );
   /** Every item the inbox lists marked read. */
   const markedAll = inboxWrite<AgentInboxReadAllParams, AgentInboxReadAllView>(
@@ -1635,6 +1644,16 @@ function composed(
           agentInboxReadStateParamsSchema,
           params,
           "marking an inbox item names the item and whether it reads as unread",
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: declaredMethod(
+      dependencies.pool,
+      snoozed,
+      (params: WireRecord) =>
+        readParams(
+          agentInboxSnoozeParamsSchema,
+          params,
+          "snoozing an inbox item names the item and until when, or none to end its snooze",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>

@@ -1,4 +1,5 @@
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxWaitingItem } from "@repo/host/app-state";
+import { useMinute } from "@repo/ui";
 import { useMemo } from "react";
 import { listedIn, waitsOnReader } from "../tasks/inbox-model.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -45,12 +46,13 @@ function toDoByTask(
  * each standing task's open items main lists as theirs, and every open item
  * from an agent with no task of that workspace (`listedIn`) that waits on
  * them (`waitsOnReader`), a question or a notice alike, as Needs you lists
- * them. Note that a notice counts until it is opened, because opening it
+ * them, less those the developer snoozed until after `now`, which Needs you
+ * leaves out until they come back. Note that a notice counts until it is opened, because opening it
  * settles it as Got it does; a teammate's thread and a settled one never
  * count, and one the reader settles leaves main's read the moment it is
  * asked (`@repo/host`'s `account-inbox-follow.ts`).
  */
-function waitingThreads(tasks: TasksControl): readonly AppInboxWaitingItem[] {
+function waitingThreads(tasks: TasksControl, now: number): readonly AppInboxWaitingItem[] {
   // Note that only the standing tasks are counted, as To do lists them, so a task not listed yet counts nowhere.
   const standing = new Set(tasks.listed.tasks.map((task) => task.id));
   const ofTasks = tasks.inbox
@@ -59,7 +61,9 @@ function waitingThreads(tasks: TasksControl): readonly AppInboxWaitingItem[] {
   const taskless = tasks.inboxTaskless.filter(
     (each) => waitsOnReader(each, tasks.me) && listedIn(each, tasks.workspace?.id),
   );
-  return [...ofTasks, ...taskless];
+  return [...ofTasks, ...taskless].filter(
+    (item) => item.snoozedUntil === undefined || item.snoozedUntil <= now,
+  );
 }
 
 /** How many questions wait on the developer on each task, by task, as main counts them; a task where none waits is left out, and every one while signed out. */
@@ -78,5 +82,6 @@ export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number
  * Inbox, and waits on the teammate. None while signed out.
  */
 export function useInboxWaiting(tasks: TasksControl): number {
-  return tasks.signedIn ? waitingThreads(tasks).length : 0;
+  const now = useMinute();
+  return tasks.signedIn ? waitingThreads(tasks, now).length : 0;
 }

@@ -1,6 +1,7 @@
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@repo/host/app-state";
+import { useMinute } from "@repo/ui";
 import { searchTokens } from "@repo/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -15,6 +16,7 @@ import {
   type InboxGroup,
   type InboxListed,
   inboxAgentOf,
+  inboxAtNow,
   inboxCounts,
   listedItems,
   taskGroups,
@@ -304,9 +306,12 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
       }),
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
+  // Note that a snooze is weighed on the window's clock, since no read of the service's may read one, so an item comes back within the minute its snooze passes.
+  const now = useMinute();
   const standing = useMemo(
-    () => (narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask)),
-    [everyItem, narrowedTask],
+    () =>
+      inboxAtNow(narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask), now),
+    [everyItem, narrowedTask, now],
   );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
