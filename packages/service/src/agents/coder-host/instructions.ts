@@ -613,6 +613,10 @@ const DEVICE_VM_WORDS = `You run in a Linux virtual machine of your own on one o
 const DEVICE_DIRECT_WORDS =
   "You run straight on one of the developer's own machines, as its own user and with full access to it, in a folder of your own: its installed tools, running services, and files are all within your reach, the folders of its other agents among them, so work in your own folder and leave what is not yours alone.";
 
+/** What a local agent run straight on its device is told of its checkout, a worktree of the device's one clone of the repository, whose branches its other agents' worktrees may hold. */
+const DEVICE_WORKTREE_WORDS =
+  "Your checkout is a git worktree of the machine's one clone of the repository, which its other agents' worktrees share: where git says a branch is already checked out in another worktree, work on it detached with `git switch --detach origin/<branch>`, and push with `git push origin HEAD:<branch>`.";
+
 /** Where a local agent on its device runs on the app's sign-ins, in a VM or straight on the device, in words; none for one on the developer's own logins or in the cloud. */
 function deviceWords(machine: CoderMachine): string | undefined {
   if (machine.isolation === DEVICE_ISOLATION.SANDBOX) return DEVICE_VM_WORDS;
@@ -624,7 +628,9 @@ function deviceWords(machine: CoderMachine): string | undefined {
 function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
   const device = deviceWords(machine);
   if (device !== undefined) {
-    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${device}`;
+    const worktree =
+      machine.isolation === DEVICE_ISOLATION.DIRECT ? ` ${DEVICE_WORKTREE_WORDS}` : "";
+    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${device}${worktree}`;
   }
   return machine.local
     ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
