@@ -12,6 +12,7 @@ import { queryBuilder } from "@repo/database/core/query";
 import { agentTable } from "@repo/database/schemas/agent";
 import { planRevision } from "@repo/database/schemas/plan-revision";
 import { task } from "@repo/database/schemas/task";
+import { MEANINGFUL_ACTION, type MeaningfulAction } from "@repo/features/admin-overview-vocabulary";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { type AnyColumn, and, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
@@ -31,9 +32,14 @@ export function atOf(column: AnyColumn | SQL): SQL.Aliased<Date> {
   return sql<Date>`${column}`.as("at");
 }
 
+/** What a union's row was, under the one name every member selects it as. */
+function kindOf(kind: MeaningfulAction): SQL.Aliased<MeaningfulAction> {
+  return sql<MeaningfulAction>`${kind}::text`.as("kind");
+}
+
 /**
  * Every meaningful action since `since`, one row per action: the account that
- * took it and when. This is the one definition of "active" on the admin
+ * took it, when, and what it was. This is the one definition of "active" on the admin
  * dashboard: the Overview's active-developer tiles, feature reach's base, the
  * most active accounts, and the meaningful retention grid, and the roster's
  * active days and ranking, all count through it. A plan revision counts only
@@ -43,11 +49,19 @@ export function atOf(column: AnyColumn | SQL): SQL.Aliased<Date> {
 export function meaningfulActions(since: Date) {
   return unionAll(
     queryBuilder
-      .select({ userId: userIdOf(task.userId), at: atOf(task.createdAt) })
+      .select({
+        userId: userIdOf(task.userId),
+        at: atOf(task.createdAt),
+        kind: kindOf(MEANINGFUL_ACTION.TASKS_CREATED),
+      })
       .from(task)
       .where(gte(task.createdAt, since)),
     queryBuilder
-      .select({ userId: userIdOf(planRevision.userId), at: atOf(planRevision.at) })
+      .select({
+        userId: userIdOf(planRevision.userId),
+        at: atOf(planRevision.at),
+        kind: kindOf(MEANINGFUL_ACTION.PLAN_REVISIONS),
+      })
       .from(planRevision)
       .where(
         and(
@@ -57,7 +71,11 @@ export function meaningfulActions(since: Date) {
         ),
       ),
     queryBuilder
-      .select({ userId: userIdOf(agentTable.userId), at: atOf(agentTable.createdAt) })
+      .select({
+        userId: userIdOf(agentTable.userId),
+        at: atOf(agentTable.createdAt),
+        kind: kindOf(MEANINGFUL_ACTION.AGENTS_STARTED),
+      })
       .from(agentTable)
       .where(gte(agentTable.createdAt, since)),
   ).as("meaningful_action");

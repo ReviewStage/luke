@@ -20,6 +20,7 @@ import type {
   ActivityFeature,
   AgentOrigin,
   FunnelStep,
+  MeaningfulAction,
   ReachFeature,
 } from "./admin-overview-vocabulary.js";
 import type { ADMIN_ATTENTION_KIND, AdminWorkspacesKind } from "./admin-wire.js";
@@ -228,6 +229,41 @@ export interface AdminUserAccount {
   signInMethods: string[];
 }
 
+/** One UTC day of an account's meaningful actions: its key, and each kind's count that day. */
+export type AdminActionDay = { day: string } & Record<MeaningfulAction, number>;
+
+/** One UTC day's count of something, as a calendar draws it. */
+export interface AdminDailyCount {
+  day: string;
+  count: number;
+}
+
+/**
+ * The account's meaningful actions (`admin-activity-queries.ts`), read once
+ * over the calendar's trailing year and folded: every figure here comes from
+ * that one series, so a tile can never disagree with the bars or the grid.
+ */
+export interface AdminUserActions {
+  /** The window's UTC days, oldest first, zero-filled, each kind counted. */
+  daily: AdminActionDay[];
+  /** The calendar's zero-filled trailing year, `calendarDayKeys`'s span, each day's kinds summed. */
+  calendarDaily: AdminDailyCount[];
+  /** Every kind summed, over the trend's two runs. */
+  actionsTrend: AdminTrend;
+  activeDaysWindow: number;
+  /** Active days in the trailing run beside the run before it. */
+  activeDaysTrend: AdminTrend;
+  /**
+   * Consecutive active days ending today or yesterday, read off the trailing
+   * year, so a run is capped where it reaches the year's first day and the
+   * page words it as "or longer".
+   */
+  currentStreakDays: number;
+  /** The earliest and the latest active day inside the trailing year; null where it holds none. */
+  firstActiveDay: string | null;
+  lastActiveDay: string | null;
+}
+
 /** The account's whole hosted-tier history, folded to counts and two dates. */
 export interface AdminUserAllTime {
   activeDays: number;
@@ -240,6 +276,9 @@ export interface AdminUserDetail {
   generatedAt: number;
   windowDays: number;
   account: AdminUserAccount;
+  /** What the account did, by its meaningful actions: the page's live activity. */
+  actions: AdminUserActions;
+  /** The retired hosted tier's figures, which only dictation still writes. */
   activity: {
     daily: AdminDailyUsage[];
     /**
@@ -581,7 +620,7 @@ export type AdminAccountFailure =
   | { kind: typeof ADMIN_FAILURE_KIND.AUTOMATION; at: number; reason: AutomationRunReason | null };
 
 export interface AdminAccountSupport {
-  /** When the account last touched the service, as `lastSeenInstant` folds it; null where nothing says. */
+  /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
   lastSeenAt: number | null;
   totals: {
     tasksCreated: number;
