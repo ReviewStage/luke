@@ -654,11 +654,11 @@ function runStartWords(automation: Automation, firedAt: Date): string {
 
 /**
  * The task a run's agent starts on, recorded on the run: one made for the
- * run alone, named for the automation and when the run fired, its plan the
- * run's prompt with what fired it; or, where the agent it starts takes every
- * later run (`standing`), the automation's standing task, named for the
- * automation alone, its plan the automation's prompt. Either is assigned to
- * the automation's owner, in its repository, and in progress. Note that the
+ * run alone, named for the automation and when the run fired; or, where the
+ * agent it starts takes every later run (`standing`), the automation's
+ * standing task, named for the automation alone. Either is assigned to the
+ * automation's owner, in its repository, and in progress, its plan blank,
+ * since the run's prompt reaches its agent as its first message. Note that the
  * task is made under an id drawn from the run's, because a run acted on
  * again must find the task it made rather than make a second, and that a
  * run whose owner left the workspace meanwhile makes none.
@@ -667,7 +667,6 @@ const runTaskOf = Effect.fnUntraced(function* (
   automation: Automation,
   run: ActedRun,
   repository: string,
-  prompt: string,
   standing: boolean,
 ) {
   const { userId } = automation;
@@ -683,7 +682,7 @@ const runTaskOf = Effect.fnUntraced(function* (
       githubAccess: GITHUB_ACCESS.APP,
       status: TASK_STATUS.IN_PROGRESS,
       assigneeId: userId,
-      text: standing ? automation.action.prompt : prompt,
+      text: "",
     }).pipe(
       Effect.as(true),
       Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(false)),
@@ -722,7 +721,7 @@ const startRunAgent = Effect.fnUntraced(function* (
   const taskId =
     repository === null
       ? Option.none<string>()
-      : yield* runTaskOf(automation, run, repository, handed.prompt, Option.isSome(adopting));
+      : yield* runTaskOf(automation, run, repository, Option.isSome(adopting));
   if (repository !== null && Option.isNone(taskId)) {
     return yield* failedRun(run, AUTOMATION_RUN_REASON.CREATOR_LEFT);
   }
