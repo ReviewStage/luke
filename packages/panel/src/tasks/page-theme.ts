@@ -21,13 +21,13 @@ import { type RefObject, useEffect } from "react";
  * answer goes to that frame alone.
  *
  * A page is told to keep no side room of its own, since in words it stands
- * at the words' edges. In a room of its own, its tab or full screen, the
+ * at the words' edges. In a room of its own, its tab in the side panel, the
  * window keeps that room for it instead: the inset the window's own pages
  * keep, and their narrow inset in a frame under 480px, so a page reads in
- * its tab, full screen, or on a phone as the window's pages do.
+ * its tab, wide or on a phone, as the window's pages do.
  */
 
-/** Where a page is drawn: in the words that tell of it, or in a room of its own, its tab or full screen. */
+/** Where a page is drawn: in the words that tell of it, or in a room of its own, its tab. */
 export const PAGE_ROOM = {
   WORDS: "words",
   OWN: "own",

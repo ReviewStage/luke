@@ -107,7 +107,7 @@ const THEME_VARIABLES_SAID = Object.values(PAGE_THEME_VARIABLE)
  */
 const PAGE_LAYOUT_WORDS =
   "It is drawn in your transcript at its whole height, on the transcript's own ground, and the " +
-  "developer can open it full screen or in the side panel: leave `html`, `body`, and the " +
+  "developer can open it in the side panel: leave `html`, `body`, and the " +
   "outermost element with no background color, and add no outer card, border, banner title, or " +
   "side padding of your own; a box that needs a ground of its own gets one inside. Its body " +
   "stands at reading width, centered, by itself; give an element that needs the room, such as " +

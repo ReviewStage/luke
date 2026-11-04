@@ -19,7 +19,7 @@ import { Schema as EffectSchema } from "effect";
  * in the scheme the window draws in, rather than on the browser's light
  * canvas. Drawn in words, a transcript's or a thread's, the page stands at
  * the words' own edges, so it is told to keep no side room of its own; drawn
- * in a room of its own, its tab or full screen, the window hands it an inset
+ * in a room of its own, its tab, the window hands it an inset
  * as well, which the script keeps around the page as its root's padding, so
  * its words stand off the room's edges as the window's own pages do: the
  * window's page inset, and its narrow inset in a frame under 480px wide.
