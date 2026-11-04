@@ -81,6 +81,7 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { entityPool } from "@repo/sync";
 import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
@@ -1125,6 +1126,7 @@ function subject(
       accountId: options.accountId ?? (() => "user-dana"),
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       focus: yield* windowFocus,
+      pool: yield* entityPool(),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
