@@ -55,6 +55,8 @@ const TOKEN_REPOSITORIES: EntityKind<TokenRepositoriesRow, TokenRepositoriesChan
 export interface TokenRepositorySet extends TasksWorkspaceTokenRepositorySetParams {
   readonly addedBy: string;
   readonly addedAt: number;
+  /** The session it was asked in (`TokenRepositoryWrites.session`), which it is drawn and sent for alone. */
+  readonly session: number;
 }
 
 /** What an addition's or a removal's service answered: the caller's answer and the list as it then stands, or the caller's answer for a refusal. */
@@ -68,7 +70,7 @@ export interface TokenRepositoryWritesDependencies {
   readonly fetched: () => AppTokenRepositories;
   /** Tells the lists again, as `drawn` draws them now. */
   readonly tell: Effect.Effect<void>;
-  /** Lays the list the service answered as the workspace's, as the fetch's own answer would. */
+  /** Lays the list the service answered as the workspace's, as the fetch's own answer would, with whatever else the answer moves; only for the session the write was asked in. */
   readonly answered: (
     workspaceId: string,
     repositories: readonly WorkspaceTokenRepository[],
@@ -79,11 +81,18 @@ export interface TokenRepositoryWritesDependencies {
 export interface TokenRepositoryWrites {
   /** `lists` with every change standing drawn over its workspace's list. */
   readonly drawn: (lists: AppTokenRepositories) => AppTokenRepositories;
-  /** An addition or a removal sent as `send` asks, drawn on its workspace's list at once, standing until the service answers its list. */
+  /**
+   * An addition or a removal sent as `send` asks, drawn on its workspace's
+   * list at once, standing until the service answers its list; one whose
+   * session ended before it was sent is refused as `unsent`, never sent.
+   */
   readonly set: <Answer>(
     send: (set: TokenRepositorySet) => Effect.Effect<TokenRepositorySetWritten<Answer>>,
+    unsent: Answer,
   ) => WriteDeclaration<TokenRepositoriesRow, TokenRepositoriesChange, TokenRepositorySet, Answer>;
-  /** Ends the session: every write asked in it draws and lays nothing from now on. */
+  /** The session writes are asked in now. */
+  readonly session: () => number;
+  /** Ends the session: every write asked in it draws, sends, and lays nothing from now on. */
   readonly letGo: Effect.Effect<void>;
 }
 
@@ -136,6 +145,7 @@ export function tokenRepositoryWrites(
     };
     const set = <Answer>(
       send: (set: TokenRepositorySet) => Effect.Effect<TokenRepositorySetWritten<Answer>>,
+      unsent: Answer,
     ): WriteDeclaration<
       TokenRepositoriesRow,
       TokenRepositoriesChange,
@@ -145,30 +155,32 @@ export function tokenRepositoryWrites(
       kind: TOKEN_REPOSITORIES,
       keys: ({ workspaceId }) => [workspaceId],
       change: (input) => {
-        const asked = session;
         const listed = listedAfter(input);
         return {
           workspaceId: input.workspaceId,
-          listed: (repositories) => (session === asked ? listed(repositories) : repositories),
+          listed: (repositories) =>
+            session === input.session ? listed(repositories) : repositories,
         };
       },
       send: (input) =>
-        Effect.suspend(() => {
-          const asked = session;
-          return Effect.flatMap(
-            send(input),
-            (sent): Effect.Effect<Written<TokenRepositoriesChange, Answer> | Refused<Answer>> => {
-              if ("refused" in sent) return Effect.succeed(sent);
-              const kept = { answer: sent.answer, txid: undefined };
-              if (session !== asked) return Effect.succeed(kept);
-              return Effect.as(dependencies.answered(input.workspaceId, sent.repositories), kept);
-            },
-          );
-        }),
+        Effect.suspend(
+          (): Effect.Effect<Written<TokenRepositoriesChange, Answer> | Refused<Answer>> => {
+            if (session !== input.session) return Effect.succeed({ refused: unsent });
+            return Effect.flatMap(
+              send(input),
+              (sent): Effect.Effect<Written<TokenRepositoriesChange, Answer> | Refused<Answer>> => {
+                if ("refused" in sent) return Effect.succeed(sent);
+                const kept = { answer: sent.answer, txid: undefined };
+                if (session !== input.session) return Effect.succeed(kept);
+                return Effect.as(dependencies.answered(input.workspaceId, sent.repositories), kept);
+              },
+            );
+          },
+        ),
     });
     const letGo = Effect.sync(() => {
       session += 1;
     });
-    return { drawn, set, letGo };
+    return { drawn, set, session: () => session, letGo };
   });
 }

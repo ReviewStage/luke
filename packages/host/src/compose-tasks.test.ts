@@ -2964,6 +2964,11 @@ it.effect("a rename still being written when the account signs out is drawn for 
       call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
     );
     yield* settled;
+    // A second rename waits behind the first, so it would be sent only after the sign-out.
+    const queued = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Research" }),
+    );
+    yield* settled;
     yield* tasks.reset;
     // A teammate names it back before the next sign-in reads it, so the rename's answer is the only "Acme Labs" left.
     service.memberships = [PERSONAL, ACME];
@@ -2971,9 +2976,15 @@ it.effect("a rename still being written when the account signs out is drawn for 
     yield* settled;
     yield* Deferred.succeed(answered, undefined);
     yield* Fiber.join(renaming);
+    const unsent = yield* Fiber.join(queued);
     yield* settled;
 
+    assert.deepEqual(unsent, { failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+    assert.deepEqual(
+      service.reads.filter((read) => read.startsWith("rename:")),
+      [`rename:${ACME.id}:Acme Labs`],
+    );
   }),
 );
 
