@@ -121,10 +121,11 @@ const STARTED_BY_AGENT = isNotNull(agentTable.startedByAgentId);
 
 /**
  * The agents started since `since`, and before `until` where given, that
- * `filters` keep, tagged `count`: one filtered arm of the same scan per figure. The origins' filters spell
- * `AGENT_ORIGIN`'s precedence, each leaving out the origins before it, so no
- * agent is counted under two; by hand is what they leave of every agent, which
- * the fold takes rather than a fourth arm restating it.
+ * `filters` keep, tagged `count`: one filtered arm of the same scan per
+ * figure. The origins' filters spell `AGENT_ORIGIN`'s precedence, each
+ * leaving out the origins before it, so no agent is counted under two; by
+ * hand is what they leave of every agent, which the fold takes rather than a
+ * fourth arm restating it.
  */
 function agentsStartedRows(
   count: DailyCount,
@@ -177,7 +178,12 @@ export function dailyCountRows(since: Date, until?: Date) {
       not(STARTED_BY_AUTOMATION),
       not(STARTED_FROM_SLACK),
     ),
-    agentsStartedRows(DAILY_COUNT.PILOTS_STARTED, since, until, eq(agentTable.kind, AGENT_KIND.PILOT)),
+    agentsStartedRows(
+      DAILY_COUNT.PILOTS_STARTED,
+      since,
+      until,
+      eq(agentTable.kind, AGENT_KIND.PILOT),
+    ),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PRS_MERGED),
