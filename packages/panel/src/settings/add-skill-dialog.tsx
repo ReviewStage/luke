@@ -607,6 +607,7 @@ function TextSkill({
             <TextField
               field={field}
               value={fill.name}
+              autoCorrect={false}
               spellCheck={false}
               readOnly={declares.name}
               disabled={disabled}

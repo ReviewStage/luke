@@ -309,6 +309,10 @@ export function CommandDialog({
               }}
               className={FIELD}
               placeholder={placeholder}
+              autoCorrect="off"
+              autoCapitalize="off"
+              enterKeyHint="search"
+              spellCheck={false}
               value={words}
               onValueChange={changeQuery}
             />

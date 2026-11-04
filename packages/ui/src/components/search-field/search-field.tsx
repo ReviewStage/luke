@@ -204,6 +204,9 @@ export function SearchField({
         aria-keyshortcuts={keyShortcuts}
         placeholder={placeholder}
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        enterKeyHint="search"
         spellCheck={false}
         value={value}
         onChange={(event) => onChange(event.target.value)}
