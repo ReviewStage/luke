@@ -199,6 +199,7 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * keys, by the account, which the window holds while signed in and
  * Settings › Agents draws; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
+ * memories, which Settings › Memory holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
  * page's tab each hold; one task's plan history, which its version history
@@ -245,6 +246,12 @@ const HOST_READS = {
     path: (server: IntegrationServer) => [server.connection ?? server.provider],
     hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
     retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
+  }),
+  [LIVE_READ.MEMORIES]: hostRead(LIVE_READ.MEMORIES, {
+    slice: APP_SLICE.MEMORIES,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
   }),
   [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
     slice: APP_SLICE.PAGES,

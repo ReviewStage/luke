@@ -37,7 +37,12 @@ export const WORKSPACE_MEMORY = {
 } as const;
 
 export type WorkspaceMemoryAnswer =
-  | { readonly kind: typeof WORKSPACE_MEMORY.READ; readonly memories: readonly MemorySummary[] }
+  | {
+      readonly kind: typeof WORKSPACE_MEMORY.READ;
+      readonly memories: readonly MemorySummary[];
+      /** The transaction a forget deleted its memory in; none for a read, or a forget of one already gone. */
+      readonly txid?: string;
+    }
   | {
       readonly kind: typeof WORKSPACE_MEMORY.NOT_MEMBER | typeof WORKSPACE_MEMORY.NOT_PERMITTED;
     };
@@ -104,8 +109,9 @@ export function readWorkspaceMemories(
 
 /**
  * Forgets one of the workspace's memories, where the member may, and answers
- * the memories as they then stand. A memory already gone answers the same as
- * one forgotten now, so a forget retried after it landed answers the same.
+ * the memories as they then stand, with the transaction it was deleted in. A
+ * memory already gone answers the same as one forgotten now, with no
+ * transaction, so a forget retried after it landed answers the same.
  */
 export function forgetWorkspaceMemory(
   userId: string,
@@ -117,9 +123,13 @@ export function forgetWorkspaceMemory(
     if (Option.isNone(role)) return { kind: WORKSPACE_MEMORY.NOT_MEMBER } as const;
     const manages = MANAGING_ROLES.has(role.value);
     const forgot = yield* forgetMemory(workspaceId, id, { userId, manages });
-    if (forgot === MEMORY_FORGET.NOT_PERMITTED)
+    if (forgot.outcome === MEMORY_FORGET.NOT_PERMITTED)
       return { kind: WORKSPACE_MEMORY.NOT_PERMITTED } as const;
     const memories = yield* summariesFor(userId, manages, yield* listMemories(workspaceId));
-    return { kind: WORKSPACE_MEMORY.READ, memories } as const;
+    return {
+      kind: WORKSPACE_MEMORY.READ,
+      memories,
+      ...(forgot.txid === undefined ? undefined : { txid: forgot.txid }),
+    } as const;
   });
 }

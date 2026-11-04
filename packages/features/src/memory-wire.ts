@@ -54,9 +54,15 @@ const memorySummarySchema = EffectSchema.Struct({
 
 export type MemorySummary = typeof memorySummarySchema.Type;
 
-/** The workspace's memories (GET, and every DELETE's answer), most recently updated first. */
+/**
+ * The workspace's memories (GET, and every DELETE's answer), most recently
+ * updated first; a DELETE that deleted the memory carries the transaction it
+ * was deleted in, which a reader following the memories waits for, and one
+ * of a memory already gone carries none.
+ */
 export const memoriesAnswerSchema = EffectSchema.Struct({
   memories: EffectSchema.Array(memorySummarySchema),
+  txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type MemoriesAnswer = typeof memoriesAnswerSchema.Type;

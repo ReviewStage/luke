@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
+import { rememberMemory } from "@repo/database/models/memory-store";
 import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
@@ -53,6 +54,11 @@ import {
   taskRecordLiveAnswerSchema,
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
+import {
+  memoriesOfLiveRows,
+  workspaceMemoriesLiveAnswerSchema,
+  workspaceMemoriesLiveRowsSchema,
+} from "@repo/features/memory-live";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
 import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
@@ -1221,6 +1227,74 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
         assert.equal(
           (yield* ask({ bearer: owner, forUser: outsider, path })).status,
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("a workspace's memories' live read", (it) => {
+  it.effect(
+    "a member is answered every memory of their workspace polled, named by its keeper and forgettable by its keeper and an owner but no other member; a member of another workspace reads only their own, and is not found asking for this one",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, keeper, teammate, outsider] = [
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+        ];
+        for (const [id, name] of [
+          [owner, "Olive Owner"],
+          [keeper, "Kai Keeper"],
+          [teammate, "Tess Teammate"],
+          [outsider, "Otto Outsider"],
+        ] as const) {
+          yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, keeper);
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openWorkspace(outsider);
+        yield* rememberMemory(workspaceId, keeper, "Deployments go out from main.", undefined);
+        yield* rememberMemory(elsewhere, outsider, "Pricing lives in billing.", undefined);
+        const read = (bearer: string, workspace: string) =>
+          Effect.gen(function* () {
+            const polled = yield* ask({
+              bearer,
+              path: `/api/live/workspace-memories?workspaceId=${workspace}`,
+            });
+            assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+            const answer = Schema.decodeUnknownSync(workspaceMemoriesLiveAnswerSchema)(polled.body);
+            assert.equal(answer.url, LIVE_POLL_URL);
+            const { memories } = Schema.decodeUnknownSync(workspaceMemoriesLiveRowsSchema)({
+              memories: answer.queries.memories.rows,
+            });
+            return memoriesOfLiveRows(memories).map((memory) => [
+              memory.text,
+              memory.keptBy?.name,
+              memory.forgettable,
+            ]);
+          });
+
+        assert.deepEqual(yield* read(keeper, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", true],
+        ]);
+        assert.deepEqual(yield* read(owner, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", true],
+        ]);
+        assert.deepEqual(yield* read(teammate, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", false],
+        ]);
+        assert.deepEqual(yield* read(outsider, elsewhere), [
+          ["Pricing lives in billing.", "Otto Outsider", true],
+        ]);
+        assert.deepEqual(
+          yield* ask({
+            bearer: outsider,
+            path: `/api/live/workspace-memories?workspaceId=${workspaceId}`,
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
       }),
   );

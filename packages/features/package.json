@@ -20,6 +20,7 @@
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
     "./credential-redaction": "./src/credential-redaction.js",
+    "./memory-live": "./src/memory-live.js",
     "./memory-wire": "./src/memory-wire.js",
     "./sentry-account": "./src/sentry-account.js",
     "./sentry-addresses": "./src/sentry-addresses.js",

@@ -30,6 +30,7 @@ import {
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
+  LIVE_POLL,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   type TaskBrowserTabsLiveAnswer,
@@ -377,21 +378,29 @@ export class HostedTaskClient {
   }
 
   /**
-   * The task list sealed for following over Neon Realtime, answered at
-   * once; unanswered for anything that went wrong, which the caller answers
-   * by asking again.
+   * The task list, its rows inline, read by the sync id the reader holds
+   * them at (`LIVE_POLL.SYNC`): whole, with the id to read past next, where
+   * `sync` is empty or the reader is too far behind; past an id, only the
+   * plans and agents that moved since, with the ids of those that stand no
+   * longer for it, held by the service until something moves. Without
+   * `sync`, every row whole as it stands, answered at once. Unanswered for
+   * anything that went wrong, which the caller answers by asking again.
    */
   listLive(
     userId: string,
-    poll = false,
-    after?: string,
+    sync: string | undefined,
   ): Effect.Effect<
     TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
     never,
     HttpClient.HttpClient
   > {
+    const read = {
+      [LIVE_USER_QUERY]: userId,
+      ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
+    };
+    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
     return hostedResult(
-      askLive(this.#hosted.live.tasks, { [LIVE_USER_QUERY]: userId }, poll, after),
+      askLive(this.#hosted.live.tasks, read, true, undefined, sync !== undefined && sync !== ""),
       LIVE_REFUSALS,
     );
   }

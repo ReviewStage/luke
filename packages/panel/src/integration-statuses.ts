@@ -44,10 +44,10 @@ import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
  * sign-ins the window waits on (`integration-sign-in.ts`), begun here, ended
  * as the slice moves for their server, given up on past their own deadline,
  * and canceled here, which ends one at the service so the provider no
- * longer stands pending; and where a write's answer left a server, drawn
- * over the slice until the slice moves for it. A Cancel the service answers
- * connected came too late: the sign-in had finished, and the row stands
- * connected.
+ * longer stands pending. A Connect, a Cancel, and a Disconnect are answered
+ * only once the slice carries them, so nothing of them is drawn over it. A
+ * Cancel the service answers connected came too late: the sign-in had
+ * finished, and the row stands connected.
  *
  * A user account may hold more than one account at a provider, so every
  * read and change here names a server: one account by its connection name
@@ -73,8 +73,6 @@ export interface IntegrationStatuses {
   readonly readFailed: boolean;
   /** The host's read asked again at once, as Try again asks. */
   readonly read: () => Promise<void>;
-  /** One server's standing as an answer of the host's left it, drawn over the slice until the slice moves for it. */
-  readonly settle: (server: string, status: IntegrationStatus) => void;
   /** A sign-in begun: the server stands pending and the window waits on it, unless a connection already stands. */
   readonly signInBegun: (server: string) => void;
   /** Ends a sign-in waited on, at the service too, revoking nothing; answers whether the service answered. */
@@ -85,14 +83,6 @@ export interface IntegrationStatuses {
 type Standing = ReadonlyMap<string, IntegrationStatus>;
 
 type SignIns = ReadonlyMap<string, SignIn>;
-
-/** A server's standing as a write's answer left it, and the slice's word for it as the answer landed, which it is drawn over until the slice moves for it. */
-interface Overlay {
-  readonly status: IntegrationStatus;
-  readonly under: IntegrationStatus | undefined;
-}
-
-type Overlays = ReadonlyMap<string, Overlay>;
 
 const NO_ACCOUNTS: readonly IntegrationAccount[] = [];
 
@@ -116,8 +106,6 @@ function standingOfRead(answer: IntegrationStatusesAnswer): Standing {
 }
 
 const NO_SIGN_INS: SignIns = new Map();
-
-const NO_OVERLAYS: Overlays = new Map();
 
 /** The one wait a surface holds, until a deadline on the runtime's clock: a write arms it afresh, cutting short the wait before it. */
 const signInWaitAtom = () =>
@@ -165,14 +153,6 @@ function signInsAfterRead(
   return next;
 }
 
-/** The overlays the host's read has not moved past: each stands while the slice's word for its server is the one it was laid over. */
-function overlaysAfterRead(overlays: Overlays, standing: Standing): Overlays {
-  if (overlays.size === 0) return overlays;
-  return new Map(
-    [...overlays].filter(([server, overlay]) => standing.get(server) === overlay.under),
-  );
-}
-
 /** Whether the server is granted by the account's own GitHub, whose connect the service never answers pending. */
 function byGitHub(server: string): boolean {
   const provider = providerOfServer(server);
@@ -189,13 +169,12 @@ function nextDeadline(signIns: SignIns): number | undefined {
   return deadlines.length === 0 ? undefined : Math.min(...deadlines);
 }
 
-/** What every surface shares of one account's integrations beside the slice: the writes' answers drawn over it, and the sign-ins the window waits on. */
+/** What every surface shares of one account's integrations beside the slice: the sign-ins the window waits on. */
 interface Book {
-  readonly overlays: Overlays;
   readonly signIns: SignIns;
 }
 
-const NO_BOOK: Book = { overlays: NO_OVERLAYS, signIns: NO_SIGN_INS };
+const NO_BOOK: Book = { signIns: NO_SIGN_INS };
 
 /**
  * What the book keeps beside it, which no surface draws: the marks, and the
@@ -242,7 +221,7 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
 /**
  * Where every integration stands, from the slice the host holds for the
  * account signed in and the one book every surface of the window shares
- * beside it: a sign-in begun, an answer settled, or a Cancel on one surface
+ * beside it: a sign-in begun, or a Cancel, on one surface
  * is what every other draws at once.
  */
 export function useIntegrationStatuses(): IntegrationStatuses {
@@ -252,7 +231,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
   const held = useHostRead(LIVE_READ.INTEGRATIONS, owner ?? undefined);
   const answer = held.rows;
   const shared = sharedOf(owner);
-  const { overlays, signIns } = useAtomValue(shared.book);
+  const { signIns } = useAtomValue(shared.book);
   const ledger = useAtomValue(shared.ledger);
   const [waitAtom] = useState(signInWaitAtom);
   const [waited, arm] = useAtom(waitAtom);
@@ -267,7 +246,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     [registry, shared],
   );
 
-  /** The sign-ins and overlays told where the host's read stands now: of what moved in it, or of every server where the deadline asks. */
+  /** The sign-ins told where the host's read stands now: of what moved in it, or of every server where the deadline asks. */
   const tell = useCallback(
     (latest: IntegrationStatusesAnswer, deadline: boolean) => {
       const before = ledger.told?.standing;
@@ -279,7 +258,6 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       // Note that the failures a read names are told once, by the read that carried them, never again at a deadline.
       const failures = deadline ? [] : (latest.signInFailures ?? []);
       change((book) => ({
-        overlays: overlaysAfterRead(book.overlays, standing),
         signIns: signInsAfterRead(
           book.signIns,
           standing,
@@ -311,83 +289,70 @@ export function useIntegrationStatuses(): IntegrationStatuses {
 
   const standing = answer === undefined ? undefined : standingOfRead(answer);
 
-  /** The slice's word for a server, with the overlay a write's answer left over it where the slice has not moved past it. */
-  const readOf = (server: string): IntegrationStatus | undefined => {
-    const word = standing?.get(server);
-    const overlay = overlays.get(server);
-    return overlay !== undefined && overlay.under === word ? overlay.status : word;
-  };
-
-  const settle = useCallback(
-    (server: string, status: IntegrationStatus) => {
-      const under = ledger.told?.standing.get(server);
-      change((book) => ({
-        ...book,
-        overlays: new Map(book.overlays).set(server, { status, under }),
-      }));
-    },
-    [ledger, change],
-  );
-
   // Note that a connection that stands is not waited on, because the service
   // answers it connected throughout, so no read could say how the sign-in ended.
   const signInBegun = useCallback(
     (server: string) => {
-      const under = ledger.told?.standing.get(server);
-      const overlay = registry.get(shared.book).overlays.get(server);
-      const drawn = overlay !== undefined && overlay.under === under ? overlay.status : under;
-      if (drawn === INTEGRATION_STATUS.CONNECTED) return;
+      if (ledger.told?.standing.get(server) === INTEGRATION_STATUS.CONNECTED) return;
       ledger.marks += 1;
       const signIn = begunSignIn(ledger.marks, now(), !byGitHub(server));
-      change((book) => ({
-        overlays: new Map(book.overlays).set(server, { status: INTEGRATION_STATUS.PENDING, under }),
-        signIns: new Map(book.signIns).set(server, signIn),
-      }));
+      change((book) => withSignIns(book, (held) => new Map(held).set(server, signIn)));
     },
-    [registry, shared, ledger, now, change],
+    [ledger, now, change],
   );
 
-  // Note that GitHub's connect is ended here alone, because the service holds no sign-in of it.
+  /**
+   * Ends a sign-in waited on: let go of at once, so the read the Cancel
+   * moves never says it failed, and put back where the service did not
+   * answer, unless one was begun meanwhile. Note that GitHub's connect is
+   * ended here alone, because the service holds no sign-in of it.
+   */
   const cancelSignIn = useCallback(
     async (server: string): Promise<boolean> => {
       const provider = providerOfServer(server);
       if (provider === undefined) return false;
+      const waited = registry.get(shared.book).signIns.get(server);
+      change((book) =>
+        withSignIns(book, (held) => {
+          const rest = new Map(held);
+          rest.delete(server);
+          return rest;
+        }),
+      );
       const canceled: IntegrationStatusView | undefined = byGitHub(server)
         ? { status: INTEGRATION_STATUS.DISCONNECTED }
         : await act(ACT_KIND.INTEGRATIONS_CANCEL, {
             provider,
             ...(server === provider ? undefined : { connection: server }),
           }).catch(() => undefined);
-      if (canceled === undefined || "failure" in canceled) return false;
-      // A first sign-in canceled is gone from the service, so the account it was to be leaves the list until the host's read says otherwise.
-      settle(server, canceled.status);
+      if (canceled === undefined || "failure" in canceled) {
+        if (waited !== undefined) {
+          change((book) =>
+            withSignIns(book, (held) =>
+              held.has(server) ? held : new Map(held).set(server, waited),
+            ),
+          );
+        }
+        return false;
+      }
       // A sign-in begun again while the Cancel was out still stands, and is waited on for its own whole wait.
       if (canceled.status === INTEGRATION_STATUS.PENDING) {
         ledger.marks += 1;
         const begun = begunSignIn(ledger.marks, now(), true);
-        change((book) => withSignIns(book, (standing) => new Map(standing).set(server, begun)));
-        return true;
+        change((book) => withSignIns(book, (held) => new Map(held).set(server, begun)));
       }
-      change((book) =>
-        withSignIns(book, (standing) => {
-          const rest = new Map(standing);
-          rest.delete(server);
-          return rest;
-        }),
-      );
       return true;
     },
-    [act, settle, now, change, ledger],
+    [act, registry, shared, now, change, ledger],
   );
 
   /**
-   * Where a server stands: the host's read's word, a write's answer over it,
-   * or, for an account the window began a sign-in for that the read does
+   * Where a server stands: the host's read's word, or, for an account the window began a sign-in for that the read does
    * not list, its sign-in's: pending while it waits, else disconnected, its
    * failure said on its line.
    */
   const statusOf = (server: string): IntegrationStatus | undefined => {
-    const read = readOf(server);
+    const read = standing?.get(server);
     if (read !== undefined) return read;
     const signIn = signIns.get(server);
     if (signIn === undefined) return undefined;
@@ -424,14 +389,9 @@ export function useIntegrationStatuses(): IntegrationStatuses {
   return {
     statusOf,
     listed: (server) => accounts.some((account) => account.connection === server),
-    // An account a write's answer left disconnected leaves the list at once, as the service's next read leaves it out.
     accountsOf: (provider) =>
       [...accounts, ...unlisted]
-        .filter(
-          (account) =>
-            account.provider === provider &&
-            readOf(account.connection) !== INTEGRATION_STATUS.DISCONNECTED,
-        )
+        .filter((account) => account.provider === provider)
         .toSorted(
           (a, b) =>
             (integrationConnectionOf(a.connection)?.place ?? 0) -
@@ -441,7 +401,6 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     signInOf: (server) => signIns.get(server),
     readFailed: held.status === HOST_READ_STATUS.FAILED,
     read: async () => held.retry(),
-    settle,
     signInBegun,
     cancelSignIn,
   };

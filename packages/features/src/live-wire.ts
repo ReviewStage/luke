@@ -853,6 +853,8 @@ export const LIVE_READ = {
   INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",
+  /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
+  MEMORIES: "workspaceMemories",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
   /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */

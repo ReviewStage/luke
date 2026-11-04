@@ -123,7 +123,6 @@ const statuses: IntegrationStatuses = {
   signInOf: () => undefined,
   readFailed: false,
   read: () => Promise.resolve(),
-  settle: () => undefined,
   signInBegun: () => undefined,
   cancelSignIn: () => Promise.resolve(true),
 };

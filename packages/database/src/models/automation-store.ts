@@ -49,7 +49,7 @@ import { conversations } from "../schemas/storage.js";
 import { noOpenInboxItem, noOpenPullRequest } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
-import { AGENT_WORKSPACE, isWorkspaceMember } from "./workspace-store.js";
+import { AGENT_WORKSPACE, isWorkspaceMember, roleAmong } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
@@ -252,13 +252,7 @@ function memberOfAutomationWorkspace(
         and(
           eq(member.organizationId, automation.organizationId),
           eq(member.userId, userId),
-          // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
-          roles === undefined
-            ? undefined
-            : sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
-                roles.map((role) => sql`${role}`),
-                sql`, `,
-              )}]::text[]`,
+          roles === undefined ? undefined : roleAmong(roles),
         ),
       ),
   );

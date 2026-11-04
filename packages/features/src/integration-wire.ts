@@ -364,9 +364,17 @@ export const integrationRenameRequestSchema = EffectSchema.Struct({
   ),
 });
 
-/** One account as a rename leaves it (POST). */
+/**
+ * The transaction a write committed in, where it wrote, which the account's
+ * live read of its integrations says it carries (`integration-live.ts`); a
+ * desktop that follows no such read ignores it.
+ */
+const writtenTxid = EffectSchema.optionalKey(EffectSchema.String);
+
+/** One account as a rename leaves it (POST), and the transaction it was named in. */
 export const integrationAccountAnswerSchema = EffectSchema.Struct({
   account: integrationAccountSchema,
+  txid: writtenTxid,
 });
 
 /** How a sign-in the browser never brought back to the app ended, as Vercel Connect tells it. */
@@ -402,9 +410,10 @@ export const integrationStatusesAnswerSchema = EffectSchema.Struct({
   signInFailures: EffectSchema.optionalKey(EffectSchema.Array(integrationSignInFailureSchema)),
 });
 
-/** What a Disconnect leaves of the one provider it ended (POST). */
+/** What a Disconnect or a Cancel leaves of the one account it ended (POST), and the transaction it ended it in where it wrote. */
 export const integrationStatusAnswerSchema = EffectSchema.Struct({
   status: integrationStatusSchema,
+  txid: writtenTxid,
 });
 
 /** Why a connected provider's server listed no tools when the service asked it. */
@@ -486,10 +495,11 @@ export const integrationToolsAnswerSchema = EffectSchema.Union([
 
 export type IntegrationToolsAnswer = typeof integrationToolsAnswerSchema.Type;
 
-/** The address a sign-in opens in the browser (POST): https, and nothing else; and the account it signs in, where the service names one. */
+/** The address a sign-in opens in the browser (POST): https, and nothing else; the account it signs in, where the service names one; and the transaction it was begun in. */
 export const integrationConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isPattern(/^https:\/\/\S+$/)),
   connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
+  txid: writtenTxid,
 });
 
 export type IntegrationConnectAnswer = typeof integrationConnectAnswerSchema.Type;
