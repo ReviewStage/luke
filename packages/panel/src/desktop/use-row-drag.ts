@@ -55,6 +55,12 @@
  * Board) keeps its zones to its own lists' rows, and its classes are
  * worn, boxless, around the copy, so its stylesheet's rules for a row still
  * draw the copy of one even though the copy stands outside it.
+ *
+ * A list of tasks (`useTaskDrag`) counts as its rows only the cards or rows
+ * standing for a task, so a quick add's lines drawn among them are no place
+ * a drag counts, and tells its owner the row dragged by its task's id rather
+ * than its place, so the task found is the one pressed whichever of the
+ * list's rows are drawn.
  */
 
 import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@repo/ui";
@@ -71,8 +77,8 @@ const EDGE_REACH = 32;
 /** The most the column runs along in a frame, in CSS pixels, with the pointer at its edge or past it. */
 const EDGE_SPEED = 12;
 
-/** The list's rows that move; one on its way out (`ListMotion`) is no longer one of them. */
-const ROW = ":scope > li:not([data-leaving])";
+/** What a card or a task's row wears, its task's id as the value. */
+const TASK_ID = "data-task-id";
 
 /** What a row and its list wear while a drag lasts; desktop.css fades the one to a placeholder and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
@@ -92,15 +98,29 @@ const CARRIED_ATTRIBUTE = "data-carried";
 /** What the copy itself wears, inside that layer; desktop.css lifts it. */
 const LIFTED_ATTRIBUTE = "data-lifted";
 
-/** A drop zone's rows, where it keeps an order of its own that a drop lands at a place in. */
-const ZONE_ROWS = "[data-row-drop-rows] > li:not([data-leaving])";
-
 /** What the zone a row is carried over wears while it is; a card's (`Card`), since a board's column is one. */
 const DROP_TARGET = CARD_DROP_TARGET;
 
 /** What the row a drop would land above wears, and the last row where it would land below them all. */
 const DROP_BEFORE = "data-drop-before";
 const DROP_AFTER = "data-drop-after";
+
+/** What a list's row is among its items, and what its owner hears one by. */
+interface RowKind<Row> {
+  /** What an item of the list must be to be one of its rows. */
+  readonly item: string;
+  /** What the owner hears the row at `at` among them by. */
+  readonly name: (row: HTMLElement, at: number) => Row | undefined;
+}
+
+/** A row of any list, heard by its place among the list's rows. */
+const PLACED_ROW: RowKind<number> = { item: "li", name: (_row, at) => at };
+
+/** A card or a row standing for a task, heard by its task's id. */
+const TASK_ROW: RowKind<string> = {
+  item: `li[${TASK_ID}]`,
+  name: (row) => row.getAttribute(TASK_ID) ?? undefined,
+};
 
 /** A zone the pressed row is carried over: the element, its id, and the place among its rows it would land at. */
 interface ZoneLanding {
@@ -129,6 +149,8 @@ interface RowPress {
   pointer: number;
   pointerX: number;
   listTop: number;
+  /** What an item of the list, or of a zone it is carried over, must be to be a row (`RowKind`). */
+  item: string;
   at: number;
   rows: HTMLElement[];
   slots: Slot[];
@@ -149,18 +171,30 @@ interface RowPress {
   scroller: HTMLElement | undefined;
 }
 
-/** What a list's rows may do beyond moving among themselves. */
-export interface RowDragOptions {
-  /** Hears a row let go over another drop zone: the row at `from` here, the zone's id, and the place among the zone's rows it lands at. */
-  onDropOut?: ((from: number, zone: string, at: number) => void) | undefined;
+/** What a list's rows may do beyond moving among themselves, each row heard as `Row`: its place among the list's rows, or a task's id. */
+export interface RowDragOptions<Row = number> {
+  /** Hears a row let go over another drop zone: the row `from` here, the zone's id, and the place among the zone's rows it lands at. */
+  onDropOut?: ((from: Row, zone: string, at: number) => void) | undefined;
   /** What a press must land in to start a drag, where a row is a group with rows of its own inside. */
   handle?: string;
   /** Hears a press become a drag (`true`) and that drag end, dropped or put back (`false`). */
   onCarried?: ((carried: boolean) => void) | undefined;
 }
 
-/** What the list's owner hears from a drop: the row at `from` now stands at `to`, which differs from it. */
-export type RowMove = (from: number, to: number) => void;
+/** What the list's owner hears from a drop: the row `from` now stands at `to` among the list's rows, which differs from where it stood. */
+export type RowMove<Row = number> = (from: Row, to: number) => void;
+
+/** The list's rows that move, its items of the kind (`item`); one on its way out (`ListMotion`) is no longer one of them. */
+function rowsIn(list: HTMLElement, item: string): HTMLElement[] {
+  return [...list.querySelectorAll<HTMLElement>(`:scope > ${item}:not([data-leaving])`)];
+}
+
+/** A drop zone's rows of the kind (`item`), where it keeps an order of its own that a drop lands at a place in. */
+function zoneRowsIn(zone: HTMLElement, item: string): HTMLElement[] {
+  return [
+    ...zone.querySelectorAll<HTMLElement>(`[data-row-drop-rows] > ${item}:not([data-leaving])`),
+  ];
+}
 
 /** The copy's travel down the list, the pointer's own and the list's scrolling since the press, held between the first row's top and the last row's foot. */
 function travel(press: RowPress, list: HTMLElement): number {
@@ -202,8 +236,8 @@ function aside(press: RowPress, index: number): number {
 }
 
 /** Where among a zone's ordered rows a pointer at `y` would land a row: below every row whose middle it is past. */
-function landingIn(zone: HTMLElement, y: number): number {
-  return [...zone.querySelectorAll<HTMLElement>(ZONE_ROWS)].filter((row) => {
+function landingIn(zone: HTMLElement, item: string, y: number): number {
+  return zoneRowsIn(zone, item).filter((row) => {
     const box = row.getBoundingClientRect();
     return box.top + box.height / 2 < y;
   }).length;
@@ -220,7 +254,7 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
   });
   const id = zone?.getAttribute(DROP_ZONE);
   if (zone === undefined || zone === own || id === null || id === undefined) return undefined;
-  return { zone, id, at: landingIn(zone, press.pointer) };
+  return { zone, id, at: landingIn(zone, press.item, press.pointer) };
 }
 
 /**
@@ -276,7 +310,7 @@ function mark(press: RowPress, landing: ZoneLanding | undefined): void {
   press.zone = landing;
   if (landing === undefined) return;
   landing.zone.setAttribute(DROP_TARGET, "true");
-  const rows = [...landing.zone.querySelectorAll<HTMLElement>(ZONE_ROWS)];
+  const rows = zoneRowsIn(landing.zone, press.item);
   const before = rows[landing.at];
   if (before !== undefined) before.setAttribute(DROP_BEFORE, "true");
   else rows.at(-1)?.setAttribute(DROP_AFTER, "true");
@@ -417,16 +451,17 @@ function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
 }
 
 /**
- * The list's drag: spread `onPointerDown` on the list. A press is heard at
- * the window from then on, so it outlives the pointer leaving the list, and
- * the pointer is captured only once the press is a drag, so a press that
- * stays a click lands on the row as any click does. None where nothing
- * hears a move or a drop elsewhere, or where the list's rows find the drop
- * elsewhere.
+ * The drag of a list whose rows are of a kind (`RowKind`): spread
+ * `onPointerDown` on the list. A press is heard at the window from then on,
+ * so it outlives the pointer leaving the list, and the pointer is captured
+ * only once the press is a drag, so a press that stays a click lands on the
+ * row as any click does. None where nothing hears a move or a drop
+ * elsewhere, or where the list's rows find the drop elsewhere.
  */
-export function useRowDrag(
-  onMove: RowMove | undefined,
-  options: RowDragOptions = {},
+function useListDrag<Row>(
+  kind: RowKind<Row>,
+  onMove: RowMove<Row> | undefined,
+  options: RowDragOptions<Row>,
 ): React.PointerEventHandler<HTMLElement> | undefined {
   const latest = useRef(onMove);
   const latestOut = useRef(options.onDropOut);
@@ -444,7 +479,7 @@ export function useRowDrag(
   const out = options.onDropOut !== undefined;
   if (onMove === undefined && !out) return undefined;
 
-  const begin = (list: HTMLElement, press: RowPress) => {
+  const begin = (list: HTMLElement, press: RowPress, name: Row) => {
     const pressed = () => press.rows[press.at];
     const carried = (now: boolean) => latestCarried.current?.(now);
     const { scroller } = press;
@@ -500,7 +535,7 @@ export function useRowDrag(
       if (!press.dragging || row === undefined) return;
       // A row pinned or unpinned under the drag leaves its places stale, so
       // the drag is put back rather than dropped at a place that moved.
-      const now = [...list.querySelectorAll<HTMLElement>(ROW)];
+      const now = rowsIn(list, press.item);
       if (now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at])) {
         lower(press, list, true);
         carried(false);
@@ -514,7 +549,7 @@ export function useRowDrag(
       if (zone !== undefined) {
         // The row now stands in the zone's list, so it comes down there rather than settling here.
         flushSync(() => {
-          latestOut.current?.(press.at, zone.id, zone.at);
+          latestOut.current?.(name, zone.id, zone.at);
           carried(false);
         });
         lower(press, list, false);
@@ -523,7 +558,7 @@ export function useRowDrag(
       // The list is drawn in its new order before the rows come down, so they
       // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
-        if (press.to !== press.at) latest.current?.(press.at, press.to);
+        if (press.to !== press.at) latest.current?.(name, press.to);
         carried(false);
       });
       const copy = press.carried;
@@ -571,12 +606,14 @@ export function useRowDrag(
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
     if (target.closest(NOT_A_HANDLE) !== null) return;
-    const rows = [...list.querySelectorAll<HTMLElement>(ROW)];
+    const rows = rowsIn(list, kind.item);
     const at = rows.findIndex((row) => row.contains(target));
+    const pressed = rows[at];
+    const name = pressed === undefined ? undefined : kind.name(pressed, at);
     // A row alone in its list has nowhere to move but out of it.
-    if (at < 0 || (rows.length < 2 && !out)) return;
+    if (name === undefined || (rows.length < 2 && !out)) return;
     const grip = handle === undefined ? null : target.closest(handle);
-    if (handle !== undefined && (grip === null || !rows[at]?.contains(grip))) return;
+    if (handle !== undefined && (grip === null || !pressed?.contains(grip))) return;
     const slots = rows.map((row) => {
       const box = row.getBoundingClientRect();
       return { top: box.top, height: box.height };
@@ -601,6 +638,26 @@ export function useRowDrag(
       frame: undefined,
       scroller: scrollerOf(list, scope),
     };
-    begin(list, { ...pointer, listTop, at, rows, slots, gap, ...state });
+    begin(list, { ...pointer, listTop, item: kind.item, at, rows, slots, gap, ...state }, name);
   };
+}
+
+/** The drag of a list of any rows, each heard by its place among them (`useListDrag`). */
+export function useRowDrag(
+  onMove: RowMove | undefined,
+  options: RowDragOptions = {},
+): React.PointerEventHandler<HTMLElement> | undefined {
+  return useListDrag(PLACED_ROW, onMove, options);
+}
+
+/**
+ * The drag of a list of tasks, the Board's column or a List's group
+ * (`useListDrag`): its rows are its cards or rows, each heard by its task's
+ * id, and a place is counted among them alone.
+ */
+export function useTaskDrag(
+  onMove: RowMove<string> | undefined,
+  options: RowDragOptions<string> = {},
+): React.PointerEventHandler<HTMLElement> | undefined {
+  return useListDrag(TASK_ROW, onMove, options);
 }
