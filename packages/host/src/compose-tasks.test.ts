@@ -5585,7 +5585,7 @@ it.effect(
 );
 
 it.effect(
-  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
+  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed; a regain right after a wake reads it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
@@ -5615,6 +5615,11 @@ it.effect(
         "behind until the fresh rows land",
       );
       assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      // The connection comes back a moment after the wake, which may have read the list before the network was there.
+      yield* call(GATEWAY_METHOD.TASKS_REGAINED);
+      yield* settled;
+      assert.equal(service.liveListReads, before + 2, "a regain reads the list again");
 
       yield* TestClock.adjust(Duration.seconds(10));
       const later = service.liveListReads;

@@ -36,7 +36,7 @@ import {
 } from "effect";
 import type { AppTranscript } from "./app-state.js";
 import type { HeldAnswers } from "./live-collection.js";
-import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, type SealedRead, serviceAnswers } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here over the service's held poll for the windows that draw it, each page laid on its app-state slice as it is read.
@@ -69,11 +69,12 @@ import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
  * then too.
  *
  * The live read is let go a while after the last follow let go of it. A
- * first read the service did not answer is asked for again every `RESEAL`,
- * at most `RESEALS` times, and then the follow is told the transcript could
- * not be read, which the window offers to try again, as it is where the
- * live read stops for good. One the account does not reach is told not
- * found.
+ * first read the service did not answer is asked for again every `RESEAL`:
+ * for as long as the service answers nothing, so a transcript opened
+ * offline reads itself once the connection is back, and otherwise at most
+ * `RESEALS` times, and then the follow is told the transcript could not be
+ * read, which the window offers to try again, as it is where the live read
+ * stops for good. One the account does not reach is told not found.
  */
 
 /** How many transcripts no window holds any longer stay drawn at most, the least recently let go closed first. */
@@ -87,10 +88,26 @@ export const HELD_BYTES_EACH = HELD_BYTES / 4;
 const IDLE = Duration.seconds(30);
 /** How long after a read the service did not answer the transcript is read again. */
 const RESEAL = Duration.seconds(1);
-/** How many times in a row a read the service did not answer is asked for again before the follow says the transcript could not be read. */
+/** How many times in a row a read the service did not answer is asked for again, while it answers other calls, before the follow says the transcript could not be read. */
 const RESEALS = 30;
 
-/** The service did not answer the transcript's live read, asked `RESEALS` times over: the last failure it answered, and what failed beneath it where the client said. */
+/**
+ * Whether a read that failed is asked again, counting from the first
+ * failure: always while the service answers nothing (`serviceAnswers`),
+ * since the read is then waiting for the connection rather than refused,
+ * and up to `RESEALS` times while it answers.
+ */
+function resealing(): () => Effect.Effect<boolean> {
+  let counted = 0;
+  return () =>
+    Effect.map(serviceAnswers, (answers) => {
+      if (!answers) return true;
+      counted += 1;
+      return counted <= RESEALS;
+    });
+}
+
+/** The service did not answer the transcript's live read, asked again as `resealing` allows: the last failure it answered, and what failed beneath it where the client said. */
 class SealUnanswered extends Data.TaggedError("SealUnanswered")<{
   readonly failure: string;
   readonly cause?: FailureFacts;
@@ -237,7 +254,7 @@ function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswe
   return "failure" in answer ? answer : followedRead(answer);
 }
 
-/** The transcript's first read, its newest messages past the start, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
+/** The transcript's first read, its newest messages past the start, asked again every `RESEAL` as `resealing` allows while the service does not answer; none where the account does not reach it. */
 function sealedOf(
   seal: (
     poll: boolean,
@@ -245,6 +262,7 @@ function sealedOf(
     cursor?: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>, SealUnanswered> {
+  const again = resealing();
   return seal(false, undefined, AGENT_CURSOR_START).pipe(
     Effect.flatMap((answer) => {
       if (!("failure" in answer)) return Effect.succeed(Option.some(answer));
@@ -259,7 +277,7 @@ function sealedOf(
         new SealUnanswered(cause === undefined ? { failure } : { failure, cause }),
       );
     }),
-    Effect.retry({ schedule: Schedule.spaced(RESEAL), times: RESEALS }),
+    Effect.retry({ schedule: Schedule.spaced(RESEAL), while: again }),
   );
 }
 
@@ -539,19 +557,21 @@ export function followTranscript<Key>(
       const tell = (page: AgentTranscriptPage) =>
         Effect.suspend(() => held.answered(toldTranscript(held.rows(), page, revision)));
       let toldNotFound = false;
-      const readNewest = reads.newest().pipe(
-        Effect.tap((answer) => {
-          if (!("failure" in answer)) return tell({ ...answer, newest: true, caughtUp: false });
-          toldNotFound = answer.failure === AGENT_CALL_FAILURE.NOT_FOUND;
-          return tell(answer);
-        }),
-        // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as the live read is, and then ends the follow on the failure told, so the window offers Try again.
-        Effect.repeat({
-          schedule: Schedule.spaced(RESEAL),
-          times: RESEALS,
-          until: (answer) => !unanswered(answer),
-        }),
-      );
+      const readNewest = Effect.suspend(() => {
+        const again = resealing();
+        return reads.newest().pipe(
+          Effect.tap((answer) => {
+            if (!("failure" in answer)) return tell({ ...answer, newest: true, caughtUp: false });
+            toldNotFound = answer.failure === AGENT_CALL_FAILURE.NOT_FOUND;
+            return tell(answer);
+          }),
+          // Note that a newest page the service keeps not answering is asked for again as the live read is (`resealing`), and then ends the follow on the failure told, so the window offers Try again.
+          Effect.repeat({
+            schedule: Schedule.spaced(RESEAL),
+            while: (answer) => (unanswered(answer) ? again() : Effect.succeed(false)),
+          }),
+        );
+      });
       // Note that a window held stands drawn before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the live read, not after it, its cursor what makes following on from it safe.
       const recalled = yield* reopened(held);
       const opening = Option.isSome(recalled) ? undefined : yield* Effect.forkScoped(readNewest);

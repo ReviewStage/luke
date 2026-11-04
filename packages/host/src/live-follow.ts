@@ -1,3 +1,4 @@
+import { ServiceReach } from "@repo/features";
 import {
   LIVE_SIGNED_OUT,
   liveDigestOf,
@@ -17,6 +18,7 @@ import {
   Schedule,
   Schema,
   Stream,
+  SubscriptionRef,
 } from "effect";
 
 /**
@@ -57,6 +59,56 @@ import {
  * stalls is answered around (`SYNC_STALL`).
  */
 
+/**
+ * Each time the service answers again after a call it left unanswered, as
+ * the host's reach says (`ServiceReach`), heard from the moment the stream
+ * runs; never where the host keeps no reach. Note that the reach the stream
+ * starts at is left out, so a reach that stands answering wakes nothing.
+ */
+const serviceRegained: Stream.Stream<boolean> = Stream.unwrap(
+  Effect.map(
+    Effect.serviceOption(ServiceReach),
+    Option.match({
+      onNone: () => Stream.never,
+      onSome: (reach) =>
+        SubscriptionRef.changes(reach).pipe(
+          Stream.map((state) => state.reachable),
+          Stream.changes,
+          Stream.drop(1),
+          Stream.filter((reachable) => reachable),
+        ),
+    }),
+  ),
+);
+
+/** Whether the service answered the last word the host had of it (`ServiceReach`); answering where the host keeps no reach. */
+export const serviceAnswers: Effect.Effect<boolean> = Effect.flatMap(
+  Effect.serviceOption(ServiceReach),
+  Option.match({
+    onNone: () => Effect.succeed(true),
+    onSome: (reach) => Effect.map(SubscriptionRef.get(reach), (state) => state.reachable),
+  }),
+);
+
+/**
+ * `duration` waited out, or less where the service answers again first
+ * (`serviceRegained`), so a read waiting to ask again after a failure asks
+ * the moment the connection is back rather than at the end of its wait.
+ */
+export function waitOrRegained(duration: Duration.Input): Effect.Effect<void> {
+  return Effect.asVoid(Effect.race(Effect.sleep(duration), Stream.runHead(serviceRegained)));
+}
+
+/** `schedule` with each of its waits ended early where the service answers again (`waitOrRegained`). */
+function untilRegained<Output, Input, Error, Env>(
+  schedule: Schedule.Schedule<Output, Input, Error, Env>,
+): Schedule.Schedule<Output, Input, Error, Env> {
+  // Note that the wait is made here and the schedule then waits no longer, since a schedule's own sleep hears nothing.
+  return schedule.pipe(
+    Schedule.modifyDelay(({ duration }) => Effect.as(waitOrRegained(duration), Duration.zero)),
+  );
+}
+
 /** The least time between two polls, so a service answering at once is not asked in a hot loop; each poll is otherwise held by the service until the rows move. */
 const LIVE_POLL_FLOOR = Duration.millis(500);
 /** The least time after an answer a write woke before the next poll: the 100 ms the service gathers a burst of writes into one answer for. */
@@ -74,14 +126,14 @@ const POLL_SPACING = Schedule.spaced(LIVE_POLL_FLOOR).pipe(
  * jitter of Electric's client
  * (https://github.com/electric-sql/electric/blob/3f9809fb0bd894cb74470d434749673492ad7acf/packages/typescript-client/src/fetch.ts).
  * Note that it is not `Schedule.jittered`, which keeps each wait within a
- * fifth of its bound, too close to spread windows that failed together.
+ * fifth of its bound, too close to spread windows that failed together. A
+ * wait ends at once where the service answers again (`untilRegained`).
  */
-const POLL_BACKOFF = Schedule.min([
-  Schedule.exponential("1 second"),
-  Schedule.spaced("5 seconds"),
-]).pipe(
-  Schedule.modifyDelay(({ duration }) =>
-    Effect.map(Random.next, (drawn) => Duration.times(duration, drawn)),
+const POLL_BACKOFF = untilRegained(
+  Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]).pipe(
+    Schedule.modifyDelay(({ duration }) =>
+      Effect.map(Random.next, (drawn) => Duration.times(duration, drawn)),
+    ),
   ),
 );
 /**
@@ -547,13 +599,16 @@ const SYNC_STALL = Duration.seconds(30);
 /**
  * How long a live follow waits before sealing again after a seal the
  * service did not answer, or a follow that stopped: the first wait, doubling
- * on each that fails again, up to the longest.
+ * on each that fails again, up to the longest, and ended at once where the
+ * service answers again (`untilRegained`).
  */
 export const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
 
-export const FOLLOW_BACKOFF = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
-  Schedule.modifyDelay(({ duration }) =>
-    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
+export const FOLLOW_BACKOFF = untilRegained(
+  Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
+    Schedule.modifyDelay(({ duration }) =>
+      Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
+    ),
   ),
 );
 
@@ -562,13 +617,17 @@ export const LIVE_RESTART = Duration.seconds(5);
 
 /**
  * `attempt` run until it answers that the follow ended, each run that
- * answers it goes on followed by the next `LIVE_RESTART` later. Note that a
+ * answers it goes on followed by the next `LIVE_RESTART` later, or as soon
+ * as the service answers again (`untilRegained`). Note that a
  * run that ends the follow is followed by no wait, since `while` ends the
  * repeat before the schedule sleeps.
  */
 export function restarting<E, R>(attempt: Effect.Effect<boolean, E, R>): Effect.Effect<void, E, R> {
   return Effect.asVoid(
-    Effect.repeat(attempt, { schedule: Schedule.spaced(LIVE_RESTART), while: (again) => again }),
+    Effect.repeat(attempt, {
+      schedule: untilRegained(Schedule.spaced(LIVE_RESTART)),
+      while: (again) => again,
+    }),
   );
 }
 

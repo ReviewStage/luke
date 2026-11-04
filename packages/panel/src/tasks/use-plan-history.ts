@@ -4,6 +4,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActedResult, askKept, type Kept } from "../act.js";
 import { HOST_READ_STATUS, type HostRead } from "../use-host-read.js";
+import { useRegained } from "../use-regained.js";
 import { revisionOfSave } from "./plan-history-model.js";
 
 /**
@@ -362,6 +363,10 @@ export function usePlanHistory(input: {
       ),
     [],
   );
+  // A version whose read failed is read again as the app reaches the service again, as its Try again reads it.
+  useRegained(() => {
+    if (chosen?.read.kind === HISTORY_READ.FAILED) onRetryVersion();
+  });
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {
     onSelect(sectionsOf);

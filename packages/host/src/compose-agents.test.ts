@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CALL_FAULT } from "@repo/features";
+import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
@@ -74,7 +74,7 @@ import {
 import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import {
   type AppAccountPreferences,
@@ -2104,6 +2104,35 @@ it.effect(
         `messages-now:${AGENT_ID}:1:0`,
         `messages-now:${AGENT_ID}:2:0`,
       ]);
+    }),
+);
+
+it.effect(
+  "a live read first asked while the service answers nothing is asked again past the bound, and the transcript reads on once it answers",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make({ reachable: false, answered: 0 });
+      yield* Effect.gen(function* () {
+        const { call, asked, held, sealTranscript, live } = yield* subject();
+        const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* settled;
+        yield* TestClock.adjust("2 minutes");
+        yield* settled;
+        assert.ok(seals() > 60, `read ${seals()} times`);
+        assert.equal(held().at(-1)?.failure, undefined, "no failure is laid while offline");
+
+        sealTranscript(LIVE_ANSWERED);
+        yield* SubscriptionRef.set(reach, { reachable: true, answered: 1 });
+        yield* TestClock.adjust("1 second");
+        yield* settled;
+        transcriptRows(live, 2);
+        yield* settled;
+        assert.ok(
+          asked.includes(`messages-now:${AGENT_ID}:1:0`),
+          "the page past the newest is read once the live read stands",
+        );
+      }).pipe(Effect.provideService(ServiceReach, reach));
     }),
 );
 
