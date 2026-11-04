@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { writePage } from "@repo/database/models/plan-pages";
+import { PAGE_THEME_VARIABLE } from "@repo/features/page-theme";
 import {
   PAGE_BOUNDS,
   PAGE_OWNER,
@@ -94,20 +95,45 @@ const CODER_SHOW_PAGE_INPUT = Schema.Struct({
 
 const readCoderInput = readEither(CODER_SHOW_PAGE_INPUT);
 
+/** Each variable a page may draw with, by its name, as an agent is told them. */
+const THEME_VARIABLES_SAID = Object.values(PAGE_THEME_VARIABLE)
+  .map((variable) => `\`${variable}\``)
+  .join(", ");
+
+/**
+ * How a page is laid out to stand in the transcript it is drawn in, as T3
+ * Code tells its agents of an inline render: on the transcript's own ground
+ * in the app's theme (`@repo/features/page-theme`), as tall as its content.
+ */
+const PAGE_LAYOUT_WORDS =
+  "It is drawn in your transcript at its whole height, on the transcript's own ground, and the " +
+  "developer can open it full screen or in the side panel: leave `html`, `body`, and the " +
+  "outermost element with no background color, and add no outer card, border, banner title, or " +
+  "side padding of your own; a box that needs a ground of its own gets one inside. Draw with " +
+  "the app's theme, which every page is handed as CSS variables in the app's light or dark, " +
+  `its \`color-scheme\` set to match: ${THEME_VARIABLES_SAID}. ` +
+  "Let the content set the height: no `vh` units or `height: 100%` on `html` or `body`, and a " +
+  "chart a fixed height in pixels. ";
+
 /** The tool as an agent is offered it: its name, its words, and its input schema, the page named by `path` alone. */
 export const CODER_SHOW_PAGE_TOOL = {
   name: AGENT_TOOL.SHOW_PAGE,
   description:
-    "Show the developer an interactive HTML page in the side panel, your task's or, on no task, " +
+    "Show the developer an interactive HTML page in your transcript, your task's or, on no task, " +
     "your own: a chart, a table to " +
     "sort, a mockup of a screen, or a comparison they can click through, when it says more than " +
     "a diagram or words would. Write the page as one self-contained HTML file in your sandbox, " +
     "its scripts and styles inline and libraries only from https://cdnjs.cloudflare.com, then " +
-    "pass its `path`. Make it read well on a phone as on a desktop: a viewport meta tag, a " +
+    "pass its `path`. " +
+    PAGE_LAYOUT_WORDS +
+    "Make it read well on a phone as on a desktop: a viewport meta tag, a " +
     "layout that reflows to one column, wide tables, code, and charts that scroll inside their " +
     "own box, and text and tap targets big enough for a finger. It runs sealed off: it cannot " +
     "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
-    "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
+    "data in the page. Never put a secret in a page. Show the page or pictures of it, never both: " +
+    "the page alone where it says what you mean, or, where pictures say it better, such as parts " +
+    `of a page set side by side, those pictures with \`${AGENT_TOOL.SHOW_IMAGE}\` and not the page. ` +
+    "Call it again with the `page` it answered to " +
     "replace that page with a new version rather than making another. Answers `accepted` with the " +
     "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
     "or `rejected` and why nothing was shown.",
