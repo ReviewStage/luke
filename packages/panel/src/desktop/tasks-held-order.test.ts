@@ -20,7 +20,7 @@ import {
   type TasksFilter,
 } from "@repo/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { Activity, act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { KEPT } from "../act.js";
@@ -108,11 +108,12 @@ const TASKS = [
   task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
 ];
 
-/** How the page is drawn again: over which tasks, under which display, shown or not, and which tasks wait on a change made here. */
+/** How the page is drawn again: over which tasks, under which display, shown or not, kept drawn while hidden or not, and which tasks wait on a change made here. */
 interface Drawing {
   readonly display?: TasksDisplay;
   readonly filter?: TasksFilter;
   readonly shown?: boolean;
+  readonly kept?: boolean;
   readonly pendingTasks?: ReadonlySet<string>;
 }
 
@@ -158,14 +159,18 @@ async function mountView(
           createElement(
             Fragment,
             null,
-            createElement(MemberDirectory, {
-              workspace: ACME,
-              readerId: DEAN,
-              children: createElement(view, {
-                tasks: control,
-                room: SHELL_ROOM.WIDE,
-                title: "Tasks",
-                frame,
+            // The page kept drawn while the window is away from it, as the shell keeps it (`desktop-shell.tsx`).
+            createElement(Activity, {
+              mode: drawing.kept === true ? "hidden" : "visible",
+              children: createElement(MemberDirectory, {
+                workspace: ACME,
+                readerId: DEAN,
+                children: createElement(view, {
+                  tasks: control,
+                  room: SHELL_ROOM.WIDE,
+                  title: "Tasks",
+                  frame,
+                }),
               }),
             }),
             createElement(ToastHost),
@@ -251,7 +256,7 @@ test("in the List, a group whose last task goes slides out where it stood, out o
   assert.deepEqual(laidOut(container), [["Todo", ["ACME-40", "ACME-39", "ACME-41"]]]);
 });
 
-test("in the List, a task held still stands where it is now once the page is hidden and shown again, or grouped anew", async () => {
+test("in the List, a task held still stands where it is now once the page is hidden and shown again, kept drawn while hidden, or grouped anew", async () => {
   const { container, draw } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
   const moved = changed(41, { status: TASK_STATUS.IN_PROGRESS, priority: TASK_PRIORITY.URGENT });
   draw(moved);
@@ -262,6 +267,15 @@ test("in the List, a task held still stands where it is now once the page is hid
   assert.deepEqual(laidOut(container), [
     ["In progress", ["ACME-41", "ACME-42"]],
     ["Todo", ["ACME-40", "ACME-39"]],
+  ]);
+
+  draw(TASKS);
+  draw(TASKS, { kept: true });
+  draw(TASKS);
+
+  assert.deepEqual(laidOut(container), [
+    ["In progress", ["ACME-42"]],
+    ["Todo", ["ACME-40", "ACME-39", "ACME-41"]],
   ]);
 
   draw(changed(41, { priority: TASK_PRIORITY.NONE }));
