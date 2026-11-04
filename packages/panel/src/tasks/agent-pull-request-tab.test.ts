@@ -34,6 +34,7 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@repo/features/agent-wire";
+import { FAILURE_FACT } from "@repo/features/failure-facts";
 import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
@@ -46,6 +47,7 @@ import {
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@repo/features/pull-request-write-wire";
+import { type ShownFailureSentry, sendShownFailure } from "@repo/features/shown-failure";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -59,7 +61,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { TabActionGroups } from "../desktop/strip-tabs.js";
@@ -70,6 +72,7 @@ import {
   type DiffViewModule,
   type DiffViewProps,
 } from "../diff-view/contract.js";
+import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -2392,8 +2395,24 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
 });
 
-test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {
-  const failure = { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, reporting what failed beneath it, and Files changed still reads on its own", async () => {
+  const failure = {
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
+    cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: "timeout" },
+  } as const;
+  const reported: Readonly<Record<string, unknown>>[] = [];
+  const recording: ShownFailureSentry = {
+    captureException: () => "",
+    logger: {
+      warn: (_message, attributes) => reported.push(attributes),
+      error: (_message, attributes) => reported.push(attributes),
+    },
+    getActiveSpan: () => undefined,
+    getCurrentScope: () => ({
+      getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
+    }),
+  };
+  onTestFinished(installShownFailureReporter((report) => sendShownFailure(recording, report)));
   const control = {
     ...controlAnswering({
       pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(failure, {
@@ -2416,6 +2435,18 @@ test("where nothing of the pull request is held and its reads fail, each part sa
   const conversation =
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
   assert.match(conversation.textContent ?? "", /The conversation could not be read\./u);
+  assert.deepEqual(
+    reported.map((attributes) => [
+      attributes["failure.surface"],
+      attributes["failure.code"],
+      attributes["error.root.tag"],
+      attributes["error.root.fault"],
+    ]),
+    [
+      ["pull_request.read", "unanswered", "HostedUnanswered", "timeout"],
+      ["pull_request_conversation.read", "unanswered", "HostedUnanswered", "timeout"],
+    ],
+  );
 
   await choose(tab, "Files changed");
   assert.match(
