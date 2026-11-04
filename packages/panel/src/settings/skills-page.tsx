@@ -6,14 +6,13 @@ import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
 } from "@repo/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { formatBytes } from "@repo/features/number-format";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { SETTING_KEEP, settingKeepWords } from "@repo/settings";
 import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -59,7 +58,6 @@ import { useAct } from "../act.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
-import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
@@ -109,14 +107,6 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * skill the account may change is checked for an update once.
  */
 
-/**
- * The sentence the workspace group's rows end in: the page's head says the
- * account keeps what the page holds, and the workspace's skills are the
- * exception, shared with every member. A workspace is no device, so no
- * capability changes its words.
- */
-const WORKSPACE_KEEP_LINE = `${settingKeepWords(SETTING_KEEP.WORKSPACE, [])}.`;
-
 /** An installed skill's row while the skills are read: its book, its words over its source, its switch, and its ⋯. */
 const SKILL_ROW_SKELETON: SettingsRowSkeletonShape = {
   described: true,
@@ -136,7 +126,7 @@ const SKILL_GROUP_SKELETON: SettingsSectionSkeletonShape = {
  * personal one, which draws no group of its own, is not yet known.
  */
 const SKILLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
-  { headed: false, rows: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] }] },
+  { headed: false, rows: [{ described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] }] },
   SKILL_GROUP_SKELETON,
   SKILL_GROUP_SKELETON,
 ];
@@ -380,20 +370,15 @@ function SkillRowView({
                 </SettingsRowMark>
               ),
               label: skill.name,
-              // Note that the source and the keep line stand under the description as the row's detail, never run onto its end.
+              // Note that the source line stands under the description as the row's detail, never run onto its end.
               description: (
                 <>
                   {skill.description}
-                  <SettingsRowStateLine block>
-                    {skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE
-                      ? `${row.line}. ${WORKSPACE_KEEP_LINE}`
-                      : row.line}
-                  </SettingsRowStateLine>
+                  <SettingsRowStateLine block>{row.line}</SettingsRowStateLine>
                 </>
               ),
               error: refusedShown(error, FAILURE_SURFACE.SKILL_WRITE),
               landed,
-              control: <SkillSourceBadge source={row.source} />,
               describedControl: (control) => (
                 <Switch
                   checked={skill.enabled}
@@ -509,7 +494,7 @@ function ShownSkills({
   return (
     <>
       <SettingsSection anchor={SETTINGS_SEARCH_ROW.ADD_SKILL}>
-        <SettingsRow label="Add a skill" description={SKILLS_LINE.ABOUT}>
+        <SettingsRow label="Add a skill">
           {() => (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
@@ -533,7 +518,7 @@ function ShownSkills({
         <>
           {workspace.personal === true ? null : (
             <SettingsSection title={workspaceGroupTitle(workspace)}>
-              {rows(groups?.workspace, `${SKILLS_LINE.NONE} ${WORKSPACE_KEEP_LINE}`)}
+              {rows(groups?.workspace)}
             </SettingsSection>
           )}
           <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups?.personal)}</SettingsSection>

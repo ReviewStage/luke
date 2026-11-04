@@ -248,7 +248,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * Runs on hold; the account's own GitHub token, by the account,
  * which Settings › Account, a workspace's Add repository, and onboarding's
  * GitHub step hold; the outside MCP clients the account allowed, by
- * the account, which Settings › Integrations holds; one agent's or worker's
+ * the account, which Settings › MCP holds; one agent's or worker's
  * transcript, by the agent and then the worker's call or the agent's own,
  * which its tab holds while it shows; one workspace's
  * memories, which Settings › Memory holds; the skills the account sees in

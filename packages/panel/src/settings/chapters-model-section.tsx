@@ -50,7 +50,6 @@ const SECTION_LINE = {
   FAILED: "The chapters model could not be read.",
   SIGNED_OUT: SIGNED_OUT_WORDS,
   WRITE_FAILED: "The chapters model could not be saved. Try again.",
-  DETAIL: "Runs on your own API key, or OpenAI's model of the same tier on an OpenAI key alone.",
 } as const;
 
 /** The row that stands while the model is read: Model over its note, and the models' segments. */
@@ -86,7 +85,6 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
         <SettingsRow
           label="Model"
           adornment={<SettingMarks changed={model !== CHAPTERS_MODEL_DEFAULT} saves={saves} />}
-          description={SECTION_LINE.DETAIL}
           error={refusalShown(rejection, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (

@@ -3,12 +3,7 @@ import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { Workspace } from "@repo/features/workspace-wire";
-import {
-  type HostCapability,
-  SETTINGS_VIEW_COUNTED_AS,
-  settingKeepWords,
-  settingsPageKeep,
-} from "@repo/settings";
+import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -214,10 +209,7 @@ function PageGroup({
  * This Mac. Settings opens on Profile, Account's first page, with the caret
  * in the search. The page is a document: its title heads its column, under
  * the page's bar (`SettingsPage`), which picks up the title once it scrolls
- * away, and a page's reset ends the title's line. One quiet line under the
- * title says where the page's settings are kept (`settingsPageKeep`): on this
- * Mac, in this browser on the web, or following the account or the workspace;
- * a row kept elsewhere says so under its own label. The Workspace page's title is
+ * away, and a page's reset ends the title's line. The Workspace page's title is
  * the listed workspace's name, since that is the workspace it shows.
  *
  * A query turns the list into what it found, and only the field changes it:
@@ -295,10 +287,6 @@ export function DesktopSettings({
     rows,
     split.single ? title : undefined,
   );
-  // Where the page's settings are kept, one quiet line under its title; none before the settings arrive or on a page keeping nothing.
-  const pageKeep = rows ? settingsPageKeep(settings.view, rows) : undefined;
-  const keepLine =
-    pageKeep === undefined ? undefined : settingKeepWords(pageKeep, settings.capabilities);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -410,7 +398,6 @@ export function DesktopSettings({
         <SettingsPage
           key={settings.view}
           title={title}
-          description={keepLine}
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

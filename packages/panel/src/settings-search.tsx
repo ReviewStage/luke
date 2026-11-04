@@ -142,7 +142,7 @@ export function resultPageWord(page: SettingsView): string {
 const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Appearance, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
-const INTEGRATION_WORDS = "connect disconnect integration mcp";
+const INTEGRATION_WORDS = "connect disconnect integration";
 
 /** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
 const EXPERIMENT_WORDS = "experiment preview beta labs early try";
@@ -235,6 +235,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
+    // The MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MCP_CLIENTS,
+          label: "Agents with access",
+          page: SETTINGS_VIEW.MCP,
+          haystack: ["Agents with access", "mcp server clients oauth allowed revoke access"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MCP_CONNECT,
+          label: "Connect an agent",
+          page: SETTINGS_VIEW.MCP,
+          haystack: [
+            "Connect an agent",
+            "mcp server url address claude code codex chatgpt connector",
+          ],
+        }
+      : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,
@@ -334,8 +354,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
-    // shows: the invite only where the reader may invite, and the leave
-    // only where the reader may leave.
+    // shows: the invite form, under the members, only where the reader may
+    // invite, and the leave only where the reader may leave.
     input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
@@ -382,13 +402,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Rename workspace", "rename name change workspace photo"],
         }
       : undefined,
-    // The workspace's link, which its owner alone changes on the row under its identity.
+    // The workspace's link, which its owner alone changes from Change slug in the identity row's ⋯.
     input.workspace?.role === WORKSPACE_ROLE.OWNER
       ? {
           id: SETTINGS_SEARCH_ROW.WORKSPACE_SLUG,
           label: "Workspace link",
           page: SETTINGS_VIEW.WORKSPACE,
-          haystack: ["Workspace link", "link slug address url change workspace"],
+          haystack: ["Workspace link", "Change slug link address url workspace"],
         }
       : undefined,
     // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.

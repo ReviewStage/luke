@@ -124,6 +124,8 @@ export const RUN_PROFILE = {
   SETTINGS_HOSTS: "settings-hosts",
   /** The same account, Settings on Integrations: some connected, some with their sign-in expired. */
   SETTINGS_INTEGRATIONS: "settings-integrations",
+  /** The same account, Settings on MCP: the agents it let in and how to connect another. */
+  SETTINGS_MCP: "settings-mcp",
   /** The same account, Settings on Skills: its team's and its own. */
   SETTINGS_SKILLS: "settings-skills",
   /** The same account, Settings on its team's memory. */
@@ -927,7 +929,7 @@ export interface AppState {
   [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhotos;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
-  /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
+  /** The outside MCP clients the account allowed, held while Settings › MCP shows them and a while after. */
   [LIVE_READ.MCP_CLIENTS]: AppMcpClients;
   /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
   [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;

@@ -307,6 +307,7 @@ const SETTINGS_PAGES = [
   "Workspace",
   "Agents",
   "Integrations",
+  "MCP",
   "Appearance",
   "This Mac",
   "Experimental",

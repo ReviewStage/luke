@@ -422,6 +422,8 @@ function answer(request: Asked): Promise<Answered> {
         });
       }
       return Promise.resolve(done({ ...ACME, name: request.payload.name }));
+    case ACT_KIND.WORKSPACE_SLUG_SET:
+      return Promise.resolve(done({ ...ACME, slug: request.payload.slug }));
     case ACT_KIND.WORKSPACE_PHOTO_SET:
       if (refusePhoto) {
         return Promise.resolve({
@@ -791,8 +793,9 @@ const rowBoxes = (within: Element) =>
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
-/** Who shares the workspace and the account's role in it, as the identity row's line says it. */
-const roleLine = (page: HTMLElement) => identity(page).querySelector("p")?.textContent;
+/** Who shares the workspace, as the identity row's line says it, or nothing where it draws no line. */
+const sharedLine = (page: HTMLElement) =>
+  identity(page).querySelector('[id$="description"]')?.textContent;
 
 /** The renames the page asked for, by their payloads. */
 const renames = () =>
@@ -835,32 +838,67 @@ test("an admin's rename the service refuses says so under the row, and a member 
   assert.equal(refusalOf(identity(admin.page)), WORKSPACE_NOT_PERMITTED_REFUSAL);
 
   const member = await mount(ACME);
-  assert.equal(roleLine(member.page), "You're a member");
   assert.equal(buttons(member.page, "Rename").length, 0);
   assert.equal(member.page.querySelector('input[aria-label="Workspace name"]') === null, true);
 });
 
-test("the identity row says who shares the workspace and the account's role, and an account's own workspace with nobody else in it just that it is personal", async () => {
+test("the identity row says who shares the workspace and nothing of the account's role, an account's own workspace with nobody else in it that it is personal, and no line where the service counts no one", async () => {
   const team = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN, memberCount: 6 });
-  const shared = roleLine(team.page);
+  const shared = sharedLine(team.page);
   const alone = await mount({ ...FIRST, memberCount: 1 });
   const ownShared = await mount({ ...FIRST, memberCount: 2 });
+  const uncounted = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.equal(shared, "6 members · You're an admin");
-  assert.equal(roleLine(alone.page), "Personal workspace");
-  assert.equal(roleLine(ownShared.page), "2 members · You're the owner");
+  assert.equal(shared, "6 members");
+  assert.equal(sharedLine(alone.page), "Personal workspace");
+  assert.equal(sharedLine(ownShared.page), "2 members");
+  assert.equal(sharedLine(uncounted.page), undefined);
 });
 
-test("a personal workspace shows its owner's name with no Rename to its owner and an admin alike, and still offers its photo", async () => {
-  for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
+test("a personal workspace shows its owner's name with no Rename to its owner and an admin alike, and still offers its photo, and its slug to the owner alone", async () => {
+  for (const [role, acts] of [
+    [WORKSPACE_ROLE.OWNER, ["Upload photo", "Change slug"]],
+    [WORKSPACE_ROLE.ADMIN, ["Upload photo"]],
+  ] as const) {
     const { page } = await mount({ ...FIRST, role });
 
     assert.equal(nameShown(page), FIRST.name);
     assert.equal(buttons(page, "Rename").length, 0);
-    assert.deepEqual(rowActions(identity(page)), ["Upload photo"]);
+    assert.deepEqual(rowActions(identity(page)), acts);
   }
   const team = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   assert.equal(buttons(team.page, "Rename").length, 1);
+});
+
+/** The slugs the page sent, by their payloads. */
+const slugs = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_SLUG_SET ? [request.payload] : [],
+  );
+
+test("the owner's Change slug opens on the slug as it stands, says what is wrong with one typed under the field, and Save sends the new one", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await chooseAction(identity(page), "Change slug");
+  const card = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("no dialog");
+  const field = card.querySelector<HTMLInputElement>("input") ?? assert.fail("no slug field");
+  const opened = field.value;
+  const typeSlug = (words: string) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  typeSlug("Acme Labs");
+  const malformed = [refusalOf(card), button(card, "Save").disabled];
+  typeSlug("acme-labs");
+  act(() => button(card, "Save").click());
+  await settle();
+
+  assert.equal(opened, "acme");
+  assert.deepEqual(malformed, [
+    "Use lowercase letters and numbers, with single hyphens between them, up to 48 characters.",
+    true,
+  ]);
+  assert.deepEqual(slugs(), [{ workspaceId: ACME.id, slug: "acme-labs" }]);
 });
 
 /** The photos the page sent, by their payloads. */
@@ -989,10 +1027,10 @@ test("Remove photo stands disabled while an upload is still under way, so the up
 });
 
 test("Remove photo, offered only where a photo is set, asks first and then sends no photo, and a set photo is replaced rather than uploaded", async () => {
-  const bare = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const bare = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   assert.deepEqual(rowActions(identity(bare.page)), ["Upload photo"]);
 
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN, photoVersion: "v1" });
   assert.deepEqual(rowActions(identity(page)), ["Replace photo", "Remove photo"]);
   await chooseAction(identity(page), "Remove photo");
   assert.deepEqual(photos(), []);
@@ -1506,14 +1544,13 @@ test("a member leaves after confirming, which names what stays and what stops, a
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the account's first workspace reads like any other: its role, its members with the invite form, and Connect for its GitHub", async () => {
+test("the account's first workspace reads like any other: its members with the invite form, and Connect for its GitHub", async () => {
   stored = [OWNER];
   const { page } = await mount(FIRST);
   const row = rowNamed(page, "GitHub");
   act(() => button(row, "Connect").click());
   await settle();
 
-  assert.equal(roleLine(page), "You're the owner");
   assert.ok(page.querySelector(".workspace-invite"));
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1964,7 +2001,7 @@ test("the token repositories say Reading while they are read, and a refused read
   );
 });
 
-test("the page has no workspace picker of its own, and shows another workspace, the account's role in it, and its own members once the sidebar lists it", async () => {
+test("the page has no workspace picker of its own, and shows another workspace, what the account may do in it, and its own members once the sidebar lists it", async () => {
   const beta: Workspace = {
     ...ACME,
     id: "workspace-beta",
@@ -1976,14 +2013,14 @@ test("the page has no workspace picker of its own, and shows another workspace, 
   const rowNames = [...page.querySelectorAll(".settings-row strong")].map(
     (name) => name.textContent,
   );
-  const listedRole = roleLine(page);
+  const listed = [nameShown(page), buttons(page, "Rename").length];
 
   await relist(beta);
 
   assert.equal(page.querySelector('button[aria-label^="Workspace:"]'), null, "no picker");
   assert.equal(rowNames.includes("Workspace"), false, "no Workspace row");
-  assert.equal(listedRole, "You're a member");
-  assert.equal(roleLine(page), "You're an admin");
+  assert.deepEqual(listed, [ACME.name, 0]);
+  assert.deepEqual([nameShown(page), buttons(page, "Rename").length], [beta.name, 1]);
   assert.deepEqual(
     sent
       .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_FOLLOW)
@@ -2403,10 +2440,7 @@ test("a Sentry read that failed says so with Retry, for a member too, and Retry 
 
   assert.equal(failed, true);
   assert.equal(sentryFailure(page), undefined);
-  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), [
-    "Sentry",
-    "Installed for automations · acme",
-  ]);
+  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Connected"]);
 });
 
 test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {
@@ -2426,7 +2460,7 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
 
-test("an installed workspace's Sentry names its organization, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
+test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(admin.page), "Sentry");
@@ -2440,7 +2474,7 @@ test("an installed workspace's Sentry names its organization, its ⋯ holds Disc
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
   const memberRow = rowNamed(githubGroup(member.page), "Sentry");
 
-  assert.deepEqual(words, ["Sentry", "Installed for automations · acme"]);
+  assert.deepEqual(words, ["Sentry", "Connected"]);
   assert.deepEqual(sentrySent(), [
     [
       ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
@@ -2451,13 +2485,13 @@ test("an installed workspace's Sentry names its organization, its ⋯ holds Disc
     "Sentry",
     "Not installed. Install to start automations from Sentry alerts.",
   ]);
-  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed for automations · acme"]);
+  assert.deepEqual(rowWords(memberRow), ["Sentry", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
 const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
 
-test("an admin connects the Slack bot, which then names its team, and disconnects it after asking; a member sees it read only", async () => {
+test("an admin connects the Slack bot, which then says Connected, and disconnects it after asking; a member sees it read only", async () => {
   slackBot = { configured: true };
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const before = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
@@ -2477,9 +2511,9 @@ test("an admin connects the Slack bot, which then names its team, and disconnect
     "Slack bot",
     "Not connected. Connect Vespin's bot to message members in Slack.",
   ]);
-  assert.deepEqual(connected, ["Slack bot", "Connected to Acme Slack"]);
+  assert.deepEqual(connected, ["Slack bot", "Connected"]);
   assert.deepEqual(after, before);
-  assert.deepEqual(rowWords(memberRow), ["Slack bot", "Connected to Acme Slack"]);
+  assert.deepEqual(rowWords(memberRow), ["Slack bot", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
