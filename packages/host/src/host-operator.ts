@@ -67,7 +67,6 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
-  type AgentWorkspaceToolsAnswerView,
   agentAccountInboxAnswerViewSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
@@ -95,13 +94,10 @@ import {
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
-  agentWorkspaceToolsAnswerViewSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
-  type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
-  devicePresenceAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
@@ -388,10 +384,12 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppChapters,
+  AppDevicePresences,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
   AppPages,
+  AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
 import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
@@ -676,7 +674,12 @@ export interface HostOperator {
   agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts, as Settings lists them; or why there is no list. */
   hostsList(): Effect.Effect<HostsAnswerView>;
-  hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
+  /** The account's devices' beats held for the windows from now until let go, asked again every `MAC_PRESENCE.POLL_MS` while held; what they hold is heard through `onDevicePresenceChanged`. */
+  hostsPresenceFollow(): Effect.Effect<void>;
+  /** The account's devices' beats let go by the windows. */
+  hostsPresenceUnfollow(): Effect.Effect<void>;
+  /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
+  onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
   /** A box's pending pairing read by the code its link named; the box, or why not. */
@@ -798,8 +801,14 @@ export interface HostOperator {
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
-  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
-  agentWorkspaceTools(params: AgentPullRequestParams): Effect.Effect<AgentWorkspaceToolsAnswerView>;
+  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
+  agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** One agent's own tools let go by the windows. */
+  agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
+  agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
+  onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -1736,10 +1745,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.HOSTS_LIST),
         answerOf(hostsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    hostsPresence: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_PRESENCE),
-        answerOf(devicePresenceAnswerViewSchema, AGENT_UNANSWERED),
+    hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
+    hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
+    onDevicePresenceChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
+        // Note that the held beats are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
+        listener,
       ),
     hostsRemove: (id) =>
       Effect.map(
@@ -2054,10 +2067,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
         answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentWorkspaceTools: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS, { agentId: params.agentId }),
-        answerOf(agentWorkspaceToolsAnswerViewSchema, AGENT_UNANSWERED),
+    agentWorkspaceToolsFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),
+    agentWorkspaceToolsUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_UNFOLLOW, { agentId: params.agentId }),
+      ),
+    agentWorkspaceToolsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId: params.agentId })),
+    onWorkspaceToolsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED,
+        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
+        listener,
       ),
     agentOverviewChecks: (params) =>
       Effect.map(

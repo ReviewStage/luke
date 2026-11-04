@@ -6,6 +6,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import type { MicrophoneRoute, MicrophoneStatus } from "@repo/settings/microphone";
@@ -328,6 +329,35 @@ export type AppChapters = Readonly<
 
 /** No chapters held, as the host stands before any window shows a pull request's and after the session ends. */
 export const NO_CHAPTERS: AppChapters = {};
+/** One of the account's own devices' last beat, at the host's instant: its age as the service answered it, taken from the host's clock as the answer landed. */
+interface AppDeviceBeat {
+  deviceId: string;
+  beatAt: number;
+}
+
+/**
+ * The account's own devices' last beats as the host last asked for them
+ * (`compose-agents.ts`): each beat at the host's instant, so a window ages
+ * it on its own clock, which is the host's machine's; and the instant of
+ * the latest ask, which moves with every ask, so a surface judging the beats
+ * by the clock draws again as often as they are asked. Where the latest ask
+ * failed after one had answered, the beats it answered stand and say so
+ * (`stale`), since a window that could not ask must not say a device is away.
+ */
+export interface AppDevicePresence {
+  beats: readonly AppDeviceBeat[];
+  askedAt: number;
+  stale?: true;
+}
+
+/** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
+export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
+
+/** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
+export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
+
+/** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
+export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
 
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
@@ -335,6 +365,8 @@ export interface AppHostReads {
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
+  [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
 }
 
 /**
@@ -429,6 +461,10 @@ export interface AppState {
   [LIVE_READ.PAGES]: AppPages;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
+  /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
+  [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
+  [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -553,6 +589,8 @@ export const HOST_READ_SLICE = {
       agentPullRequests: "agentId" satisfies keyof TasksRows<"agentPullRequests">[number],
     } satisfies { readonly [Part in keyof TasksView]?: string },
   },
+  [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 
 /** A slice `HOST_READ_SLICE` declares. */

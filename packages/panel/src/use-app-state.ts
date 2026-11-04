@@ -245,6 +245,8 @@ export const APP_SLICE = {
   HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
   PAGES: sliceAtom(LIVE_READ.PAGES),
   PULL_REQUEST_CHAPTERS: sliceAtom(LIVE_READ.PULL_REQUEST_CHAPTERS),
+  DEVICE_PRESENCE: sliceAtom(LIVE_READ.DEVICE_PRESENCE),
+  WORKSPACE_TOOLS: sliceAtom(LIVE_READ.WORKSPACE_TOOLS),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),

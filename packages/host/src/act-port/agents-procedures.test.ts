@@ -87,8 +87,6 @@ const REFUSAL = {
     "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
     "Could not read the repository's reviewers and labels on this system.",
-  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]:
-    "Could not read the agent's Vespin tools on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]:
     "Could not read the pull request's checks on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
@@ -216,11 +214,6 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS,
     payload: { agentId: AGENT_ID },
     ask: "agentReviewOptions",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS,
-    payload: { agentId: AGENT_ID },
-    ask: "agentWorkspaceTools",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS,

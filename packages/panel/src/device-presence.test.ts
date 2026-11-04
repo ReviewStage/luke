@@ -2,17 +2,17 @@
 
 import assert from "node:assert/strict";
 import { DEVICE_STANDING } from "@repo/features/agent-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { presenceStanding, useDevicePresence } from "./device-presence.js";
 import { fakeActPort } from "./testing/app-bridge.js";
+import { handBeats } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
 /**
- * device-presence.test.ts -- the shared presence judges each device by the service's own count of how long ago it beat, never by comparing two wall clocks, and says it cannot check, not offline, where its read failed.
+ * device-presence.test.ts -- the shared presence judges each device by how long ago its beat was on this machine's clock, and says it cannot check, not offline, where its read failed.
  * Synthetic ids.
  */
 
@@ -58,41 +58,27 @@ async function draw(ids: readonly string[]): Promise<HTMLElement> {
   return container;
 }
 
-/** The service answering each device as `ageMs` old. */
-const answeringAges = (ages: Readonly<Record<string, number>>) => ({
-  [ACT_KIND.HOSTS_PRESENCE]: () =>
-    Promise.resolve({
-      devices: Object.entries(ages).map(([deviceId, ageMs]) => ({ deviceId, ageMs })),
-    }),
-});
-
-test("a window whose clock is five minutes off still reads a beating device online", async () => {
-  fakeActPort(answeringAges({ [deviceOf(1)]: 5_000 }));
-  const real = Date.now();
-  for (const skew of [5 * 60_000, -5 * 60_000]) {
-    vi.spyOn(Date, "now").mockReturnValue(real + skew);
-    const container = await draw([deviceOf(1)]);
-    assert.equal(container.textContent, DEVICE_STANDING.ONLINE, `skew ${skew}`);
-  }
-});
-
 test("a beat delayed by 25 seconds still reads online, and a device quiet for four beats reads offline", async () => {
-  fakeActPort(answeringAges({ [deviceOf(1)]: 25_000 + 15_000, [deviceOf(2)]: 61_000 }));
+  fakeActPort({});
+  handBeats({ [deviceOf(1)]: 25_000 + 15_000, [deviceOf(2)]: 61_000 });
   const container = await draw([deviceOf(1), deviceOf(2)]);
 
   assert.equal(container.textContent, `${DEVICE_STANDING.ONLINE},${DEVICE_STANDING.OFFLINE}`);
 });
 
-test("a device the service does not name as the account's own has no standing", async () => {
-  fakeActPort(answeringAges({ [deviceOf(1)]: 1_000 }));
+test("a device the read does not name as the account's own has no standing", async () => {
+  fakeActPort({});
+  handBeats({ [deviceOf(1)]: 1_000 });
   const container = await draw([deviceOf(1), deviceOf(9)]);
 
   assert.equal(container.textContent, `${DEVICE_STANDING.ONLINE},none`);
 });
 
-test("a read that failed says unknown, never offline", async () => {
-  fakeActPort({ [ACT_KIND.HOSTS_PRESENCE]: () => Promise.reject(new Error("no answer")) });
-  const container = await draw([deviceOf(1)]);
+test("a read that failed says unknown, never offline, whether or not one answered before it", async () => {
+  fakeActPort({});
+  handBeats(undefined);
+  assert.equal((await draw([deviceOf(1)])).textContent, DEVICE_STANDING.UNKNOWN);
 
-  assert.equal(container.textContent, DEVICE_STANDING.UNKNOWN);
+  handBeats({ [deviceOf(1)]: 61_000 }, { stale: true });
+  assert.equal((await draw([deviceOf(1)])).textContent, DEVICE_STANDING.UNKNOWN);
 });

@@ -303,7 +303,7 @@ export const DEVICE_BEAT = {
 export const MAC_PRESENCE = {
   /** How lately a device must have beaten to count as there: `MISSED_BEATS` beats' time. */
   FRESH_MS: DEVICE_BEAT.EVERY_MS * DEVICE_BEAT.MISSED_BEATS,
-  /** How often a window reads the beats of the devices it draws: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
+  /** How often the host reads the beats of the account's devices while a window draws them: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
 } as const;
 

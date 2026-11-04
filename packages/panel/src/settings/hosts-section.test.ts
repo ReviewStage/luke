@@ -16,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -98,7 +99,6 @@ test("Add hosts shows the public install command, with no secret in it, waits fo
   ];
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
   });
   drawHosts();
   await settle();
@@ -135,8 +135,8 @@ it.effect("the dialog names a host that joins while it stands within seconds", (
     const hosts: Host[] = [];
     fakeActPort({
       [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-      [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: id, ageMs: 0 }] }),
     });
+    handBeats({ [id]: 0 });
     drawHosts(yield* onTestClock);
     yield* Effect.promise(settle);
     yield* Effect.promise(() => press("Add hosts"));
@@ -161,7 +161,6 @@ test("a code approved from its link in the same window lets Add hosts, open bene
   const hosts: Host[] = [];
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
     [ACT_KIND.HOSTS_PAIRING_READ]: () =>
       Promise.resolve({
         name: "hel-02",
@@ -207,8 +206,8 @@ it.effect(
       fakeActPort({
         [ACT_KIND.HOSTS_LIST]: () =>
           Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-        [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
       });
+      handBeats({});
       drawHosts(yield* onTestClock);
       yield* Effect.promise(settle);
       assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
@@ -256,9 +255,9 @@ async function machinesWithThisMac(
 ): Promise<void> {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
     [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac),
   });
+  handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
   drawHosts();
   await settle();
 }
