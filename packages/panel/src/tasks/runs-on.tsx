@@ -7,6 +7,7 @@ import {
 import type { MacOffer } from "@repo/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@repo/features/task-wire";
 import {
+  CHIP_LOOK,
   CHIP_WIDTH,
   GAP,
   GlyphSlot,
@@ -34,7 +35,8 @@ import { keptKey, useKept } from "../use-kept.js";
  *
  * Where agents run is the task's (`task-wire.ts`'s `runsOn`), it decides
  * where every agent started on it runs, and it is set when the task is
- * created and never changed. New task's chip drops a menu: Cloud first, then
+ * created and never changed. New task's chip, a toolbar chip ending in its
+ * chevron as the model chip beside it is, drops a menu: Cloud first, then
  * each device the member registered, as the models answer lists them, by what
  * every list of machines calls it (`machine-name.ts`), This Mac among them,
  * under the glyph of its platform, a Mac or a Linux server, each saying
@@ -63,7 +65,7 @@ import { keptKey, useKept } from "../use-kept.js";
  */
 
 /** What the menu and its chips say. */
-const RUNS_ON_WORDS = {
+export const RUNS_ON_WORDS = {
   LABEL: "Runs on",
   CLOUD: "Cloud",
   ONLINE: "Online",
@@ -84,7 +86,7 @@ const KEPT = { PICK: keptKey("app.newTaskRunsOn", Schema.String) } as const;
 const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
 
 /** A device's glyph by its platform (`devicePlatformOf`): a server's for Linux, a Mac's otherwise. */
-function DeviceGlyph({
+export function DeviceGlyph({
   device,
 }: {
   device: { readonly platform?: DevicePlatform } | undefined;
@@ -256,6 +258,8 @@ export function NewTaskRunsOnChip({
       noMatch={RUNS_ON_WORDS.NO_MATCH}
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
+      look={CHIP_LOOK.TOOLBAR}
+      chevron
       menuWidth={POPOVER_WIDTH.REGULAR}
       disabled={disabled}
       onPick={(id) => onChoose(id === CLOUD_ROW ? undefined : id)}

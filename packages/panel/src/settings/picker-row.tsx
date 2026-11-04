@@ -75,6 +75,8 @@ interface PickerProps {
   width?: ChipWidth | undefined;
   /** The chip's look: a field's, ending in its chevron, where none is named, or a toolbar's. */
   look?: typeof CHIP_LOOK.FIELD | typeof CHIP_LOOK.TOOLBAR | undefined;
+  /** Whether the chip ends in the menu's chevron: a field's always does, and a toolbar's where it asks, as the model chip beside it does. */
+  chevron?: boolean | undefined;
   /** How wide the menu stands, the room allowing; narrow where none is named. */
   menuWidth?: PopoverWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
@@ -109,6 +111,7 @@ export function Picker({
   align = POPOVER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
   look = CHIP_LOOK.FIELD,
+  chevron = look === CHIP_LOOK.FIELD,
   menuWidth = POPOVER_WIDTH.NARROW,
   onOpen,
   onSearch,
@@ -146,7 +149,7 @@ export function Picker({
           look={look}
           width={width}
           iconOnly={iconOnly && valueIcon != null}
-          chevron={look === CHIP_LOOK.FIELD}
+          chevron={chevron}
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}
           aria-describedby={describedBy}
