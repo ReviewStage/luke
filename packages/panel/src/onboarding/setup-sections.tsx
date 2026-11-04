@@ -1,7 +1,7 @@
 import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { SETTINGS_SECTION_FRAME, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import { useEffect, useState } from "react";
-import { AgentAuthSection } from "../settings/agent-auth-section.js";
+import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { GitHubSetup } from "./setup-github.js";
@@ -12,12 +12,13 @@ import { GitHubSetup } from "./setup-github.js";
  * An agent and GitHub are read as Home opens; each one missing is a section
  * of its own, Connect an agent and Connect GitHub, which stays, its rows
  * saying it is connected, once it is done, so nothing moves under the
- * pointer. With neither missing there is nothing, and Home stands as it does
+ * pointer. An agent connects in place, as onboarding's step connects one,
+ * since this is that step taken up later; Settings › Agents keeps the dialog. With neither missing there is nothing, and Home stands as it does
  * for anyone.
  */
 
-/** The Agents rows' API keys, which the section reads no further. */
-const IGNORE_KEYS = () => undefined;
+/** Whether an agent is connected, which its rows say for themselves. */
+const IGNORE_CONNECTED = () => undefined;
 
 /** Whether GitHub reaches a repository, which its card says for itself. */
 const IGNORE_REACHED = () => undefined;
@@ -79,7 +80,7 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             Run agents on your ChatGPT or Claude plan, or an API key.
           </Text>
-          <AgentAuthSection signedIn onKeys={IGNORE_KEYS} />
+          <AgentConnectSection onConnected={IGNORE_CONNECTED} />
         </SettingsSection>
       ) : null}
       {missing.github ? (
