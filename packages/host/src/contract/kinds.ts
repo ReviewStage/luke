@@ -148,6 +148,7 @@ export const AGENT_ACT_KIND = {
   AGENTS_SHOWN: "agents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   AGENTS_SEEN: "agents.seen",
+  /** One agent as its own page reads it, by its id, read once where a press must know where the agent stands now, as the archive confirm asks whether a teammate's agent still works before it archives it; answered to the press, never on the document. */
   AGENTS_PAGE: "agents.page",
   /**
    * The run of an automation that started one agent, held followed while the
@@ -666,7 +667,7 @@ export const PORT_ACT_USE = {
   AGENTS_DELETE: ACT_USE.WRITE,
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
-  AGENTS_PAGE: ACT_USE.READ,
+  AGENTS_PAGE: ACT_USE.FETCH,
   AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
   AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
