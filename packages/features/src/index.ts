@@ -96,6 +96,7 @@ export {
   type HostedQuota,
   hostedErrorSchema,
   hostedQuotaSchema,
+  IDEMPOTENCY_KEY,
   isWireUuid,
   readServiceAnswer,
   WIRE_UUID_LENGTH,

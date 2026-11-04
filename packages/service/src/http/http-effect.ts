@@ -74,6 +74,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -195,6 +196,8 @@ export const HOSTED_REFUSAL = {
   TASK_PARENT_HELD: { error: HOSTED_API_ERROR.TASK_PARENT_HELD },
   /** The account named too many pairing codes no pending pairing has (`hostPairingHeld`, which names until when); nothing was read or written. */
   HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
+  /** A write sent again under an idempotency key it was taken under before; nothing ran again. */
+  ALREADY_WRITTEN: { error: HOSTED_API_ERROR.ALREADY_WRITTEN },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

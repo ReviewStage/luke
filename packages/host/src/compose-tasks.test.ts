@@ -1200,6 +1200,8 @@ function subject(
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
+        // Note that the id the host mints for a task it starts is the one the service answers it under.
+        createId: () => INVITES,
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
@@ -1508,49 +1510,132 @@ it.effect(
 );
 
 it.effect(
-  "a quiet start draws its task's row as the service answered it, blocked where a blocker is open, and holds it until the list carries the start",
+  "a quick add draws its row before the service answers and holds it until the list carries the start, and one the service refused is taken back",
   () =>
     Effect.gen(function* () {
       const billing = task(BILLING, "Billing export", "# Billing", 20);
       const service = fakeService([billing]);
       const { call, last, settled, listed } = yield* subject(service);
-      const listedIds = () => last()?.tasks.map((row) => row.id);
+      const shown = () => last()?.tasks.some((row) => row.id === INVITES);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
       yield* nextPoll(settled);
-      const made: Task = {
-        ...task(INVITES, "Invitation expiry", "", 30),
-        createdAt: 3_000,
-        ownerId: "user-dana",
-        createdBy: { userId: "user-dana", name: "Dana" },
-        status: TASK_STATUS.TODO,
-        priority: TASK_PRIORITY.NONE,
-        number: 2,
-        // Started blocked by a task still open, which the answer names rather than marks.
-        blockedBy: [BILLING],
-      };
-      service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
+      // The service answers a start only once let go, as one still out.
+      const answered = yield* Deferred.make<void>();
+      const { create } = service;
+      service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
+      service.createAnswer = { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+      const quickAdd = { name: "Invitation expiry", workspaceId: billing.workspaceId, quiet: true };
 
-      const start = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
-      );
+      const refusing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_START, quickAdd));
       yield* settled;
-      const drawn = listedIds();
-      const drawnBlocked = last()?.tasks.find((row) => row.id === INVITES)?.blocked;
+      const drawn = shown();
+      yield* Deferred.succeed(answered, undefined);
+      const refused = yield* Fiber.join(refusing);
+      const takenBack = shown();
+
+      const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
+      service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
+      const start = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_START, quickAdd));
+      yield* settled;
       // A list read from before the start answers without it.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
       yield* nextPoll(settled);
-      const throughStale = listedIds();
+      const throughStale = shown();
       service.live.list.set({ plans: [rowOfTask(made), rowOfTask(billing)] }, ["tx-start"]);
       yield* nextPoll(settled);
 
+      assert.equal(drawn, true, "the row is drawn before the service answers");
+      assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+      assert.equal(takenBack, false, "a refused start's row is taken back");
+      assert.equal(throughStale, true, "the row stands until the list carries the start");
       assert.deepEqual(yield* Fiber.join(start), { planId: INVITES });
-      assert.deepEqual(drawn, [INVITES, BILLING], "the row is drawn before the list carries it");
-      assert.equal(drawnBlocked, true, "a task started blocked by an open one is drawn blocked");
-      assert.deepEqual(throughStale, [INVITES, BILLING]);
-      assert.deepEqual(listedIds(), [INVITES, BILLING]);
+      assert.deepEqual(
+        last()?.tasks.map((row) => row.id),
+        [INVITES, BILLING],
+      );
+    }),
+);
+
+it.effect(
+  "a start opens its task at once on its empty plan, and one the service refused puts the reader back on the task they stood on",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      const { call, last, settled, listed, openTask, plan } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* openTask(BILLING);
+      // The service answers the start only once let go, as one still out.
+      const answered = yield* Deferred.make<void>();
+      const { create } = service;
+      service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
+      service.createAnswer = { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+
+      const start = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, {
+          name: "Invitation expiry",
+          workspaceId: billing.workspaceId,
+        }),
+      );
+      yield* settled;
+      const opened = last()?.activeTaskId;
+      const drawn = plan(INVITES);
+      yield* Deferred.succeed(answered, undefined);
+      const refused = yield* Fiber.join(start);
+
+      assert.equal(opened, INVITES, "the task opens before the service answers");
+      assert.equal(drawn?.name, "Invitation expiry");
+      assert.equal(drawn?.document.body, "", "on its empty plan");
+      assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+      assert.equal(last()?.activeTaskId, BILLING, "the reader is back where they stood");
+    }),
+);
+
+it.effect(
+  "a start opened at once follows its task's record once the service made it, so a save someone else makes reaches its plan",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      const { call, settled, listed, plan } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // The service makes the task only once let go, its record sealed from then on.
+      const answered = yield* Deferred.make<void>();
+      const { create } = service;
+      service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
+      const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
+      service.createAnswer = { ok: true, answer: { task: made } };
+
+      const start = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, {
+          name: "Invitation expiry",
+          workspaceId: billing.workspaceId,
+        }),
+      );
+      yield* settled;
+      service.tasks = [...service.tasks, made];
+      const record = polledRecord(service, INVITES);
+      service.recordLives[INVITES] = record;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(start);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+      // A teammate saves the plan, which the next poll carries.
+      service.tasks = service.tasks.map((each) =>
+        each.id === INVITES
+          ? { ...each, updatedAt: 40, document: { ...each.document, body: "# Theirs" } }
+          : each,
+      );
+      record.move();
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+
+      assert.equal(plan(INVITES)?.document.body, "# Theirs");
     }),
 );
 

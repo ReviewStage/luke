@@ -579,7 +579,7 @@ describe("the host's install script", () => {
     { os: "Darwin", stops: true },
     { os: "Darwin", stops: false },
   ])(
-    "the account install's uninstall, run through ~/.local/bin/vespin-host with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones, the work its daemon salvaged and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
+    "the account install's uninstall, run through ~/.local/bin/vespin-host with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
     ({ os, stops }) => {
       const fakes = folder();
       const home = folder();
@@ -607,9 +607,6 @@ describe("the host's install script", () => {
       mkdirSync(join(state, "owned-agents"), { recursive: true });
       writeFileSync(join(state, "owned-agents/one"), "");
       writeFileSync(join(state, "device.json"), "{}");
-      const salvage = join(state, "salvage");
-      mkdirSync(join(salvage, "one/1"), { recursive: true });
-      writeFileSync(join(salvage, "one/1/note.json"), "{}");
       // Note that agent one is this install's, by its daemon's record, and agent two another install's.
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
         mkdirSync(join(home, ".vespin", each), { recursive: true });
@@ -642,7 +639,7 @@ describe("the host's install script", () => {
         stops
           ? [
               `Removed ${join(home, ".vespin/agents/one")}.`,
-              `Removed ${state}, but for ${salvage}, which keeps the work saved from agent folders before they were removed.`,
+              `Removed ${state}.`,
               `Removed ${releases}.`,
               `Removed ${link}.`,
             ]
@@ -651,8 +648,7 @@ describe("the host's install script", () => {
       for (const [place, kept] of [
         [service, !stops],
         [join(home, ".vespin/agents/one"), !stops],
-        [join(state, "device.json"), !stops],
-        [join(salvage, "one/1/note.json"), true],
+        [state, !stops],
         [releases, !stops],
         [link, !stops],
         [join(home, ".vespin/agents/two"), true],

@@ -968,6 +968,52 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
+    "an automation that archives its successful runs archives the helpers its run's agent started with that agent, and none of the run's agents while one of them is still at work",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation, now, workspaceId } = yield* openAutomation({
+          archiveSuccessful: true,
+        });
+        const lead = yield* startedNow(eve, automation);
+        const made = yield* createAgent(owner, {
+          taskId: null,
+          organizationId: workspaceId,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          planSnapshot: null,
+          prompt: "Bisect the flaky test.",
+          repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
+          automationRunId: Option.getOrThrow(yield* readAgent(owner, lead)).automationRunId ?? "",
+          startedByAgentId: lead,
+        });
+        const helper = Option.getOrThrow(made).agent;
+        yield* ranTurn(owner, lead, TURN_STATUS.SETTLED);
+        yield* ranTurn(owner, helper.id, TURN_STATUS.RUNNING);
+        const archived = () =>
+          Effect.forEach([lead, helper.id], (id) =>
+            Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null),
+          );
+
+        yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
+        const whileHelping = yield* archived();
+        yield* Database.use((db) =>
+          db
+            .update(turns)
+            .set({ status: TURN_STATUS.SETTLED })
+            .where(eq(turns.conversationId, helper.conversationId)),
+        );
+        yield* sweepAutomations(eve.sessionsFor, now + 60_000).pipe(Effect.provide(services));
+
+        assert.deepEqual(whileHelping, [false, false]);
+        assert.deepEqual(yield* archived(), [true, true]);
+      }),
+  );
+
+  it.effect(
     "a due schedule starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and a sweep after it starts nothing",
     () =>
       Effect.gen(function* () {

@@ -177,9 +177,23 @@ export const HOSTED_API_ERROR = {
   TASK_PARENT_HELD: "task-parent-held",
   /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
   HOST_PAIRING_HELD: "host-pairing-held",
+  /** A write sent again under the idempotency key (`IDEMPOTENCY_KEY`) it was taken under before; it was not run again, so what it wrote stands as the service holds it now. */
+  ALREADY_WRITTEN: "already-written",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
+
+/**
+ * The idempotency key a write may be sent under, as the header names it: a
+ * write sent again under a key the service took it under is answered
+ * `ALREADY_WRITTEN` without running again, so a write whose answer was lost
+ * lands once however often it is sent. A key is the sender's own, at most
+ * `MAX_LENGTH` characters; a request without one is taken as it always was.
+ */
+export const IDEMPOTENCY_KEY = {
+  HEADER: "idempotency-key",
+  MAX_LENGTH: 255,
+} as const;
 
 /** What one day's allowance looked like when the service last answered. */
 export interface HostedQuota {

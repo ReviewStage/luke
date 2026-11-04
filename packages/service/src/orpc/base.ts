@@ -26,6 +26,8 @@
 import "@orpc/experimental-effect/extensions/effect";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { type KeyRing, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import { keepWriteReceipt, writeReceiptStands } from "@repo/database/models/write-receipts";
+import { IDEMPOTENCY_KEY } from "@repo/features";
 import { hostedContract } from "@repo/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
@@ -44,11 +46,15 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedCarriesBearer,
+  hostedStoreOrUnavailable,
   resolvedAccount,
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
+
+/** How long a write's idempotency key is held after it was taken (`writeReceiptMiddleware`): thirty days. */
+const WRITE_RECEIPT_KEPT_MS = 30 * 24 * 60 * 60_000;
 
 /**
  * What every hosted procedure is called with: the request, the web runtime's
@@ -253,6 +259,39 @@ export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: K
     return yield* next({ context: { ring: ring.success } });
   },
 );
+
+/**
+ * A write taken once under the idempotency key its request carries
+ * (`IDEMPOTENCY_KEY`), chained after a caller middleware whose account the
+ * key is kept under: a key the account holds a receipt for is refused as
+ * already written without running, and any other runs the write and, once
+ * it succeeds, is kept. A request with no key runs as it always did, and a
+ * key past the bound is refused as invalid.
+ *
+ * Note that the receipt is kept after the write commits, so a function cut
+ * off between the two lets the write sent again run twice; and that a
+ * receipt the store would not keep is logged rather than answered, because
+ * the write itself was taken.
+ */
+export const writeReceiptMiddleware = middlewareGen<HostedContext & HostedCaller>(function* ({
+  context,
+  next,
+}) {
+  const key = context.request.headers.get(IDEMPOTENCY_KEY.HEADER);
+  if (key === null) return yield* next();
+  if (key.length === 0 || key.length > IDEMPOTENCY_KEY.MAX_LENGTH) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const { userId } = context;
+  if (yield* hostedStoreOrUnavailable(writeReceiptStands(userId, key))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.ALREADY_WRITTEN);
+  }
+  const answered = yield* next();
+  yield* keepWriteReceipt(userId, key, WRITE_RECEIPT_KEPT_MS).pipe(
+    Effect.catch((failure) => Effect.logWarning("a write's receipt was not kept", failure)),
+  );
+  return answered;
+});
 
 /**
  * The caller by a Better Auth session, read from the request's one

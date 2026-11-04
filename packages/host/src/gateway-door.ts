@@ -250,9 +250,6 @@ const GATEWAY_ACT = {
 
 /** The row writes still served by hand, by the change that declares each; only ever cut. */
 const UNDECLARED_ROW_WRITES = [
-  // New tasks and automations, declared by W2.
-  GATEWAY_METHOD.TASKS_START,
-  GATEWAY_METHOD.AUTOMATIONS_CREATE,
   // Workspace, member, and invitation writes, declared by W5.
   GATEWAY_METHOD.WORKSPACES_RENAME,
   GATEWAY_METHOD.WORKSPACES_SLUG_SET,
