@@ -24,6 +24,7 @@ import {
   session,
   type WebContents,
 } from "electron";
+import type { BuildLabelMenu } from "../app-menu";
 import { followDockIcon } from "../window/dock-icon";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
@@ -144,6 +145,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   });
   /** What stops a development build's renderer errors reaching the terminal; nothing until the start begins it. */
   let stopRendererErrors = (): void => undefined;
+  /** Whether the menu bar hid this development build's label for a demo, for as long as the run lasts. */
+  let buildLabelHidden = false;
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -162,7 +165,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       );
     });
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    return { fullScreen: panels.fullScreen(sender) };
+    return { fullScreen: panels.fullScreen(sender), buildLabelHidden };
   }
 
   /** The document as `sender` is handed it, read and pushed alike. */
@@ -275,7 +278,22 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       const badge = config.packaged
         ? undefined
         : devBuildBadge({ instance: config.instance, commit: config.commit });
-      followDockIcon(path.join(config.resourceDirectory, "icon"), badge, config.report);
+      const bandDockIcon = followDockIcon(
+        path.join(config.resourceDirectory, "icon"),
+        badge,
+        config.report,
+      );
+      // Developer's Show Build Label hides the band and the sidebar's chip
+      // together, and brings both back, so a demo shows no branch.
+      const buildLabelMenu = (shown: boolean): BuildLabelMenu => ({
+        shown,
+        onShow: (next) => {
+          buildLabelHidden = !next;
+          bandDockIcon(next ? badge : undefined);
+          config.showMenuBar({ buildLabel: buildLabelMenu(next) });
+          publishAppState();
+        },
+      });
       const settings = await run(operator.ensureSettings());
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits
@@ -302,6 +320,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // opened without them (`hardenedWebPreferences`).
       if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
       if (runMode.takesFocus) config.showMenuBar({ developerTools: true });
+      if (badge !== undefined) config.showMenuBar({ buildLabel: buildLabelMenu(true) });
       // The menu's New Task and ⌘0 bring the window back where it was
       // closed, since no window's keymap stands to answer them then.
       config.showMenuBar({
