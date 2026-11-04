@@ -77,7 +77,7 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswer
 /**
  * Each agent's status its own held transcript says, noted for each page read
  * since `noted` last counted its pages, as the notices take every page's,
- * and each agent no longer held let go of. Note that a transcript laid anew
+ * and each agent whose own transcript is no longer held let go of. Note that a transcript laid anew
  * with no page read, as one held again lays what it held, says nothing of
  * the agent now: its status is the last page's, which may be a turn's the
  * agent has since moved past, and a status names no turn.
@@ -92,6 +92,8 @@ function observeTranscripts(
   }
   for (const [agentId, transcripts] of Object.entries(held)) {
     const rows = transcripts[OWN_TRANSCRIPT]?.rows;
+    // Note that an own transcript let go for good is counted from its first page once it is read anew.
+    if (rows === undefined) noted.delete(agentId);
     if (rows?.word === undefined || noted.get(agentId) === rows.pages) continue;
     noted.set(agentId, rows.pages);
     notices.observeStatus(agentId, rows.word.status);

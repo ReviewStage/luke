@@ -266,3 +266,33 @@ it.effect(
       yield* Scope.close(scope, Exit.void);
     }),
 );
+
+it.effect(
+  "an agent's own transcript let go for good while a worker's stands, and read anew, notes its pages from the first",
+  () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const { state } = yield* linked(scope, () => Effect.void, []);
+      const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+      const worker = { "call-7": transcriptAt(AGENT_STATUS.RUNNING) };
+      const held = (own?: AppHostRead<AppTranscript>) => ({
+        [LIVE_READ.TRANSCRIPT]: {
+          [TASKLESS.id]: own === undefined ? worker : { ...worker, [OWN_TRANSCRIPT]: own },
+        },
+      });
+      state.update({ tasks: { ...state.snapshot().tasks, tasklessAgents: [TASKLESS] } });
+      yield* settled;
+
+      state.update(held(transcriptAt(AGENT_STATUS.RUNNING, 1)));
+      yield* settled;
+      // Pushed out past the budget, while the worker's tab still holds the worker's.
+      state.update(held());
+      yield* settled;
+      // Read anew once the turn ended, its first page counted as the one let go was.
+      state.update(held(transcriptAt(AGENT_STATUS.COMPLETED, 1)));
+      yield* settled;
+      assert.deepEqual(state.snapshot().agents.unseen, [TASKLESS.id]);
+
+      yield* Scope.close(scope, Exit.void);
+    }),
+);
