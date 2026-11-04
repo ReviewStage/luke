@@ -99,6 +99,7 @@ import {
   type IntegrationToolsProblemReason,
   type integrationAccountAnswerSchema,
   integrationConnectionOf,
+  integrationLabelUnread,
   integrationProviderFromWire,
   mintIntegrationConnectionName,
 } from "@repo/features/integration-wire";
@@ -435,8 +436,8 @@ const labeledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices | HttpClient.HttpClient
 > {
   const { ACCOUNT_NAME }: IntegrationDefinition = INTEGRATION[row.provider];
-  const unread = row.label === undefined || (row.label === "" && ACCOUNT_NAME !== undefined);
-  if (!unread || status !== INTEGRATION_STATUS.CONNECTED) return row;
+  if (!integrationLabelUnread(row.provider, row.label) || status !== INTEGRATION_STATUS.CONNECTED)
+    return row;
   // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
   if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
   const grant = row.connectedAt?.getTime();

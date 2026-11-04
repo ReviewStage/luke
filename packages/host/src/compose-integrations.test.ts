@@ -40,7 +40,8 @@ import { windowFocus } from "./window-focus.js";
  * a closed account gate nothing is asked or opened; a server's tools a
  * window holds are kept from their last read; and where the integrations
  * stand, which a window holds, is followed live, the service asked to
- * settle a sign-in only while a row stands pending, a disconnect
+ * settle a sign-in only while a row stands pending, and to name an account
+ * still to be named once and again as a window comes forward, a disconnect
  * answered only once that read carries it, and a rename drawn over it at
  * once. Synthetic accounts and rows throughout.
  */
@@ -295,6 +296,34 @@ it.effect("the held integrations are settled only while a row stands pending", (
     assert.equal(settles(), 2, "a sign-in settled is settled no more");
     yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
   }),
+);
+
+it.effect(
+  "an account still to be named is settled once, under the service's rule, and again as a window comes forward",
+  () =>
+    Effect.gen(function* () {
+      const { call, settles, live, focus } = yield* subject({
+        status: INTEGRATION_STATUS.CONNECTED,
+      });
+      // Linear answers no account's name, so an empty label there is a grant that named nothing, called by its place.
+      const placed = { ...row("linear", INTEGRATION_PROVIDER.LINEAR, "connected"), label: "" };
+      live.set({ connections: [placed] });
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* after(Duration.millis(500));
+      assert.equal(settles(), 0, "an empty label where the provider names no account is final");
+
+      const unnamed = { ...row("notion", INTEGRATION_PROVIDER.NOTION, "connected"), label: "" };
+      live.set({ connections: [placed, unnamed] });
+      yield* after(Duration.millis(500));
+      assert.equal(settles(), 1, "an empty label where the provider names its accounts is read");
+      yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
+      assert.equal(settles(), 1, "asked once while no window comes forward");
+
+      yield* focus.raise;
+      yield* settled;
+      assert.equal(settles(), 2, "a name the settle did not read is asked for again");
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+    }),
 );
 
 it.effect(
