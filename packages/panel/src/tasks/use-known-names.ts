@@ -1,7 +1,9 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import type { AgentStatus } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
-import { agentName } from "@repo/features/model-label";
+import { agentName, modelLabel } from "@repo/features/model-label";
+import type { CatalogModel } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -12,6 +14,7 @@ import { useMemo } from "react";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { appStateDerivedAtom } from "../use-app-state.js";
+import { useMentionedPlace } from "./mentioned-place.js";
 
 /**
  * use-known-names.ts -- the names the window already holds for places in the app, by id, for a chip to call an app link by.
@@ -23,7 +26,9 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * pages as the window holds them (`LIVE_READ.PAGES`), each task's key, the
  * Inbox items waiting, and the agents an automation started with no task;
  * from the directories standing around
- * the caller, the members and the automation asked for. Nothing is fetched,
+ * the caller, the members and the automation asked for, and the catalog an
+ * untitled agent's model is named by, as its tab and row name it
+ * (`mentioned-place.ts`). Nothing is fetched,
  * so a name the window does not hold is not here; the task list is followed
  * from the account signing in (`compose-tasks.ts`), which brings each task's
  * name as the service gives it.
@@ -36,6 +41,35 @@ import { appStateDerivedAtom } from "../use-app-state.js";
 
 /** No people: what a caller outside a member directory names. */
 const NO_PEOPLE: ReadonlyMap<string, string> = new Map();
+
+/** The agents each held set of names last named by a catalog, and that catalog, so every chip of one delivery shares one map. */
+const cataloguedAgents = new WeakMap<
+  ReadonlyMap<string, string>,
+  { readonly models: readonly CatalogModel[]; readonly agents: ReadonlyMap<string, string> }
+>();
+
+/**
+ * The agents' names with each untitled agent's, the one its model's id
+ * spells, named by the catalog instead, as its tab and its row in a list
+ * name it; the names as held where no catalog is read.
+ */
+function agentsNamedBy(
+  agents: ReadonlyMap<string, string>,
+  agentModels: ReadonlyMap<string, string>,
+  models: readonly CatalogModel[] | undefined,
+): ReadonlyMap<string, string> {
+  if (models === undefined) return agents;
+  const held = cataloguedAgents.get(agents);
+  if (held?.models === models) return held.agents;
+  const named = new Map(agents);
+  for (const [agentId, name] of agents) {
+    const model = agentModels.get(agentId);
+    if (model !== undefined && name === modelLabel(model))
+      named.set(agentId, modelLabel(model, models));
+  }
+  cataloguedAgents.set(agents, { models, agents: named });
+  return named;
+}
 
 /** The slices of the document the names are read from: the tasks, the Inbox, and the active task's pages. */
 interface NamedSlices {
@@ -124,6 +158,18 @@ const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
     ),
 );
 
+/** Each listed agent's status, a task's row's and those on no task, by its id, built as the task statuses are. */
+const heldAgentStatusesAtom: Atom.Atom<ReadonlyMap<string, AgentStatus>> = Atom.map(
+  namedSlicesAtom,
+  ({ planning }) =>
+    new Map([
+      ...(planning?.tasks ?? []).flatMap((task) =>
+        (task.agents?.agents ?? []).map((agent) => [agent.id, agent.status] as const),
+      ),
+      ...(planning?.tasklessAgents ?? []).map((agent) => [agent.id, agent.status] as const),
+    ]),
+);
+
 /** No keys: what a window listing no numbered task holds, one object for every reader. */
 const NO_KEY_TARGETS: ReadonlyMap<string, string> = new Map();
 
@@ -183,15 +229,22 @@ export function useTaskStatus(taskId: string | undefined): TaskStatus | undefine
   return taskId === undefined ? undefined : statuses.get(taskId);
 }
 
+/** The status of the agent the window lists by `agentId`; none where it lists no such agent. */
+export function useAgentStatus(agentId: string): AgentStatus | undefined {
+  return useAtomValue(heldAgentStatusesAtom).get(agentId);
+}
+
 /**
  * The names the window holds, the automation `automationId` names among them
  * where the directory around the caller lists it. Outside a member directory
  * and with no automation asked for, every caller is handed the one shared
- * value, which stays the same object until the tasks or the Inbox move.
+ * value, which stays the same object until the tasks or the Inbox move; with
+ * the catalog read, every caller shares the one map of agents' names it named.
  */
 export function useKnownNames(automationId?: string): KnownNames {
   const held = useAtomValue(heldNamesAtom);
   const { members, former } = useMemberDirectory();
+  const agents = agentsNamedBy(held.agents, held.agentModels, useMentionedPlace().models);
   const automation = useAutomation(automationId)?.automation;
   const people = useMemo(
     () =>
@@ -210,9 +263,9 @@ export function useKnownNames(automationId?: string): KnownNames {
   );
   return useMemo(
     () =>
-      people === held.people && automations === held.automations
+      people === held.people && automations === held.automations && agents === held.agents
         ? held
-        : { ...held, people, automations },
-    [held, people, automations],
+        : { ...held, agents, people, automations },
+    [held, agents, people, automations],
   );
 }
