@@ -873,10 +873,11 @@ const findTaskWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The columns of a task `readTaskHeader` answers: every one but its plan's. */
-const findTaskHeader = SqlSchema.findOneOption({
-  Request: TaskKeySchema,
+/** The columns of a task `readTaskHeaders` answers: every one but its plan's. */
+const findTaskHeaders = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
+    id: Schema.String,
     organizationId: Schema.String,
     userId: Schema.String,
     name: Schema.String,
@@ -889,10 +890,11 @@ const findTaskHeader = SqlSchema.findOneOption({
     assigneeId: Schema.NullOr(Schema.String),
     number: Schema.Number,
   }),
-  execute: ({ userId, taskId }) =>
+  execute: ({ userId, taskIds }) =>
     Database.use((db) =>
       db
         .select({
+          id: task.id,
           organizationId: task.organizationId,
           userId: task.userId,
           name: task.name,
@@ -906,8 +908,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           number: task.number,
         })
         .from(task)
-        .where(reachableTask(userId, taskId))
-        .limit(1),
+        .where(and(inArray(task.id, [...taskIds]), taskReachableBy(userId))),
     ),
 });
 
@@ -1345,20 +1346,37 @@ export function readTaskHeader(
   userId: string,
   taskId: string,
 ): TaskStoreEffect<Option.Option<TaskHeader>> {
+  return Effect.map(readTaskHeaders(userId, [taskId]), (headers) =>
+    Option.fromUndefinedOr(headers.get(taskId)),
+  );
+}
+
+/** The tasks among those named the account reaches, as `readTaskHeader` answers each, in one statement, keyed by id; one it reaches none of is absent. */
+export function readTaskHeaders(
+  userId: string,
+  taskIds: readonly string[],
+): TaskStoreEffect<ReadonlyMap<string, TaskHeader>> {
+  if (taskIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findTaskHeader({ userId, taskId }),
-    Option.map((row) => ({
-      workspaceId: row.organizationId,
-      ownerId: row.userId,
-      name: row.name,
-      repository: row.repository,
-      status: row.status,
-      runsOn: { machine: row.machine, deviceId: row.deviceId },
-      parentTaskId: row.parentTaskId,
-      mode: row.mode,
-      assigneeId: row.assigneeId,
-      number: row.number,
-    })),
+    findTaskHeaders({ userId, taskIds }),
+    (rows) =>
+      new Map(
+        rows.map((row): [string, TaskHeader] => [
+          row.id,
+          {
+            workspaceId: row.organizationId,
+            ownerId: row.userId,
+            name: row.name,
+            repository: row.repository,
+            status: row.status,
+            runsOn: { machine: row.machine, deviceId: row.deviceId },
+            parentTaskId: row.parentTaskId,
+            mode: row.mode,
+            assigneeId: row.assigneeId,
+            number: row.number,
+          },
+        ]),
+      ),
   );
 }
 
