@@ -1505,7 +1505,7 @@ function TodoItems({
     <Stack
       as={LAYOUT_ELEMENT.UL}
       gap={GAP.TIGHT}
-      className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto" : ""}`}
+      className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto overscroll-contain" : ""}`}
     >
       {todos.map((todo, index) => (
         // Note that an item's place is its identity, so a write that moves

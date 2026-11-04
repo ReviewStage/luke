@@ -2028,6 +2028,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--ui-space-16) var(--ui-space-16) var(--ui-row-inset);
   background: transparent;
   color: var(--ui-color-text);
