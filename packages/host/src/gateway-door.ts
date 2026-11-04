@@ -4,13 +4,11 @@
  * A row write's method takes only a handler `@repo/sync`'s `declaredMethod`
  * built from a write declaration, so the write is drawn over the pool the
  * moment it is asked; a handler written by hand does not compile
- * (`HostMethodTable`). A row write still served by hand stands on
- * `UNDECLARED_ROW_WRITES`, which only shrinks: each child of the sync engine
- * cuts its own rows as it declares them, and the last deletes the list.
+ * (`HostMethodTable`).
  */
 
 import { GATEWAY_METHOD, type GatewayMethod, type GatewayMethodHandler } from "@repo/gateway";
-import { ACT, type Act, type DoorTable, type RowWriteOf } from "@repo/sync";
+import { ACT, type Act, type DoorTable } from "@repo/sync";
 
 /** What each Gateway method does, said once; a method added to the protocol fails here until it is classified. */
 const GATEWAY_ACT = {
@@ -265,16 +263,5 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: ACT.READ,
 } as const satisfies Readonly<Record<GatewayMethod, Act>>;
 
-/** The row writes still served by hand, by the change that declares each; only ever cut. */
-const UNDECLARED_ROW_WRITES = [
-  // The agent queue's writes, declared by W7 once its rows ride a held read.
-  GATEWAY_METHOD.AGENTS_QUEUE,
-] as const satisfies readonly RowWriteOf<typeof GATEWAY_ACT>[];
-
-/** A composer's handler table: a declared row write's method served only from its write declaration, every other method by any handler. */
-export type HostMethodTable = DoorTable<
-  GatewayMethod,
-  typeof GATEWAY_ACT,
-  (typeof UNDECLARED_ROW_WRITES)[number],
-  GatewayMethodHandler
->;
+/** A composer's handler table: a row write's method served only from its write declaration, every other method by any handler. */
+export type HostMethodTable = DoorTable<GatewayMethod, typeof GATEWAY_ACT, GatewayMethodHandler>;

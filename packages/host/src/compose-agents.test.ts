@@ -4,6 +4,7 @@ import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
   AGENT_CALL_FAILURE,
+  type AgentQueueAnswerView,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
   INBOX_SCOPE_KIND,
@@ -22,6 +23,7 @@ import {
   CHECK_SUMMARY,
   MERGE_STATE,
   PULL_REQUEST_STATE,
+  QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
@@ -308,6 +310,10 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
+  /** What a change of an agent's queue answers, once its gate lets it; the queue empty at its first revision from the start. */
+  let queueAnswer: AgentQueueAnswerView = { queue: { messages: [], revision: 1 } };
+  /** What a change of an agent's queue waits on before the service answers it; nothing from the start. */
+  let queueGate: Effect.Effect<void> = Effect.void;
   /** What a forget answers, once its gate lets it; the memories left, with no transaction, from the start. */
   let forgetAnswer: MemoriesAnswerView = { memories: [] };
   /** What a forget waits on before the service answers it; nothing from the start. */
@@ -462,10 +468,13 @@ function fakeService() {
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
     changeQueue: (agentId, change) =>
-      Effect.sync(() => {
-        asked.push(`queue:${agentId}:${change.change}`);
-        return { queue: { messages: [], revision: 1 } };
-      }),
+      Effect.andThen(
+        Effect.suspend(() => queueGate),
+        Effect.sync(() => {
+          asked.push(`queue:${agentId}:${change.change}`);
+          return queueAnswer;
+        }),
+      ),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
@@ -782,6 +791,11 @@ function fakeService() {
     holdChanges: (gate: Effect.Effect<void>) => {
       changeGate = gate;
     },
+    /** What a change of an agent's queue answers from now on, once `gate` lets it. */
+    answerQueue: (answer: AgentQueueAnswerView, gate: Effect.Effect<void> = Effect.void) => {
+      queueAnswer = answer;
+      queueGate = gate;
+    },
     /** Whether the service answers a plan's or an agent's inbox's live read, or that the account reaches none; none answers unanswered. */
     sealScope: (next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined) => {
       scope = next;
@@ -1042,6 +1056,7 @@ function subject(
       pageNewest: service.pageNewest,
       sendTxid: service.sendTxid,
       holdChanges: service.holdChanges,
+      answerQueue: service.answerQueue,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       sealItems: service.sealItems,
@@ -1852,6 +1867,90 @@ it.effect(
       });
       yield* nextPoll;
       assert.equal(reads(), beforeLine + 1, "a line awaiting its turn reads the page");
+    }),
+);
+
+/** A queued message's id, as its window minted it. */
+const QUEUED_ID = "4e2d6c8a-1f3b-4a5c-9d7e-8b0a2c4e6f13";
+
+/** The agent's queue holding the one message, saying `text`, at `revision`. */
+function queueOf(text: string, revision: number) {
+  return { messages: [{ id: QUEUED_ID, text, queuedBy: "user-dana" }], revision };
+}
+
+/** The words of the queued messages the held transcript last laid. */
+function queuedTexts(held: () => readonly (AppTranscript | undefined)[]) {
+  return held()
+    .at(-1)
+    ?.word?.queue?.messages.map((message) => message.text);
+}
+
+/** An edit of the queued message, as the window asks it. */
+const EDITED = {
+  agentId: AGENT_ID,
+  change: { change: QUEUE_CHANGE.EDIT, messageId: QUEUED_ID, text: "Run the tests and fix them" },
+};
+
+/** A held transcript whose newest page and first page past it carry the queue holding "Run the tests" at its first revision. */
+function queueFollowed() {
+  return Effect.gen(function* () {
+    const harness = yield* subject();
+    harness.sealTranscript(LIVE_ANSWERED);
+    harness.pageNewest({
+      ...newestPage("1:0", "Reading the invites."),
+      queue: queueOf("Run the tests", 1),
+    });
+    harness.pageNow({ ...pageNow("1:0", { holds: false }), queue: queueOf("Run the tests", 1) });
+    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+    yield* settled;
+    transcriptRows(harness.live, 1);
+    yield* settled;
+    assert.deepEqual(queuedTexts(harness.held), ["Run the tests"]);
+    return harness;
+  });
+}
+
+it.effect(
+  "an edit of a queued message is drawn in the agent's transcript before the service answers it, and taken back where the service refused it",
+  () =>
+    Effect.gen(function* () {
+      const { call, held, answerQueue } = yield* queueFollowed();
+      const answered = yield* Deferred.make<void>();
+      answerQueue({ failure: AGENT_CALL_FAILURE.NOT_FOUND }, Deferred.await(answered));
+
+      const edit = yield* Effect.forkChild(call(GATEWAY_METHOD.AGENTS_QUEUE, EDITED));
+      yield* settled;
+      assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
+
+      yield* Deferred.succeed(answered, undefined);
+      assert.deepEqual(yield* Fiber.join(edit), { failure: AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(queuedTexts(held), ["Run the tests"]);
+    }),
+);
+
+it.effect(
+  "an edit the service answered stands until a page carries its queue, so a page read before it lands without putting the old words back",
+  () =>
+    Effect.gen(function* () {
+      const { call, held, answerQueue, pageNow: script, live } = yield* queueFollowed();
+      answerQueue({ queue: queueOf("Run the tests and fix them", 2) });
+      yield* call(GATEWAY_METHOD.AGENTS_QUEUE, EDITED);
+      assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
+
+      // A page read before the edit landed answers after it.
+      script({ ...pageNow("1:0", { holds: false }), queue: queueOf("Run the tests", 1) });
+      live.transcript.set({ queueRevision: [{ revision: 1 }] });
+      yield* nextPoll;
+      assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
+
+      // A page carrying a later change of the queue is drawn as it says.
+      script({
+        ...pageNow("1:0", { holds: false }),
+        queue: queueOf("Run the tests, then open the pull request", 3),
+      });
+      live.transcript.set({ queueRevision: [{ revision: 3 }] });
+      yield* nextPoll;
+      assert.deepEqual(queuedTexts(held), ["Run the tests, then open the pull request"]);
     }),
 );
 

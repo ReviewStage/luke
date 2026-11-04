@@ -7,126 +7,101 @@ import {
   hasWordsOrFiles,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
+import { STATUS_TONE } from "@repo/ui";
 import { keepPictureRead, PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Option, Schema } from "effect";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
 import type { HeldComposer } from "./use-agent-composer.js";
 
 /**
  * use-agent-queue.ts -- an agent's queue as its tab draws and changes it: the messages queued behind its turn, in the order they go, and the one door every change goes through.
  *
- * What the tab draws is the service's queue, read live with the newest
- * transcript page (`use-agent-transcript.ts`), or the queue a change's
- * answer named where that stands at a higher revision; every change to the
- * queue moves its revision on, which wakes the page. Nothing here polls. A
- * message queued, as the box empties at once, and a new order, as a drag
- * drops it, are drawn before their answer, keyed to their own request and
- * let go as it answers; every other change waits its round trip. A message
- * is queued under an id the tab mints (`crypto.randomUUID`), so it is drawn
- * at the queue's end as it goes, under the id it keeps, and takes presses at
- * once: every change goes after every change asked before it, as a drag's
- * section writes do (the host's `sidebar-collections.ts`), so a press on a
- * message still landing reaches the service after its add. Its files are
- * drawn from the bytes the box held, kept in the window's pictures under ids
- * of the tab's own and, before the row naming them by the service's ids is
- * painted, under those, so its thumbnails never give way to a read of what
- * the window already holds.
+ * What the tab draws is the queue its transcript's page carries, with every
+ * change asked of it drawn over it by the host the moment it is asked
+ * (`@repo/host`'s `agent-queue-writes.ts`), each sent after every change of
+ * the agent's queue asked before it and standing until a page carries it,
+ * so nothing here waits on one. A change the service refused is taken back
+ * by the host and said here in a toast. A message is queued under an id the
+ * tab mints (`crypto.randomUUID`), so it is drawn at the queue's end as it
+ * goes, under the id it keeps, and takes presses at once. The files of a
+ * message queued or edited here are kept in the window's pictures under
+ * ids of the tab's own, which the host draws them by, and, as the service
+ * answers, under the ids it names them by, so its thumbnails never give way
+ * to a read of what the window already holds.
  */
 
 /** What a change answered where the act itself failed. */
 const UNANSWERED: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
-/** What a refused delete says in its dialog. */
-const DELETE_REFUSED = "Could not delete the message. Try again.";
+/** What the toast says of a change the host drew and took back, by what it asked; a hold's refusal closes its edit, which says it. */
+const REFUSED_WORDS: { readonly [Change in AgentQueueChange["change"]]?: string } = {
+  [QUEUE_CHANGE.ADD]: "Could not queue the message.",
+  [QUEUE_CHANGE.EDIT]: "Could not save the queued message.",
+  [QUEUE_CHANGE.DELETE]: "Could not delete the queued message.",
+  [QUEUE_CHANGE.STEER]: "Could not send the queued message.",
+  [QUEUE_CHANGE.REORDER]: "Could not reorder the queue.",
+  [QUEUE_CHANGE.RESUME]: "Could not resume the queue.",
+};
 
-/** A queue with nothing in it, as an agent's page before its first change carries none. */
-const EMPTY: AgentQueue = { messages: [], revision: 0 };
+/** What the toast says beneath them where the service said the message is no longer in the queue. */
+const LEFT_WORDS = "It already left the queue.";
 
-/** One change the tab drew at once, still out: its own id, the change, and for a message queued the ids its files are drawn under until it lands. */
-interface Out {
-  readonly id: number;
-  readonly change: DrawnAtOnce;
-  readonly files?: readonly string[];
-}
-
-/** A change the tab draws before the service answers it: a message queued, as the box empties at once, and a new order, as a drag drops it. */
-type DrawnAtOnce = Extract<
-  AgentQueueChange,
-  { readonly change: typeof QUEUE_CHANGE.ADD | typeof QUEUE_CHANGE.REORDER }
->;
-
-/** Whether a change is drawn before the service answers it; every other waits on its answer. */
-function drawnAtOnce(change: AgentQueueChange): change is DrawnAtOnce {
-  return change.change === QUEUE_CHANGE.ADD || change.change === QUEUE_CHANGE.REORDER;
-}
+/** The messages of a queue its page carries none of, as an agent's page before its first change. */
+const NO_MESSAGES: readonly QueuedMessage[] = [];
 
 /** A file the box held, as the window draws it from its own bytes. */
 function fileUrl(file: AgentAttachment): string {
   return `data:${file.mediaType};base64,${file.data}`;
 }
 
+/** The files a change sends with a message, where it sends any. */
+function filesOf(change: AgentQueueChange): readonly AgentAttachment[] {
+  if (change.change !== QUEUE_CHANGE.ADD && change.change !== QUEUE_CHANGE.EDIT) return [];
+  return change.attachments ?? [];
+}
+
+/** The message a change names, by its id; none for one of the whole queue. */
+function messageOf(change: AgentQueueChange): string | undefined {
+  if (change.change === QUEUE_CHANGE.ADD) return change.id;
+  return "messageId" in change ? change.messageId : undefined;
+}
+
 /**
- * The files of a message queued from this tab, kept in the agent's pictures
- * under the ids the service's queue names them by, once it names them, so
- * the landed row draws the bytes the box held rather than reading them back.
+ * The files a message was queued or edited with from this tab, kept in the
+ * agent's pictures under the ids the service's answer names them by, before
+ * any page naming them by those is drawn, so the landed row draws the bytes
+ * the box held rather than reading them back.
  */
-function keepLandedFiles(owner: string, queue: AgentQueue, out: readonly Out[]): void {
-  for (const { change } of out) {
-    if (change.change !== QUEUE_CHANGE.ADD || change.attachments === undefined) continue;
-    const landed = queue.messages.find((message) => message.id === change.id);
-    for (const [index, file] of (landed?.files ?? []).entries()) {
-      const held = change.attachments[index];
-      if (file.id === undefined || held === undefined) continue;
-      if (pictureNow(owner, file.id).kind !== PICTURE_STATE.READY) {
-        keepPictureRead(owner, file.id, fileUrl(held));
-      }
+function keepLandedFiles(
+  owner: string,
+  queue: AgentQueue,
+  messageId: string,
+  attachments: readonly AgentAttachment[],
+): void {
+  const landed = queue.messages.find((message) => message.id === messageId);
+  for (const [index, file] of (landed?.files ?? []).entries()) {
+    const held = attachments[index];
+    if (file.id === undefined || held === undefined) continue;
+    if (pictureNow(owner, file.id).kind !== PICTURE_STATE.READY) {
+      keepPictureRead(owner, file.id, fileUrl(held));
     }
   }
 }
 
-/** The queue as a change still out would leave it. */
-function drawnWith(queue: AgentQueue, { change, files }: Out): AgentQueue {
-  if (change.change === QUEUE_CHANGE.REORDER) {
-    const at = new Map(change.order.map((id, index) => [id, index]));
-    const placed = (message: QueuedMessage) => at.get(message.id) ?? change.order.length;
-    return { ...queue, messages: queue.messages.toSorted((a, b) => placed(a) - placed(b)) };
-  }
-  // A message the queue lists has landed, and is drawn as the queue draws it.
-  if (queue.messages.some((message) => message.id === change.id)) return queue;
-  return {
-    ...queue,
-    messages: [
-      ...queue.messages,
-      {
-        id: change.id,
-        text: change.text,
-        queuedBy: "",
-        ...(change.attachments === undefined || change.attachments.length === 0
-          ? undefined
-          : {
-              files: change.attachments.map((file, index) => ({
-                name: file.name,
-                mediaType: file.mediaType,
-                ...(files?.[index] === undefined ? undefined : { id: files[index] }),
-              })),
-            }),
-      },
-    ],
-  };
-}
-
 /** An agent's queue as its tab holds it. */
 export interface AgentQueueControl {
-  /** Its messages in the order they go, the tab's own changes still out drawn over the page. */
+  /** Its messages in the order they go, every change asked of it drawn over the page. */
   readonly messages: readonly QueuedMessage[];
-  /** The messages the service's queue lists now, by id, whatever this tab's changes still out draw over them. */
+  /** The messages the queue lists now, by id. */
   readonly listed: ReadonlySet<string>;
   readonly paused: AgentQueue["paused"];
-  /** One change, answered as the service answered it, sent after every change asked before it and once `after` settles where one is given. */
+  /** One change, drawn by the host at once and answered as the service answered it, asked once `after` settles where one is given. */
   readonly change: (
     change: AgentQueueChange,
     after?: Promise<unknown>,
@@ -139,66 +114,68 @@ export interface AgentQueueControl {
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
   const { act } = useAct();
-  const [out, setOut] = useState<readonly Out[]>([]);
-  const [answered, setAnswered] = useState<AgentQueue | undefined>();
-  const counter = useRef(0);
-  // The change asked last, settled or not, which the next one goes after.
-  const asked = useRef<Promise<unknown>>(Promise.resolve());
-  const page = queue ?? EMPTY;
-  // The queue as the service last said it, by whichever of the page and a change's answer stands at the higher revision.
-  const standing = answered !== undefined && answered.revision > page.revision ? answered : page;
-  const drawn = out.reduce(drawnWith, standing);
-  // The files of a message queued from here are kept under the service's ids before the row naming them is painted.
-  useLayoutEffect(() => keepLandedFiles(agentId, standing, out), [agentId, standing, out]);
-  const listed = new Set(page.messages.map((message) => message.id));
+  const toast = useToast();
+  const messages = queue?.messages ?? NO_MESSAGES;
+  const listed = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const change = (next: AgentQueueChange, after?: Promise<unknown>) => {
-    counter.current += 1;
-    const id = counter.current;
-    if (drawnAtOnce(next)) {
-      const files =
-        next.change === QUEUE_CHANGE.ADD
-          ? next.attachments?.map((file) => {
-              const drawnAs = crypto.randomUUID();
-              keepPictureRead(agentId, drawnAs, fileUrl(file));
-              return drawnAs;
-            })
-          : undefined;
-      setOut((was) => [
-        ...was,
-        { id, change: next, ...(files === undefined ? undefined : { files }) },
-      ]);
-    }
-    const sent = Promise.all([asked.current, after])
-      .then(() => act(ACT_KIND.AGENTS_QUEUE, { agentId, change: next }))
-      .catch(() => UNANSWERED);
-    asked.current = sent;
-    return sent.then((answer) => {
-      // Note that a change answered is drawn as the queue its answer names, and one refused springs back.
-      if ("queue" in answer) keepLandedFiles(agentId, answer.queue, out);
-      setOut((was) => was.filter((each) => each.id !== id));
-      if ("queue" in answer) {
-        setAnswered((was) =>
-          was === undefined || answer.queue.revision > was.revision ? answer.queue : was,
-        );
-      }
-      return answer;
+    const files = filesOf(next);
+    const messageId = messageOf(next);
+    const drawnAs = files.map((file) => {
+      const id = crypto.randomUUID();
+      keepPictureRead(agentId, id, fileUrl(file));
+      return id;
     });
+    const params = {
+      agentId,
+      change: next,
+      ...(drawnAs.length === 0 ? undefined : { pictures: drawnAs }),
+    };
+    // Note that a message queued behind the box's own sends is asked only once they settle, so it never reaches the service ahead of them.
+    const asked =
+      after === undefined
+        ? act(ACT_KIND.AGENTS_QUEUE, params)
+        : after.then(() => act(ACT_KIND.AGENTS_QUEUE, params));
+    return asked
+      .catch(() => UNANSWERED)
+      .then((answer) => {
+        // Note that the files are kept under the service's ids as it answers, ahead of the page that carries its queue.
+        if ("queue" in answer && messageId !== undefined && files.length > 0) {
+          keepLandedFiles(agentId, answer.queue, messageId, files);
+        }
+        const words = REFUSED_WORDS[next.change];
+        if (!("failure" in answer) || words === undefined) return answer;
+        toast({
+          words,
+          ...(answer.failure === AGENT_CALL_FAILURE.NOT_FOUND && messageId !== undefined
+            ? { detail: LEFT_WORDS }
+            : undefined),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: {
+            surface:
+              next.change === QUEUE_CHANGE.DELETE
+                ? FAILURE_SURFACE.AGENT_QUEUE_DELETE
+                : FAILURE_SURFACE.AGENT_QUEUE_CHANGE,
+            cause: answer,
+            about: { agentId },
+          },
+        });
+        return answer;
+      });
   };
   const move = (from: number, to: number) => {
-    const ids = drawn.messages.map((message) => message.id);
+    const ids = messages.map((message) => message.id);
     const [taken] = ids.splice(from, 1);
     if (taken === undefined) return;
     ids.splice(to, 0, taken);
     void change({ change: QUEUE_CHANGE.REORDER, order: ids });
   };
-  const remove = (message: QueuedMessage) =>
-    change({ change: QUEUE_CHANGE.DELETE, messageId: message.id }).then(
-      (answer): ActionResult =>
-        "failure" in answer
-          ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSED }
-          : { status: ACTION_RESULT_STATUS.ACCEPTED },
-    );
-  return { messages: drawn.messages, listed, paused: drawn.paused, change, move, remove };
+  // Note that the host draws the deletion on the press, so the dialog closes at once; one refused is taken back and said in a toast.
+  const remove = (message: QueuedMessage) => {
+    void change({ change: QUEUE_CHANGE.DELETE, messageId: message.id });
+    return Promise.resolve<ActionResult>({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  };
+  return { messages, listed, paused: queue?.paused, change, move, remove };
 }
 
 /** A queued message's files whole, read through the agent's pictures by the ids the queue names them under; none where any did not read. */
@@ -255,8 +232,9 @@ export interface QueueEditing {
  * The box's part in the queue. An edit moves the queued message's words into
  * the box, keeping what the box held aside, and marks the message as being
  * edited, which stops the hand-off at it; Save writes the words back in its
- * place, and Steer sends them now as that message, each closing the edit once
- * the queue took it, so a refusal leaves the words where they are. Cancel,
+ * place, which the host draws in the message's row at once, and Steer sends
+ * them now as that message, each closing the edit once the queue took it, so
+ * a refusal leaves the words where they are, the box's own still kept aside. Cancel,
  * Escape, or Save with the box emptied lets it go as it was, and a message
  * the queue would not mark, already on its way, closes the edit. The mark
  * has no time to it: an edit left standing, its window closed, stays until

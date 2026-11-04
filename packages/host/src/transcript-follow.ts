@@ -365,8 +365,21 @@ export interface TranscriptReads {
   readonly after: (after: string) => Effect.Effect<TranscriptNowAnswer | AgentMessagesAnswerView>;
 }
 
-/** What the windows hold of one transcript, read and laid by its follow: the rows its slice holds at the transcript's key (`heldSlice`). */
-export type HeldTranscript = Pick<HeldAnswers<AppTranscript>, "answered" | "rows">;
+/**
+ * What the windows hold of one transcript, read and laid by its follow: the
+ * rows its slice holds at the transcript's key (`heldSlice`), and how a
+ * transcript is laid there, which for an agent's own takes its queue into
+ * the sync engine's pool first (`agent-queue-writes.ts`).
+ */
+export interface HeldTranscript {
+  readonly rows: () => AppTranscript | undefined;
+  readonly answered: (rows: AppTranscript) => Effect.Effect<void>;
+}
+
+/** A transcript's rows as its slice holds them, laid there as they are told. */
+export function heldTranscript(answers: HeldAnswers<AppTranscript>): HeldTranscript {
+  return { rows: answers.rows, answered: (rows) => Effect.sync(() => answers.answered(rows)) };
+}
 
 /**
  * Whether a newest page meets the messages held, so joining it leaves no
@@ -447,21 +460,27 @@ export function withOlderPage(
  * newest page. Note that what it holds is laid anew as not yet caught up
  * and no longer failed, since the follow reads it again.
  */
-function reopened(held: HeldTranscript): Option.Option<AgentNewestAnswer> {
-  const rows = held.rows();
-  if (rows === undefined) return Option.none();
-  const { failure, ...standing } = rows;
-  const word = standing.word === undefined ? undefined : { ...standing.word, caughtUp: false };
-  if (failure !== undefined || rows.word?.caughtUp === true) {
-    held.answered(word === undefined ? standing : { ...standing, word });
-  }
-  if (standing.cursor === undefined || word === undefined) return Option.none();
-  const { caughtUp: _caughtUp, queueRevision: _revision, ...said } = word;
-  return Option.some({
-    ...said,
-    messages: standing.messages,
-    cursor: standing.cursor,
-    ...(standing.before === undefined ? undefined : { before: standing.before }),
+function reopened(held: HeldTranscript): Effect.Effect<Option.Option<AgentNewestAnswer>> {
+  return Effect.suspend(() => {
+    const rows = held.rows();
+    if (rows === undefined) return Effect.succeed(Option.none());
+    const { failure, ...standing } = rows;
+    const word = standing.word === undefined ? undefined : { ...standing.word, caughtUp: false };
+    const laid =
+      failure !== undefined || rows.word?.caughtUp === true
+        ? held.answered(word === undefined ? standing : { ...standing, word })
+        : Effect.void;
+    if (standing.cursor === undefined || word === undefined) return Effect.as(laid, Option.none());
+    const { caughtUp: _caughtUp, queueRevision: _revision, ...said } = word;
+    return Effect.as(
+      laid,
+      Option.some({
+        ...said,
+        messages: standing.messages,
+        cursor: standing.cursor,
+        ...(standing.before === undefined ? undefined : { before: standing.before }),
+      }),
+    );
   });
 }
 
@@ -480,11 +499,13 @@ function joinedWindow(
 }
 
 /** `held` with no cursor to read on from, so a follow after it reads the newest page. */
-function forgetCursor(held: HeldTranscript): void {
-  const rows = held.rows();
-  if (rows?.cursor === undefined) return;
-  const { cursor: _cursor, ...rest } = rows;
-  held.answered(rest);
+function forgetCursor(held: HeldTranscript): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    const rows = held.rows();
+    if (rows?.cursor === undefined) return Effect.void;
+    const { cursor: _cursor, ...rest } = rows;
+    return held.answered(rest);
+  });
 }
 
 /**
@@ -516,7 +537,7 @@ export function followTranscript<Key>(
       /** The queue revision the last page read past a cursor was read at, which its queue is at least as new as, and every page told after it carries. */
       let revision: number | undefined;
       const tell = (page: AgentTranscriptPage) =>
-        Effect.sync(() => held.answered(toldTranscript(held.rows(), page, revision)));
+        Effect.suspend(() => held.answered(toldTranscript(held.rows(), page, revision)));
       let toldNotFound = false;
       const readNewest = reads.newest().pipe(
         Effect.tap((answer) => {
@@ -532,7 +553,7 @@ export function followTranscript<Key>(
         }),
       );
       // Note that a window held stands drawn before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the live read, not after it, its cursor what makes following on from it safe.
-      const recalled = yield* Effect.sync(() => reopened(held));
+      const recalled = yield* reopened(held);
       const opening = Option.isSome(recalled) ? undefined : yield* Effect.forkScoped(readNewest);
       const sealed = yield* Effect.result(RcMap.get(follows, key));
       if (sealed._tag === "Failure" || sealed.success.kind === LIVE_STATE.REFUSED) {
@@ -651,7 +672,7 @@ export function followTranscript<Key>(
         );
         // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
         if (fromHeld && unanswered(answer)) {
-          yield* Effect.sync(() => forgetCursor(held));
+          yield* forgetCursor(held);
           const newest = yield* readNewest;
           if ("failure" in newest) {
             if (newest.failure === AGENT_CALL_FAILURE.NOT_FOUND) return;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type AgentQueue, QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import type { AgentQueue } from "@repo/features/agent-queue-wire";
 import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@repo/features/agent-view";
 import {
   AGENT_ATTACHMENT_TYPE,
@@ -26,16 +26,16 @@ import {
 } from "./use-agent-queue.js";
 
 /**
- * An agent's queue as its tab draws and changes it. What it draws is the
- * service's queue, as the newest page or a change's answer names it,
- * whichever stands at the higher revision, so an answer that lands after a
- * newer page never draws an older queue; a message queued and a new order
- * are drawn as they go, and spring back where refused. The
+ * An agent's queue as its tab changes it; the host draws each change over
+ * the queue its page carries (`@repo/host`'s `agent-queue-writes.ts`). The
  * message box's part: a message the queue refused comes back into the box,
  * an edit the queue did not save stays open with its new words, an edit of
- * a message the queue would not hold closes, an edit steered is one
- * change of that message, and an edit takes the message's files into the
- * box, read as its row draws them, which Save sends back with its words.
+ * a message the queue would not hold closes, an edit
+ * steered is one change of that message, and an edit takes the message's
+ * files into the box, read as its row draws them, which Save sends back with
+ * its words. A message queued with files names the ids the window keeps
+ * their bytes under, which stand, and are kept under the service's ids once
+ * its queue names them.
  */
 
 const ignore = () => undefined;
@@ -52,8 +52,9 @@ let held:
     }
   | undefined;
 
-/** Every change the tab sent, and the answers still owed, answered in the order a test says. */
+/** Every change the tab sent, the picture ids each named, and the answers still owed, answered in the order a test says. */
 let sent: AgentQueueChange[] = [];
+let pictures: (readonly string[] | undefined)[] = [];
 let owed: ((answer: AgentQueueAnswerView) => void)[] = [];
 
 function Tab(): ReactNode {
@@ -95,8 +96,6 @@ const refused: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED }
 
 const message = (id: string, text: string) => ({ id, text, queuedBy: "user-1" });
 
-const texts = () => now().queue.messages.map((each) => each.text);
-
 /** An image a queued message carries, the id the queue reads it by, and a file the box takes on beside it. */
 const SHOT = { name: "flow.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data: "iVBORw0KGgo=" };
 const SHOT_ID = "3c1f5d0e-7a8b-4c9d-9e0f-1a2b3c4d5e6f";
@@ -104,11 +103,13 @@ const SPEC = { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: "JV
 
 beforeEach(async () => {
   sent = [];
+  pictures = [];
   owed = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.AGENTS_QUEUE]: ({ change }) => {
+    [ACT_KIND.AGENTS_QUEUE]: ({ change, pictures: named }) => {
       sent.push(change);
+      pictures.push(named);
       return new Promise((resolve) => owed.push(resolve));
     },
     [ACT_KIND.AGENTS_PICTURE]: ({ pictureId }) =>
@@ -133,51 +134,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a message queued is drawn at once, and gone once a newer page says it was handed on, whenever its own answer lands", async () => {
-  act(() => now().page({ messages: [], revision: 1 }));
-  act(() => now().composer.setDraft("Hello"));
-  act(() => now().editing.queue());
-  assert.deepEqual(texts(), ["Hello"]);
-
-  // The hand-off sent it before the queue's answer to the add came back.
-  act(() => now().page({ messages: [], revision: 3 }));
-  await answer({ queue: { messages: [message("m1", "Hello")], revision: 2 } });
-
-  assert.deepEqual(texts(), []);
-});
-
-test("Resume answered after the page that handed the message on draws neither the message nor the pause", async () => {
-  act(() =>
-    now().page({
-      messages: [message("m1", "Open the pull request")],
-      paused: { because: QUEUE_PAUSE.STOPPED },
-      revision: 5,
-    }),
-  );
-  act(() => void now().queue.change({ change: QUEUE_CHANGE.RESUME }));
-
-  act(() => now().page({ messages: [], revision: 7 }));
-  await answer({ queue: { messages: [message("m1", "Open the pull request")], revision: 6 } });
-
-  assert.deepEqual(texts(), []);
-  assert.equal(now().queue.paused, undefined);
-});
-
-test("a new order is drawn as the drag drops it, and springs back where the queue refuses it", async () => {
-  act(() =>
-    now().page({
-      messages: [message("m1", "Run tests"), message("m2", "Open the PR")],
-      revision: 1,
-    }),
-  );
-  act(() => now().queue.move(1, 0));
-  assert.deepEqual(texts(), ["Open the PR", "Run tests"]);
-
-  await answer(refused);
-
-  assert.deepEqual(texts(), ["Run tests", "Open the PR"]);
-});
-
 test("a message the queue refused comes back into the box it was queued from", async () => {
   act(() => now().composer.setDraft("Please update the tests"));
   act(() => now().editing.queue());
@@ -200,7 +156,6 @@ test("an edit the queue refused to save stays open with its new words, the box's
   act(() => now().editing.cancel());
   assert.equal(now().composer.draft, "my own words");
 });
-
 test("an edit of a message the queue would not hold, already on its way, closes and gives the box back", async () => {
   act(() => now().composer.setDraft("my own words"));
   act(() => now().editing.edit(message("m1", "Run tests")));
@@ -224,27 +179,8 @@ test("an edit steered is one change of the message it edits, with its new words,
     text: "Run tests and fix failures",
   });
   await answer({ queue: { messages: [], revision: 3 } });
-  assert.deepEqual(texts(), [], "the message steered leaves the queue");
   assert.equal(now().editing.editing, undefined);
   assert.equal(sent.filter((each) => each.change === QUEUE_CHANGE.ADD).length, 0);
-});
-
-test("a message queued is drawn once, never beside its own row on a page that lists it before the queue answers", async () => {
-  act(() => now().page({ messages: [], revision: 1 }));
-  act(() => now().composer.setDraft("Hello"));
-  act(() => now().editing.queue());
-  await settle();
-  const [added] = sent;
-  assert.ok(added?.change === QUEUE_CHANGE.ADD);
-
-  act(() =>
-    now().page({
-      messages: [message(added.id, "Hello")],
-      revision: 2,
-    }),
-  );
-
-  assert.deepEqual(texts(), ["Hello"]);
 });
 
 test("an edit whose message left the queue, sent or deleted elsewhere, closes and keeps its words in the box", async () => {
@@ -282,23 +218,23 @@ test("an edit takes the message's files into the box, read as its row draws them
   });
 });
 
-test("a message queued with an image draws its thumbnail at once and as it lands, the bytes the box held kept under the id the service minted, never read back", async () => {
+test("a message queued with an image names the id its bytes stand under for the host to draw it by, and once the service answers it under an id of its own, the bytes the box held stand under that too, never read back", async () => {
   act(() => now().page({ messages: [], revision: 1 }));
   act(() => now().composer.setAttachments(() => [SHOT]));
   act(() => now().editing.queue());
+  await settle();
   const ready = (id: string | undefined) => {
-    assert.ok(id !== undefined, "the drawn file names an id");
+    assert.ok(id !== undefined, "the file names an id");
     const state = pictureNow("agent-1", id);
     return state.kind === PICTURE_STATE.READY ? state.url : state.kind;
   };
   const url = `data:${SHOT.mediaType};base64,${SHOT.data}`;
-  assert.equal(ready(now().queue.messages[0]?.files?.[0]?.id), url);
-  await settle();
   const queued = sent.at(-1);
   assert.ok(queued?.change === QUEUE_CHANGE.ADD);
+  assert.equal(ready(pictures.at(-1)?.[0]), url);
   const landed = "5d6e7f80-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
-  act(() =>
-    now().page({
+  await answer({
+    queue: {
       messages: [
         {
           ...message(queued.id, ""),
@@ -306,26 +242,8 @@ test("a message queued with an image draws its thumbnail at once and as it lands
         },
       ],
       revision: 2,
-    }),
-  );
+    },
+  });
 
   assert.equal(ready(landed), url);
-});
-
-test("a change pressed on a message before its add has answered waits for the add, then goes under the message's own id", async () => {
-  act(() => now().page({ messages: [], revision: 1 }));
-  act(() => now().composer.setDraft("Hello"));
-  act(() => now().editing.queue());
-  await settle();
-  const [added] = sent;
-  assert.ok(added?.change === QUEUE_CHANGE.ADD);
-  const [drawn] = now().queue.messages;
-  assert.equal(drawn?.id, added.id, "the row is drawn under the id it is queued under");
-
-  act(() => void now().queue.remove(drawn));
-  await settle();
-  assert.equal(sent.length, 1, "the delete waits for the add");
-
-  await answer({ queue: { messages: [message(added.id, "Hello")], revision: 2 } });
-  assert.deepEqual(sent[1], { change: QUEUE_CHANGE.DELETE, messageId: added.id });
 });

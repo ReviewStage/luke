@@ -6,8 +6,7 @@
  * takes only a handler `declaredMethod` built from a write declaration, which
  * draws the write over the pool at once; a handler written by hand does not
  * compile. The brand that tells the two apart is a type alone, which only
- * `declaredMethod` gives. A row write not declared yet stands on the host's
- * own list of them beside the map, which takes any handler meanwhile.
+ * `declaredMethod` gives.
  */
 
 import { Effect } from "effect";
@@ -29,31 +28,20 @@ export const ACT = {
 
 export type Act = (typeof ACT)[keyof typeof ACT];
 
-/** The methods a classification names row writes. */
-export type RowWriteOf<Classes extends Readonly<Record<string, Act>>> = {
-  [Method in keyof Classes]: Classes[Method] extends typeof ACT.ROW_WRITE ? Method : never;
-}[keyof Classes];
-
 /** The brand of a handler built from a write declaration: a type no value carries, so only `declaredMethod` gives it. */
 declare const DECLARED: unique symbol;
 
 /** A method handler `declaredMethod` built from a write declaration, the one a declared row write's method takes. */
 export type DeclaredHandler<Handler> = Handler & { readonly [DECLARED]: true };
 
-/**
- * A handler table whose row writes, bar those still `Undeclared`, take only
- * a `DeclaredHandler`, and whose every other method takes any `Handler`.
- */
+/** A handler table whose row writes take only a `DeclaredHandler`, and whose every other method takes any `Handler`. */
 export type DoorTable<
   Method extends string,
   Classes extends Readonly<Record<Method, Act>>,
-  Undeclared extends RowWriteOf<Classes>,
   Handler,
 > = {
   [Each in Method]?: Classes[Each] extends typeof ACT.ROW_WRITE
-    ? Each extends Undeclared
-      ? Handler
-      : DeclaredHandler<Handler>
+    ? DeclaredHandler<Handler>
     : Handler;
 };
 
