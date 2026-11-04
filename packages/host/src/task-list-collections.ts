@@ -75,8 +75,13 @@ export interface TaskListDependencies {
 
 /** The account's task list standing in the pool, for as long as its scope stands. */
 export interface TaskListCollections {
-  /** Takes one answer of the list's follow, both its parts, whole or past a sync id, and draws it. */
-  readonly answer: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<void>;
+  /**
+   * Takes one answer of the list's follow, both its parts, whole or past a
+   * sync id, and draws it, answering whether a row the list holds moved, or
+   * it took one up or let one go. One past a sync id that carries no row and
+   * lets none go is neither taken nor drawn.
+   */
+  readonly answer: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<boolean>;
   /** The plans and agents the list holds as the service answered them, with no write drawn over them, as the entity store keeps them. */
   readonly synced: () => TaskListLiveRows;
 }
@@ -143,20 +148,28 @@ export function taskListCollections(
     return {
       answer: (rows, standing) =>
         Effect.suspend(() => {
-          planKeys = joined(planKeys, rows.plans, standing);
-          agentKeys = joined(agentKeys, rows.agents, standing);
+          const nextPlans = joined(planKeys, rows.plans, standing);
+          const nextAgents = joined(agentKeys, rows.agents, standing);
+          // Note that an answer past a sync id carrying no row and letting none go moves nothing, as most of a busy service's do, so neither the pool nor the list is walked: the edge armed stands, and a write settles on the follow's wait.
+          const still =
+            standing?.past !== undefined &&
+            rows.plans.length + rows.agents.length === 0 &&
+            nextPlans.length === planKeys.length &&
+            nextAgents.length === agentKeys.length;
+          if (still) return Effect.succeed(false);
+          planKeys = nextPlans;
+          agentKeys = nextAgents;
           const at = syncIdOf(standing);
           const answered = (held: readonly string[]) => ({
             held,
             ...(at === undefined ? undefined : { at }),
           });
-          return Effect.andThen(
-            Effect.andThen(
-              plans.answer(rows.plans, answered(planKeys)),
-              agents.answer(rows.agents, answered(agentKeys)),
-            ),
-            drawn,
-          );
+          return Effect.gen(function* () {
+            const plansMoved = yield* plans.answer(rows.plans, answered(planKeys));
+            const agentsMoved = yield* agents.answer(rows.agents, answered(agentKeys));
+            yield* drawn;
+            return plansMoved.length + agentsMoved.length > 0;
+          });
         }),
       synced: () => ({ plans: plans.synced(), agents: agents.synced() }),
     };

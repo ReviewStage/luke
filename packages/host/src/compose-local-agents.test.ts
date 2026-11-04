@@ -41,7 +41,6 @@ import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents, type LocalAgentsUpdate } from "./compose-local-agents.js";
 import { hostUpdate } from "./daemon/host-update.js";
@@ -53,6 +52,7 @@ import {
   Reporter,
 } from "./effect/seams.js";
 import { fakeClis } from "./testing/fake-clis.js";
+import { memoryFileSystem } from "./testing/memory-file-system.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const HOME = "/Users/dev";
@@ -126,7 +126,14 @@ const followingDevice = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const files = new Map<string, string>();
+    const disk = memoryFileSystem({
+      exists: () => Effect.succeed(false),
+      makeDirectory: (path) =>
+        options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
+          ? Effect.sleep(options.writingTakes)
+          : Effect.void,
+    });
+    const { files } = disk;
     let minted = 0;
     const signal = yield* Deferred.make<void>();
     const runner: Script =
@@ -232,35 +239,7 @@ const followingDevice = (
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
-      FileSystem.layerNoop({
-        exists: () => Effect.succeed(false),
-        makeDirectory: (path) =>
-          options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
-            ? Effect.sleep(options.writingTakes)
-            : Effect.void,
-        chmod: () => Effect.void,
-        readFileString: (path) => {
-          const held = files.get(path);
-          return held === undefined
-            ? Effect.fail(
-                systemError({
-                  _tag: "NotFound",
-                  module: "FileSystem",
-                  method: "readFileString",
-                  pathOrDescriptor: path,
-                }),
-              )
-            : Effect.succeed(held);
-        },
-        writeFileString: (path, data) => Effect.sync(() => void files.set(path, data)),
-        rename: (from, to) =>
-          Effect.sync(() => {
-            const held = files.get(from);
-            files.delete(from);
-            if (held !== undefined) files.set(to, held);
-          }),
-        remove: (path) => Effect.sync(() => void files.delete(path)),
-      }),
+      disk.layer,
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),

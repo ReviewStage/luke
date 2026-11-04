@@ -22,7 +22,13 @@
  * shapes it was kept at, so a file of another account, of another build's
  * shapes, or one that will not open, is deleted and read as none, and every
  * read reads whole. A store saves what moved at most every `SAVE_EVERY`, and
- * once more as it closes; a sign-out forgets it, which deletes the file.
+ * once more as it closes; a sign-out forgets it, which deletes the file. Rows
+ * kept where none of them moved but where they stand (`keepUnmoved`), as the
+ * task list's sync id moving alone, are written only beside the next save of
+ * something that moved, and as the store closes. Note that a file left
+ * behind at an older sync id reads right, because a read past an id answers
+ * every row that moved since it, and the rows the file kept at that id are
+ * the very rows the service held there.
  *
  * Beside the lists it keeps the row writes made while the service could not
  * be reached, as the sync engine hands them out (`EntityPool.queued`) and
@@ -145,6 +151,11 @@ export interface EntityStore {
   readonly stored: <Read extends KeptRead>(read: Read) => KeptRows[Read] | undefined;
   /** `read`'s rows as the service answered them now, written within `SAVE_EVERY` and as the store closes; the workspaces' leave with them every read kept per workspace of one they no longer name. */
   readonly keep: <Read extends KeptRead>(read: Read, rows: KeptRows[Read]) => Effect.Effect<void>;
+  /** `read`'s rows kept as `keep` keeps them where none of them moved but where they stand, as the task list's sync id alone: written only with the next save of something that moved, and as the store closes. */
+  readonly keepUnmoved: <Read extends KeptRead>(
+    read: Read,
+    rows: KeptRows[Read],
+  ) => Effect.Effect<void>;
   /** What the store holds of one workspace's `read` now: as the file held it, or as it was kept since; none where it holds none. */
   readonly storedIn: <Read extends KeptByWorkspace>(
     read: Read,
@@ -268,39 +279,53 @@ export function openEntityStore(
     const queued = options.queued ?? (() => queue);
     let reads: Partial<KeptRows> = stored;
     let dirty = kept === undefined && queue.length > 0;
+    /** Whether rows kept since the last save moved nothing but where they stand (`keepUnmoved`), which only a save of something that moved, or the last, writes. */
+    let unmoved = false;
     let savedQueue = JSON.stringify(queue);
     let forgotten = false;
     const lock = yield* Semaphore.make(1);
-    const save = lock.withPermits(1)(
-      Effect.suspend(() => {
-        const waiting = queued();
-        const waitingText = JSON.stringify(waiting);
-        if ((!dirty && waitingText === savedQueue) || forgotten) return Effect.void;
-        dirty = false;
-        savedQueue = waitingText;
-        return encodeKept({ hash, accountId, reads, queue: waiting }).pipe(
-          Effect.map((plain) => Base64.encode(cipher.encrypt(plain))),
-          Effect.flatMap((sealed) =>
-            writeSettingsFileAtomic(directory, sealed, undefined, ENTITY_STORE_FILE_NAME),
-          ),
-          // Note that a failure is logged by its kind alone, since a row's words may be among its message.
-          Effect.catch((failure) =>
-            Effect.logWarning(`the entity store was not written: ${failure._tag}`),
-          ),
-          Effect.provideContext(services),
-        );
-      }),
-    );
-    yield* Effect.forkScoped(Effect.repeat(save, Schedule.spaced(SAVE_EVERY)));
-    yield* Effect.addFinalizer(() => save);
+    const save = (closing: boolean) =>
+      lock.withPermits(1)(
+        Effect.suspend(() => {
+          const waiting = queued();
+          const waitingText = JSON.stringify(waiting);
+          const moved = dirty || waitingText !== savedQueue;
+          if (!(moved || (closing && unmoved)) || forgotten) return Effect.void;
+          dirty = false;
+          unmoved = false;
+          savedQueue = waitingText;
+          return encodeKept({ hash, accountId, reads, queue: waiting }).pipe(
+            Effect.map((plain) => Base64.encode(cipher.encrypt(plain))),
+            Effect.flatMap((sealed) =>
+              writeSettingsFileAtomic(directory, sealed, undefined, ENTITY_STORE_FILE_NAME),
+            ),
+            // Note that a failure is logged by its kind alone, since a row's words may be among its message.
+            Effect.catch((failure) =>
+              Effect.logWarning(`the entity store was not written: ${failure._tag}`),
+            ),
+            Effect.provideContext(services),
+          );
+        }),
+      );
+    yield* Effect.forkScoped(Effect.repeat(save(false), Schedule.spaced(SAVE_EVERY)));
+    yield* Effect.addFinalizer(() => save(true));
+    /** `read`'s rows laid among those kept, the workspaces' leaving with them every read kept per workspace of one they no longer name. */
+    const laid = <Read extends KeptRead>(kept: Read, rows: KeptRows[Read]) => {
+      reads = { ...reads, [kept]: rows };
+      if (kept === KEPT_READ.WORKSPACES) reads = withinWorkspaces(reads);
+    };
     return {
       stored: (read) => stored[read],
       queue,
       keep: (kept, rows) =>
         Effect.sync(() => {
-          reads = { ...reads, [kept]: rows };
-          if (kept === KEPT_READ.WORKSPACES) reads = withinWorkspaces(reads);
+          laid(kept, rows);
           dirty = true;
+        }),
+      keepUnmoved: (kept, rows) =>
+        Effect.sync(() => {
+          laid(kept, rows);
+          unmoved = true;
         }),
       storedIn: <Read extends KeptByWorkspace>(kept: Read, workspaceId: string) =>
         byWorkspaceOf<Read>(reads, kept)?.[workspaceId],

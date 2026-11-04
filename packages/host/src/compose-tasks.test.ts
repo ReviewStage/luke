@@ -109,6 +109,7 @@ import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import { type EntityStore, KEPT_READ, openEntityStore } from "./entity-store.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
+import { memoryFileSystem } from "./testing/memory-file-system.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { testCipher } from "./testing/test-cipher.js";
@@ -1596,6 +1597,39 @@ it.effect(
       assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
       assert.equal(asked[0], "7");
     }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "an answer of the list that moves no row writes nothing to disk, and the sync id it reached is written as the store closes",
+  () =>
+    Effect.gen(function* () {
+      const disk = Layer.merge(memoryFileSystem().layer, NodePath.layer);
+      const opened = Effect.provide(
+        openEntityStore({ directory: "/state", cipher: testCipher(), accountId: "user-dana" }),
+        disk,
+      );
+      /** The sync id the list stands at on disk, as a store opened over it reads it. */
+      const keptAt = Effect.map(
+        Effect.scoped(opened),
+        (store) => store.stored(KEPT_READ.TASK_LIST)?.at,
+      );
+      const quit = yield* Scope.make();
+      const entities = yield* Scope.provide(quit)(opened);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call, listed } = yield* Scope.provide(quit)(subject(service, { entities }));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* TestClock.adjust("2 seconds");
+      const first = yield* keptAt;
+
+      // The service answers past the id it answered last, nothing having moved since.
+      yield* listed();
+      yield* TestClock.adjust("2 seconds");
+      const meanwhile = yield* keptAt;
+      yield* Scope.close(quit, Exit.void);
+
+      assert.deepEqual([first, meanwhile, yield* keptAt], ["1", "1", "2"]);
+    }),
 );
 
 it.effect(

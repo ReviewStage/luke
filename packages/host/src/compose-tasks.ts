@@ -1258,24 +1258,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ),
       // Note that an answer's read standing rides the list it draws, so a window is told both at once.
       take: (rows, standing) =>
-        Effect.suspend(() => {
+        Effect.gen(function* () {
           view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
           const entities = dependencies.entities();
           const { collections } = taskList;
-          // Note that only an answer read at a sync id is kept, since the follow reads past it at the next launch.
-          const kept =
-            entities === undefined || standing === undefined
-              ? Effect.void
-              : Effect.suspend(() =>
-                  entities.keep(KEPT_READ.TASK_LIST, {
-                    rows: collections.synced(),
-                    at: standing.next,
-                  }),
-                );
-          return Effect.andThen(
-            Effect.andThen(collections.answer(rows, standing), kept),
-            resendQueued,
-          );
+          const moved = yield* collections.answer(rows, standing);
+          // Note that an answer the list did not draw tells its standing here, as after a poll that failed, and one it drew told it already.
+          publish();
+          // Note that only an answer read at a sync id is kept, since the follow reads past it at the next launch, and one that moved no row is written only beside the next that did.
+          if (entities !== undefined && standing !== undefined) {
+            const kept = { rows: collections.synced(), at: standing.next };
+            yield* moved
+              ? entities.keep(KEPT_READ.TASK_LIST, kept)
+              : entities.keepUnmoved(KEPT_READ.TASK_LIST, kept);
+          }
+          yield* resendQueued;
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
