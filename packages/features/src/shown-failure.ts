@@ -1,14 +1,15 @@
 /**
- * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
+ * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
  * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
  * alike. Each becomes one Sentry log line, searchable by every attribute
  * below: at `warn` for a refusal something named, such as a limit or a
- * refusal the service or the host worded, and at `error` for anything else.
- * One nothing named becomes an issue besides, grouped by where it was shown
- * and its code rather than by its stack, since one surface shows the same
- * failure from many paths.
+ * refusal the service or the host worded, or for any failure shown while the
+ * machine had no network, and at `error` for anything else. One nothing
+ * named, shown while online, becomes an issue besides, grouped by where it
+ * was shown and its code rather than by its stack, since one surface shows
+ * the same failure from many paths.
  *
  * What it carries is chosen here rather than read from the failure whole:
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
@@ -620,9 +621,13 @@ export function failureAboutOf(payload: unknown): FailureAbout {
 
 /**
  * Sends Sentry a failure the app showed: a log line, at `warn` for a refusal
- * something named and at `error` for anything else, and for anything else
- * an issue besides, grouped by where it was shown and its code. Answers the
- * issue's event id, where it opened one, and the trace both went in.
+ * something named or a failure shown offline and at `error` for anything
+ * else, and for anything else an issue besides, grouped by where it was
+ * shown and its code. Answers the issue's event id, where it opened one, and
+ * the trace both went in. Note that a failure shown while the machine had no
+ * network opens no issue, because a read or a write that could not reach the
+ * service then is the network's failure rather than the app's, as a Mac
+ * waking from sleep shows every live read failed before its network is back.
  */
 export function sendShownFailure(
   sentry: ShownFailureSentry,
@@ -633,7 +638,7 @@ export function sendShownFailure(
   const traceId =
     sentry.getActiveSpan()?.spanContext().traceId ??
     sentry.getCurrentScope().getPropagationContext().traceId;
-  if (report.kind === FAILURE_KIND.REFUSED) {
+  if (report.kind === FAILURE_KIND.REFUSED || !report.state.online) {
     sentry.logger.warn(line, attributes);
     return { traceId };
   }
