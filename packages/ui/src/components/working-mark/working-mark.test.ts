@@ -1,16 +1,23 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { it } from "@effect/vitest";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { Shimmer } from "../shimmer/shimmer.js";
+import { timeRuntime } from "../time/time-clock.js";
 import { WorkingMark } from "./working-mark.js";
 
 /**
  * working-mark.test.ts -- the loading marks are decorative, hidden from a
- * reader, the working mark's still frame lights several cells, and the shimmer
- * says its words alone.
+ * reader, the working mark's still frame lights several cells and steps on
+ * the beat, and the shimmer says its words alone.
  */
 
 declare global {
@@ -38,6 +45,38 @@ test("a still working mark lights at least three cells, not one stacked dot", ()
   const cells = new Set([...dots].map((dot) => dot.style.transform));
   assert.ok(cells.size >= 3, `the still mark lights ${cells.size} cells`);
 });
+
+it.effect("each pixel steps one cell on along the lap on each beat", () =>
+  Effect.gen(function* () {
+    const registry = AtomRegistry.make({
+      initialValues: [
+        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
+      ],
+    });
+    const mark = render(
+      createElement(RegistryContext.Provider, { value: registry }, createElement(WorkingMark)),
+    );
+    const cells = () =>
+      [...mark.querySelectorAll<SVGElement>(".ui-working-mark-dot")].map(
+        (dot) => dot.style.transform,
+      );
+    // The lead, its tail, the trail, and its tail, resting on cells 1, 0, 5, and 4 of the lap.
+    assert.deepEqual(cells(), [
+      "translate(5px, 0px)",
+      "translate(0px, 0px)",
+      "translate(5px, 10px)",
+      "translate(10px, 10px)",
+    ]);
+    yield* TestClock.adjust("200 millis");
+    yield* Effect.promise(() => act(() => Promise.resolve()));
+    assert.deepEqual(cells(), [
+      "translate(10px, 0px)",
+      "translate(5px, 0px)",
+      "translate(0px, 10px)",
+      "translate(5px, 10px)",
+    ]);
+  }),
+);
 
 test("the shimmer says its words and passes props on", () => {
   const line = render(createElement(Shimmer, { children: "Working", "aria-live": "polite" }));
