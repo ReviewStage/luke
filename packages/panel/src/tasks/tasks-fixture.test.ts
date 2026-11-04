@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
-import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/tasks-view";
+import type { TasksRevisionAnswer } from "@repo/features/tasks-view";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
@@ -62,18 +62,18 @@ test("every fixture task names a member of its own workspace as who created it",
 });
 
 test("the open task's version history lists at least four versions by more than one member, each read beside the one before it", () => {
-  const read = (
-    kind: typeof ACT_KIND.TASKS_REVISIONS | typeof ACT_KIND.TASKS_REVISION,
-    seq?: number,
-  ) =>
-    fixtureActAnswer(
-      { profile: RUN_PROFILE.TASKS },
-      kind,
-      seq === undefined ? { taskId: FIXTURE_IDS.TASK } : { taskId: FIXTURE_IDS.TASK, seq },
-    )?.answer;
-  // SAFETY: the profile answered the history's page read, with its result.
-  const page = read(ACT_KIND.TASKS_REVISIONS) as TasksRevisionsAnswer;
-  assert.ok("revisions" in page, "the history's page is answered");
+  const read = (seq: number) =>
+    fixtureActAnswer({ profile: RUN_PROFILE.TASKS }, ACT_KIND.TASKS_REVISION, {
+      taskId: FIXTURE_IDS.TASK,
+      seq,
+    })?.answer;
+  const main = stateWith({}, {});
+  const staged = fixtureAppState({
+    ...main,
+    run: { ...main.run, fixtureMode: true, profile: RUN_PROFILE.TASKS },
+  });
+  const page = staged[LIVE_READ.HISTORY][FIXTURE_IDS.TASK]?.rows;
+  assert.ok(page, "the history is held as the version history holds it");
   const members = new Set(page.revisions.flatMap(({ lastEdit }) => lastEdit.by?.userId ?? []));
   assert.ok(page.revisions.length >= 4, "at least four versions");
   assert.ok(members.size >= 2, "written by more than one member");
@@ -82,8 +82,8 @@ test("the open task's version history lists at least four versions by more than 
   const second = page.revisions.at(-2);
   assert.ok(first !== undefined && second !== undefined);
   // SAFETY: the profile answered each revision read, with its result.
-  const opened = read(ACT_KIND.TASKS_REVISION, second.seq) as TasksRevisionAnswer;
-  const oldest = read(ACT_KIND.TASKS_REVISION, first.seq) as TasksRevisionAnswer;
+  const opened = read(second.seq) as TasksRevisionAnswer;
+  const oldest = read(first.seq) as TasksRevisionAnswer;
   assert.ok("revision" in opened && "revision" in oldest);
   assert.notEqual(
     opened.revision.previous,

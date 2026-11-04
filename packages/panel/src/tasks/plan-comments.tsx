@@ -156,8 +156,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { centerWithin } from "../scroll-within.js";
-import { type SendQueue, useSendQueue } from "../send-queue.js";
-import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -216,24 +214,25 @@ import {
  * link, or a chip inside them puts nothing off. Posting a comment asks no
  * agent anything.
  *
- * A reply leaves its field the moment it is sent, and the field takes the
- * next at once, as the agent's box does (`use-agent-composer.ts`): nothing
- * holds Send, the files' +, or the microphone while the service answers. A
- * thread's replies go one at a time, in the order sent, each under a key of
- * its own, the next once the one before it answered (`../send-queue.ts`),
- * through one queue the comments' scope holds, so a thread closed and opened
- * again, or open in the margin and the Comments tab at once, keeps one
- * order. Each reply on its way stands at the thread's end as the reader's
- * own comment marked Sending, until the thread holds the comment it became.
- * A reply refused takes every reply queued behind it with it, which never
- * goes, so comments land in the order written. Alone, it comes back into the
- * field above whatever was written there since; with replies behind it, or
- * where the field is gone or the two are more than one comment carries,
- * they stand apart as not sent, each under its own key, with Retry and
+ * Every write here is drawn by the host the moment it is asked, standing
+ * until the read carries it (`@repo/host`'s `plan-comment-writes.ts`), so
+ * nothing waits on the service: a resolve, a reopen, an edit, or a deletion
+ * once asked draws in the frame of the press, and one refused is taken back
+ * and said in a toast. A thread being started is drawn under the key its
+ * first comment is sent under, which names the thread, and opens at once
+ * in its card's place. A reply leaves its field the moment it is sent and
+ * draws at the thread's end as the reader's own comment, and the field
+ * takes the next at once, as the agent's box does
+ * (`use-agent-composer.ts`): nothing holds Send, the files' +, or the
+ * microphone while the service answers, and the host sends a thread's
+ * replies one at a time in the order written, each under a key of its own.
+ * A reply refused comes back into the field above whatever was written
+ * there since; where the field is gone or the two are more than one comment
+ * carries, it stands apart as not sent, under its own key, with Retry and
  * Discard, since a refusal may be an answer lost after the service wrote the
- * reply, and only its own key keeps Retry from writing it twice.
- * A thread being started holds its field until it answers, since its send
- * opens the thread.
+ * reply, and only its own key keeps Retry from writing it twice. A thread's
+ * first comment refused comes back the same way, where its words are
+ * commented on again.
  */
 
 /**
@@ -412,15 +411,12 @@ const COMMENT_WORDS = {
   ADD: "Add a comment",
   REPLY: "Reply",
   RESOLVE: "Resolve",
-  RESOLVING: "Resolving",
   REOPEN: "Reopen",
-  REOPENING: "Reopening",
   THING: "Comment",
   EDIT: "Edit",
   DELETE: "Delete",
   DELETE_THREAD: "Delete thread",
   SAVE: "Save",
-  SAVING: "Saving",
   CANCEL: "Cancel",
   GONE: "Original content deleted",
   RESOLVED_IT: "resolved this",
@@ -430,7 +426,6 @@ const COMMENT_WORDS = {
   SHOW_WORDS: "Show in the plan",
   SHOW_ELEMENT: "Show on the page",
   WHOLE_PAGE: "Whole page",
-  SENDING: "Sending",
   DISCARD: "Discard",
   NOT_SENT: "This comment could not be sent.",
   NOT_SENT_MANY: "These comments could not be sent.",
@@ -634,9 +629,6 @@ const DISCARD_MANY_QUESTION: DialogQuestion = {
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
-/** What a delete that did not land says. */
-const COMMENT_NOT_DELETED = "The comment could not be deleted.";
-
 /** One comment of a thread: who wrote it and when, its words, or the field editing them, and its tools under the pointer. */
 function CommentEntry({
   thread,
@@ -662,24 +654,23 @@ function CommentEntry({
     on: { threadId: thread.id, entryId: entry.id },
   });
   const drafts = useDraftWriter();
+  // Note that a deletion asks first, then is drawn by the host at once, so the dialog closes on the press; one refused is taken back and said in a toast.
   const deleting = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    async () => {
-      const deleted = await doors.control.act(
-        thread.id,
-        first
-          ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
-          : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
-      );
-      if (!deleted) {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
-        };
-      }
-      // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
-      drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    () => {
+      void doors.control
+        .act(
+          thread.id,
+          first
+            ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
+            : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
+        )
+        .then((deleted) => {
+          // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
+          if (deleted)
+            drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
+        });
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     confirmFailure(FAILURE_SURFACE.PLAN_COMMENT_DELETE),
   );
@@ -728,13 +719,11 @@ function CommentEntry({
   ];
   const groups = [copies, edits, deletes].filter((group) => group.length > 0);
   const settle = first && openThread(thread);
-  // Note that the check is busy from its press until the service answers, so a slow answer is seen working, and a refusal is the thread's note to say.
-  const settling = useBusyPress(() =>
-    doors.control.act(thread.id, {
+  // Note that a resolve or a reopen is drawn by the host on the press; one refused is taken back and said in a toast.
+  const settleThread = () =>
+    void doors.control.act(thread.id, {
       action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
-    }),
-  );
-  const [saving, setSaving] = useState(false);
+    });
   // The reader's own words take a date changed from its chip, as their editor would, saved as an edit of the comment.
   const openDate = useWordsDatePicker();
   const latestWords = useRef(entry.words);
@@ -774,16 +763,10 @@ function CommentEntry({
       deleting.ask();
       return;
     }
-    if (saving) return;
-    setSaving(true);
-    void doors.control
-      .act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words })
-      .then((done) => {
-        if (!done) return;
-        setEditing(undefined);
-        edited.update(() => EMPTY_DRAFT);
-      })
-      .finally(() => setSaving(false));
+    // Note that the edit is drawn by the host on the press, so the field closes at once; words refused come back as its draft (`use-plan-comments.ts`), which Edit opens on again.
+    setEditing(undefined);
+    edited.update(() => EMPTY_DRAFT);
+    void doors.control.act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words });
   };
   return (
     <div className="comment-entry relative py-tight-gap" data-entry={entry.id}>
@@ -807,9 +790,9 @@ function CommentEntry({
                     size={BUTTON_SIZE.COMPACT}
                     icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
                     label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
-                    busy={settling.busy}
-                    busyLabel={settle ? COMMENT_WORDS.RESOLVING : COMMENT_WORDS.REOPENING}
-                    onClick={settling.onPress}
+                    // Note that the host draws a resolve or a reopen on the press, so the check is never busy.
+                    busy={false}
+                    onClick={settleThread}
                   />
                 </Tooltip>
               ) : null}
@@ -857,12 +840,8 @@ function CommentEntry({
             />
             <div className="comment-field-foot">
               <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
-              <Button
-                variant={BUTTON_VARIANT.PRIMARY}
-                busy={saving}
-                busyLabel={COMMENT_WORDS.SAVING}
-                onClick={save}
-              >
+              {/* Note that the host draws the edit on the press, which closes the field, so Save is never busy. */}
+              <Button variant={BUTTON_VARIANT.PRIMARY} busy={false} onClick={save}>
                 {COMMENT_WORDS.SAVE}
               </Button>
             </div>
@@ -1049,8 +1028,6 @@ function PlainCommentText({
 function ReplyField({
   label,
   place,
-  sending = false,
-  replies,
   onSend,
   onCancel,
   autoFocus,
@@ -1060,11 +1037,7 @@ function ReplyField({
   label: string;
   /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
   place: PlanCommentPlace;
-  /** Whether the thread being started is on its way, which holds the field until it answers, since its send opens the thread; a reply on its way holds nothing. */
-  sending?: boolean;
-  /** The thread a reply goes on and the queue its replies go through, one at a time in the order sent; none for a thread being started. */
-  replies?: { readonly on: string; readonly queue: ReplyQueue } | undefined;
-  /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
+  /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once; answers whether they landed. */
   onSend: (
     words: string,
     clientKey: string,
@@ -1094,8 +1067,6 @@ function ReplyField({
   // Why the last files handed to the field did not all come; nothing once they did.
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const files = useAttachedFiles({ onRefusal: setRefusal });
-  // The words of a thread being started, sent and not yet answered, which hold its card through a press away.
-  const [inFlight, setInFlight] = useState("");
   // The last send refused, whose key the same words and files sent again go under, so a send whose answer was lost is taken once.
   const attempt = useRef<CommentSend | undefined>(undefined);
   // Sends refused that the field could not take back beside what was typed or added since, kept apart in the order written, marked as not sent, with Retry under their keys.
@@ -1138,35 +1109,16 @@ function ReplyField({
     update((now) => ({ ...now, text: back.words }));
     files.set(back.attachments);
   };
+  // Note that the host draws a send the moment it is asked and sends a thread's in the order asked, so nothing here waits on one; one refused comes back.
   const go = (out: CommentSend) => {
-    if (replies === undefined) {
-      setInFlight(out.words);
-      void onSend(out.words, out.key, out.attachments).then((sent) => {
-        setInFlight("");
-        if (!sent) takeBack([out]);
-      });
-      return;
-    }
-    const { on, queue } = replies;
-    const line: QueuedReply = { threadId: on, send: out, at: Date.now() };
-    queue.change((was) => [...was, line]);
-    queue.after(on, async () => {
-      // A reply let go before its turn, queued behind one refused, sends nothing.
-      if (!queue.now().includes(line)) return;
-      const sent = await onSend(out.words, out.key, out.attachments);
-      // Note that a reply refused takes every reply queued behind it on the thread with it, which never goes, so none lands ahead of it.
-      const queued = queue.now();
-      const behind = sent
-        ? []
-        : queued.slice(queued.indexOf(line) + 1).filter((each) => each.threadId === on);
-      queue.change((was) => was.filter((each) => each !== line && !behind.includes(each)));
-      if (!sent) takeBack([line, ...behind].map((each) => each.send));
+    void onSend(out.words, out.key, out.attachments).then((sent) => {
+      if (!sent) takeBack([out]);
     });
   };
   const send = () => {
     const trimmed = words.trim();
     // Note that sends not sent go first, so comments land in the order they were written.
-    if (trimmed === "" || sending || files.reading || unsent.length > 0) return;
+    if (trimmed === "" || files.reading || unsent.length > 0) return;
     const { attachments } = files;
     const was = attempt.current;
     const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
@@ -1182,7 +1134,7 @@ function ReplyField({
     });
   };
   const retry = () => {
-    if (unsent.length === 0 || sending) return;
+    if (unsent.length === 0) return;
     dropUnsent();
     for (const each of unsent) go(each);
   };
@@ -1203,10 +1155,8 @@ function ReplyField({
       className="comment-field"
       data-variant={variant}
       dropping={files.drop.dropping}
-      // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
-      data-held={
-        inFlight.trim() !== "" || files.attachments.length > 0 || files.reading || dictating
-      }
+      // Note that held files and files still being read, and a dictation whose words land once heard, hold the field, so a press away keeps a thread being started; typed words are kept as its draft and hold nothing.
+      data-held={files.attachments.length > 0 || files.reading || dictating}
       {...files.drop.target}
     >
       {unsent.length === 0 ? null : (
@@ -1241,10 +1191,7 @@ function ReplyField({
       )}
       <ComposerBody
         files={
-          <AttachedFileChips
-            files={attachmentChips(files.attachments)}
-            onRemove={sending ? undefined : files.remove}
-          />
+          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         }
       >
         <CommentText
@@ -1265,21 +1212,19 @@ function ReplyField({
         />
       </ComposerBody>
       <ComposerFoot
-        tools={<AttachFilesButton disabled={sending} onFiles={files.attach} />}
+        tools={<AttachFilesButton onFiles={files.attach} />}
         counter={
           dictates
             ? { length: words.length, limit: PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS }
             : undefined
         }
-        actions={dictates ? <DictateButton dictation={dictation} disabled={sending} /> : undefined}
+        actions={dictates ? <DictateButton dictation={dictation} disabled={false} /> : undefined}
         strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
         send={{
           label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
           empty: words.trim() === "",
           held: files.reading || unsent.length > 0,
           onSend: send,
-          busy: sending,
-          busyLabel: COMMENT_WORDS.SENDING,
         }}
         // Note that a file refused is said over a dictation's note or a cut paste, as the agent box says it.
         note={
@@ -1330,53 +1275,6 @@ interface CommentSend {
  */
 const unsentAtom = heldLines<{ readonly place: PlanCommentPlace; readonly send: CommentSend }>();
 
-/** A reply on its way: the thread it goes on, what it carries under its key, and when it was sent. */
-interface QueuedReply {
-  readonly threadId: string;
-  readonly send: CommentSend;
-  readonly at: number;
-}
-
-/**
- * The replies on their way, every thread's in the order sent, and the queue
- * they go through, one thread's one at a time (`SendQueue`), keyed by the
- * thread's id.
- */
-interface ReplyQueue extends SendQueue {
-  readonly lines: readonly QueuedReply[];
-  /** The replies on their way this moment, for a send's answer that lands after the render it was made in. */
-  readonly now: () => readonly QueuedReply[];
-  readonly change: (change: (was: readonly QueuedReply[]) => readonly QueuedReply[]) => void;
-}
-
-/** No replies on their way, one array so a thread with none hands down the same one. */
-const NO_REPLIES: readonly QueuedReply[] = [];
-
-/** A reply queue held for as long as the component holding it is mounted. */
-function useOwnReplyQueue(): ReplyQueue {
-  const { after, settled } = useSendQueue();
-  const [lines, setLines] = useState(NO_REPLIES);
-  const held = useRef(lines);
-  const now = useCallback(() => held.current, []);
-  const change = useCallback((next: (was: readonly QueuedReply[]) => readonly QueuedReply[]) => {
-    held.current = next(held.current);
-    setLines(held.current);
-  }, []);
-  return useMemo(
-    () => ({ after, settled, lines, now, change }),
-    [after, settled, lines, now, change],
-  );
-}
-
-/** The reply queue the comments' scope holds (`CommentFocusScope`), which every thread's field shares. */
-const ReplyQueueContext = createContext<ReplyQueue | undefined>(undefined);
-
-/** The scope's reply queue, or one of the caller's own where no scope stands over it. */
-function useReplyQueue(): ReplyQueue {
-  const own = useOwnReplyQueue();
-  return useContext(ReplyQueueContext) ?? own;
-}
-
 /** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
 function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {
   if (send.words.length > PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) return false;
@@ -1397,44 +1295,6 @@ type ReplyVariant = (typeof REPLY_VARIANT)[keyof typeof REPLY_VARIANT];
 
 /** A comment's dictation hears no names of its own, which an agent's box takes from its repository. */
 const NO_KEYWORDS: readonly string[] = [];
-
-/** One of the reader's replies on its way, drawn as the thread draws a comment, its files going up and Sending at its head's end, until the thread holds the comment it became. */
-function SendingComment({
-  reply,
-  doors,
-  now,
-}: {
-  reply: QueuedReply;
-  doors: ThreadDoors;
-  now: number;
-}): React.JSX.Element {
-  const { send } = reply;
-  return (
-    <div className="comment-entry py-tight-gap" data-sending="">
-      <WrittenComment
-        writer={{
-          actor: PLAN_COMMENT_ACTOR.MEMBER,
-          ...(doors.me === undefined
-            ? undefined
-            : { by: { userId: doors.me, name: COMMENT_WORDS.YOU } }),
-        }}
-        agents={doors.agents}
-        at={reply.at}
-        now={now}
-        trailing={
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-            {COMMENT_WORDS.SENDING}
-          </Text>
-        }
-      >
-        {send.attachments.length === 0 ? null : (
-          <AttachedFileChips files={attachmentChips(send.attachments)} uploading />
-        )}
-        <CommentWords words={send.words} />
-      </WrittenComment>
-    </div>
-  );
-}
 
 /** Over a thread whose words were deleted: that they were, and what they said. */
 function GoneQuote({
@@ -1582,7 +1442,6 @@ function ThreadCard({
   onShowWords?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  const replies = useReplyQueue();
   const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
   const [first] = comments;
   // Note that a page's thread stands on no words of the plan, so it never reads as having lost them.
@@ -1678,18 +1537,6 @@ function ThreadCard({
               <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
             ),
           )}
-          {/* Note that a reply the thread already holds, read before its send answered, is drawn there alone. */}
-          {replies.lines
-            .filter(
-              (reply) =>
-                reply.threadId === thread.id &&
-                !comments.some(
-                  (entry) => writtenByReader(entry, doors.me) && entry.words === reply.send.words,
-                ),
-            )
-            .map((reply) => (
-              <SendingComment key={reply.send.key} reply={reply} doors={doors} now={now} />
-            ))}
         </div>
       </ScrollArea>
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
@@ -1700,7 +1547,6 @@ function ThreadCard({
             planId: doors.control.planId,
             on: { threadId: thread.id },
           }}
-          replies={{ on: thread.id, queue: replies }}
           autoFocus={pressed}
           failure={note}
           onCancel={() => onClose?.()}
@@ -1714,24 +1560,14 @@ function ThreadCard({
             })
           }
         />
-      ) : note === undefined ? null : (
-        // Note that a resolved thread has no field to stand a failure under, so its Reopen's is said on its own.
-        <FailureNote
-          failure={failureShown({
-            surface: FAILURE_SURFACE.PLAN_THREAD_REOPEN,
-            cause: FAILURE_CONDITION.REFUSED,
-            refused: true,
-          })}
-        >
-          {note}
-        </FailureNote>
-      )}
+      ) : null}
     </CommentCard>
   );
 }
 
-/** A thread's first comment as its field sends it, under the key it keeps while it is sent again. */
+/** A thread's first comment as its field sends it, under the key it keeps while it is sent again, and the id of the thread it starts. */
 interface FirstComment {
+  readonly id: string;
   readonly clientKey: string;
   readonly words: string;
   readonly attachments?: readonly AgentAttachment[];
@@ -1740,7 +1576,10 @@ interface FirstComment {
 /**
  * The thread being started, its field focused, which posts its first
  * comment: on the plan's words, or on a page or one of its elements, as
- * `begin` makes the start of it.
+ * `begin` makes the start of it. The thread is started under the key its
+ * first comment is sent under, so a send tried again names the same
+ * thread, and the host draws it the moment it is asked, so the card hands
+ * its place to the thread at once.
  */
 function PendingCard({
   on,
@@ -1758,57 +1597,59 @@ function PendingCard({
   head?: ReactNode;
   doors: ThreadDoors;
   begin: (first: FirstComment) => PlanCommentStart;
-  onStarted: (thread: PlanCommentThread) => void;
+  /** Hands the card's place to the thread it started, by its id. */
+  onStarted: (threadId: string) => void;
   onCancel: () => void;
 }): React.JSX.Element {
-  const [sending, setSending] = useState(false);
-  const [note, setNote] = useState<string | undefined>(undefined);
   return (
     <CommentCard place={place} open data-thread={PENDING_THREAD}>
       {head}
       <ReplyField
         label={COMMENT_WORDS.ADD}
         place={{ kind: DRAFT_PLACE.PLAN_COMMENT, planId: doors.control.planId, on }}
-        sending={sending}
         autoFocus
-        failure={note}
         onCancel={onCancel}
         variant={REPLY_VARIANT.FIRST}
-        onSend={async (words, clientKey, attachments) => {
-          setSending(true);
-          const started = await doors.control.start(
+        onSend={(words, clientKey, attachments) => {
+          const started = doors.control.start(
             begin({
+              id: clientKey,
               clientKey,
               words,
               ...(attachments.length === 0 ? undefined : { attachments }),
             }),
           );
-          setSending(false);
-          if ("note" in started) {
-            setNote(started.note);
-            return false;
-          }
-          onStarted(started.thread);
-          return true;
+          onStarted(clientKey);
+          return started.then((answer) => !("note" in answer));
         }}
       />
     </CommentCard>
   );
 }
 
-/** The start of a thread on the plan's words a pending card makes, measured in the plan's text. */
+/**
+ * The start of a thread on the plan's words a pending card makes, measured
+ * in the plan's text as saved where its words stand there, so the thread
+ * the host draws at once stands on them as the service will place it, and
+ * the open editor marks them where they are. Note that words started on in
+ * the editor and not saved yet are measured in its text, which the service
+ * lays over the saved one.
+ */
 function planBegin(
   pending: PendingThread,
   text: string,
 ): (first: FirstComment) => PlanCommentStart {
-  return (first) => ({
-    ...first,
-    scope: pending.scope,
-    quote: pending.quote,
-    anchor: { from: pending.from, to: pending.to },
-    // Note that words started on in the editor are measured in its text, which the service lays over the saved one.
-    text: pending.text ?? text,
-  });
+  return (first) => {
+    const saved = pending.text === undefined ? pending : textChange(pending.text, text)(pending);
+    return {
+      ...first,
+      scope: pending.scope,
+      quote: pending.quote,
+      ...(saved === undefined
+        ? { anchor: { from: pending.from, to: pending.to }, text: pending.text ?? text }
+        : { anchor: { from: saved.from, to: saved.to }, text }),
+    };
+  };
 }
 
 /** Where words drawn inside `root` stand in its drawn text, from its start to the point. */
@@ -2447,9 +2288,9 @@ export function PlanCommentLayer({
     onActive(undefined);
     setPending(undefined);
   };
-  const startedFromPending = (thread: PlanCommentThread) => {
+  const startedFromPending = (threadId: string) => {
     setPending(undefined);
-    onActive(thread.id);
+    onActive(threadId);
   };
   const pendingCard =
     pending === undefined ? null : (
@@ -2647,7 +2488,6 @@ export function CommentFocusScope({
   const [pending, setPending] = useState<PendingThread | undefined>(undefined);
   const [revealed, setRevealed] = useState<CommentFocus["revealed"]>(undefined);
   const [focusedOn, setFocusedOn] = useState(planId);
-  const replies = useOwnReplyQueue();
   // Note that the thread being started is let go in the render the plan changes in, so it is never posted to another plan.
   if (focusedOn !== planId) {
     setFocusedOn(planId);
@@ -2678,9 +2518,7 @@ export function CommentFocusScope({
   );
   return (
     <CommentFocusContext.Provider value={focus}>
-      <ReplyQueueContext.Provider value={replies}>
-        <PendingSetter.Provider value={setPending}>{children}</PendingSetter.Provider>
-      </ReplyQueueContext.Provider>
+      <PendingSetter.Provider value={setPending}>{children}</PendingSetter.Provider>
     </CommentFocusContext.Provider>
   );
 }
@@ -3262,7 +3100,7 @@ export function PageCommentLayer({
   onReply: (selected: PagePicked) => void;
   onWholePage: () => void;
   onStopPick: () => void;
-  onStarted: (thread: PlanCommentThread) => void;
+  onStarted: (threadId: string) => void;
   onCancel: () => void;
 }): React.JSX.Element {
   const full = { ...doors, control };

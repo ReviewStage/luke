@@ -1,5 +1,5 @@
 import type { InboxItem } from "@repo/features/inbox-wire";
-import { Badge, LIST_VARIANT, List, ListRow, STATUS_TONE } from "@repo/ui";
+import { LIST_VARIANT, List, ListRow } from "@repo/ui";
 import { InboxIcon } from "@repo/ui/icons";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
@@ -37,7 +37,7 @@ export function ThreadsDock({ threads }: { threads: AgentThreads | undefined }):
         <ListRow
           leading={<InboxIcon aria-hidden="true" />}
           title={many ? threadsWaitingWords(threads.waiting.length) : next.title}
-          meta={many ? nextWords : <Badge tone={STATUS_TONE.ATTENTION}>{NEEDS_YOU.LABEL}</Badge>}
+          meta={many ? nextWords : NEEDS_YOU.LABEL}
           onPress={() => threads.onOpen(next)}
         />
       </List>
