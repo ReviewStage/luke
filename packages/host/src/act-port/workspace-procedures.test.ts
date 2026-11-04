@@ -78,8 +78,8 @@ const REFUSAL = {
     "Could not disconnect GitHub from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]:
     "Could not install Sentry for that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ]:
-    "Could not read that workspace's Slack bot on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]:
+    "Could not connect the Slack bot to that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]:
     "Could not disconnect Sentry from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]:
@@ -221,13 +221,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`sentry-disconnect:${params.workspaceId}:${params.installationId}`, () =>
         script.notPermitted ? refusal() : { sentry: { configured: true, installations: [] } },
       ),
-    workspaceSlackBot: (params) =>
-      ask(`slack-bot:${params.workspaceId}`, () =>
-        params.workspaceId === ACME.id ? { slackBot: { configured: true } } : refusal(),
-      ),
     workspaceSlackBotConnect: (params) =>
       ask(`slack-bot-connect:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { slackBot: { configured: true } },
+        script.notPermitted || params.workspaceId !== ACME.id
+          ? refusal()
+          : { slackBot: { configured: true } },
       ),
     workspaceSlackBotDisconnect: (params) =>
       ask(`slack-bot-disconnect:${params.workspaceId}`, () =>
@@ -499,13 +497,13 @@ it("a workspace write the account's role does not allow is refused in words that
     await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: null }),
   ];
   script.notPermitted = false;
-  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ, {
+  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, {
     workspaceId: "workspace-gone",
   });
 
   const notPermitted = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
   assert.deepEqual(refusedNow, Array(6).fill(notPermitted));
-  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ] });
+  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT] });
   assert.deepEqual(browsed, []);
 });
 

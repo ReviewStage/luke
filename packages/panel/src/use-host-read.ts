@@ -218,7 +218,10 @@ function pullRequestPartRead(part: PullRequestPart) {
 }
 
 /**
- * Every read a surface reads through `useHostRead`, by its name: the feed of
+ * Every read a surface reads through `useHostRead`, by its name: the
+ * account's preferences row, by the account, held for the session, which
+ * every surface drawing the default agent, the chapters model, or the Slack
+ * notifications switch reads; the feed of
  * every item the account reaches, held for the session; one holder's own
  * inbox; where the account's integrations stand, by the account, which every
  * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
@@ -236,7 +239,9 @@ function pullRequestPartRead(part: PullRequestPart) {
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; the account's own GitHub token, by the account,
+ * Settings › Agents draws; the models the account is offered and its
+ * devices, by the account, which every model menu, setup, and New task's
+ * Runs on hold; the account's own GitHub token, by the account,
  * which Settings › Account, a workspace's Add repository, and onboarding's
  * GitHub step hold; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
@@ -268,6 +273,13 @@ function pullRequestPartRead(part: PullRequestPart) {
  * photo none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
+  [LIVE_READ.ACCOUNT_PREFERENCES]: hostRead(LIVE_READ.ACCOUNT_PREFERENCES, {
+    slice: APP_SLICE.ACCOUNT_PREFERENCES,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the row of whoever is signed in for the session, so no surface holds it and its Try again names no account.
+    hold: undefined,
+    retry: () => tellAct(ACT_KIND.AGENTS_PREFERENCES_RETRY),
+  }),
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
     slice: APP_SLICE.AGENT_ORIGINS,
     path: (agentId: string) => [agentId],
@@ -317,6 +329,13 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.MODELS]: hostRead(LIVE_READ.MODELS, {
+    slice: APP_SLICE.MODELS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the models of whoever is signed in, so neither act names an account, and that Try again answers once its ask has landed, which New task waits on for its devices.
+    hold: () => askAct(ACT_KIND.AGENTS_MODELS_FOLLOW),
+    retry: () => askAct(ACT_KIND.AGENTS_MODELS_RETRY),
   }),
   [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
     slice: APP_SLICE.PAGES,

@@ -27,6 +27,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
@@ -171,11 +172,14 @@ function startPayloads(
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
-test("a read of the models that never answers is said as failed past its bound, and the Retry that lands reads no device as none", async () => {
+test("an ask of the models that never lands is said as failed past its bound, one that lands on models never read as failed, and one that lands on models read as read, no device as none", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
+    const { deliverModels } = handHostReads({});
+    fakeActPort({
+      [ACT_KIND.AGENTS_MODELS_RETRY]: () => Promise.withResolvers<undefined>().promise,
+    });
     const tab = mount({ taskId: undefined, repository: null });
-    tab.answer(ACT_KIND.AGENTS_MODELS, Promise.withResolvers<WireBoundaryInput>().promise);
     await tab.mount();
     act(() => tab.control().readModels());
     await settle();
@@ -185,7 +189,14 @@ test("a read of the models that never answers is said as failed past its bound, 
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     assert.equal(tab.control().modelsFailed, true);
 
-    tab.answer(ACT_KIND.AGENTS_MODELS, { models: [] });
+    fakeActPort({});
+    deliverModels({ failed: true });
+    act(() => tab.control().readModels());
+    await settle();
+    assert.equal(tab.control().modelsRead.state, MODELS_READ.FAILED);
+    assert.equal(tab.control().macs, undefined);
+
+    deliverModels({ rows: { models: [] } });
     act(() => tab.control().readModels());
     await settle();
     assert.equal(tab.control().modelsRead.state, MODELS_READ.READ);

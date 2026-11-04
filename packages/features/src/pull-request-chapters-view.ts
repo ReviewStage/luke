@@ -64,9 +64,12 @@ export const chaptersModelWriteParamsSchema = EffectSchema.Struct({ model: chapt
 
 export type ChaptersModelWriteParams = typeof chaptersModelWriteParamsSchema.Type;
 
-/** The member's chapters model, as Settings hears it read or written: the model as kept, or why there is none. */
+/** The member's chapters model, as Settings hears it written: the model as kept, with the transaction it committed in where the service names one, or why there is none. */
 export const chaptersModelAnswerViewSchema = EffectSchema.Union([
-  chaptersModelWriteParamsSchema,
+  EffectSchema.Struct({
+    model: chaptersModelSchema,
+    txid: EffectSchema.optionalKey(EffectSchema.String),
+  }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals(Object.values(PULL_REQUEST_CHAPTERS_CALL_FAILURE)),
   }),

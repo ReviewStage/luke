@@ -6,7 +6,6 @@ import {
   type AgentArchiveParams,
   type AgentChangesAnswerView,
   type AgentChooseParams,
-  type AgentDefaultAnswer,
   type AgentDeleteAnswerView,
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
@@ -19,11 +18,10 @@ import {
   type AgentInboxReadAllParams,
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
-  type AgentInboxSnoozeParams,
   type AgentInboxReadStateView,
+  type AgentInboxSnoozeParams,
   type AgentListAnswer,
   type AgentMessagesAnswerView,
-  type AgentModelsAnswer,
   type AgentPageAnswerView,
   type AgentPartView,
   type AgentPinParams,
@@ -106,10 +104,10 @@ import {
 } from "@repo/features/inbox-writes";
 import { writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
+import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
-  type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
@@ -152,6 +150,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
 import {
+  agentDefaultWritten,
+  chaptersModelWritten,
+  heldAccountPreferences,
+} from "./account-preferences-follow.js";
+import {
+  type AppAccountPreferences,
   type AppAgentOrigins,
   type AppChapters,
   type AppDevicePresence,
@@ -163,6 +167,7 @@ import {
   type AppHosts,
   type AppInboxItems,
   type AppMemories,
+  type AppModels,
   type AppProviderKeyList,
   type AppProviderKeys,
   type AppWorkspaceTools,
@@ -262,10 +267,9 @@ export type AgentClient = Pick<
   | "pullRequestChaptersLive"
   | "agentOriginLive"
   | "generateChapters"
-  | "readChaptersModel"
   | "writeChaptersModel"
   | "models"
-  | "readDefault"
+  | "accountPreferencesLive"
   | "writeDefault"
   | "hostsLive"
   | "devicePresence"
@@ -506,6 +510,16 @@ export function composeAgents(
         userId,
         tellItems,
       );
+    const preferences = yield* heldAccountPreferences({
+      seal: (userId, poll, after) => asked(client.accountPreferencesLive(userId, poll, after)),
+      gate,
+      pool: dependencies.pool,
+      tell: (held: AppAccountPreferences) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED, carried(held)),
+    });
+    // Note that the row is held for the session rather than by a window, so the read stands until the session's reads close.
+    const holdPreferences = (userId: string) =>
+      Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
     const memories = yield* heldMemories({
       seal: (workspaceId, userId, poll, after) =>
         asked(client.workspaceMemoriesLive(workspaceId, userId, poll, after)),
@@ -551,7 +565,7 @@ export function composeAgents(
       { transcripts, followed, held },
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
-      { reads: sessionReads, followItems },
+      { reads: sessionReads, followItems, preferences, holdPreferences },
       { chapters, holds: chapterHolds },
       { memories, holds: memoryHolds },
       { origins, holds: originHolds },
@@ -588,6 +602,9 @@ interface AccountFollow {
 interface SessionReads {
   readonly reads: AccountReads<LiveRead>;
   readonly followItems: (userId: string) => Effect.Effect<void>;
+  /** The account's preferences row, held for the session by `holdPreferences`. */
+  readonly preferences: HeldSlice<string>;
+  readonly holdPreferences: (userId: string) => Effect.Effect<void>;
 }
 
 /** The held lifetime over every agent's pull request's chapters the windows hold, and the windows' holds, one fiber per pull request held. */
@@ -624,6 +641,10 @@ interface FetchedReads {
   readonly tools: HeldFetch<string, WorkspaceToolsAnswer>;
   /** The windows' hold on each agent's tools, one fiber standing until let go. */
   readonly toolsHolds: FiberMap.FiberMap<string>;
+  /** The models a coding agent may run on as the account is offered them, and its devices, by the account. */
+  readonly models: HeldFetch<string, ModelsAnswer>;
+  /** The windows' hold on the models, under the account signed in. */
+  readonly modelsHold: AccountHeld;
   /** The account's own provider keys, by the account. */
   readonly keys: HeldFetch<string, AppProviderKeyList>;
   /** The windows' hold on the keys, under the account signed in. */
@@ -651,8 +672,11 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats, the keys, and the GitHub token are asked for the account
- * signed in now alone, since the service answers that account's, and that
+ * that the beats, the models, the keys, and the GitHub token are asked for
+ * the account signed in now alone, since the service answers that
+ * account's; that the models are asked again as the keys move, since a key,
+ * a plan, or a plan's default moves which models no credential pays for;
+ * and that
  * an ask of the beats which fails, or runs past
  * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
  * answered, marked stale, under the new instant, so a window says it cannot
@@ -702,16 +726,34 @@ function fetchedReads(
       tell: (held: AppWorkspaceTools) =>
         kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),
     });
+    const models = yield* heldFetch<typeof LIVE_READ.MODELS, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      every: MODEL_CATALOG_TTL,
+      fetch: (userId) =>
+        userId === accountId()
+          ? Effect.map(asked(client.models()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some(answer),
+            )
+          : Effect.succeed(Option.none()),
+      tell: (held: AppModels) => kernel.emit(GATEWAY_EVENT.MODELS_CHANGED, carried(held)),
+    });
     const keys = yield* heldFetch<typeof LIVE_READ.PROVIDER_KEYS, string>({
       empty: NO_KEYS_HELD,
       path: (userId) => [userId],
       gate,
       focus,
-      fetch: (userId) =>
+      fetch: (userId, held) =>
         userId === accountId()
-          ? Effect.map(asked(client.readProviderKeys()), (answer) =>
-              "failure" in answer ? Option.none() : Option.some(keyListOf(answer)),
-            )
+          ? Effect.flatMap(asked(client.readProviderKeys()), (answer) => {
+              if ("failure" in answer) return Effect.succeed(Option.none());
+              const list = keyListOf(answer);
+              // Note that the first answer asks nothing of the models, which are asked as a window holds them.
+              const moved = held !== undefined && JSON.stringify(held) !== JSON.stringify(list);
+              return Effect.as(moved ? models.wake(() => true) : Effect.void, Option.some(list));
+            })
           : Effect.succeed(Option.none()),
       tell: (held: AppProviderKeys) =>
         kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
@@ -735,6 +777,8 @@ function fetchedReads(
       presenceHold: yield* accountHeld(presence, accountId),
       tools,
       toolsHolds: yield* FiberMap.make<string>(),
+      models,
+      modelsHold: yield* accountHeld(models, accountId),
       keys,
       keysHold: yield* accountHeld(keys, accountId),
       token,
@@ -751,8 +795,8 @@ function composed(
   { inboxes, holders, holds: inboxHolds, accountWide }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
-  /** The session's account reads, every item the account reaches among them. */
-  { reads: sessionReads, followItems }: SessionReads,
+  /** The session's account reads, every item the account reaches and its preferences among them. */
+  { reads: sessionReads, followItems, preferences, holdPreferences }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
   /** The workspaces' memories Settings › Memory holds. */
@@ -761,7 +805,18 @@ function composed(
   { origins, holds: originHolds }: OriginFollows,
   /** The account's hosts Settings › Hosts holds. */
   { hosts, hold: hostsHold }: HostsFollows,
-  { presence, presenceHold, tools, toolsHolds, keys, keysHold, token, tokenHold }: FetchedReads,
+  {
+    presence,
+    presenceHold,
+    tools,
+    toolsHolds,
+    models,
+    modelsHold,
+    keys,
+    keysHold,
+    token,
+    tokenHold,
+  }: FetchedReads,
   /** The parts of the pull requests the windows' Pull request tabs hold. */
   parts: PullRequestParts,
 ): AgentsComposer {
@@ -1021,13 +1076,16 @@ function composed(
   /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
   const keysWritten = (answer: ProviderKeysAnswerView) =>
     Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
-  /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them. */
+  /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them, and the models asked again, whose marks they move. */
   const keysAnswered = (answer: ProviderKeysAnswerView | ChatGptSignInAnswerView) =>
     Effect.suspend(() => {
       const userId = dependencies.accountId();
       return userId === undefined || !("keys" in answer)
         ? Effect.void
-        : keys.answered(userId, keyListOf(answer));
+        : Effect.andThen(
+            keys.answered(userId, keyListOf(answer)),
+            models.wake(() => true),
+          );
     });
 
   /**
@@ -1050,20 +1108,24 @@ function composed(
     );
 
   const methods: HostMethodTable = {
-    [GATEWAY_METHOD.AGENTS_MODELS]: () =>
-      Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
-    [GATEWAY_METHOD.AGENTS_DEFAULT_READ]: () =>
-      Effect.map(asked(client.readDefault()), (answer) => carried<AgentDefaultAnswer>(answer)),
-    [GATEWAY_METHOD.AGENTS_DEFAULT_WRITE]: (params) =>
-      Effect.gen(function* () {
-        const choice = yield* readParams(
+    // The models are held for the windows while any draws a model or a device, under the account signed in, and told only on the app state (`MODELS_CHANGED`).
+    [GATEWAY_METHOD.AGENTS_MODELS_FOLLOW]: () => Effect.as(modelsHold.follow, {}),
+    [GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW]: () => Effect.as(modelsHold.unfollow, {}),
+    [GATEWAY_METHOD.AGENTS_MODELS_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : models.retry(userId), {});
+      }),
+    [GATEWAY_METHOD.AGENTS_DEFAULT_WRITE]: declaredMethod(
+      dependencies.pool,
+      agentDefaultWritten((choice) => asked(client.writeDefault(choice)), dependencies.accountId),
+      (params: WireRecord) =>
+        readParams(
           agentDefaultWriteParamsSchema,
           params,
           "the default names a model and its effort",
-        );
-        const answer = yield* asked(client.writeDefault(choice));
-        return carried<AgentDefaultAnswer>(answer);
-      }),
+        ),
+    ),
     // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in, and told only on the app state (`HOSTS_CHANGED`); a removal is drawn gone over them the moment it is asked.
     [GATEWAY_METHOD.HOSTS_FOLLOW]: () => Effect.as(hostsHold.follow, {}),
     [GATEWAY_METHOD.HOSTS_UNFOLLOW]: () => Effect.as(hostsHold.unfollow, {}),
@@ -1545,20 +1607,19 @@ function composed(
         const answer = yield* asked(client.generateChapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_READ]: () =>
-      Effect.map(asked(client.readChaptersModel()), (answer) =>
-        carried<ChaptersModelAnswerView>(answer),
+    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: declaredMethod(
+      dependencies.pool,
+      chaptersModelWritten(
+        (write) => asked(client.writeChaptersModel(write.model)),
+        dependencies.accountId,
       ),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: (params) =>
-      Effect.gen(function* () {
-        const { model } = yield* readParams(
+      (params: WireRecord) =>
+        readParams(
           chaptersModelWriteParamsSchema,
           params,
           "the chapters model names one of the models Settings offers",
-        );
-        const answer = yield* asked(client.writeChaptersModel(model));
-        return carried<ChaptersModelAnswerView>(answer);
-      }),
+        ),
+    ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1791,6 +1852,11 @@ function composed(
       Effect.as(FiberHandle.clear(accountFollow), {}),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY]: () =>
       Effect.as(sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems), {}),
+    [GATEWAY_METHOD.AGENTS_PREFERENCES_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : preferences.retry(userId), {});
+      }),
   };
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
@@ -1808,8 +1874,10 @@ function composed(
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
     yield* sessionReads.end;
+    yield* preferences.end;
     yield* presence.end;
     yield* tools.end;
+    yield* models.end;
     yield* keys.end;
     yield* token.end;
     yield* parts.end;
@@ -1818,12 +1886,14 @@ function composed(
   // Note that the beats, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
+    yield* sessionReads.open(LIVE_READ.ACCOUNT_PREFERENCES, holdPreferences);
     yield* holders.open;
     yield* chapters.open;
     yield* memories.open;
     yield* origins.open;
     yield* presenceHold.open;
     yield* hostsHold.open;
+    yield* modelsHold.open;
     yield* keysHold.open;
     yield* tokenHold.open;
     yield* tools.open;

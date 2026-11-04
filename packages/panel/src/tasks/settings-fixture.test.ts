@@ -53,10 +53,6 @@ const ACME = { workspaceId: "workspace-acme" };
 
 /** The reads the staged pages ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
-  read(ACT_KIND.AGENTS_MODELS, undefined),
-  read(ACT_KIND.AGENTS_DEFAULT_READ, undefined),
-  read(ACT_KIND.CHAPTERS_MODEL_READ, undefined),
-  read(ACT_KIND.WORKSPACE_SLACK_BOT_READ, ACME),
   read(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, {
     ...ACME,
     skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001",

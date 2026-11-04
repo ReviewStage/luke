@@ -190,6 +190,7 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { slackNotificationsWritten } from "./account-preferences-follow.js";
 import {
   type AppLinkStanding,
   type AppLinkStandings,
@@ -3532,22 +3533,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "disconnecting Sentry names a workspace and an installation",
         ),
     ),
-    // A workspace's Slack bot is answered to the window that asked and held
-    // nowhere: the reader's own notifications switch reads it as it opens and
-    // as the window comes forward, since no row of the workspace carries it.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "reading the Slack bot names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(client.workspaces.slackBot(read.workspaceId));
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
-        );
-      }),
     [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3575,21 +3560,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "disconnecting the Slack bot names a workspace",
         ),
     ),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: declaredMethod(
+      dependencies.pool,
+      slackNotificationsWritten(
+        (write) =>
+          gate()
+            ? Effect.map(
+                served(
+                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
+                ),
+                slackBotOf,
+              )
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        dependencies.accountId,
+      ),
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceSlackBotNotificationsParamsSchema,
           params,
           "changing Slack notifications names a workspace and the switch",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(
-          client.workspaces.slackBotNotifications(read.workspaceId, read.notifications),
-        );
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
-        );
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: declaredMethod(
       dependencies.pool,
       slackBotRepository((repository) =>

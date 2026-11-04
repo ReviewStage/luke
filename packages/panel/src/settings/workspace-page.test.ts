@@ -376,8 +376,6 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.WORKSPACE_SLACK_BOT_READ:
-      return Promise.resolve(done(slackBot));
     // Note that the host draws each write over the workspace's held integrations, so the window reads it there.
     case ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT:
       slackBot = { configured: true, team: SLACK_TEAM, notifications: true };
@@ -1009,13 +1007,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   const { page } = await mount(ACME);
 
   assert.deepEqual(
-    sent
-      .filter(
-        (request) =>
-          request.kind.startsWith("workspace.") &&
-          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
-      )
-      .map((request) => request.kind),
+    sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
     [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, ACT_KIND.WORKSPACE_MEMBERS_FOLLOW],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
@@ -2019,8 +2011,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
         (request) =>
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_FOLLOW &&
           request.kind !== ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW &&
-          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW &&
-          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
+          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [

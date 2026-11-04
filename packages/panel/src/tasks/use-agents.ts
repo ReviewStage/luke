@@ -1,9 +1,4 @@
-import {
-  AGENT_CALL_FAILURE,
-  type AgentChangesAnswerView,
-  type AgentDefaultAnswer,
-  type AgentModelsAnswer,
-} from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -34,6 +29,7 @@ import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import {
   DRAFT_PLACE,
@@ -49,6 +45,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
   archiveWords,
@@ -246,18 +243,16 @@ export interface AgentsControl {
   listMissing: boolean;
   /** Reads the task list again where its read failed while it carries no row of the page's agent, or looks the agent up again where its lookup failed; the list follows itself otherwise, a task's agents among it. */
   onRetryList: () => void;
-  /** The models the menu offers, as last read; nothing before the menu first asks. */
+  /** The models the menu offers, as the host holds them for the account (`LIVE_READ.MODELS`); nothing before they are first read. */
   models: readonly CatalogModel[] | undefined;
-  /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
+  /** Whether the models could not be read, or the newest ask of them ran past its bound, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
-  /** Where the newest read of the models stands, at the generation it took, which New task waits on. */
+  /** Where the newest ask of the models made here stands, at the generation it took, which New task waits on. */
   modelsRead: ModelsRead;
-  /** The member's devices a task's Runs on may name, as the last read of the models offered them: none listed where it offered none, and nothing before a read lands. */
+  /** The member's devices a task's Runs on may name, as the models the host holds offered them: none listed where they offered none, and nothing before they are read. */
   macs: readonly MacOffer[] | undefined;
-  /** Reads the models now, for a menu opening or the menu's Retry. */
+  /** Asks the host for the models again, as New task opening or the menu's Retry asks. */
   readModels: () => void;
-  /** Reads the account's default now, for a menu opening or the Settings page. */
-  readDefault: () => Promise<AgentDefaultAnswer>;
   /** How the open task, or the page's agent's task, is worked, which says what its members start of their own (`startsOwnAgents`); none for an agent of no task, or before the task list names it. */
   mode: TaskMode | undefined;
   /** The open task's draft agent; nothing while it has none. */
@@ -717,8 +712,7 @@ export function useAgents(input: {
   const listedPage =
     taskId === undefined && input.listedPage?.id === agentId ? input.listedPage : undefined;
   const onPage = taskId === undefined && agentId !== undefined;
-  const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
-  const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
+  const offered = useOfferedModels();
   const [modelsRead, setModelsRead] = useState<ModelsRead>({
     state: MODELS_READ.UNREAD,
     generation: 0,
@@ -845,44 +839,42 @@ export function useAgents(input: {
   // The archives asked here and still out.
   const [archivesOut, setArchivesOut] = useState(0);
 
+  /** Settles the ask of `generation` where it is still the newest: read at any point, failed only while it is out. */
+  const settleModels = useCallback((generation: number, state: ModelsReadState) => {
+    setModelsRead((was) =>
+      was.generation === generation &&
+      (state === MODELS_READ.READ || was.state === MODELS_READ.READING)
+        ? { state, generation }
+        : was,
+    );
+  }, []);
+  // The newest ask that landed, whose settling waits on what the slice then holds.
+  const [modelsLanded, setModelsLanded] = useState(0);
   /**
-   * Reads the models, stamping the read with a generation of its own. Note
-   * that only the newest read settles where the read stands, though any read
-   * that lands lists what it read, and that one still out past its bound is
-   * said as failed, so nothing waits on it for ever; should it land after,
-   * it settles as read.
+   * Asks the host for the models again, stamping the ask with a generation
+   * of its own. Note that only the newest ask settles where the read
+   * stands, and that one still out past its bound is said as failed, so
+   * nothing waits on it for ever; should it land after, it settles as read.
+   * An ask that landed settles once the slice says how it went (below),
+   * since a Try again answers alike whether its ask was answered or not.
    */
+  const retryModels = offered.retry;
   const readModels = useCallback(() => {
     modelsGeneration.current += 1;
     const generation = modelsGeneration.current;
-    const settle = (state: ModelsReadState) =>
-      setModelsRead((was) =>
-        was.generation === generation &&
-        (state === MODELS_READ.READ || was.state === MODELS_READ.READING)
-          ? { state, generation }
-          : was,
-      );
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
-    act(ACT_KIND.AGENTS_MODELS).then(
-      (answer: AgentModelsAnswer) => {
-        if ("failure" in answer) return settle(MODELS_READ.FAILED);
-        setModels(answer.models);
-        setMacs(answer.macs ?? []);
-        settle(MODELS_READ.READ);
-      },
-      () => settle(MODELS_READ.FAILED),
-    );
-    rendererPause(MODELS_READ_BOUND_MS).then(() => settle(MODELS_READ.FAILED));
-  }, [act]);
-
-  const readDefault = useCallback(
-    (): Promise<AgentDefaultAnswer> =>
-      act(ACT_KIND.AGENTS_DEFAULT_READ).catch(
-        (): AgentDefaultAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-      ),
-    [act],
-  );
+    retryModels().then(() => setModelsLanded(generation));
+    rendererPause(MODELS_READ_BOUND_MS).then(() => settleModels(generation, MODELS_READ.FAILED));
+  }, [retryModels, settleModels]);
+  // Note that a landed ask reads as read only where the slice holds models, and as failed where it never answered, so a card waiting on its devices never takes no list for an empty one.
+  useEffect(() => {
+    if (modelsLanded === 0) return;
+    if (offered.rows !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
+    else if (offered.status === HOST_READ_STATUS.FAILED) {
+      settleModels(modelsLanded, MODELS_READ.FAILED);
+    }
+  }, [modelsLanded, offered.rows, offered.status, settleModels]);
 
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
@@ -1550,12 +1542,12 @@ export function useAgents(input: {
     listFailed,
     listMissing,
     onRetryList,
-    models,
-    modelsFailed: modelsRead.state === MODELS_READ.FAILED,
+    models: offered.rows?.models,
+    modelsFailed:
+      offered.status === HOST_READ_STATUS.FAILED || modelsRead.state === MODELS_READ.FAILED,
     modelsRead,
-    macs,
+    macs: offered.rows === undefined ? undefined : (offered.rows.macs ?? []),
     readModels,
-    readDefault,
     onUnarchive: undefined,
     continueAgent: startsFrom ? steadyContinueAgent : undefined,
     start: {

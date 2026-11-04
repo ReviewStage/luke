@@ -2,15 +2,17 @@ import type { AgentSummary } from "@repo/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useState } from "react";
+import { useAgentDefault, useOfferedModels } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { useWorkspaceAgents, type WorkspaceAgents } from "../tasks/use-workspace-agents.js";
+import { HOST_READ_STATUS } from "../use-host-read.js";
 
 /**
  * use-run-choices.ts -- what an automation's "Runs land in" row chooses from: the models a new agent may run on, the account's default it runs on until one is chosen, and the workspace's agents on the repository a run may go to.
  *
- * The models and the default are read once as the row first stands, and
- * the models again as the chip's menu opens, so it shows the catalog as it
- * stands. The agents are the newest the task list carries of the
+ * The models and the default are the ones the host holds for the account
+ * (`account-choices.ts`), drawn as the row first stands, and asked again
+ * as the menu's Retry asks. The agents are the newest the task list carries of the
  * repository the automation works in (`useWorkspaceAgents`), drawn only
  * while runs land in the same agent; once a word is searched, the service
  * finds the agents on that repository holding it, so one past the newest
@@ -22,9 +24,9 @@ import { useWorkspaceAgents, type WorkspaceAgents } from "../tasks/use-workspace
 export interface RunChoices {
   /** The catalog as last read; nothing before the first read lands. */
   readonly models: readonly CatalogModel[] | undefined;
-  /** Whether the last read of the catalog did not land. */
+  /** Whether the catalog could not be read before it ever was. */
   readonly modelsFailed: boolean;
-  /** Reads the catalog now, for the chip's name, for its menu opening, and for the menu's Retry. */
+  /** Reads the catalog again, as the menu's Retry asks. */
   readonly readModels: () => void;
   /** The account's default a new agent runs on until a model is chosen; nothing before it is read. */
   readonly defaultChoice: ModelChoice | undefined;
@@ -52,40 +54,18 @@ export function useRunChoices(input: {
 }): RunChoices {
   const { act, press } = useAct();
   const { workspaceId, repository, wantsAgents } = input;
-  const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
-  const [modelsFailed, setModelsFailed] = useState(false);
-  const [defaultChoice, setDefaultChoice] = useState<ModelChoice | undefined>(undefined);
-  const [defaultFailed, setDefaultFailed] = useState(false);
+  const offered = useOfferedModels();
+  const drawnDefault = useAgentDefault();
   const agents = useWorkspaceAgents(wantsAgents ? workspaceId : undefined, repository);
   const [found, setFound] = useState<readonly AgentSummary[] | undefined>(undefined);
   const [searchFailed, setSearchFailed] = useState(false);
   const [words, setWords] = useState("");
   // Each press of Retry searches again.
   const [searches, setSearches] = useState(0);
+  const retryModels = offered.retry;
   const readModels = useCallback(() => {
-    // The menu reads again while a read is out, so a Retry shows its reading.
-    setModelsFailed(false);
-    act(ACT_KIND.AGENTS_MODELS).then(
-      (answer) => {
-        if ("failure" in answer) setModelsFailed(true);
-        else {
-          setModels(answer.models);
-          setModelsFailed(false);
-        }
-      },
-      () => setModelsFailed(true),
-    );
-  }, [act]);
-  useEffect(() => {
-    readModels();
-    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
-      (answer) => {
-        if ("failure" in answer) setDefaultFailed(true);
-        else setDefaultChoice(answer.choice);
-      },
-      () => setDefaultFailed(true),
-    );
-  }, [act, readModels]);
+    void retryModels();
+  }, [retryModels]);
   // Once a word is typed the service finds the agents it names, however many the repository holds.
   const asked = words.trim();
   useEffect(() => {
@@ -121,11 +101,11 @@ export function useRunChoices(input: {
     setSearches((count) => count + 1);
   }, [press, listFailed]);
   return {
-    models,
-    modelsFailed,
+    models: offered.rows?.models,
+    modelsFailed: offered.status === HOST_READ_STATUS.FAILED,
     readModels,
-    defaultChoice,
-    defaultFailed,
+    defaultChoice: drawnDefault.choice,
+    defaultFailed: drawnDefault.status === HOST_READ_STATUS.FAILED,
     agents,
     found: asked === "" ? undefined : found,
     searchFailed: asked !== "" && searchFailed,

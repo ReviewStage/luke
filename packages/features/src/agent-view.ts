@@ -169,9 +169,12 @@ export const agentModelsAnswerSchema = EffectSchema.Union([modelsAnswerSchema, f
 
 export type AgentModelsAnswer = typeof agentModelsAnswerSchema.Type;
 
-/** The account's default model and effort, as the window hears them read or written: the choice as kept, or why there is none. */
+/** The account's default model and effort, as the window hears them written: the choice as kept, with the transaction it committed in where the service names one, or why there is none. */
 export const agentDefaultAnswerViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ choice: modelChoiceSchema }),
+  EffectSchema.Struct({
+    choice: modelChoiceSchema,
+    txid: EffectSchema.optionalKey(EffectSchema.String),
+  }),
   failed,
 ]);
 

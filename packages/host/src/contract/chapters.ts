@@ -34,11 +34,6 @@ export const chaptersActsContract = {
   )
     .input(exactInput(pullRequestChaptersParamsSchema))
     .output(EffectSchema.flip(pullRequestChaptersAnswerViewSchema)),
-  [CHAPTERS_ACT_KIND.CHAPTERS_MODEL_READ]: actProcedure(
-    "Could not read the chapters model on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(chaptersModelAnswerViewSchema)),
   [CHAPTERS_ACT_KIND.CHAPTERS_MODEL_WRITE]: actProcedure(
     "Could not change the chapters model on this system.",
   )

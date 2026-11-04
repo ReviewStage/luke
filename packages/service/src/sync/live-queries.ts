@@ -265,7 +265,7 @@ export const macCommandsLive = defineLiveQuery({
  * both, so none of them wakes this read or the account's other reads.
  */
 export const accountPreferencesLive = defineLiveQuery({
-  name: "accountPreferences",
+  name: LIVE_READ.ACCOUNT_PREFERENCES,
   params: ["userId"],
   reads: [accountPreferenceSync],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],

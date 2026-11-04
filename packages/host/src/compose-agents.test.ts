@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
+import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
   AGENT_CALL_FAILURE,
   type DevicePresenceAnswerView,
@@ -43,7 +44,12 @@ import {
   type TranscriptNowAnswer,
 } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import {
+  AGENT_DEFAULT_CHOICE,
+  AGENT_FALLBACK_CHOICE,
+  type CatalogModel,
+  MODEL_PROVIDER,
+} from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -66,6 +72,7 @@ import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import type { AppAccountPreferences, AppModels } from "./app-state.js";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { taskListCollections } from "./task-list-collections.js";
@@ -273,7 +280,13 @@ function fakeService() {
     memories: polledLive(MEMORIES_PARTS),
     origin: polledLive(["origin"]),
     hosts: polledLive(["hosts"]),
+    // Note that the account stored no preferences until a test sets a row, as a new account has none.
+    preferences: polledLive(["preferences"], () => ({ preferences: [] })),
   };
+  /** The models the account is offered, as the service answers them; the one Claude model from the start. */
+  let offeredModels: readonly CatalogModel[] = MODELS;
+  /** The account's provider keys, as the service answers them; the one Claude key from the start. */
+  let keptKeys: readonly ProviderKeySummary[] = [KEPT];
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
   let pageGate: Effect.Effect<void> = Effect.void;
@@ -312,12 +325,14 @@ function fakeService() {
     models: () =>
       Effect.sync(() => {
         asked.push("models");
-        return { models: MODELS };
+        return { models: offeredModels };
       }),
-    readDefault: () =>
-      Effect.sync(() => {
-        asked.push("default");
-        return { choice: { model: AGENT.model, effort: AGENT.effort } };
+    accountPreferencesLive: (_userId, poll, after) =>
+      Effect.suspend((): ReturnType<AgentClient["accountPreferencesLive"]> => {
+        if (poll !== true) asked.push("preferences-live");
+        return poll === true
+          ? live.preferences.poll(after)
+          : Effect.succeed(live.preferences.first());
       }),
     writeDefault: (choice) =>
       Effect.sync(() => {
@@ -495,11 +510,6 @@ function fakeService() {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHAPTERS;
       }),
-    readChaptersModel: () =>
-      Effect.sync(() => {
-        asked.push("chapters-model");
-        return { model: CHAPTERS_MODEL.HAIKU };
-      }),
     writeChaptersModel: (model) =>
       Effect.sync(() => {
         asked.push(`chapters-model-write:${model}`);
@@ -546,7 +556,7 @@ function fakeService() {
     readProviderKeys: () =>
       Effect.sync(() => {
         asked.push("keys");
-        return { keys: [KEPT] };
+        return { keys: keptKeys };
       }),
     saveProviderKey: (save) =>
       Effect.sync(() => {
@@ -808,6 +818,11 @@ function fakeService() {
     answerPresence: (next: DevicePresenceAnswerView) => {
       presence = Effect.succeed(next);
     },
+    /** The account's provider keys and the models it is offered as the service answers them from now on. */
+    answerKeys: (keys: readonly ProviderKeySummary[], models: readonly CatalogModel[]) => {
+      keptKeys = keys;
+      offeredModels = models;
+    },
     /** The service never answering how long ago the devices beat, from now on. */
     hangPresence: () => {
       presence = Effect.never;
@@ -1000,6 +1015,7 @@ function subject(
       answerRemoves: service.answerRemoves,
       answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
+      answerKeys: service.answerKeys,
       hangPresence: service.hangPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
@@ -1023,6 +1039,16 @@ function subject(
       accountItems: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the models the host holds for the windows, whole, in order. */
+      models: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.MODELS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the account's preferences the host holds for the session, whole, in order. */
+      preferences: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the provider keys the host holds for the windows, whole, in order. */
       providerKeys: () =>
@@ -1070,10 +1096,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
     const { call, asked, sealTranscript } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_MODELS), { models: MODELS });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DEFAULT_READ), {
-      choice: { model: AGENT.model, effort: AGENT.effort },
-    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_DEFAULT_WRITE, {
         model: "openai/gpt-6.1-sol",
@@ -1186,9 +1208,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       CHAPTERS,
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_READ), {
-      model: CHAPTERS_MODEL.HAIKU,
-    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
       { model: CHAPTERS_MODEL.OPUS },
@@ -1324,8 +1343,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
     );
 
     assert.deepEqual(asked, [
-      "models",
-      "default",
       "default:openai/gpt-6.1-sol:xhigh",
       `list:${TASK_ID}`,
       `list:${TASK_ID}:archived`,
@@ -1345,7 +1362,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
-      "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
@@ -1372,7 +1388,10 @@ it.effect(
       const signedOut = yield* subject({ signedIn: false });
       const offline = yield* subject({ sendsNetwork: false });
 
-      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.AGENTS_MODELS), GATE_CLOSED_SIGNED_OUT);
+      assert.deepEqual(
+        yield* signedOut.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }),
+        GATE_CLOSED_SIGNED_OUT,
+      );
       assert.deepEqual(yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
         cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: GATE_CLOSED_BY.NO_NETWORK },
@@ -1445,6 +1464,52 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "an account that stored no default reads the fallback its keys pay for, and once its keys move the models are asked again and the fallback moves with them",
+  () =>
+    Effect.gen(function* () {
+      const { call, open, answerKeys, models, preferences } = yield* subject();
+      const openai = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.OPENAI];
+      const claude: CatalogModel = {
+        id: AGENT_DEFAULT_CHOICE.model,
+        name: "Claude Opus 5.5",
+        provider: MODEL_PROVIDER.ANTHROPIC,
+        efforts: ["high"],
+      };
+      const gpt: CatalogModel = {
+        id: openai.model,
+        name: "GPT-6.1 Sol",
+        provider: MODEL_PROVIDER.OPENAI,
+        efforts: ["high"],
+      };
+      const openaiKey = { ...KEPT, provider: PROVIDER_KEY_PROVIDER.OPENAI };
+      answerKeys([openaiKey], [{ ...claude, credentialMissing: true }, gpt]);
+      /** The default a surface draws from the slices the host told last. */
+      const drawnDefault = () => {
+        // SAFETY: the host tells its own slices whole, as built.
+        const held = preferences().at(-1) as AppAccountPreferences | undefined;
+        const offered = models().at(-1) as AppModels | undefined;
+        assert.ok(held?.["user-dana"]?.rows !== undefined, "the preferences answered");
+        return agentDefaultOf(held["user-dana"].rows.agent, offered?.["user-dana"] ?? {});
+      };
+
+      yield* open;
+      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW);
+      yield* settled;
+      assert.deepEqual(drawnDefault(), openai, "only an OpenAI key pays, so OpenAI's fallback");
+
+      answerKeys([openaiKey, KEPT], [claude, gpt]);
+      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_RETRY);
+      yield* settled;
+      assert.deepEqual(
+        drawnDefault(),
+        AGENT_DEFAULT_CHOICE,
+        "a Claude key pays now, so Anthropic's",
+      );
     }),
 );
 

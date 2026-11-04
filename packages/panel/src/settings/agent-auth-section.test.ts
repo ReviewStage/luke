@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -100,12 +98,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   const subscriptions = held.subscriptions ?? [];
   switch (request.kind) {
-    case ACT_KIND.AGENTS_MODELS:
-      return Promise.resolve(done({ models: [] }));
-    case ACT_KIND.AGENTS_DEFAULT_READ:
-      return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-    case ACT_KIND.CHAPTERS_MODEL_READ:
-      return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
     case ACT_KIND.PROVIDER_KEYS_SAVE:

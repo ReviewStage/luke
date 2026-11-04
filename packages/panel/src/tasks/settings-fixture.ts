@@ -57,6 +57,7 @@ import type { TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppAccountPreferences,
   type AppDevicePresences,
   type AppGitHubTokens,
   type AppHosts,
@@ -65,6 +66,7 @@ import {
   type AppIntegrationTools,
   type AppMcpClients,
   type AppMemories,
+  type AppModels,
   type AppProviderKeys,
   type AppRepositoryLists,
   type AppSlackChannels,
@@ -627,11 +629,6 @@ type StagedAnswer<Kind extends PortActKind> = (
 
 /** Every read the staged pages ask, answered as the service would answer it for this account. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
-  [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
-    choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
-  }),
-  [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
   // A box waiting on its code, as a pairing's link opened over Settings › Hosts reads it.
   [ACT_KIND.HOSTS_PAIRING_READ]: () => ({
     name: "fra-02",
@@ -640,8 +637,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
   }),
-  [ACT_KIND.WORKSPACE_SLACK_BOT_READ]: ({ workspaceId }) =>
-    workspaceId === WORKSPACE.ACME ? acmeSlackBot : { configured: true },
   [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => {
     acmeSlackBot = { ...acmeSlackBot, notifications };
     return acmeSlackBot;
@@ -735,6 +730,20 @@ const STAGED_KEYS: AppProviderKeys = {
           forAgents: true,
         },
       ],
+    },
+  },
+};
+
+/** The models the staged account is offered, as the host holds them. */
+const STAGED_MODELS: AppModels = { [ACCOUNT_ID]: { rows: { models: MODELS } } };
+
+/** The staged account's preferences row, as the host holds it: Opus on high, chapters on Sonnet, and Slack notifications on. */
+const STAGED_PREFERENCES: AppAccountPreferences = {
+  [ACCOUNT_ID]: {
+    rows: {
+      agent: { model: "anthropic/claude-opus-5.5", effort: "high" },
+      chaptersModel: CHAPTERS_MODEL.SONNET,
+      slackNotifications: true,
     },
   },
 };
@@ -898,6 +907,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     ...held,
     account: ACCOUNT,
     access: ADMIN_ACCESS,
+    [LIVE_READ.ACCOUNT_PREFERENCES]: STAGED_PREFERENCES,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
     [LIVE_READ.HOSTS]: STAGED_HOSTS,
     [LIVE_READ.INSTALLED_SKILLS]: STAGED_SKILLS,
@@ -905,6 +915,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.WORKSPACE_INVITATIONS]: HELD_INVITATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,
+    [LIVE_READ.MODELS]: STAGED_MODELS,
     [LIVE_READ.WORKSPACE_INTEGRATIONS]: STAGED_WORKSPACE_INTEGRATIONS,
     [LIVE_READ.SLACK_CHANNELS]: STAGED_SLACK_CHANNELS,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,

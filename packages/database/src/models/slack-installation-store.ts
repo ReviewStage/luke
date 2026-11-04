@@ -102,8 +102,9 @@ const findNotifications = SqlSchema.findOneOption({
     ),
 });
 
-const upsertNotifications = SqlSchema.void({
+const upsertNotifications = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, on: Schema.Boolean }),
+  Result: Schema.Struct({ txid: Schema.String }),
   execute: ({ userId, on }) =>
     Database.use((db) =>
       db
@@ -112,7 +113,8 @@ const upsertNotifications = SqlSchema.void({
         .onConflictDoUpdate({
           target: accountPreference.userId,
           set: { slackNotifications: on },
-        }),
+        })
+        .returning({ txid: sql<string>`pg_current_xact_id()::text` }),
     ),
 });
 
@@ -632,9 +634,13 @@ export function slackNotificationsOn(userId: string): TaskStoreEffect<boolean> {
   );
 }
 
-/** Turns the member's switch on or off, every workspace's bot alike. */
-export function writeSlackNotifications(userId: string, on: boolean): TaskStoreEffect<void> {
-  return upsertNotifications({ userId, on });
+/** Turns the member's switch on or off, every workspace's bot alike, answering the transaction it was written in. */
+export function writeSlackNotifications(userId: string, on: boolean): TaskStoreEffect<string> {
+  return upsertNotifications({ userId, on }).pipe(
+    Effect.map(({ txid }) => txid),
+    // An upsert that returned no row is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+  );
 }
 
 /** The workspaces connected to the Slack team, the oldest connection first; none where no workspace connected it. */

@@ -59,6 +59,11 @@ export interface AccountPreferencesRow {
   updatedAt: Date | undefined;
 }
 
+/** One account's snapshot as a write left it, with the transaction the write committed in, which a reader holding the row waits for. */
+export interface AccountPreferencesWritten extends AccountPreferencesRow {
+  readonly txid: string;
+}
+
 /**
  * What a write carries: each part present replaces what stood, and a part
  * left out stands as it was, so the desktop's settings sync and Settings'
@@ -321,7 +326,7 @@ function writtenColumns(write: PreferenceWrite) {
  */
 const upsertPreference = SqlSchema.findOne({
   Request: PreferenceWriteSchema,
-  Result: PreferenceRowSchema,
+  Result: Schema.Struct({ ...PreferenceRowSchema.fields, txid: Schema.String }),
   execute: (write) => {
     const columns = writtenColumns(write);
     // The experiments are the one part merged rather than replaced: the patch's keys over what stood.
@@ -337,7 +342,7 @@ const upsertPreference = SqlSchema.findOne({
         .insert(accountPreference)
         .values({ userId: write.userId, ...columns })
         .onConflictDoUpdate({ target: accountPreference.userId, set: merged })
-        .returning(PREFERENCE_COLUMNS),
+        .returning({ ...PREFERENCE_COLUMNS, txid: sql<string>`pg_current_xact_id()::text` }),
     );
   },
 });
@@ -345,14 +350,14 @@ const upsertPreference = SqlSchema.findOne({
 /**
  * Writes each part the write carries over what stood — the preferences
  * whole, the coding-agent default whole, the chapters model, the experiments key by key — and answers the snapshot as it
- * now stands. The instant moves with the shared preferences part alone,
+ * now stands, with the transaction it committed in. The instant moves with the shared preferences part alone,
  * so a coding-agent choice, a chapters model, or a link choice never reads to a Mac as a
  * settings snapshot it has to take.
  */
 export function writeAccountPreferences(
   userId: string,
   write: AccountPreferencesWrite,
-): Effect.Effect<AccountPreferencesRow, StoreFailure, DatabaseServices> {
+): Effect.Effect<AccountPreferencesWritten, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
     // Note that the shared part holds no preference since the voice went, so its write moves the instant alone.
@@ -370,6 +375,6 @@ export function writeAccountPreferences(
       // An upsert that returned no row is the database breaking its own contract, not an outcome.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
-    return snapshotOf(row);
+    return { ...snapshotOf(row), txid: row.txid };
   });
 }

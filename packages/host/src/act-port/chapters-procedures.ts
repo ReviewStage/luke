@@ -33,7 +33,6 @@ export interface ChaptersProceduresDependencies {
     pullRequestChaptersGenerate(
       params: PullRequestChaptersParams,
     ): Effect.Effect<PullRequestChaptersAnswerView>;
-    chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
     chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   };
 }
@@ -74,12 +73,6 @@ export function chaptersProcedures(dependencies: ChaptersProceduresDependencies)
       function* ({ input, context, errors }) {
         if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
         return yield* host.pullRequestChaptersGenerate(input);
-      },
-    ),
-    [CHAPTERS_ACT_KIND.CHAPTERS_MODEL_READ]: actPort[CHAPTERS_ACT_KIND.CHAPTERS_MODEL_READ].effect(
-      function* ({ context, errors }) {
-        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        return yield* host.chaptersModelRead();
       },
     ),
     [CHAPTERS_ACT_KIND.CHAPTERS_MODEL_WRITE]: actPort[

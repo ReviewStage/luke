@@ -21,9 +21,11 @@ import {
 } from "@repo/ui";
 import { useSettingWrite } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useAccountPreferences } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
+import { HOST_READ_STATUS } from "../use-host-read.js";
 import { SettingMarks } from "./marks.js";
 
 /**
@@ -56,33 +58,11 @@ const CHAPTERS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
 ];
 
-/** The Chapters group, over the member's choice as the service holds it. */
+/** The Chapters group, over the member's choice as the host holds it (`LIVE_READ.ACCOUNT_PREFERENCES`), which a choice made on another device moves within moments. */
 export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const { act } = useAct();
-  const [model, setModel] = useState<ChaptersModelId | undefined>(undefined);
-  const [readFailed, setReadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  // The page opening reads the choice the service holds now, which another device may just have written.
-  useEffect(() => {
-    if (!signedIn) return;
-    let live = true;
-    setModel(undefined);
-    setReadFailed(false);
-    act(ACT_KIND.CHAPTERS_MODEL_READ).then(
-      (answer) => {
-        if (!live) return;
-        if ("failure" in answer) setReadFailed(true);
-        else setModel(answer.model);
-      },
-      () => {
-        if (live) setReadFailed(true);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, attempt]);
+  const preferences = useAccountPreferences();
+  const model = preferences.rows?.chaptersModel;
 
   const write = useCallback(
     (next: ChaptersModelId): Promise<ActionResult> =>
@@ -92,12 +72,11 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
           if (answer === undefined || "failure" in answer) {
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: SECTION_LINE.WRITE_FAILED };
           }
-          setModel(answer.model);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
     [act],
   );
-  const { busy, rejection, saves, run } = useSettingWrite(write);
+  const { rejection, saves, run } = useSettingWrite(write);
 
   return (
     <SettingsSection title="Chapters">
@@ -119,17 +98,18 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
               }))}
               value={model}
               look={CHOICE_BAR_LOOK.SEGMENTED}
-              disabled={busy}
+              // Note that the bar stays live while a write is out, because the host draws the choice on the press.
+              disabled={false}
               {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHAPTERS_MODEL)}
               onChange={run}
             />
           )}
         </SettingsRow>
-      ) : readFailed ? (
+      ) : preferences.status === HOST_READ_STATUS.FAILED ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.CHAPTERS_MODEL_READ)}
-            onRetry={() => setAttempt((count) => count + 1)}
+            onRetry={() => void preferences.retry()}
           >
             {SECTION_LINE.FAILED}
           </ErrorState>

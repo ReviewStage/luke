@@ -1,9 +1,5 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
-import {
-  AGENT_CALL_FAILURE,
-  type AgentAgentAnswer,
-  type AgentDefaultAnswer,
-} from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
   type AgentAttachment,
@@ -839,10 +835,8 @@ export interface TasksControl {
     modelsFailed: boolean;
     /** Where the newest read of the models stands, at the generation it took, so the card can wait on a read made since it opened. */
     modelsRead: ModelsRead;
-    /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
+    /** Asks the host for the models again, as the card opening and the chip's Retry ask. */
     readModels: () => void;
-    /** Reads the account's default model, which the composer's chip starts on. */
-    readDefault: () => Promise<AgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and New task's Task relation offers its workspace's of. */
@@ -3838,7 +3832,6 @@ export function useTasksTab(input: {
       modelsFailed: agents.modelsFailed,
       modelsRead: agents.modelsRead,
       readModels: agents.readModels,
-      readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),
       tasks: sidebar,
       onShowMention: guard(showMention),

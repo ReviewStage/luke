@@ -14,7 +14,7 @@ import {
   Tooltip,
 } from "@repo/ui";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
 import { agentPayerLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
@@ -108,11 +108,11 @@ export function AgentModelChip({
   startsNew = false,
 }: {
   model: AgentModelControl;
-  /** The catalog as last read; nothing before the first read lands. */
+  /** The catalog as the host holds it for the account; nothing before it is first read. */
   models: readonly CatalogModel[] | undefined;
-  /** Whether the last read of the catalog did not land. */
+  /** Whether the catalog could not be read. */
   modelsFailed: boolean;
-  /** Reads the catalog now, for the chip's name, for a menu opening, and for the menu's Retry. */
+  /** Asks the host for the catalog again, as the menu's Retry asks. */
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: AgentUsage | undefined;
@@ -132,15 +132,6 @@ export function AgentModelChip({
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  // Note that the reader is read through a ref, because the tab hands a new
-  // closure on every render and a read is owed to the mount and the opening.
-  const latest = useRef(readModels);
-  latest.current = readModels;
-
-  useEffect(() => {
-    latest.current();
-  }, [open]);
-
   // Note that we hand focus back to the chip, as a native menu returns it to
   // its trigger, because closing takes the focused field away with it.
   const close = () => {

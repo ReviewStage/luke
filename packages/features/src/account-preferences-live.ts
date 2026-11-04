@@ -28,6 +28,8 @@ export const accountPreferencesLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({ preferences: sealedLiveQuerySchema }),
 });
 
+export type AccountPreferencesLiveAnswer = typeof accountPreferencesLiveAnswerSchema.Type;
+
 /**
  * The account's row as the statement delivers it, each column as stored and
  * null where never chosen. Note that the context window and the chapters
@@ -59,9 +61,11 @@ export interface AccountPreferencesLive {
   readonly slackNotifications: boolean;
 }
 
-/** The models as a read of them stands: its rows once it answered, and whether it said it could not before it ever had. */
+/** The models as a read of them stands, as the host holds it: its answer once it answered, and whether it said it could not before it ever had. */
 interface OfferedModelsRead {
-  readonly rows?: readonly Pick<CatalogModel, "id" | "provider" | "credentialMissing">[];
+  readonly rows?: {
+    readonly models: readonly Pick<CatalogModel, "id" | "provider" | "credentialMissing">[];
+  };
   readonly failed?: true;
 }
 
@@ -111,6 +115,6 @@ export function agentDefaultOf(
   models: OfferedModelsRead,
 ): ModelChoice | undefined {
   if (stored !== undefined) return stored;
-  if (models.rows !== undefined) return agentFallbackChoice(models.rows);
+  if (models.rows !== undefined) return agentFallbackChoice(models.rows.models);
   return models.failed === true ? AGENT_DEFAULT_CHOICE : undefined;
 }

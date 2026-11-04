@@ -18,7 +18,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
-import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -96,17 +95,14 @@ export function useSetupGate(
     finishedHere ||
     finishedOnAccount ||
     (accountId !== undefined && finishedOnDevice.includes(accountId));
-  const { models, modelsRead, readModels, workspaces } = tasks.newTask;
+  // Note that the models are the ones the host holds for the account, so nothing here asks for them.
+  const { models, modelsFailed, workspaces } = tasks.newTask;
   const fresh = welcomed(tasks);
-  const candidate = fresh && accountId !== undefined && !finished;
-  useEffect(() => {
-    if (candidate && modelsRead.state === MODELS_READ.UNREAD) readModels();
-  }, [candidate, modelsRead.state, readModels]);
   // Note that a read that failed is taken as an agent standing, so a hitch never stands setup before an account that has worked.
   const agent =
     models !== undefined
       ? models.some((model) => model.credentialMissing !== true)
-      : modelsRead.state === MODELS_READ.FAILED
+      : modelsFailed
         ? true
         : undefined;
   return setupGate({

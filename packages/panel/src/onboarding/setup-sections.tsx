@@ -2,7 +2,6 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { SETTINGS_SECTION_FRAME, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import { useEffect, useState } from "react";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
-import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { GitHubSetup } from "./setup-github.js";
@@ -32,16 +31,13 @@ interface Missing {
 
 /** Finish setting up, where an agent or GitHub is missing; nothing otherwise, or while either is still read. */
 export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
-  const { workspaceId, models, modelsRead, readModels } = tasks.newTask;
+  const { workspaceId, models, modelsFailed } = tasks.newTask;
   const [missing, setMissing] = useState<Missing | undefined>(undefined);
-  // The models are read on asking, so Home asks; a read that fails asks for no agent here, New task saying why instead.
-  useEffect(() => {
-    if (modelsRead.state === MODELS_READ.UNREAD) readModels();
-  }, [modelsRead.state, readModels]);
+  // The models are the ones the host holds for the account; a read that fails asks for no agent here, New task saying why instead.
   const agentMissing =
     models !== undefined
       ? !models.some((model) => model.credentialMissing !== true)
-      : modelsRead.state === MODELS_READ.FAILED
+      : modelsFailed
         ? false
         : undefined;
 

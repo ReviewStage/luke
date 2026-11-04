@@ -10,6 +10,7 @@ import {
   jsonOf,
 } from "./account-call.js";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
+import type { AccountPreferencesLiveAnswer } from "./account-preferences-live.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import type { AgentOriginLiveAnswer } from "./agent-origin-live.js";
 import {
@@ -455,14 +456,16 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
 }
 
 /**
- * The default read off the preferences snapshot, or why there was none: its
- * coding-agent part as a choice reads, the settings parts beside it the
- * settings client's to read.
+ * The default a write left off the preferences snapshot, with the
+ * transaction it committed in, or why there was none: its coding-agent part
+ * as a choice reads, the settings parts beside it the settings client's to
+ * read.
  */
 function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAnswer {
   if ("failure" in read) return read;
   const choice = Option.getOrUndefined(Schema.decodeUnknownOption(modelChoiceSchema)(read.agent));
-  return choice === undefined ? UNANSWERED : { choice };
+  if (choice === undefined) return UNANSWERED;
+  return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
 /** The chapters model as nothing the window can show: the call never answered, or answered no model this build offers. */
@@ -470,7 +473,7 @@ const CHAPTERS_MODEL_UNANSWERED = {
   failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
 } as const;
 
-/** The chapters model read off the preferences snapshot, or unanswered where it carries none this build offers. */
+/** The chapters model a write left off the preferences snapshot, with the transaction it committed in, or unanswered where it carries none this build offers. */
 function chaptersModelAnswerOf(
   asked: Effect.Effect<AccountPreferencesAnswerWire, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
@@ -480,7 +483,8 @@ function chaptersModelAnswerOf(
       const model = Option.getOrUndefined(
         Schema.decodeUnknownOption(chaptersModelSchema)(read.chaptersModel),
       );
-      return model === undefined ? CHAPTERS_MODEL_UNANSWERED : { model };
+      if (model === undefined) return CHAPTERS_MODEL_UNANSWERED;
+      return read.txid === undefined ? { model } : { model, txid: read.txid };
     },
   });
 }
@@ -572,15 +576,31 @@ export class HostedAgentClient {
     return pairingAnswer(askHosted(this.#hosted.hosts.denyPairing, { code }));
   }
 
-  /** The account's default model and effort, read off the preferences snapshot. */
-  readDefault(): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
-    return Effect.map(
-      hostedAnswer(askHosted(this.#hosted.account.preferences, undefined), {}),
-      defaultOf,
-    );
+  /**
+   * The account's preferences row, its default agent, chapters model, and
+   * Slack notifications as stored, sealed for following, or with its row
+   * inline where `poll` asks for it; signed out where the session is
+   * another account's, or why not.
+   */
+  accountPreferencesLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AccountPreferencesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.accountPreferences, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, {}));
   }
 
-  /** The account's default written on its own, answering it as kept; a choice the service would refuse by shape is refused here without traveling at all. */
+  /** The account's default written on its own, answering it as kept with the transaction it committed in; a choice the service would refuse by shape is refused here without traveling at all. */
   writeDefault(
     choice: ModelChoice,
   ): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
@@ -592,12 +612,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** The Claude model the account's Generate chapters runs on, read off the preferences snapshot. */
-  readChaptersModel(): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-    return chaptersModelAnswerOf(askHosted(this.#hosted.account.preferences, undefined));
-  }
-
-  /** The account's chapters model written on its own, answering it as kept. */
+  /** The account's chapters model written on its own, answering it as kept with the transaction it committed in. */
   writeChaptersModel(
     model: ChaptersModelId,
   ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {

@@ -1,7 +1,8 @@
 import { AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
 import { useSecond } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useAgentDefault } from "../account-choices.js";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { AgentComposer } from "./agent-composer.js";
 import { agentName } from "./agent-model.js";
@@ -103,22 +104,12 @@ export function DraftAgentTab({
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
   // Note that a send lets the refusal New task handed over go, so a tab opened again after says only its own.
   const shownNote = note ?? draft.refused;
-  // The account's default as read, which the chip names until the developer makes a choice of their own.
-  const [fallback, setFallback] = useState<AgentDraft["choice"]>(undefined);
+  // The account's default as the host holds it, which the chip names until the developer makes a choice of their own.
+  const fallback = useAgentDefault().choice;
   // Note that the control is read through a ref, because the panel hands a
   // new one on every render and an answer lands on whichever is current.
   const latest = useRef(control);
   latest.current = control;
-
-  useEffect(() => {
-    let live = true;
-    latest.current.readDefault().then((answer) => {
-      if (live && !("failure" in answer)) setFallback(answer.choice);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
 
   const { fork } = draft;
   const source =

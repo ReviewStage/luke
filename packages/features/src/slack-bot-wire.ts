@@ -88,8 +88,10 @@ export type SlackListedChannel = Omit<SlackBotChannel, "repository">;
  * repository for Slack starts, absent while none is named, and, to an owner
  * or admin, the team's channels, absent where Slack could not be read. A
  * write that changed the bot's rows carries the transaction it committed
- * in, which a desktop holding the workspace's integrations live waits for;
- * a read, and a write that changed none, carry none.
+ * in, which a desktop holding the workspace's integrations live waits for,
+ * and a notifications write the one its switch on the reader's preferences
+ * row committed in, which their live read of those preferences carries; a
+ * read, and a write that changed none, carry none.
  */
 export const workspaceSlackBotAnswerSchema = EffectSchema.Struct({
   configured: EffectSchema.Boolean,
