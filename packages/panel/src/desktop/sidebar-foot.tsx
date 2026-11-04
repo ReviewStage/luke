@@ -46,6 +46,7 @@ import {
   LightbulbIcon,
   LogOutIcon,
   MailIcon,
+  MessageSquareIcon,
   NewspaperIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -293,7 +294,7 @@ function accountMenuGroups(
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
         label: "Send feedback",
-        icon: <GLYPH.FEEDBACK />,
+        icon: <MessageSquareIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
@@ -420,7 +421,7 @@ export function SidebarFoot({
         <SidebarUpdate updates={updates} />
         <Tooltip label="Send feedback">
           <IconButton
-            icon={<GLYPH.FEEDBACK />}
+            icon={<MessageSquareIcon />}
             label="Send feedback"
             onClick={() => runAppCommand(APP_COMMAND.SEND_FEEDBACK)}
           />
