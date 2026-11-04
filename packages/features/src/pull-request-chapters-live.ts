@@ -37,6 +37,8 @@ export const pullRequestChaptersLiveAnswerSchema = EffectSchema.Struct({
   generatable: EffectSchema.Boolean,
 });
 
+export type PullRequestChaptersLiveAnswer = typeof pullRequestChaptersLiveAnswerSchema.Type;
+
 /** A git commit's name, as GitHub spells it. */
 const commitSchema = EffectSchema.NonEmptyString;
 

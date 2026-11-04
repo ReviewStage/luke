@@ -34,6 +34,7 @@ const SECTIONS = [
   "Retention · weekly cohorts",
   "Most active accounts",
   "Signups",
+  "Retention by any hosted call · retired",
 ];
 
 /** One cohort week, its accounts, and the share of them retained in the week itself. */
@@ -290,24 +291,15 @@ test("the funnel and reach read each row's count and its share of the base", () 
   expect(page.textContent).toContain("of 12 active developers");
 });
 
-test("retention counts meaningful actions until the hosted basis is chosen", () => {
+test("retention counts meaningful actions, and the retired hosted basis stands in its own grid", () => {
   const page = render(ready(metrics()));
-  const bases = page.querySelector('[role="radiogroup"][aria-label="Retained by"]');
-  const chosen = () =>
-    Array.from(bases?.querySelectorAll('[role="radio"]') ?? [])
-      .filter((radio) => radio.getAttribute("aria-checked") === "true")
-      .map((radio) => radio.textContent);
+  const named = (name: string) => regions(page).find((region) => region.name === name)?.words;
 
-  expect(chosen()).toEqual(["Meaningful action"]);
-  expect(page.textContent).toContain("70%");
-  expect(page.textContent).toContain("created a task, wrote a plan revision");
-
-  act(() => button(page, "Any hosted call").click());
-
-  expect(chosen()).toEqual(["Any hosted call"]);
-  expect(page.textContent).toContain("20%");
-  expect(page.textContent).not.toContain("70%");
-  expect(page.textContent).toContain("made a hosted-tier call");
+  expect(named("Retention · weekly cohorts")).toContain("70%");
+  expect(named("Retention · weekly cohorts")).toContain("created a task, wrote a plan revision");
+  expect(named("Retention · weekly cohorts")).not.toContain("20%");
+  expect(named("Retention by any hosted call · retired")).toContain("20%");
+  expect(named("Retention by any hosted call · retired")).toContain("made a hosted-tier call");
 });
 
 test("the most active accounts read each one's days and per-feature counts", () => {

@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
+import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
@@ -46,6 +47,8 @@ import {
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
+import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
@@ -65,7 +68,12 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { markInboxItemRead, postInboxThread } from "../inbox/inbox-store.js";
+import {
+  markInboxItemRead,
+  postInboxMessage,
+  postInboxThread,
+  withdrawInboxMessage,
+} from "../inbox/inbox-store.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -281,6 +289,8 @@ const askTask = (options: {
   readonly forUser?: string;
   readonly taskId?: string;
   readonly path?: string;
+  /** The page of the task a comments read names; the plan's own threads where left out. */
+  readonly page?: string;
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
@@ -302,6 +312,7 @@ const askTask = (options: {
       options.forUser ?? options.bearer,
     );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
+    if (options.page !== undefined) url.searchParams.set("page", options.page);
     if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
     const response = yield* hostedAnswer(
@@ -479,6 +490,49 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             taskId: started.id,
             path,
           }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's comments, its plan's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            dana,
+            taskPageOwner(started.id),
+            { title: "Invite funnel", html: "<p>12 sent</p>" },
+            { kind: PAGE_SHOWER.APP },
+          ),
+        );
+        yield* startPlanCommentThread(
+          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: dana },
+          started.id,
+          {
+            clientKey: randomUUID(),
+            page: { id: shown.id, version: 1 },
+            words: "Add a chart.",
+          },
+        );
+        const path = "/api/live/task-comments";
+        const threadsOf = (body: unknown) => {
+          const answer = Schema.decodeUnknownSync(taskCommentsLiveAnswerSchema)(body);
+          assert.equal(answer.url, LIVE_POLL_URL);
+          return answer.queries.threads.rows;
+        };
+
+        const onPage = yield* askTask({ bearer: dana, taskId: started.id, path, page: shown.id });
+        assert.equal(onPage.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(threadsOf(onPage.body)?.length, 1);
+        const onPlan = yield* askTask({ bearer: dana, taskId: started.id, path });
+        assert.deepEqual(threadsOf(onPlan.body), [], "the page's thread is not the plan's");
+        assert.deepEqual(
+          yield* askTask({ bearer: eli, taskId: started.id, path, page: shown.id }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
       }),
@@ -1254,8 +1308,8 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   );
 });
 
-/** The task list asked as `bearer`, in delta mode past `sync` where it names one ("" for none yet), its answer decoded. */
-const askTasks = (bearer: string, sync?: string) =>
+/** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock; its answer's body. */
+const askLive = (bearer: string, path: string, sync?: string) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -1264,7 +1318,7 @@ const askTasks = (bearer: string, sync?: string) =>
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({ resolveUserId: () => Effect.succeed(Option.some(bearer)) });
-    const url = readOf("/api/live/tasks", bearer);
+    const url = readOf(path, bearer);
     url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     if (sync !== undefined) url.searchParams.set(LIVE_POLL.SYNC, sync);
     const response = yield* hostedAnswer(
@@ -1274,8 +1328,15 @@ const askTasks = (bearer: string, sync?: string) =>
     );
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
     const body: unknown = JSON.parse(yield* Effect.promise(() => response.text()));
-    return Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries;
+    return body;
   });
+
+/** The task list asked as `bearer`, in delta mode past `sync` where it names one, its parts decoded. */
+const askTasks = (bearer: string, sync?: string) =>
+  Effect.map(
+    askLive(bearer, "/api/live/tasks", sync),
+    (body) => Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries,
+  );
 
 /** Each part's row ids, as a delta answers its rows. */
 const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
@@ -1420,5 +1481,67 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
       assert.equal(answered.plans.sync?.past, undefined);
       assert.ok(answered.plans.sync?.next !== undefined);
     }),
+  );
+});
+
+/** The account's inbox items asked as `bearer` in delta mode past `sync` ("" for none yet), its parts decoded. */
+const askItems = (bearer: string, sync: string) =>
+  Effect.map(
+    askLive(bearer, "/api/live/inbox-items", sync),
+    (body) => Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(body).queries,
+  );
+
+/** An item of an agent of the member's on a task of theirs, the agent's message opening its thread; the item's id. */
+const openItem = (userId: string) =>
+  Effect.gen(function* () {
+    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const agentId = yield* openTaskAgent(userId, task.workspaceId, task.id);
+    const posted = yield* postInboxThread(
+      { userId, taskId: task.id, agentId },
+      {
+        key: "review",
+        title: "Review the invite flow",
+        body: "It is up.",
+        ask: { type: INBOX_ASK.DO, steps: [] },
+      },
+    );
+    return Result.getOrThrow(posted).id;
+  });
+
+/** The client keys of a messages part's rows, as the reader's own messages carry them. */
+const clientKeysOf = (part: { readonly rows?: readonly unknown[] }) =>
+  (part.rows ?? []).map((row) => (row as { readonly clientKey: string | null }).clientKey);
+
+it.layer(getTestDB())("the account's inbox items' live read in delta mode", (it) => {
+  it.effect(
+    "a message withdrawn moves its item, answered whole without it in every part, and nothing of another workspace's",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const erin = yield* openUser;
+        const itemId = yield* openItem(dana);
+        const erinsItem = yield* openItem(erin);
+        const clientKey = randomUUID();
+        assert.ok(
+          Option.isSome(yield* postInboxMessage(dana, itemId, { text: "On it", clientKey })),
+        );
+        const whole = yield* askItems(dana, "");
+        const past = whole.stamps.sync?.next;
+        assert.ok(past !== undefined);
+        assert.ok(clientKeysOf(whole.messages).includes(clientKey), "the message stands");
+
+        yield* withdrawInboxMessage(dana, itemId, clientKey);
+        yield* markInboxItemRead(erin, erinsItem);
+        // Note that the hold is let run to its end, so a withdrawal no row the read takes records answers nothing moved rather than holding the test.
+        const asked = yield* Effect.forkChild(askItems(dana, past));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = yield* Fiber.join(asked);
+
+        assert.deepEqual(idsOf(moved.stamps), [itemId]);
+        assert.deepEqual(idsOf(moved.items), [itemId]);
+        assert.ok(!clientKeysOf(moved.messages).includes(clientKey), "the message is withdrawn");
+        assert.ok(clientKeysOf(moved.messages).length > 0, "the item's thread comes whole");
+        assert.equal(moved.items.sync?.past, past);
+      }),
   );
 });

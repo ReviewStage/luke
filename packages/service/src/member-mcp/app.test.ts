@@ -4,25 +4,55 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
+import type { Client } from "@modelcontextprotocol/client";
+import { Database } from "@repo/database/core/query";
 import { readAgent } from "@repo/database/models/agent-store";
 import { listRevisions } from "@repo/database/models/plan-revisions";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
-import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "@repo/database/testing";
+import { agentTable } from "@repo/database/schemas/agent";
+import {
+  getTestDB,
+  joinWorkspace,
+  openInboxItem,
+  openTaskAgent,
+  openWorkspace,
+} from "@repo/database/testing";
 import { AGENT_ARCHIVER } from "@repo/features/agent-wire";
 import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { NOTE_KIND } from "@repo/features/plan-template";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { eq } from "drizzle-orm";
+import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
-import { fakeEve, openAskOf, openTask, startedAgent } from "../testing/agents-app-support.js";
+import {
+  fakeEve,
+  freshInstallation,
+  type GraphqlCall,
+  graphqlAnswering,
+  mutationOf,
+  openAskOf,
+  openTask,
+  PUBLISHED,
+  PULL_REQUEST_NODE_ID,
+  publishedPullRequestDrafted,
+  RELAY_FULL_NAME,
+  startedAgent,
+} from "../testing/agents-app-support.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  signInWithGitHub,
+  standingGithubRow,
+} from "../testing/github-app-fake.js";
 import {
   connected,
   MCP_CLIENT,
@@ -46,14 +76,18 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * provider's own, minted through a seeded test client linked to the
  * resource: a signed-up account authorizes it, as a client's sign-in will,
  * and the client exchanges its code (`../testing/member-mcp-auth.ts`, the
- * harness the sign-in test shares). The SDK's own client drives the server
- * at both revisions it serves. GitHub is reached by no call here, no agent's
- * session is, and the model catalog offers nothing.
- * An answer's hand-off to the agent that asked is driven apart, over the
- * agents' own test world (`../testing/agents-app-support.ts`): a started
- * agent on a fake eve, its server admitted on the world's bearers.
- * Synthetic accounts.
+ * harness the sign-in test shares). The SDK's own client
+ * drives the server at both revisions it serves. GitHub is reached by no
+ * call here but a change to a pull request's, which answers from a script
+ * as the Pull request tab's own tests script it, no agent's session is,
+ * and the model catalog offers nothing. An answer's hand-off to the agent
+ * that asked is driven apart, over the agents' own test world
+ * (`../testing/agents-app-support.ts`): a started agent on a fake eve, its
+ * server admitted on the world's bearers. Synthetic accounts and tokens.
  */
+
+/** The member's own GitHub token, as their sign-in through the App left it. */
+const MEMBER_GITHUB_TOKEN = "ghu_member";
 
 const decodeMetadata = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -122,6 +156,11 @@ function goldenOf(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}-input`;
 }
 
+/** The head commit a changes read answers its pull request at. */
+const decodeHead = Schema.decodeUnknownSync(
+  Schema.Struct({ pullRequest: Schema.Struct({ headSha: Schema.String }) }),
+);
+
 /** A tool's answer as the agent reads it: whether it is the tool's error, and its JSON text read. */
 const decodeAnswer = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -136,7 +175,7 @@ afterEach(() => {
 
 const ORIGIN = MEMBER_MCP_TEST.ORIGIN;
 
-/** The server over its seeded rows, as every test here stands it up. */
+/** The server over its seeded rows and a GitHub nobody reaches, as most tests here stand it up. */
 const standing = memberMcpStanding();
 
 /** The metadata document's address a challenge must name for the resource (RFC 9728). */
@@ -242,7 +281,7 @@ it.effect.each(Object.values(REVISION))(
 );
 
 it.effect(
-  "a member with several workspaces lists the one a list names, reads their own tasks, agents, and inbox, and reads or answers nothing of a workspace they are not in",
+  "a member with several workspaces lists the one a list names, reads their own tasks, agents, and inbox, and reads, answers, or changes nothing of a workspace they are not in, an agent's pull request among it",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -324,6 +363,13 @@ it.effect(
           [
             MEMBER_MCP_TOOL.CLOSE_THREAD,
             { threadId: rows.strangerItem, revision: strangerAsk.revision },
+          ],
+          [
+            MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION,
+            {
+              agentId: rows.strangerAgent,
+              change: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
+            },
           ],
         ] as const,
         ([name, args]) => call(name, args),
@@ -518,6 +564,119 @@ it.effect(
         userId: member.userId,
         reason: "Done.",
       });
+    }),
+);
+
+it.effect(
+  "an outside agent marks the member's agent's draft ready and merges it against the head read_agent_changes answered, on the member's own GitHub sign-in as the Pull request tab does, and a teammate with no GitHub sign-in is told to sign in, with nothing made",
+  () =>
+    Effect.gen(function* () {
+      const calls: GraphqlCall[] = [];
+      const drafted = publishedPullRequestDrafted(() => true);
+      const installation = freshInstallation();
+      const github = githubReaching(
+        [installation],
+        undefined,
+        undefined,
+        graphqlAnswering(calls, undefined, (sent) =>
+          new URL(sent.url).pathname === `/repos/${RELAY_FULL_NAME}/pulls/${PUBLISHED.number}/files`
+            ? Response.json([])
+            : drafted(sent),
+        ),
+      );
+      const { auth, fetch, services } = yield* memberMcpStanding({ github: github.layer });
+      const member = yield* Effect.promise(() => signUp(auth));
+      const teammate = yield* Effect.promise(() => signUp(auth));
+      const agentId = yield* Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        yield* signInWithGitHub(member.userId, {
+          ...standingGithubRow(now),
+          accessToken: MEMBER_GITHUB_TOKEN,
+        });
+        const workspaceId = yield* openWorkspace(member.userId);
+        yield* joinWorkspace(workspaceId, teammate.userId);
+        yield* connectWorkspaceGitHub(workspaceId, installation);
+        const task = yield* createTask(member.userId, {
+          organizationId: workspaceId,
+          name: "Teammate invitations",
+        });
+        const id = yield* openTaskAgent(member.userId, workspaceId, task.id);
+        // The agent pushed its branch to the repository the installation reaches, from which its draft stands open.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({
+              repository: RELAY_FULL_NAME,
+              repositories: [RELAY_FULL_NAME],
+              branch: PUBLISHED.branch,
+            })
+            .where(eq(agentTable.id, id)),
+        );
+        return id;
+      }).pipe(Effect.provide(services));
+      const clientOf = (cookie: string) =>
+        Effect.flatMap(
+          Effect.promise(() =>
+            mintedToken(auth, cookie, {
+              clientId: MCP_CLIENT.id,
+              scope: [MEMBER_MCP_SCOPE.MCP],
+              resource: RESOURCE,
+            }),
+          ),
+          (token) => Effect.map(connected(fetch, token, REVISION.MODERN), ({ client }) => client),
+        );
+      const memberClient = yield* clientOf(member.cookie);
+      const teammateClient = yield* clientOf(teammate.cookie);
+      const act = (client: Client, change: Record<string, string>) =>
+        Effect.promise(async () =>
+          decodeAnswer(
+            await client.callTool({
+              name: MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION,
+              arguments: { agentId, change },
+            }),
+          ),
+        );
+
+      const unsigned = yield* act(teammateClient, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW });
+      const ready = yield* act(memberClient, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW });
+      const changes = yield* Effect.promise(async () =>
+        decodeAnswer(
+          await memberClient.callTool({
+            name: MEMBER_MCP_TOOL.READ_AGENT_CHANGES,
+            arguments: { agentId },
+          }),
+        ),
+      );
+      const { headSha } = decodeHead(JSON.parse(changes.content[0].text)).pullRequest;
+      const merged = yield* act(memberClient, {
+        action: PULL_REQUEST_ACTION.MERGE,
+        method: "squash",
+        headSha,
+      });
+      yield* Effect.promise(() => Promise.all([memberClient.close(), teammateClient.close()]));
+
+      assert.equal(unsigned.isError, true);
+      assert.match(unsigned.content[0].text, /sign in with GitHub/u);
+      for (const answer of [ready, merged]) {
+        assert.notEqual(answer.isError, true, answer.content[0].text);
+        assert.deepEqual(JSON.parse(answer.content[0].text), { status: "accepted" });
+      }
+      assert.equal(headSha, PUBLISHED.headSha);
+      const id = PULL_REQUEST_NODE_ID;
+      assert.deepEqual(
+        calls.flatMap((call) => {
+          const mutation = mutationOf(call);
+          return mutation === undefined ? [] : [[mutation, call.variables, call.authorization]];
+        }),
+        [
+          ["markPullRequestReadyForReview", { id }, `Bearer ${MEMBER_GITHUB_TOKEN}`],
+          [
+            "mergePullRequest",
+            { id, method: "SQUASH", head: PUBLISHED.headSha },
+            `Bearer ${MEMBER_GITHUB_TOKEN}`,
+          ],
+        ],
+      );
     }),
 );
 

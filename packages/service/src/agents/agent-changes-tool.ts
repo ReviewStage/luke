@@ -9,9 +9,11 @@
  * (`GET /api/agents/{id}/pull-request`); its files, reviewers, and reviews
  * that said something are read afresh on a token minted for its repository
  * (`pullRequestChangesRead`), as the Changes tab reads them
- * (`GET /api/agents/{id}/changes`). Each file is named with what became of
- * it and the lines it adds and removes, without its patch, since a pull
- * request's patches together may run to millions of characters; one file the
+ * (`GET /api/agents/{id}/changes`), with the head commit it stands on,
+ * which a merge names (`agent_pull_request_action`). Each file is named
+ * with what became of it and the lines it adds and removes, without its
+ * patch, since a pull request's patches together may run to millions of
+ * characters; one file the
  * call names by its path is answered with its patch beside, cut on a line
  * to a bound. A GitHub that did not answer, or a repository the workspace's
  * installation no longer reaches, is refused in the model's words, never
@@ -122,7 +124,7 @@ export function runReadAgentChanges(
         ),
       );
       if (Result.isFailure(read)) return agentToolRejected(unreadWords(read.failure.error));
-      const { files, truncated, reviewers, comments, writtenAs } = read.success;
+      const { headSha, files, truncated, reviewers, comments, writtenAs } = read.success;
       const named = path === undefined ? undefined : files.find((file) => file.path === path);
       if (path !== undefined && named === undefined) {
         return agentToolRejected(READ_AGENT_CHANGES_REFUSAL.NO_FILE);
@@ -134,6 +136,7 @@ export function runReadAgentChanges(
         branch,
         pullRequest: {
           ...pullRequest,
+          ...(headSha === undefined ? undefined : { headSha }),
           ...(writtenAs === undefined ? undefined : { writtenAs }),
           files: files.map((file) => ({
             path: file.path,

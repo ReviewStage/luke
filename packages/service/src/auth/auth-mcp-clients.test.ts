@@ -151,7 +151,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const standing = memberMcpStanding(fetchMetadataDocument);
+const standing = memberMcpStanding({ fetchClientMetadataResource: fetchMetadataDocument });
 
 it.effect(
   "a client named by its metadata document and one registered dynamically each sign in through consent for the server alone: the token names the server and enters it, and names nobody at an account route",

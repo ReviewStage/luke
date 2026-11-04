@@ -8,6 +8,7 @@
  * nothing they wrote closes the fence and reads as the brief.
  */
 
+import { LINK_ORIGIN } from "@repo/features/link-home";
 import { fencedBlock } from "../tasks/markdown-fence.js";
 
 /** The brief every Create with an agent opens with, ahead of the request. */
@@ -19,7 +20,7 @@ A member asked on the Automations page for an automation that does what their re
 2. Decide what you can yourself. Ask the member in their inbox only for what you cannot, such as a choice their words leave open.
 3. Read the workspace's automations with \`list_automations\`, so you make none that one already does, and check the automations tools can do what is needed. Where they cannot, say so rather than make something else.
 4. Create it with \`create_automation\`.
-5. Reply with what you made: its name, its trigger, and what each run does.`;
+5. Reply with what you made: its name as a link to it, \`[<name>](${LINK_ORIGIN}/<workspace>/automation/<id>)\`, by the id \`create_automation\` answered and the workspace in your task's own link, its trigger, and what each run does.`;
 
 /** What leads the member's words in. */
 const REQUEST_LEAD = "Their request, in their own words:";

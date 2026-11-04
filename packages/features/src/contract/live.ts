@@ -6,7 +6,9 @@
  * answer; every inbox item the account reaches, as where each stands and
  * those changed since `?since=` whole; the task list, as its tasks and every agent of them and with no
  * task; and one task's record, pages, and calls, named by `?id=`, as the
- * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them; and one
+ * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them, and its
+ * comments, its plan's own threads or with `&page=` one page's, as their
+ * threads, entries, and files; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
  * statements its pages are read from; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
@@ -22,8 +24,8 @@
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
- * list asked with `&sync=` is answered what moved past that sync id alone,
- * held until something does. Each
+ * list and the inbox items asked with `&sync=` are answered what moved past
+ * that sync id alone, held until something does. Each
  * names the account it was started for under `?userId=`, and a session of
  * any other is answered as signed out. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
@@ -52,6 +54,7 @@ import {
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
+import { taskCommentsLiveAnswerSchema } from "../plan-comment-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
@@ -69,6 +72,9 @@ const pollField = EffectSchema.optionalKey(EffectSchema.Literal(LIVE_POLL.ON));
 /** Where the rows stood when the reader last polled (`liveDigestOf`); the poll is held until they move past it. */
 const afterField = EffectSchema.optionalKey(EffectSchema.String);
 
+/** The sync id the reader holds every row at, as text, past which it is answered what moved alone; empty where it holds none yet (`LIVE_POLL.SYNC`). */
+const syncField = EffectSchema.optionalKey(EffectSchema.String);
+
 /** The account the reader started following for, which the session must be (`LIVE_USER_QUERY`). */
 const userField = EffectSchema.optionalKey(EffectSchema.String);
 
@@ -79,11 +85,11 @@ const liveReadSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The task list as a live read follows it: the sync id the reader holds every row at, as text, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
+/** The task list as a live read follows it: the sync id the reader holds every row at (`syncField`). */
 const liveTasksSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
-  [LIVE_POLL.SYNC]: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.SYNC]: syncField,
   [LIVE_USER_QUERY]: userField,
 });
 
@@ -97,17 +103,27 @@ const liveAccountInboxSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text; none for every item. */
+/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text, none for every item; and the sync id it holds every item at, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
 const liveAccountInboxItemsSchema = EffectSchema.Struct({
   [ACCOUNT_INBOX_ITEMS.SINCE]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.SYNC]: syncField,
   [LIVE_USER_QUERY]: userField,
 });
 
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The task whose comments a live read follows, and the page whose threads it follows, its plan's own where it names none; each read as text, one that is no UUID answered as not found. */
+const liveTaskCommentsSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  page: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -192,6 +208,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
+  taskComments: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_COMMENTS }))
+    .input(liveTaskCommentsSchema)
+    .output(EffectSchema.flip(taskCommentsLiveAnswerSchema)),
   taskBrowserTabs: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
     .input(liveTaskSchema)

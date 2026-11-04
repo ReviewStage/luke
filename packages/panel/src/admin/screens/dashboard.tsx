@@ -4,14 +4,12 @@ import type {
   AdminOverviewAccount,
   AdminTrend,
 } from "@repo/features/admin-answer-wire";
-import { RETENTION_BASIS, type RetentionBasis } from "@repo/features/admin-overview-vocabulary";
+import { RETENTION_BASIS } from "@repo/features/admin-overview-vocabulary";
 import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCount, formatPercent } from "@repo/features/number-format";
 import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
-import { CHOICE_BAR_LOOK, ChoiceBar } from "@repo/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@repo/ui/accounts-sort";
-import { useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
   AccountsTable,
@@ -31,7 +29,7 @@ import {
 import { SignupsChart, SignupsChartSkeleton } from "../charts/signups-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
-import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes.js";
+import { ActivityNote, RetentionNote, retiredTitle, TopAccountsNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
@@ -41,12 +39,6 @@ const METRICS_ERROR = readFailedWords("the overview");
 
 /** What the page is called, in the sidebar and over the page alike. */
 const OVERVIEW_TITLE = "Overview";
-
-/** The retention grid's two bases, the meaningful one first and chosen until another is. */
-const RETENTION_OPTIONS = [
-  { value: RETENTION_BASIS.MEANINGFUL, label: "Meaningful action" },
-  { value: RETENTION_BASIS.HOSTED_CALL, label: "Any hosted call" },
-] as const;
 
 /**
  * How many accounts the most-active table's skeleton stands a row for, the
@@ -166,21 +158,18 @@ const HEADLINE_STATS: readonly StatSpec<AdminOverview["headline"]>[] = [
 
 /**
  * The page's sections under its toolbar, drawn from `metrics` once it is
- * read and as their skeletons until then. The retention basis is the page's
- * own choice, so its picker and its note stand live either way.
+ * read and as their skeletons until then. The live sections come first; the
+ * retention the retired hosted tier counted stands last, under a retired
+ * heading, since both grids ride every answer.
  */
 function DashboardSections({
   metrics,
   windowDays,
-  basis,
-  onBasisChange,
   onOpenAccount,
   onOpenDay,
 }: {
   metrics: AdminMetrics | undefined;
   windowDays: AdminMetricsWindow;
-  basis: RetentionBasis;
-  onBasisChange: (basis: RetentionBasis) => void;
   onOpenAccount: (id: string) => void;
   onOpenDay: (day: string) => void;
 }): React.JSX.Element {
@@ -223,25 +212,12 @@ function DashboardSections({
       </AdminSection>
 
       <AdminSection title="Retention · weekly cohorts">
-        <div>
-          <ChoiceBar
-            label="Retained by"
-            items={RETENTION_OPTIONS}
-            value={basis}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            onChange={onBasisChange}
-          />
-        </div>
         {metrics === undefined ? (
           <RetentionGridSkeleton />
         ) : (
-          <RetentionGrid
-            retention={
-              basis === RETENTION_BASIS.MEANINGFUL ? metrics.overview.retention : metrics.retention
-            }
-          />
+          <RetentionGrid retention={metrics.overview.retention} />
         )}
-        <RetentionNote basis={basis} />
+        <RetentionNote basis={RETENTION_BASIS.MEANINGFUL} />
       </AdminSection>
 
       <AdminSection title="Most active accounts">
@@ -267,6 +243,15 @@ function DashboardSections({
             generatedAt={metrics.generatedAt}
           />
         )}
+      </AdminSection>
+
+      <AdminSection title={retiredTitle("Retention by any hosted call")}>
+        {metrics === undefined ? (
+          <RetentionGridSkeleton />
+        ) : (
+          <RetentionGrid retention={metrics.retention} />
+        )}
+        <RetentionNote basis={RETENTION_BASIS.HOSTED_CALL} />
       </AdminSection>
     </>
   );
@@ -320,9 +305,6 @@ export function DashboardScreen({
   const { gate } = useAdminDoors();
   const { state, refreshing, reload, withdraw } = read;
   const signOut = () => void withdraw(onSignOut);
-  // The basis is the page's own choice, kept across refreshes and windows:
-  // both grids ride every answer, so flipping it reads nothing.
-  const [basis, setBasis] = useState<RetentionBasis>(RETENTION_BASIS.MEANINGFUL);
   const controls = (
     <>
       <AdminViewOptions
@@ -336,8 +318,6 @@ export function DashboardScreen({
 
   const sections = {
     windowDays,
-    basis,
-    onBasisChange: setBasis,
     onOpenAccount,
     onOpenDay,
   };

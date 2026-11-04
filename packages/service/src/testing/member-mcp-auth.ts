@@ -9,9 +9,9 @@
  * rows a deployment's seeder writes are seeded, and a test client linked to
  * the resource beside them. The key set the admission verifies against is
  * fetched from the auth service over HTTP, as on a deployment: here the
- * in-process handler, and nothing else answers. GitHub is reached by no
- * call here, no agent's session is, and the model catalog offers nothing.
- * Synthetic accounts.
+ * in-process handler, and nothing else answers. GitHub is the layer a test
+ * hands in, by default one nobody reaches; no agent's session is reached,
+ * and the model catalog offers nothing. Synthetic accounts.
  */
 
 import assert from "node:assert/strict";
@@ -26,8 +26,9 @@ import { openMigratedPglite, sqlClientOverPglite } from "@repo/database/testing"
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
 import { vi } from "vitest";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
@@ -48,6 +49,7 @@ import {
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { memberMcpApp, memberMcpAuth } from "../member-mcp/app.js";
 import {
@@ -181,20 +183,28 @@ const seedRows = Effect.gen(function* () {
   );
 });
 
+/** What a test stands the server up over: the transport its metadata documents are fetched through, and the GitHub its tools reach. */
+export interface MemberMcpStandingOptions {
+  readonly fetchClientMetadataResource?: ClientMetadataResourceFetch;
+  readonly github?: Layer.Layer<GitHubApp | HttpClient.HttpClient>;
+}
+
 /**
- * The server's group over a migrated PGlite and the auth service, as a
- * fetch a client is handed, with the rows seeded and the key set reachable.
- * The `fetch` spy it installs is restored by the test's `afterEach`.
+ * The server's group over a migrated PGlite, the auth service, the clock,
+ * and the GitHub given, as a fetch a client is handed, with the rows seeded
+ * and the key set reachable. The `fetch` spy it installs is restored by the
+ * test's `afterEach`.
  */
-export function memberMcpStanding(fetchClientMetadataResource?: ClientMetadataResourceFetch) {
+export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
   return Effect.gen(function* () {
     const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
       Effect.promise(() => opened.close()),
     );
-    const auth = memberMcpTestAuth(client, fetchClientMetadataResource);
+    const auth = memberMcpTestAuth(client, options.fetchClientMetadataResource);
     const services = Layer.mergeAll(
       Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
-      NO_GITHUB,
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      options.github ?? NO_GITHUB,
       modelCatalogOf([]),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
     );

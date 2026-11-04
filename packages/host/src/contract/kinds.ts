@@ -211,13 +211,16 @@ export const AGENT_INBOX_ACT_KIND = {
 
 /**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
- * read as its workspace keeps them, and generated for its head on our own
- * model key when the developer presses Generate, the generation answered
- * once it lands, which may take minutes; and Settings' choice of the Claude
- * model the member's Generate runs on, read and written.
+ * held followed as its workspace keeps them while the tab holds them, which
+ * reach the panel on app state (`LIVE_READ.PULL_REQUEST_CHAPTERS`), and read
+ * again as Try again asks; generated for its head on our own model key when
+ * the developer presses Generate, the generation answered once it lands,
+ * which may take minutes; and Settings' choice of the Claude model the
+ * member's Generate runs on, read and written.
  */
 export const CHAPTERS_ACT_KIND = {
-  CHAPTERS_READ: "chapters.read",
+  CHAPTERS_FOLLOW: "chapters.follow",
+  CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
@@ -689,7 +692,8 @@ export const PORT_ACT_USE = {
   BROWSER_LIVE_ATTACH: ACT_USE.WRITE,
   BROWSER_LIVE_DETACH: ACT_USE.WRITE,
 
-  CHAPTERS_READ: ACT_USE.READ,
+  CHAPTERS_FOLLOW: ACT_USE.READ,
+  CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
   CHAPTERS_MODEL_READ: ACT_USE.READ,
   CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,

@@ -360,29 +360,6 @@
   transform: translateX(-50%);
 }
 
-/* With the chat at the right (desktop.css), the panel's sheet stands first,
-   the gap after it, and its edge in that gap. */
-:where(:root):not([data-ui-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task[data-chat-side="right"]
-  > .side-panel:not([data-full-screen="true"]) {
-  margin-right: var(--sheet-gap);
-  margin-left: 0;
-  border-right: 0;
-}
-
-:where(:root):not([data-ui-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task[data-chat-side="right"]
-  > .side-panel
-  > .ui-resize-edge {
-  right: calc(-1 * var(--sheet-gap) / 2);
-  left: auto;
-  transform: translateX(50%);
-}
-
 /* The Inbox's list is parted from its item inside the sheet, under the row,
    rather than by an edge running up through the row on the frame. */
 :where(:root):not([data-ui-room="narrow"])
