@@ -241,8 +241,9 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
  * signed-in account's keys, and the workspaces' people, over whatever
  * document the window was handed, its experiments and the reads handed
  * before among it, and answers with how each is delivered again as it
- * moves, as the host tells it. The account is given an id where the document
- * names none, since the host holds its keys by it.
+ * moves, as the host tells it; what the bridge delivered before still
+ * reaches the window. The account is given an id where the document names
+ * none, since the host holds its keys by it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
@@ -253,7 +254,10 @@ export function handHostReads(first: {
   readonly members?: AppWorkspaceMembers;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
+  const earlier = fakeAppBridgeCalls().onAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  /** Everything delivered here, which what the bridge delivered before never takes back. */
+  let laid: AppStateDelivery["entries"] = {};
   let version = 1;
   let account = HELD_ACCOUNT_ID;
   fakeAppBridge({
@@ -284,10 +288,19 @@ export function handHostReads(first: {
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      // Note that what the bridge delivered before, a test's settings among it, still reaches the window, stamped as newer than all delivered here, with what was delivered here laid over it.
+      const off = earlier?.((delivery) => {
+        version += 1;
+        listener({ version, entries: { ...delivery.entries, ...laid } });
+      });
+      return () => {
+        listeners.delete(listener);
+        off?.();
+      };
     },
   });
   const deliver = (entries: AppStateDelivery["entries"]) => {
+    laid = { ...laid, ...entries };
     version += 1;
     for (const listener of [...listeners]) listener({ version, entries });
   };
