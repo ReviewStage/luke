@@ -20,7 +20,7 @@ ORIGIN="http://127.0.0.1:$PORT"
 DEMO_EMAIL="dean@example.com"
 TSX_BINS=(node_modules/.bin/tsx apps/web/node_modules/.bin/tsx)
 
-mkdir -p "$RUN/queue/in" "$RUN/queue/out" "$RUN/shots" "$RUN/home"
+mkdir -p "$RUN/queue/in" "$RUN/queue/running" "$RUN/queue/out" "$RUN/shots" "$RUN/home"
 RUN=$(CDPATH= cd -- "$RUN" && pwd)
 cd "$REPO"
 
@@ -93,11 +93,13 @@ const { Client } = require(process.argv[1]);
     exec node --import tsx scripts/local-server.ts --port "$PORT"
 ) >"$RUN/server.log" 2>&1 &
 server_pid=$!
+serving=""
 for _ in $(seq 1 240); do
-    curl --silent --max-time 5 --output /dev/null "$ORIGIN/api/auth/ok" && break
+    curl --silent --fail --max-time 5 --output /dev/null "$ORIGIN/api/auth/ok" && { serving=1; break; }
     kill -0 "$server_pid" 2>/dev/null || { echo "[stack] server died"; tail -40 "$RUN/server.log"; exit 1; }
     sleep 0.5
 done
+[[ -n $serving ]] || { echo "[stack] server never answered $ORIGIN/api/auth/ok"; tail -40 "$RUN/server.log"; exit 1; }
 echo "[stack] serving $ORIGIN"
 
 DATABASE_URL="$database_url" FIRST_DAY_ORIGIN="$ORIGIN" \

@@ -1,10 +1,12 @@
 // driver.cjs -- one persistent Chromium for a first-day run, driven through a file queue so every later command steers the same browser.
 //
-// Each `<run>/queue/in/<name>.js` is run once as the body of an async
-// function given `page`, `context`, `shot(name, options)`, `sql(text,
-// params)`, `origin`, and `setPage(page)`; what it returns, what it threw,
-// the page's address, and the console errors it raised are written to
-// `<run>/queue/out/<name>.json`. A `quit.js` stops the driver.
+// Each `<run>/queue/in/<name>.js` is moved to `queue/running/` and run once
+// as the body of an async function given `page`, `context`, `shot(name,
+// options)`, `sql(text, params)`, `origin`, and `setPage(page)`; what it
+// returns, what it threw, the page's address, and the console errors it raised
+// are written to `<run>/queue/out/<name>.json`, and its file leaves
+// `running/`. A step still running at `STEP_DEADLINE_MS` is answered as timed
+// out and the queue moves on. A `quit.js` stops the driver.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -13,10 +15,16 @@ const { Client } = require(process.argv[3]);
 
 const RUN = process.argv[2];
 const ORIGIN = process.env.FIRST_DAY_ORIGIN;
-const QUEUE = { IN: path.join(RUN, "queue", "in"), OUT: path.join(RUN, "queue", "out") };
+const QUEUE = {
+  IN: path.join(RUN, "queue", "in"),
+  RUNNING: path.join(RUN, "queue", "running"),
+  OUT: path.join(RUN, "queue", "out"),
+};
 const POLL_MS = 200;
 const STEP_TIMEOUT_MS = 8000;
 const NAVIGATION_TIMEOUT_MS = 60000;
+/** Matches `step.sh`'s default wait, so a caller that gave up is never answered later. */
+const STEP_DEADLINE_MS = 115000;
 const LOG_CHARS = 400;
 const AsyncFunction = (async () => {}).constructor;
 
@@ -37,10 +45,39 @@ function watchConsole(page, logs) {
   page.on("pageerror", (error) => logs.push(`pageerror: ${error.message}`.slice(0, LOG_CHARS)));
 }
 
+function answerText(out) {
+  try {
+    return JSON.stringify(out, null, 2);
+  } catch (error) {
+    const reason = `the step's result could not be written as JSON: ${error?.message ?? error}`;
+    return JSON.stringify({ name: out.name, error: reason, url: out.url, logs: out.logs }, null, 2);
+  }
+}
+
+// Note that a body past its deadline cannot be stopped, only left: it may
+// still act on the page, which the answer says so the caller looks first.
+function bounded(promise) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`the step ran past ${STEP_DEADLINE_MS} ms and was left running`)),
+      STEP_DEADLINE_MS,
+    );
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
 async function runStep(file, state) {
   const name = file.replace(/\.js$/, "");
-  const code = fs.readFileSync(path.join(QUEUE.IN, file), "utf8");
-  fs.unlinkSync(path.join(QUEUE.IN, file));
+  const running = path.join(QUEUE.RUNNING, file);
+  // Note that `step.sh` takes back a step it gave up on, which may land between the listing and this claim.
+  try {
+    fs.renameSync(path.join(QUEUE.IN, file), running);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  const code = fs.readFileSync(running, "utf8");
   state.logs.length = 0;
   const shot = async (shotName, options = {}) => {
     const target = path.join(RUN, "shots", `${shotName}.png`);
@@ -50,15 +87,18 @@ async function runStep(file, state) {
   const out = { name };
   try {
     const body = new AsyncFunction("page", "context", "shot", "sql", "origin", "setPage", code);
-    out.result = await body(state.page, state.context, shot, sql, ORIGIN, (page) => {
-      state.page = page;
-    });
+    out.result = await bounded(
+      body(state.page, state.context, shot, sql, ORIGIN, (page) => {
+        state.page = page;
+      }),
+    );
   } catch (error) {
     out.error = String(error?.stack ?? error).slice(0, 2000);
   }
   out.url = state.page.url();
   out.logs = [...state.logs];
-  fs.writeFileSync(path.join(QUEUE.OUT, `${name}.json`), JSON.stringify(out, null, 2));
+  fs.writeFileSync(path.join(QUEUE.OUT, `${name}.json`), answerText(out));
+  fs.unlinkSync(running);
 }
 
 async function main() {
@@ -75,10 +115,10 @@ async function main() {
       await route.abort().catch(() => {});
     }
   });
-  const state = { context, page: await context.newPage(), logs: [] };
-  state.page.setDefaultTimeout(STEP_TIMEOUT_MS);
+  context.setDefaultTimeout(STEP_TIMEOUT_MS);
   // Note that Vite compiles the panel on its first load, which takes far longer than a click.
-  state.page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
+  context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
+  const state = { context, page: await context.newPage(), logs: [] };
   watchConsole(state.page, state.logs);
   context.on("page", (page) => watchConsole(page, state.logs));
   console.log("[stack] ready");
