@@ -520,15 +520,6 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's host as Settings › Hosts reaches it (`this-mac-host.ts`): the
- * device its record names, read while Hosts is drawn. Answered by the host,
- * which keeps it.
- */
-export const THIS_MAC_HOST_ACT_KIND = {
-  THIS_MAC_HOST_READ: "thisMacHost.read",
-} as const;
-
-/**
  * The updater as Settings' row and the sidebar's foot reach it: a check
  * asked for, answered with where the updater then stands; the ready build
  * installed; the app moved to Applications, where an install needs it; and
@@ -663,7 +654,6 @@ export const PORT_ACT_KIND = {
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
-  ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
@@ -884,8 +874,6 @@ export const PORT_ACT_USE = {
   TERMINAL_RESUME: ACT_USE.WRITE,
   TERMINAL_ATTACH: ACT_USE.WRITE,
   TERMINAL_DETACH: ACT_USE.WRITE,
-
-  THIS_MAC_HOST_READ: ACT_USE.READ,
 
   UPDATE_CHECK: ACT_USE.WRITE,
   UPDATE_INSTALL: ACT_USE.WRITE,

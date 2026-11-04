@@ -338,7 +338,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [attempt, setAttempt] = useState(0);
   // The ids of the account's hosts as Add hosts opened, while its dialog stands.
   const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
-  const thisMac = useThisMac(signedIn);
+  const thisMac = useThisMac();
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
   useEffect(() => closeConnect, [closeConnect]);

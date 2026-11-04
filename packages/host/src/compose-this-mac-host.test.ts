@@ -1,5 +1,5 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's host kept as the account's experiments say: a Mac with no record enrolled under a new id, its record written and the install script run; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; and a record that is not the account's left alone.
+ * compose-this-mac-host.test.ts -- This Mac's host kept as the account's experiments say: a Mac with no record enrolled under a new id, its record written and the install script run; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; a record that is not the account's left alone; and This Mac told the windows as its record moves.
  *
  * The composer runs over a real state folder of its own, a fake service
  * that enrolls the Mac, lists the account's hosts, and serves the install
@@ -15,7 +15,7 @@ import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@repo/gateway";
+import { GATEWAY_EVENT } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
@@ -23,6 +23,7 @@ import { Duration, Effect, Layer, Option, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
+import type { AppThisMacHost, AppThisMacHosts } from "./app-state.js";
 import { composeThisMacHost } from "./compose-this-mac-host.js";
 import { reporterLayer, ThisMacHost } from "./effect/seams.js";
 import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
@@ -38,8 +39,6 @@ const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
 const SCRIPT = "#!/bin/sh\necho install\n";
 /** Where the fake service takes an enroll, so its responder reads the version the enroll carried. */
 const ENROLL_URL = `${SERVICE}/enroll`;
-/** The panel's own operator, which asks the host's methods. */
-const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 
 const BRING_YOUR_OWN_HOST_ON = {
@@ -81,7 +80,7 @@ const nudged = (time: Duration.Input) =>
  * This Mac's host composed over a state folder of its own, with what each
  * fake was asked, in the order it was asked: the service's enrolls, by the
  * device id and the version they carried, and the installer's and launchd's
- * acts.
+ * acts; and This Mac as the windows were last told it, under the account.
  */
 const thisMac = (stateRoot: string, options: MacOptions = {}) =>
   Effect.gen(function* () {
@@ -92,6 +91,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
       options.experiments ?? BRING_YOUR_OWN_HOST_ON;
     const listed = new Set(options.listed ?? []);
     let version: string | null = null;
+    let told: AppThisMacHosts | undefined;
     const client = {
       enrollOwn: (deviceId: string) =>
         HttpClient.get(ENROLL_URL).pipe(
@@ -108,6 +108,10 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
       kernel: {
         hostedServiceBaseUrl: SERVICE,
         createId: () => MINTED_ID,
+        emit: (kind, payload) => {
+          // SAFETY: what the composer tells on this event is the windows' This Mac, built as `AppThisMacHosts`.
+          if (kind === GATEWAY_EVENT.THIS_MAC_HOST_CHANGED) told = payload as AppThisMacHosts;
+        },
         runMode: { sendsNetwork: true },
       },
       account: { capabilitiesActive: () => true },
@@ -156,12 +160,8 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
       ),
     );
     yield* composer.lifetime;
-    const read = Effect.gen(function* () {
-      const handler = composer.methods[GATEWAY_METHOD.THIS_MAC_HOST_READ];
-      assert.ok(handler !== undefined);
-      return yield* Effect.orDie(handler({}, CONTEXT));
-    });
-    return { asked, enrolled, read };
+    const held = (): AppThisMacHost | undefined => told?.[USER_ID]?.rows;
+    return { asked, enrolled, held };
   });
 
 /** The state folder with the record given written, as the install's host would have left it. */
@@ -191,7 +191,35 @@ it.effect(
         const fileSystem = yield* FileSystem.FileSystem;
         const mode = (yield* fileSystem.stat(join(stateRoot, "device.json"))).mode & 0o777;
         assert.equal(mode, 0o600, "the record is readable by its owner alone");
-        assert.deepEqual(yield* mac.read, { deviceId: MINTED_ID, machineId: MACHINE_ID });
+        assert.deepEqual(mac.held(), { deviceId: MINTED_ID, machineId: MACHINE_ID });
+      }).pipe(Effect.provide(FILES)),
+    ),
+);
+
+it.effect(
+  "a record the install's own host writes reaches the windows on the loop's next pass, with no window asking",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
+        const mac = yield* thisMac(stateRoot, { experiments: {} });
+        yield* until(() => mac.held() !== undefined);
+        assert.deepEqual(mac.held(), { machineId: MACHINE_ID });
+
+        // As the host daemon writes it once it pairs, apart from this app.
+        yield* writeHostDevice(stateRoot, {
+          deviceId: KEPT_ID,
+          deviceSecret: OLD_SECRET,
+          serviceOrigin: SERVICE,
+        });
+        yield* until(() => mac.held()?.deviceId !== undefined);
+
+        assert.deepEqual(mac.held(), { deviceId: KEPT_ID, machineId: MACHINE_ID });
+        assert.equal(
+          mac.asked.length,
+          0,
+          "nothing of the host is kept with Bring your own host off",
+        );
       }).pipe(Effect.provide(FILES)),
     ),
 );

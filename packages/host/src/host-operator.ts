@@ -383,11 +383,11 @@ import type {
   AppPlanComments,
   AppPlanDocuments,
   AppProviderKeys,
+  AppThisMacHosts,
   AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
-import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
   type MacCommandAsk,
@@ -424,8 +424,8 @@ export interface HostOperator {
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
-  /** The device This Mac's host's record names; none where the host could not answer. */
-  thisMacHost(): Effect.Effect<ThisMacHostRead | undefined>;
+  /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
+  onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -1221,10 +1221,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
       ),
-    thisMacHost: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.THIS_MAC_HOST_READ),
-        answerOf(thisMacHostReadSchema, undefined),
+    onThisMacHostChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.THIS_MAC_HOST_CHANGED,
+        // Note that This Mac is the host's own, handed over in this process, so it is passed on as built, as the held beats are.
+        (payload) => (isRecord(payload) ? answered<AppThisMacHosts>(payload) : undefined),
+        listener,
       ),
     answerMacCommand: (answer) =>
       Effect.map(
