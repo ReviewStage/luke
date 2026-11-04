@@ -109,3 +109,16 @@ it.effect(
       assert.equal(yield* Fiber.join(write), "renamed");
     }).pipe(Effect.scoped),
 );
+
+it.effect("an answer read at an older sync id never replaces a row taken at a newer one", () =>
+  Effect.gen(function* () {
+    const pool = yield* entityPool();
+    const feed = yield* standing(pool);
+    const inbox = yield* standing(pool);
+
+    yield* feed.rows.answer([{ id: "1", name: "Triage issues", runs: 2 }], { at: 20n });
+    yield* inbox.rows.answer([{ id: "1", name: "Triage", runs: 1 }], { at: 10n });
+
+    assert.deepEqual(inbox.rows.rows(), [{ id: "1", name: "Triage issues", runs: 2 }]);
+  }).pipe(Effect.scoped),
+);

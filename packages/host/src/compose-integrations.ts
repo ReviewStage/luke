@@ -1,4 +1,4 @@
-import type { HostedIntegrationsClient } from "@repo/features";
+import type { HostedIntegrationsClient, HostedMcpClientsClient } from "@repo/features";
 import type { IntegrationLiveRow } from "@repo/features/integration-live";
 import {
   INTEGRATION_CALL_FAILURE,
@@ -16,6 +16,12 @@ import {
 } from "@repo/features/integration-wire";
 import type { LIVE_READ } from "@repo/features/live-wire";
 import {
+  MCP_CLIENTS_CALL_FAILURE,
+  type McpClientsView,
+  mcpClientRevokeParamsSchema,
+} from "@repo/features/mcp-client-view";
+import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
+import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -24,18 +30,23 @@ import {
 } from "@repo/gateway";
 import { Effect, FiberHandle, FiberMap, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { type AppIntegrations, type AppIntegrationTools, NO_KEYS_HELD } from "./app-state.js";
+import {
+  type AppIntegrations,
+  type AppIntegrationTools,
+  type AppMcpClients,
+  NO_KEYS_HELD,
+} from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
-import { type HeldFetch, heldFetch } from "./held-fetch.js";
+import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type HeldIntegrations, heldIntegrations } from "./integrations-follow.js";
 import type { RunMode } from "./run-mode.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
- * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, held, a sign-in begun or canceled, a connection ended, an account named.
+ * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, held, a sign-in begun or canceled, a connection ended, an account named; and the outside MCP clients the account allowed, held and revoked.
  *
  * Where the integrations stand is held for the windows that draw one
  * (`integrations-follow.ts`), under the account signed in, followed on the
@@ -57,6 +68,13 @@ import type { WindowFocus } from "./window-focus.js";
  * in the browser, and on Try again, and told as `INTEGRATION_TOOLS_CHANGED`
  * events. Behind a closed account gate, or on a run that sends nothing,
  * every ask answers unanswered.
+ *
+ * The outside MCP clients the account allowed are fetched the same way,
+ * under the account signed in, while Settings › Integrations holds them,
+ * and told as `MCP_CLIENTS_CHANGED` events. A revoke that lands lays the
+ * clients it answered as they then stand before it answers, so the
+ * window's list already stands without the client; one that did not finish
+ * answers unanswered and lays nothing, so the client stands with its Revoke.
  */
 
 /** The service's side of the integrations, as this concern asks it. */
@@ -65,22 +83,26 @@ export type IntegrationsClient = Pick<
   "statusesLive" | "settle" | "github" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
 >;
 
+/** The service's side of the outside MCP clients, as this concern asks it. */
+export type McpClientsClient = Pick<HostedMcpClientsClient, "list" | "revoke">;
+
 export interface IntegrationsDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
-  /** The account signed in now, by its id, which the held integrations are followed under; none where nobody is. */
+  /** The account signed in now, by its id, which the held integrations and the outside MCP clients are held under; none where nobody is. */
   accountId: () => string | undefined;
   client: IntegrationsClient;
+  mcpClients: McpClientsClient;
   /** Hands an address to the operating system; answers whether it took it. */
   openExternal: (url: string) => Effect.Effect<boolean>;
-  /** The windows coming forward, on which every server's tools a window holds, and GitHub's standing, are asked again. */
+  /** The windows coming forward, on which every server's tools a window holds, GitHub's standing, and the outside MCP clients where a window holds them, are asked again. */
   focus: WindowFocus;
 }
 
 export interface IntegrationsComposer extends Composer {
-  /** Every server's tools a window holds followed anew, and the windows' hold on where the integrations stand taken anew under the account signed in, as the account gate opening asks. */
+  /** Every server's tools a window holds followed anew, and the windows' holds on where the integrations stand and on the outside MCP clients taken anew under the account signed in, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
-  /** Every server's tools and the held integrations let go, as a sign-out lets them go; the windows' holds stand. */
+  /** Every server's tools, the held integrations, and the outside MCP clients let go, as a sign-out lets them go; the windows' holds stand. */
   readonly reset: Effect.Effect<void>;
   /** GitHub's standing asked again, as a GitHub disconnect that answered asks; done once each ask has landed. */
   readonly githubMoved: Effect.Effect<void>;
@@ -88,12 +110,20 @@ export interface IntegrationsComposer extends Composer {
 
 const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
+
 /** A call of the service asked behind the gate, or unanswered where the gate stands closed. */
 type Asked = <Answer>(
   call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
 ) => Effect.Effect<Answer | typeof UNANSWERED>;
 
-/** What the composer holds for the windows: where the integrations stand and each server's tools, and the windows' holds on them. */
+/** The outside MCP clients the host holds for the windows, by the account, and the windows' one hold on them. */
+interface HeldMcpClients {
+  readonly read: HeldFetch<string, McpClientsAnswer>;
+  readonly hold: AccountHeld;
+}
+
+/** What the composer holds for the windows: where the integrations stand, each server's tools, and the outside MCP clients, and the windows' holds on them. */
 interface Held {
   readonly integrations: HeldIntegrations;
   /** The windows' hold on where the integrations stand, one fiber standing until let go, under the account signed in as it was taken. */
@@ -102,6 +132,7 @@ interface Held {
   readonly tools: HeldFetch<string, IntegrationToolsAnswer>;
   /** The windows' hold on each server's tools, one fiber standing until let go. */
   readonly toolHolds: FiberMap.FiberMap<string>;
+  readonly clients: HeldMcpClients;
 }
 
 /** The account a server's name stands for, as the service is asked it: its provider, and the account where the name is not the provider's own; none for a name this build cannot read. */
@@ -123,7 +154,7 @@ export function composeIntegrations(
 ): Effect.Effect<IntegrationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const { kernel, account, client, focus } = dependencies;
+    const { kernel, account, client, mcpClients, accountId, focus } = dependencies;
     const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
     /** The service asked behind the gate, over the host's own HTTP client. */
     const asked: Asked = (call) =>
@@ -156,11 +187,26 @@ export function composeIntegrations(
       tell: (held: AppIntegrationTools) =>
         kernel.emit(GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED, carried(held)),
     });
+    // Note that the clients are asked for the account signed in now alone, since the service answers that account's.
+    const clients = yield* heldFetch<typeof LIVE_READ.MCP_CLIENTS, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      fetch: (userId) =>
+        userId !== accountId()
+          ? Effect.succeed(Option.none())
+          : Effect.map(asked(mcpClients.list()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some(answer),
+            ),
+      tell: (held: AppMcpClients) => kernel.emit(GATEWAY_EVENT.MCP_CLIENTS_CHANGED, carried(held)),
+    });
     return composed(dependencies, asked, {
       integrations,
       integrationsHold: yield* FiberHandle.make<void>(),
       tools,
       toolHolds: yield* FiberMap.make<string>(),
+      clients: { read: clients, hold: yield* accountHeld(clients, accountId) },
     });
   });
 }
@@ -169,9 +215,9 @@ export function composeIntegrations(
 function composed(
   dependencies: IntegrationsDependencies,
   asked: Asked,
-  { integrations, integrationsHold, tools, toolHolds }: Held,
+  { integrations, integrationsHold, tools, toolHolds, clients }: Held,
 ): IntegrationsComposer {
-  const { client, openExternal } = dependencies;
+  const { client, mcpClients, accountId, openExternal } = dependencies;
 
   type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
 
@@ -235,7 +281,34 @@ function composed(
         : { opened: true, connection: answer.connection };
     });
 
+  /** One client revoked, and the clients it answered laid for the account signed in, so the windows' list stands without it as the revoke answers. */
+  const revoke = (clientId: string): Effect.Effect<McpClientsView> =>
+    Effect.gen(function* () {
+      const answer = yield* asked(mcpClients.revoke(clientId));
+      if ("failure" in answer) return MCP_CLIENTS_UNANSWERED;
+      const userId = accountId();
+      if (userId !== undefined) yield* clients.read.answered(userId, answer);
+      return answer;
+    });
+
   const methods: HostMethodTable = {
+    // The outside MCP clients are held for the windows while Settings › Integrations shows them, under the account signed in, and told only on the app state (`MCP_CLIENTS_CHANGED`); a revoke's own answer is laid there too.
+    [GATEWAY_METHOD.MCP_CLIENTS_FOLLOW]: () => Effect.as(clients.hold.follow, {}),
+    [GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW]: () => Effect.as(clients.hold.unfollow, {}),
+    [GATEWAY_METHOD.MCP_CLIENTS_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = accountId();
+        return Effect.as(userId === undefined ? Effect.void : clients.read.retry(userId), {});
+      }),
+    [GATEWAY_METHOD.MCP_CLIENTS_REVOKE]: (params) =>
+      Effect.gen(function* () {
+        const { clientId } = yield* readParams(
+          mcpClientRevokeParamsSchema,
+          params,
+          "a revoke names one client",
+        );
+        return carried<McpClientsView>(yield* revoke(clientId));
+      }),
     // Where the integrations stand is held for the windows while any draws one, under the account signed in, and told only on the app state (`INTEGRATIONS_CHANGED`).
     [GATEWAY_METHOD.INTEGRATIONS_FOLLOW]: () =>
       Effect.gen(function* () {
@@ -333,9 +406,14 @@ function composed(
     // Note that where the integrations stand is held anew under whoever signed in, in place of the hold before, rather than followed again under the account it was held for.
     open: Effect.gen(function* () {
       yield* tools.open;
+      yield* clients.hold.open;
       if (holding) yield* holdIntegrations;
     }),
-    reset: Effect.andThen(tools.end, integrations.end),
+    reset: Effect.gen(function* () {
+      yield* tools.end;
+      yield* clients.read.end;
+      yield* integrations.end;
+    }),
     githubMoved: integrations.githubMoved,
   };
 }

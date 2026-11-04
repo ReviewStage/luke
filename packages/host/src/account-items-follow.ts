@@ -1,5 +1,5 @@
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import type { InboxItem } from "@repo/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   type AccountInboxItemsLiveAnswer,
@@ -10,45 +10,45 @@ import {
   inboxOfLiveRows,
 } from "@repo/features/live-wire";
 import type { EntityPool, HeldRows } from "@repo/sync";
-import { Effect, Ref } from "effect";
+import { Clock, Effect } from "effect";
 import type { AppHostRead, AppInboxItems } from "./app-state.js";
 import { type AccountWideReads, INBOX_ITEM, type InboxChange } from "./inbox-collections.js";
-import { confirmWrite, followTakingRows, restarting, type TxWait } from "./live-follow.js";
+import {
+  confirmWrite,
+  followTakingRows,
+  restarting,
+  type SyncStanding,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
- * account-items-follow.ts -- every inbox item the account reaches, whole, followed over the service's one held poll for the signed-in session and told whole as it moves.
+ * account-items-follow.ts -- every inbox item the account reaches, whole, followed by sync id over the service's one held poll for the signed-in session and told whole as it moves.
  *
  * The host follows the account's items read (`/api/live/inbox-items`,
  * `live-follow.ts`) for as long as the session's account reads stand
- * (`live-collection.ts`'s `accountReads`). Each answer carries where
- * every item stands (`stamps`), which is the whole set, and the items
- * changed since the instant the poll named (`since`) whole; the poll is
- * held on the stamps alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`). The follow
- * keeps every item it was sent, with the plan it is on, or its agent where
- * that has no task, and asks each poll past the latest change it holds.
- *
- * Some moves change a stamp without resending its item. A read mark is
- * patched from the stamp. Any other (who it
- * waits on, a withdrawn message) asks once again past no digest, from that
- * item's change, so it is resent. An item no stamp names any more is gone,
- * and dropped.
+ * (`live-collection.ts`'s `accountReads`), by sync id (`LIVE_POLL.SYNC`):
+ * its first answer, and any while it is too far behind, is every item
+ * whole, where each stands (`stamps`), its row, and every message and file
+ * its thread draws; and each poll after is held until something moves past
+ * the id the last answer named, and answered only the items that moved,
+ * each whole, with the ids of those that stand no longer for the account
+ * (`gone`). The follow keeps every item it holds with the plan it is on, or
+ * its agent where that has no task. An item settled longer ago than the
+ * read's window leaves it by the clock, which no answer says, so the follow
+ * drops it itself; and a sync id that stalls is asked around whole
+ * (`live-follow.ts`'s `SYNC_STALL`).
  *
  * The items stand in the sync engine's pool (`inbox-collections.ts`'s
- * `INBOX_ITEM`), each answer taken as its poll answers, and are told by
- * plan and agent after each answer and each write drawn over them.
- * Only a holder an item on it moved is ordered again, every other's list
- * told as the very one told before, so a change costs the holders it
- * moved rather than the feed's whole. A read the service refused, or a follow that stopped, is read
- * again after `LIVE_RESTART`, keeping what it told; one refused before it
- * ever answered is told as failed.
+ * `INBOX_ITEM`): each answer upserts only the items it carries, at the sync
+ * id it was read at, so an older copy never replaces a newer row another
+ * read took, and holds the rest by id. They are told by plan and agent
+ * after each answer and each write drawn over them. Only a holder an item
+ * on it moved is ordered again, every other's list told as the very one
+ * told before, so a change costs the holders it moved rather than the
+ * feed's whole. A read the service refused, or a follow that stopped, is
+ * read again after `LIVE_RESTART`, whole, keeping what it told; one refused
+ * before it ever answered is told as failed.
  */
-
-/**
- * What of a stamp moves only with its item resent, so a stamp moving on any
- * of them with no resend asks for the item again: who it waits on and how
- * many messages its thread holds move with no change to the item's own.
- */
-const RESENT_ON = ["revision", "version", "status", "updatedAt", "waitsOn", "messages"] as const;
 
 /** A read the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
@@ -56,10 +56,9 @@ type SealFailure = { readonly failure: string; readonly gone?: boolean };
 /** The kind of holder an item is on: a plan, or an agent with no task. */
 type HolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
 
-/** One item as the follow holds it: whole, the stamp it was last sent with, its read mark kept current, and the plan or agent it is on. */
+/** One item as the follow last took it, and the plan or agent it is on. */
 interface HeldItem {
   readonly item: InboxItem;
-  readonly sent: InboxItemStamp;
   readonly kind: HolderKind;
   readonly holder: string;
 }
@@ -67,19 +66,11 @@ interface HeldItem {
 /** Every item held, by its id. */
 type Held = ReadonlyMap<string, HeldItem>;
 
-/** What the next poll asks: the instant it is sent every item changed since, none for every item, and whether it asks past no digest, so an item whose stamp moved alone is sent. */
-interface Asking {
-  readonly since: number | undefined;
-  readonly again: boolean;
-}
-
 export interface AccountItemsDependencies {
-  /** The account's items read for the account named, those changed since `since` whole, its rows inline where `poll`, held past `after` where it names one; signed out, or a failure where the service answered none. */
+  /** The account's items read for the account named, past the sync id named, whole where it is empty or none; signed out, or a failure where the service answered none. */
   readonly seal: (
     userId: string,
-    since: number | undefined,
-    poll: boolean,
-    after?: string,
+    sync: string | undefined,
   ) => Effect.Effect<AccountInboxItemsLiveAnswer | SealFailure>;
   /** The sync engine's pool, which the items stand in while they are followed. */
   readonly pool: EntityPool;
@@ -94,61 +85,48 @@ function holderOf(stamp: InboxItemStamp): Pick<HeldItem, "kind" | "holder"> {
     : { kind: INBOX_SCOPE_KIND.PLAN, holder: stamp.planId };
 }
 
+/** A sync id as the host compares it, from the decimal an answer spells; none where it spells none. */
+function syncIdOf(standing: SyncStanding | undefined): bigint | undefined {
+  return standing !== undefined && /^\d+$/.test(standing.next) ? BigInt(standing.next) : undefined;
+}
+
 /**
- * The items held after an answer, the stamps that moved with no item sent,
- * and the items now on another holder than they were: each item the answer
- * sent taken whole, kept as it was held where it is sent unchanged; each
- * other held item's read mark patched from its stamp; and
- * every item no stamp names dropped.
+ * The items held after an answer, the items it carried that stand, and the
+ * items now on another holder than they were. A whole answer is every item
+ * there is; one past a sync id carries only the items that moved, each
+ * whole, and names those that stand no longer, which leave, as does every
+ * item settled before the read's window, by the clock.
  */
 function heldAfter(
   held: Held,
   rows: AccountInboxItemsLiveRows,
+  standing: SyncStanding | undefined,
+  now: number,
 ): {
   readonly held: Held;
-  readonly unsent: readonly InboxItemStamp[];
+  readonly sent: readonly InboxItem[];
   readonly placed: readonly string[];
 } {
-  const sent = new Map(inboxOfLiveRows(rows).map((item) => [item.id, item]));
-  const next = new Map<string, HeldItem>();
-  const unsent: InboxItemStamp[] = [];
+  const carried = new Map(inboxOfLiveRows(rows).map((item) => [item.id, item]));
+  const next = new Map<string, HeldItem>(standing?.past === undefined ? [] : held);
   const placed: string[] = [];
   for (const stamp of rows.stamps) {
+    const item = carried.get(stamp.id);
+    if (item === undefined) continue;
     const on = holderOf(stamp);
     const before = held.get(stamp.id);
     if (before !== undefined && (before.kind !== on.kind || before.holder !== on.holder)) {
       placed.push(stamp.id);
     }
-    const item = sent.get(stamp.id);
-    if (item !== undefined) {
-      // Note that an item sent again as it stood stays the object held, so its holder's list keeps its identity where nothing moved.
-      const same = before !== undefined && JSON.stringify(before.item) === JSON.stringify(item);
-      next.set(stamp.id, { item: same ? before.item : item, sent: stamp, ...on });
-      continue;
-    }
-    if (before === undefined) {
-      unsent.push(stamp);
-      continue;
-    }
-    if (RESENT_ON.some((field) => before.sent[field] !== stamp[field])) unsent.push(stamp);
-    const patched =
-      before.sent.unread === stamp.unread
-        ? before
-        : {
-            item: { ...before.item, unread: stamp.unread },
-            sent: { ...before.sent, unread: stamp.unread },
-          };
-    next.set(stamp.id, { item: patched.item, sent: patched.sent, ...on });
+    next.set(stamp.id, { item, ...on });
   }
-  return { held: next, unsent, placed };
-}
-
-/** The instant the next poll is sent every item changed since: the latest change held, or earlier, the change of each stamp `again` asks for; none while nothing is held. */
-function sinceOf(held: Held, again: readonly InboxItemStamp[]): number | undefined {
-  let since: number | undefined;
-  for (const { item } of held.values()) since = Math.max(since ?? item.updatedAt, item.updatedAt);
-  for (const stamp of again) since = Math.min(since ?? stamp.updatedAt, stamp.updatedAt);
-  return since;
+  for (const id of standing?.gone ?? []) next.delete(id);
+  const settledSince = now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS;
+  for (const [id, { item }] of next) {
+    if (item.status !== INBOX_STATUS.OPEN && item.updatedAt < settledSince) next.delete(id);
+  }
+  const sent = [...carried.values()].filter((item) => next.has(item.id));
+  return { held: next, sent, placed };
 }
 
 /** No item on any holder, as the feed is told before it first answers. */
@@ -219,19 +197,16 @@ export function followAccountItems(
   let answered = false;
   const attempt = Effect.scoped(
     Effect.gen(function* () {
-      const first = yield* dependencies.seal(userId, undefined, false);
+      const first = yield* dependencies.seal(userId, "");
       if ("failure" in first) {
         if (!answered) yield* tell({ failed: true });
         return true;
       }
-      const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
       let wait: TxWait | undefined;
-      /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
+      /** Every item as the follow last took it, with its holder. */
       let held: Held | undefined;
       /** The items as last drawn, a standing write's among them, by the holder each is on. */
       let told = NO_ITEMS;
-      /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
-      let askedFor: string | undefined;
       /** Tells the items as last drawn, once the read first answered. */
       const toldNow = Effect.suspend(() => {
         if (held === undefined) return Effect.void;
@@ -254,35 +229,25 @@ export function followAccountItems(
         },
       });
       yield* dependencies.accountWide.stand(() => wait);
-      // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
-      const landed = (decoded: AccountInboxItemsLiveRows) =>
+      const landed = (decoded: AccountInboxItemsLiveRows, standing?: SyncStanding) =>
         Effect.gen(function* () {
           const was = held ?? new Map<string, HeldItem>();
-          const after = heldAfter(was, decoded);
+          const after = heldAfter(was, decoded, standing, yield* Clock.currentTimeMillis);
           held = after.held;
-          const moved = yield* items.answer([...after.held.values()].map((kept) => kept.item));
-          told = inboxItemsPatched(told, [...moved, ...after.placed], was, after.held, items.row);
-          const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
-          const again = unsent !== undefined && unsent !== askedFor;
-          askedFor = unsent;
-          yield* Ref.set(asking, {
-            since: sinceOf(after.held, again ? after.unsent : []),
-            again,
+          const at = syncIdOf(standing);
+          const moved = yield* items.answer(after.sent, {
+            held: [...after.held.keys()],
+            ...(at === undefined ? undefined : { at }),
           });
+          told = inboxItemsPatched(told, [...moved, ...after.placed], was, after.held, items.row);
           yield* toldNow;
         });
       yield* followTakingRows(
         {
-          poll: (after) =>
-            Effect.flatMap(
-              Ref.getAndUpdate(asking, (asked) => ({ ...asked, again: false })),
-              ({ since, again }) =>
-                dependencies.seal(userId, since, true, again ? undefined : after),
-            ),
+          poll: (_after, _cursor, sync) => dependencies.seal(userId, sync),
           onTxWait: (handed) => {
             wait = handed;
           },
-          heldOn: ACCOUNT_INBOX_ITEMS.HELD_ON,
         },
         first,
         accountInboxItemsLiveRowsSchema,

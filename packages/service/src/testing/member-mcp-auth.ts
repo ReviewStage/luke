@@ -113,7 +113,9 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
 /** The protocol revisions the server serves, as the SDK's client is told to speak each. */
 export const REVISION = { MODERN: "2026-07-28", LEGACY: "2025-11-25" } as const;
 
-const decodeTokens = Schema.decodeUnknownSync(Schema.Struct({ access_token: Schema.String }));
+const decodeTokens = Schema.decodeUnknownSync(
+  Schema.Struct({ access_token: Schema.String, refresh_token: Schema.optionalKey(Schema.String) }),
+);
 const decodeConsentAnswer = Schema.decodeUnknownSync(
   Schema.Struct({ redirect: Schema.Boolean, url: Schema.String }),
 );
@@ -251,6 +253,30 @@ export async function signUp(auth: MemberMcpTestAuth): Promise<{ userId: string;
   return { userId: response.user.id, cookie };
 }
 
+/** What a client registers by RFC 7591 as Cursor and its kind do: public, PKCE, a loopback redirect, the scopes given. */
+export function registration(scope: readonly string[]) {
+  return {
+    client_name: "A client registered dynamically",
+    redirect_uris: [MEMBER_MCP_TEST.LOOPBACK],
+    application_type: "native",
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    scope: scope.join(" "),
+  };
+}
+
+/** One registration as a client posts it, answered as the provider answers it. */
+export async function register(auth: MemberMcpTestAuth, body: object): Promise<Response> {
+  return auth.handler(
+    new Request(`${MEMBER_MCP_TEST.ORIGIN}${AUTH_BASE_PATH}/oauth2/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 /** What a token is minted for: its client, the scopes asked, and the resource it names, or none for the desktop's opaque one. */
 export interface Grant {
   readonly clientId: string;
@@ -316,6 +342,11 @@ export async function exchangeCode(
   grant: Grant,
   landed: URL,
 ): Promise<string> {
+  return (await exchangeTokens(auth, grant, landed)).access_token;
+}
+
+/** The client's exchange of the code it landed with, under its verifier, for its tokens: the access token, and a refresh token where it asked `offline_access`. */
+export async function exchangeTokens(auth: MemberMcpTestAuth, grant: Grant, landed: URL) {
   assert.equal(`${landed.origin}${landed.pathname}`, MEMBER_MCP_TEST.LOOPBACK, landed.href);
   assert.ok(landed.searchParams.has("code"), `${grant.clientId} ${grant.scope}: ${landed.search}`);
   const exchanged = await auth.handler(
@@ -333,7 +364,7 @@ export async function exchangeCode(
     }),
   );
   assert.equal(exchanged.status, HOSTED_HTTP_STATUS.OK, await exchanged.clone().text());
-  return decodeTokens(await exchanged.json()).access_token;
+  return decodeTokens(await exchanged.json());
 }
 
 /** An access token minted by the auth service as a trusted client's sign-in mints one: the signed-in browser authorizes the client straight to its redirect, which exchanges the code. */

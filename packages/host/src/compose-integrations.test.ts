@@ -12,6 +12,8 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { MCP_CLIENTS_CALL_FAILURE } from "@repo/features/mcp-client-view";
+import type { McpClient } from "@repo/features/mcp-client-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -23,7 +25,11 @@ import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppIntegrations } from "./app-state.js";
-import { composeIntegrations, type IntegrationsClient } from "./compose-integrations.js";
+import {
+  composeIntegrations,
+  type IntegrationsClient,
+  type McpClientsClient,
+} from "./compose-integrations.js";
 import { INTEGRATION_SETTLE_EVERY } from "./integrations-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 import { windowFocus } from "./window-focus.js";
@@ -64,9 +70,25 @@ interface ServiceScript {
   connectRefused?: boolean;
   /** What a read of a server's tools answers; Linear's tools where none is given. */
   tools?: IntegrationToolsView;
+  /** The outside MCP clients the account allowed, as the service holds them. */
+  clients?: McpClient[];
+  /** Whether a revoke fails before it finishes, as one whose session lapsed does. */
+  revokeFails?: boolean;
 }
 
-/** The service as a script over one account's connection and its live rows, and what it was asked about. */
+/** The member MCP server's address, as the service answers it. */
+const SERVER_URL = "https://app.test/api/mcp";
+
+/** An outside MCP client a member allowed, as the service lists it. */
+const CLAUDE: McpClient = {
+  clientId: "client-claude",
+  name: "Claude",
+  redirectUris: ["https://claude.test/cb"],
+  allowedAt: 1_000,
+  lastRefreshedAt: null,
+};
+
+/** The service as a script over one account's connection, its live rows, and its outside MCP clients, and what it was asked about. */
 function fakeService(script: ServiceScript) {
   const opened: string[] = [];
   const asked: IntegrationProvider[] = [];
@@ -117,7 +139,17 @@ function fakeService(script: ServiceScript) {
         };
       }),
   };
-  return { client, opened, asked, live, settles: () => settles };
+  const mcpClients: McpClientsClient = {
+    list: () =>
+      Effect.sync(() => ({ serverUrl: SERVER_URL, clients: [...(script.clients ?? [])] })),
+    revoke: (clientId) =>
+      Effect.sync(() => {
+        if (script.revokeFails) return { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED };
+        script.clients = (script.clients ?? []).filter((each) => each.clientId !== clientId);
+        return { serverUrl: SERVER_URL, clients: [...script.clients] };
+      }),
+  };
+  return { client, mcpClients, opened, asked, live, settles: () => settles };
 }
 
 function subject(
@@ -130,6 +162,8 @@ function subject(
     // Every telling of the servers' tools, and of where the integrations stand, the host holds for the windows, whole, in order.
     const told: WireValue[] = [];
     const integrations: AppIntegrations[] = [];
+    // Every telling of the outside MCP clients the host holds for the windows, whole, in order.
+    const clients: WireValue[] = [];
     const composer = yield* composeIntegrations({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
@@ -138,11 +172,13 @@ function subject(
           // SAFETY: the host tells its own slice as built, in this process.
           if (kind === GATEWAY_EVENT.INTEGRATIONS_CHANGED)
             integrations.push(payload as AppIntegrations);
+          if (kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED) clients.push(payload);
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: () => USER_ID,
       client: service.client,
+      mcpClients: service.mcpClients,
       focus,
       openExternal: (url) =>
         Effect.sync(() => {
@@ -155,7 +191,7 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { ...service, call, told, integrations, focus };
+    return { ...service, call, told, integrations, clients, focus };
   });
 }
 
@@ -278,5 +314,34 @@ it.effect(
       });
       assert.deepEqual(listed(), [], "the answer lands with the account gone from the read");
       yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+    }),
+);
+
+it.effect(
+  "a revoke that lands lays the held clients it answered before it answers, and one that did not finish answers so and leaves the client held",
+  () =>
+    Effect.gen(function* () {
+      const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED, clients: [CLAUDE] };
+      const { call, clients } = yield* subject(script);
+      yield* call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW);
+      yield* settled;
+      const held = (listed: readonly McpClient[]) => ({
+        "user-dana": { rows: { serverUrl: SERVER_URL, clients: listed } },
+      });
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+
+      script.revokeFails = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
+        { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED },
+      );
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+
+      script.revokeFails = false;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
+        { serverUrl: SERVER_URL, clients: [] },
+      );
+      assert.deepEqual(clients.at(-1), held([]));
     }),
 );

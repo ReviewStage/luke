@@ -121,13 +121,15 @@ export interface PoolRead<Row, Change = unknown> {
 /** The rows one read holds of a kind, for as long as it stands on it. */
 export interface HeldRows<Row extends object, Change = unknown> {
   /**
-   * Takes the rows the read answered, whole, in one commit: each upserted,
-   * the keys the read holds now theirs, and any key no read holds any longer
-   * gone, answering the keys whose row moved for the read or that it took up
-   * or let go. Every other read holding a row that moved is drawn again; the
-   * read draws itself.
+   * Takes the rows the read answered, in one commit: each upserted, the keys
+   * the read holds now theirs, or those `held` names where the read answers
+   * only what moved, and any key no read holds any longer gone; answering
+   * the keys whose row moved for the read or that it took up or let go.
+   * Every other read holding a row that moved is drawn again; the read draws
+   * itself. A row answered `at` a sync id never replaces one taken at a
+   * newer id, as from a read whose answer was computed before another's.
    */
-  readonly answer: (rows: readonly Row[]) => Effect.Effect<readonly string[]>;
+  readonly answer: (rows: readonly Row[], answered?: Answered) => Effect.Effect<readonly string[]>;
   /**
    * Takes a row the service answered made in the read's place, where the
    * read can confirm no write yet: held from now as if the read had answered
@@ -145,6 +147,12 @@ export interface HeldRows<Row extends object, Change = unknown> {
   readonly pending: () => readonly string[];
   /** Every change standing over the kind, oldest first, which a read beside the pool draws over its own rows. */
   readonly standing: () => readonly Change[];
+}
+
+/** How an answer stands: every key the read holds now, where its rows are only what moved, and the sync id it was read at, where it names one. */
+export interface Answered {
+  readonly held?: readonly string[];
+  readonly at?: bigint;
 }
 
 /** What the service answered of a write it took: the caller's answer, and the transaction it committed in. */
@@ -223,6 +231,8 @@ interface KindRows<Row extends object, Change> {
   standing: readonly Standing<Change>[];
   /** Each key's newest write, which the next write to it is sent after and stands down after. */
   readonly lastWrites: Map<string, Turn>;
+  /** The sync id each key's row was taken at, where an answer named one. */
+  readonly takenAt: Map<string, bigint>;
 }
 
 /** The row `key` names as the reads show it: the synced one with every write standing on it drawn over it, in order; none where none shows. */
@@ -360,7 +370,11 @@ function stood<Row extends object, Change>(
     Effect.sync(() => {
       rows.reads.delete(holding);
       const next = new Map(rows.synced.held());
-      for (const key of holding.order) if (!heldByAny(rows.reads, key)) next.delete(key);
+      for (const key of holding.order) {
+        if (heldByAny(rows.reads, key)) continue;
+        next.delete(key);
+        rows.takenAt.delete(key);
+      }
       rows.synced.take(next);
     });
   return Effect.map(
@@ -378,17 +392,28 @@ function stood<Row extends object, Change>(
       release,
     ),
     (holding): HeldRows<Row, Change> => ({
-      answer: (answered) =>
+      answer: (answered, { held, at } = {}) =>
         Effect.suspend(() => {
           const keyed = new Map(answered.map((row) => [rows.kind.key(row), row]));
+          const keys = new Set(held ?? keyed.keys());
           const was = holding.held;
-          holding.order = [...keyed.keys()];
-          holding.held = new Set(keyed.keys());
-          const next = new Map([...rows.synced.held(), ...keyed]);
-          for (const key of was) if (!heldByAny(rows.reads, key)) next.delete(key);
+          holding.order = [...keys];
+          holding.held = keys;
+          const next = new Map(rows.synced.held());
+          for (const [key, row] of keyed) {
+            const taken = rows.takenAt.get(key);
+            if (at !== undefined && taken !== undefined && taken > at) continue;
+            next.set(key, row);
+            if (at !== undefined) rows.takenAt.set(key, at);
+          }
+          for (const key of was) {
+            if (heldByAny(rows.reads, key)) continue;
+            next.delete(key);
+            rows.takenAt.delete(key);
+          }
           const placed = [
-            ...[...keyed.keys()].filter((key) => !was.has(key)),
-            ...[...was].filter((key) => !keyed.has(key)),
+            ...[...keys].filter((key) => !was.has(key)),
+            ...[...was].filter((key) => !keys.has(key)),
           ];
           return Effect.map(takenAndDrawn(rows, next, holding), (written) => [
             ...new Set([...written, ...placed]),
@@ -433,8 +458,10 @@ function takenInPlace<Row extends object, Change>(
       for (const key of keys) {
         if (!holding.held.has(key) && !holding.adopted.has(key)) continue;
         const drawn = rows.kind.drawn(taken, next.get(key));
-        if (drawn === ROW_GONE) next.delete(key);
-        else if (drawn !== undefined) next.set(key, drawn);
+        if (drawn === ROW_GONE) {
+          next.delete(key);
+          rows.takenAt.delete(key);
+        } else if (drawn !== undefined) next.set(key, drawn);
         if (holding.held.has(key) || !next.has(key)) continue;
         holding.order = [...holding.order, key];
         holding.held = new Set([...holding.held, key]);
@@ -555,6 +582,7 @@ export function entityPool(): Effect.Effect<EntityPool, never, Scope.Scope> {
             reads: new Set(),
             standing: [],
             lastWrites: new Map(),
+            takenAt: new Map(),
           };
           kinds.set(kind, fresh);
           return fresh;

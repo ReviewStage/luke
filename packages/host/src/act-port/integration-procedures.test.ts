@@ -59,6 +59,7 @@ const REFUSAL = {
   [INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT]:
     "Could not disconnect that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME]: "Could not rename that account on this system.",
+  [INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE]: "Could not revoke that app on this system.",
 } as const;
 
 type Kind = keyof typeof REFUSAL;
@@ -91,6 +92,11 @@ const ACTS: readonly {
   {
     kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME,
     call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME](RENAME),
+  },
+  {
+    kind: INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE,
+    call: (client) =>
+      client[INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE]({ clientId: "client-claude" }),
   },
 ];
 
@@ -141,6 +147,14 @@ function windowPort(actor: ActSender, trusted = true) {
       Effect.sync(() => {
         asked.push(`rename ${provider} ${connection}`);
         return { account: { provider, connection, label, status: INTEGRATION_STATUS.CONNECTED } };
+      }),
+    mcpClientsFollow: () => Effect.sync(() => void asked.push("follow clients")),
+    mcpClientsUnfollow: () => Effect.sync(() => void asked.push("unfollow clients")),
+    mcpClientsRetry: () => Effect.sync(() => void asked.push("retry clients")),
+    mcpClientsRevoke: ({ clientId }) =>
+      Effect.sync(() => {
+        asked.push(`revoke ${clientId}`);
+        return { serverUrl: "https://app.test/api/mcp", clients: [] };
       }),
   };
   const client = windowClient(integrationProcedures({ host }), actor, trusted);
