@@ -60,24 +60,33 @@ it.layer(getTestDB())("a sandbox session's firewall record", (it) => {
       }),
   );
 
-  it.effect("one account's session row is neither read nor replaced through another's", () =>
-    Effect.gen(function* () {
-      const owner = yield* openOwner;
-      const other = yield* openOwner;
-      const theirs = { userId: other.userId, sandboxSessionId: owner.sandboxSessionId };
-      const standing = nextState("sealed-owner");
-      yield* replaceStandingFirewall(owner, undefined, standing, AT);
+  it.effect(
+    "one account's session row is neither read nor replaced through another's, whose writes keep to a row of its own",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openOwner;
+        const other = yield* openOwner;
+        const theirs = { userId: other.userId, sandboxSessionId: owner.sandboxSessionId };
+        const standing = nextState("sealed-owner");
+        yield* replaceStandingFirewall(owner, undefined, standing, AT);
 
-      assert.equal(yield* readStandingFirewall(theirs), undefined);
-      const landed = [
-        yield* replaceStandingFirewall(theirs, undefined, nextState("sealed-other"), LATER),
-        yield* replaceStandingFirewall(theirs, standing.version, nextState("sealed-other"), LATER),
-        yield* replaceStandingFirewall(theirs, standing.version, undefined, LATER),
-      ];
+        assert.equal(yield* readStandingFirewall(theirs), undefined);
+        const landed = [
+          yield* replaceStandingFirewall(
+            theirs,
+            standing.version,
+            nextState("sealed-other"),
+            LATER,
+          ),
+          yield* replaceStandingFirewall(theirs, standing.version, undefined, LATER),
+        ];
+        const own = nextState("sealed-other-own");
+        const ownLanded = yield* replaceStandingFirewall(theirs, undefined, own, LATER);
 
-      assert.deepEqual(landed, [false, false, false]);
-      assert.deepEqual(yield* readStandingFirewall(owner), standing);
-    }),
+        assert.deepEqual([...landed, ownLanded], [false, false, true]);
+        assert.deepEqual(yield* readStandingFirewall(owner), standing);
+        assert.deepEqual(yield* readStandingFirewall(theirs), own);
+      }),
   );
 
   it.effect(

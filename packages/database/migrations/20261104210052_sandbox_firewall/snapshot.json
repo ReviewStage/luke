@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ef14b36b-89ba-4222-b71a-b54ccd44d7f3",
+  "id": "bf42aab1-5feb-4293-acae-3d06b37b44c7",
   "prevIds": [
     "d6d3e635-ec58-488b-8a72-1009b34699db"
   ],
@@ -13491,6 +13491,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "sandbox_session_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sandbox_firewall_session",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sandbox_firewall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "updated_at",
           "isExpression": false,
           "asc": true,
@@ -17241,6 +17262,17 @@
     },
     {
       "columns": [
+        "user_id",
+        "sandbox_session_id"
+      ],
+      "nameExplicit": false,
+      "name": "sandbox_firewall_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "sandbox_firewall"
+    },
+    {
+      "columns": [
         "organization_id",
         "channel_id",
         "thread_ts"
@@ -17898,16 +17930,6 @@
       "name": "runner_line_pkey",
       "schema": "public",
       "table": "runner_line",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "sandbox_session_id"
-      ],
-      "nameExplicit": false,
-      "name": "sandbox_firewall_pkey",
-      "schema": "public",
-      "table": "sandbox_firewall",
       "entityType": "pks"
     },
     {

@@ -9,9 +9,10 @@
  * none was written meanwhile, and answers whether it landed, so two writers
  * at once never lose either's change. A write that leaves nothing standing
  * deletes the row, so a withdrawn entry's sealed value is gone with it. A
- * read and a write are scoped to the account whose agent the session is; a
- * clear, made by the service ahead of a stop, and the sweep's drop read
- * nothing and are the deployment's. The row holds the entries only as the
+ * row is the account's own, keyed by the account whose agent the session
+ * is and the session, so a read and a write reach that account's row
+ * alone; a clear, made by the service ahead of a stop, and the sweep's drop
+ * read nothing and are the deployment's. The row holds the entries only as the
  * service sealed them (`provider-key-seal.ts`'s `sealFirewallEntries`).
  */
 
@@ -65,7 +66,7 @@ const insertStanding = SqlSchema.findAll({
       db
         .insert(sandboxFirewall)
         .values(row)
-        .onConflictDoNothing({ target: sandboxFirewall.sandboxSessionId })
+        .onConflictDoNothing({ target: [sandboxFirewall.userId, sandboxFirewall.sandboxSessionId] })
         .returning({ version: sandboxFirewall.version }),
     ),
 });
@@ -132,8 +133,8 @@ export function readStandingFirewall(
  * The account's session's row moved from the version read to what stands
  * next, answering whether it landed: a row written where none stood, one
  * replaced where it still stands at `expected`, or deleted where nothing
- * stands next. Note that a row another account holds under the session is
- * never read or replaced, so a write to it never lands.
+ * stands next. Another account's row under the session is never read or
+ * replaced.
  */
 export function replaceStandingFirewall(
   owner: FirewallOwner,
@@ -156,7 +157,7 @@ export function replaceStandingFirewall(
   return Effect.map(landed, wrote);
 }
 
-/** The session's row deleted, whoever's it is, as the session's firewall is cleared ahead of a stop. */
+/** The session's rows deleted, whoever's they are, as the session's firewall is cleared ahead of a stop. */
 export function clearStandingFirewall(sandboxSessionId: string): FirewallEffect<void> {
   return deleteSession({ sandboxSessionId });
 }

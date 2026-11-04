@@ -43,7 +43,9 @@ import { Redacted, Result, Schema } from "effect";
  * runs (`sandbox_firewall`), with purposes of their own
  * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
  * beside them, so the seal opens for no other session's row. The rewrap
- * does not visit those rows either, which last no longer than their session.
+ * does not visit those rows either: the sweep drops each a day and an hour
+ * after it was last written, so a version stays in the ring that long past
+ * the rewrap that moved every other row off it.
  *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every

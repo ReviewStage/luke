@@ -183,7 +183,7 @@ export function runnerSandboxApi() {
     return `${prefix}_${next}`;
   };
   /** A sandbox session's id, unique beyond this fake as Vercel's are, since a firewall's record in the suite's database is kept by it. */
-  const sessionIds = randomUUID().slice(0, 8);
+  const sessionIds = randomUUID();
   const mintSession = () => id(`sbs_${sessionIds}`);
   const listed = (sandbox: FakeSandbox) => ({
     name: sandbox.name,

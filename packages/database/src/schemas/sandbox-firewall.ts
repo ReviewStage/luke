@@ -1,4 +1,4 @@
-import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -8,7 +8,7 @@ import { user } from "./auth.js";
  * Vercel's network-policy write replaces a session's whole policy, and the
  * policy reads back with every header value redacted, so the service keeps
  * here what each part of the session set at its firewall: one row per
- * sandbox session, under the account whose agent the session is, with the
+ * sandbox session and the account whose agent the session is, with the
  * standing entries as the service sealed them under the deployment's key
  * ring, bound to that account and session (`../models/sandbox-firewall-store.ts`,
  * `@repo/service`'s `agents/sandbox-firewall.ts`). `version` is minted
@@ -22,7 +22,7 @@ export const sandboxFirewall = pgTable(
   "sandbox_firewall",
   {
     /** The Vercel Sandbox session the policy stands on. */
-    sandboxSessionId: text("sandbox_session_id").primaryKey(),
+    sandboxSessionId: text("sandbox_session_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -34,6 +34,10 @@ export const sandboxFirewall = pgTable(
     updatedAt: timestamptz("updated_at").notNull(),
   },
   (table) => [
+    // An account's own row for a session; its account leads, so the account's deletion finds its rows by it.
+    primaryKey({ columns: [table.userId, table.sandboxSessionId] }),
+    // A clear ahead of a stop names the session alone.
+    index("sandbox_firewall_session").on(table.sandboxSessionId),
     // The sweep drops the rows of sessions long gone by age.
     index("sandbox_firewall_updated").on(table.updatedAt),
   ],

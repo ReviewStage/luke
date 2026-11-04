@@ -228,8 +228,8 @@ interface HeaderMatch {
 
 /**
  * One rule on a host: the headers the firewall sets on the way out, on every
- * request, or on those whose path matches, or that carry every header
- * named at its value.
+ * request, or on those that match every condition its `match` names: the
+ * path, and each header named at its value.
  */
 export interface NetworkRule {
   readonly match?: {

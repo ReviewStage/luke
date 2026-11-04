@@ -23,9 +23,10 @@
  * is done, and where the row moved on, sends what stands now itself, until
  * what it sent is what stands: whichever send lands last, its writer finds
  * the row as it left it, or sends the latest. A clear, made ahead of a
- * stop, deletes the row and sends the open internet, reading nothing, so a
- * write racing it leaves the stopping session at worst with less than its
- * row, never more.
+ * stop, deletes the session's rows and sends the open internet, reading
+ * nothing. Note that a write racing a clear lands as a write after it, the
+ * row and the policy both its own, as a renewal racing a stop landed before
+ * this record; whether to write is the caller's to read, as it was.
  *
  * A placeholder swap is how a secret leaves the sandbox: the process that
  * needs it is handed a random placeholder minted for its launch

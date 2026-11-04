@@ -243,10 +243,11 @@ export function runInSandbox(
  * A run of git's against GitHub with the token at the firewall, for the
  * repository's own git endpoint alone (`cloneEntry`), in a slot of its own,
  * and the refusal for a git that failed. The token stands for the run
- * alone: its slot is withdrawn as the run ends, however it ended, and in a
- * finalizer, so an interrupted run leaves no credential of its own standing
- * either and no later command runs under it, while what else stands at the
- * firewall stays.
+ * alone: its slot is withdrawn as the run ends, however it ended, an
+ * interrupted run's as it is interrupted, so no later command runs under
+ * it, while what else stands at the firewall stays. A withdrawal that
+ * failed refuses the checkout, because the session's record would
+ * otherwise carry the read token into every later write.
  */
 const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential")(function* (
   sandbox: RepositorySandbox,
@@ -265,13 +266,17 @@ const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential
       orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
-  yield* firewall
+  const withdrawn = firewall.withdraw(FIREWALL_SLOT.GITHUB_CLONE).pipe(Effect.mapError(refused));
+  const ended = yield* firewall
     .set(FIREWALL_SLOT.GITHUB_CLONE, cloneEntry(fullName, token, access))
-    .pipe(Effect.mapError(refused));
-  const ran = yield* Effect.ensuring(
-    timed,
-    Effect.ignore(firewall.withdraw(FIREWALL_SLOT.GITHUB_CLONE)),
-  );
+    .pipe(
+      Effect.mapError(refused),
+      Effect.andThen(timed),
+      Effect.onInterrupt(() => Effect.ignore(withdrawn)),
+      Effect.exit,
+    );
+  yield* withdrawn;
+  const ran = yield* ended;
   if (ran.exitCode !== 0) return yield* gitRefusal(ran);
 });
 

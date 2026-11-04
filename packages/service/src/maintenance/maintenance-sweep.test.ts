@@ -71,6 +71,7 @@ interface Recorded {
   repositorySnapshots: number[];
   hostPairings: number[];
   syncLog: number[];
+  staleFirewalls: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -93,6 +94,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     repositorySnapshots: [],
     hostPairings: [],
     syncLog: [],
+    staleFirewalls: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -189,7 +191,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.syncLog.push(now);
         return 5;
       }),
-    purgeStaleFirewalls: () => Effect.succeed(0),
+    purgeStaleFirewalls: (now) =>
+      Effect.sync(() => {
+        recorded.staleFirewalls.push(now);
+        return 7;
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -228,6 +234,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
+      staleFirewalls: [],
     });
   }),
 );
@@ -261,6 +268,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
+      staleFirewalls: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -281,6 +289,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
+      staleFirewalls: [],
     });
   }),
 );
@@ -304,6 +313,7 @@ it.effect(
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
       assert.equal(answer.body.syncLog, 5);
+      assert.equal(answer.body.staleFirewalls, 7);
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -325,6 +335,7 @@ it.effect(
         repositorySnapshots: [instant],
         hostPairings: [instant],
         syncLog: [instant],
+        staleFirewalls: [instant],
       });
     }),
 );
@@ -359,6 +370,7 @@ it.effect(
       assert.equal(recorded.repositorySnapshots.length, 1);
       assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
+      assert.equal(recorded.staleFirewalls.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );
