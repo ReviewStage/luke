@@ -438,14 +438,15 @@ it.layer(getTestDB())("our Slack route", (it) => {
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
       return Effect.gen(function* () {
         const { owner, item } = yield* openAskedMember(bot);
-        const posted = calls.find((call) => call.method === "chat.postMessage");
+        // The DM saying the thread's title, then the ask as a reply under it.
+        const [title, posted] = calls.filter((call) => call.method === "chat.postMessage");
         const [actions] = JSON.parse(posted?.args.blocks ?? "[]").filter(
           (block: { type: string }) => block.type === "actions",
         );
         const [month] = actions.elements.filter(
           (element: { text: { text: string } }) => element.text.text === "A month",
         );
-        const slackUserId = posted?.args.channel ?? "";
+        const slackUserId = title?.args.channel ?? "";
         const askStatus = Effect.map(
           readInboxItem(owner, item.id),
           (stored) => Option.getOrThrow(stored).item.thread?.find((m) => m.ask)?.ask?.status,
@@ -493,7 +494,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
           options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
           multiple: true,
         });
-        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const [title, posted] = calls.filter((call) => call.method === "chat.postMessage");
         const elements = JSON.parse(posted?.args.blocks ?? "[]").flatMap(
           (block: { type: string; elements?: unknown[] }) =>
             block.type === "actions" ? (block.elements ?? []) : [],
@@ -511,7 +512,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const kept = keptAfterResponse();
         yield* answer(
           bot,
-          press(submit, posted?.args.channel ?? "", CONNECT_TOKEN, {
+          press(submit, title?.args.channel ?? "", CONNECT_TOKEN, {
             picks: {
               [checkboxes.action_id]: { type: "checkboxes", selected_options: ticked },
             },
@@ -543,7 +544,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
           type: INBOX_ASK.DO,
           steps: ["Open the repository's settings.", "Run this:\n```\npnpm install\n```"],
         });
-        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const [title, posted] = calls.filter((call) => call.method === "chat.postMessage");
         const blocks = JSON.parse(posted?.args.blocks ?? "[]");
         const done = blocks
           .flatMap((block: { type: string; elements?: unknown[] }) =>
@@ -552,13 +553,13 @@ it.layer(getTestDB())("our Slack route", (it) => {
           .find((element: { text?: { text: string } }) => element.text?.text === "Mark done");
 
         const kept = keptAfterResponse();
-        yield* answer(bot, press(done, posted?.args.channel ?? "", CONNECT_TOKEN), kept.layer);
+        yield* answer(bot, press(done, title?.args.channel ?? "", CONNECT_TOKEN), kept.layer);
         yield* kept.run;
         yield* kept.run;
 
         const words =
           "Pick how long an invitation stays open.\n\n1. Open the repository's settings.\n\n2. Run this:\n   ```\n   pnpm install\n   ```";
-        assert.equal(blocks[1]?.text, words);
+        assert.equal(blocks[0]?.text, words);
         const stored = Option.getOrThrow(yield* readInboxItem(owner, item.id));
         const asked = stored.item.thread?.find((message) => message.ask);
         assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
@@ -568,7 +569,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
           "How long should an invitation last? · You marked it done",
         );
         // The settled DM keeps the steps it asked.
-        assert.equal(JSON.parse(updated[0]?.args.blocks ?? "[]")[1]?.text, words);
+        assert.equal(JSON.parse(updated[0]?.args.blocks ?? "[]")[0]?.text, words);
       });
     },
   );

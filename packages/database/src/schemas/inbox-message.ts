@@ -64,9 +64,10 @@ export const inboxMessage = pgTable(
      * waited on (`packages/service/src/slack/thread-dms.ts`), by the
      * conversation it is in and its timestamp, which is what Slack rewrites
      * it by once the message's ask is answered, withdrawn, or replaced, and
-     * then marked settled; the member it went to, and for a reply in an
-     * earlier DM's Slack thread, that DM's timestamp; null where none was
-     * written.
+     * then marked settled; the member it went to, and the timestamp of the
+     * DM saying the thread's title whose Slack thread it is a reply in,
+     * absent on a DM written before the title stood alone; null where none
+     * was written.
      */
     slackDm: jsonb("slack_dm").$type<{
       readonly channel: string;
