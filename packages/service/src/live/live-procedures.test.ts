@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
+import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
@@ -46,6 +47,8 @@ import {
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
+import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
@@ -281,6 +284,8 @@ const askTask = (options: {
   readonly forUser?: string;
   readonly taskId?: string;
   readonly path?: string;
+  /** The page of the task a comments read names; the plan's own threads where left out. */
+  readonly page?: string;
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
@@ -302,6 +307,7 @@ const askTask = (options: {
       options.forUser ?? options.bearer,
     );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
+    if (options.page !== undefined) url.searchParams.set("page", options.page);
     if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
     const response = yield* hostedAnswer(
@@ -479,6 +485,49 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             taskId: started.id,
             path,
           }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's comments, its plan's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            dana,
+            taskPageOwner(started.id),
+            { title: "Invite funnel", html: "<p>12 sent</p>" },
+            { kind: PAGE_SHOWER.APP },
+          ),
+        );
+        yield* startPlanCommentThread(
+          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: dana },
+          started.id,
+          {
+            clientKey: randomUUID(),
+            page: { id: shown.id, version: 1 },
+            words: "Add a chart.",
+          },
+        );
+        const path = "/api/live/task-comments";
+        const threadsOf = (body: unknown) => {
+          const answer = Schema.decodeUnknownSync(taskCommentsLiveAnswerSchema)(body);
+          assert.equal(answer.url, LIVE_POLL_URL);
+          return answer.queries.threads.rows;
+        };
+
+        const onPage = yield* askTask({ bearer: dana, taskId: started.id, path, page: shown.id });
+        assert.equal(onPage.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(threadsOf(onPage.body)?.length, 1);
+        const onPlan = yield* askTask({ bearer: dana, taskId: started.id, path });
+        assert.deepEqual(threadsOf(onPlan.body), [], "the page's thread is not the plan's");
+        assert.deepEqual(
+          yield* askTask({ bearer: eli, taskId: started.id, path, page: shown.id }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
       }),
