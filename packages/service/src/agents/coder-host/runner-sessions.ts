@@ -2063,8 +2063,10 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     // Note that credentials that would not come off are said and passed over, because the launch that
     // hands the lines on sets its own in their slots, and an END that failed would hand nothing on.
     yield* runnerSlotsWithdrawn(machine, running, ending.target.userId).pipe(
-      Effect.catch(() =>
-        Effect.logWarning("an ended runner's credentials stayed on a place left up for its lines"),
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `an ended runner's credentials stayed on a place left up for its lines: ${keptFailureWords(failureWords(failure))}`,
+        ),
       ),
     );
     return RUNNER_ENDED.LINES_WAITING;
