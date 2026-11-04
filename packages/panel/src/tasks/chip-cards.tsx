@@ -14,7 +14,7 @@ import {
 } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHeldRows, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-place.js";
 import { PageCard } from "./page-card.js";
@@ -86,19 +86,20 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
 
 /**
  * The heading a section's anchor names in a plan the window holds the
- * words of: the plan's page's, or the open plan's; none where it holds
- * neither, no heading spells the anchor, or no plan is asked for.
+ * words of: the plan's page's, or one the host holds for a window that
+ * opened it (`LIVE_READ.PLAN_DOCUMENT`); none where it holds neither, no
+ * heading spells the anchor, or no plan is asked for.
  */
 export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
-  const opened = useAppSlice(APP_SLICE.TASKS)?.document.task;
+  const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, taskId);
   const text =
     taskId === undefined
       ? undefined
       : holderTaskId(page?.holder) === taskId
         ? page?.text()
-        : opened?.id === taskId
-          ? opened.document.body
+        : held !== undefined && "task" in held
+          ? held.task.document.body
           : undefined;
   if (text === undefined) return undefined;
   const headings = planSections(text).map((section) => section.heading);

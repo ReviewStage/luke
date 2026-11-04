@@ -420,6 +420,15 @@ export const TASKS_ACT_KIND = {
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**
+   * One task's plan held followed while the window holds the stream open
+   * for the task it has open, and a while after among those let go lately:
+   * what it holds reaches the panel on app state
+   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   */
+  TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
+  /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
+  TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
+  /**
    * One plan's newest page of history, followed while the window holds the
    * stream open for its version history: each time a save lands, over Neon
    * Realtime, never on the document.
@@ -826,6 +835,8 @@ export const PORT_ACT_USE = {
   TASKS_RESTORE: ACT_USE.WRITE,
   TASKS_PAGE_SOURCE: ACT_USE.FETCH,
   TASKS_PAGES_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_RETRY: ACT_USE.READ,
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,

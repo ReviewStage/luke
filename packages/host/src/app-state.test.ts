@@ -5,7 +5,6 @@ import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
-import { TASKS_READ } from "@repo/features/tasks-view";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { WireValue } from "@repo/wire";
@@ -14,6 +13,7 @@ import {
   type AppHolderInboxes,
   type AppInboxItems,
   type AppPages,
+  type AppPlanDocuments,
   type AppStateDelivery,
   type AppStateSnapshot,
   appStateDelivery,
@@ -174,11 +174,17 @@ describe("a delivery that crosses the wire", () => {
     ...invites,
     document: { body: "# Billing alerts fire at ninety percent", assumptions: [] },
   };
-  const planRead = { status: TASKS_READ.READY, task: openPlan };
   const taskList = (tasks: readonly TaskSummary[]): AppStateSnapshot => ({
     ...document,
-    tasks: { ...document.tasks, tasks, activeTaskId: openPlan.id, document: planRead },
+    tasks: { ...document.tasks, tasks, activeTaskId: openPlan.id },
   });
+  const plans = (held: AppPlanDocuments): AppStateSnapshot => ({
+    ...document,
+    [LIVE_READ.PLAN_DOCUMENT]: held,
+  });
+  const quietPlan = { rows: { task: openPlan } };
+  /** A plan's document holding `body` alone. */
+  const draft = (body: string): Task["document"] => ({ body, assumptions: [] });
   const quietList = [quietItem];
   const quietInbox = { rows: quietList };
   const quietPages = { rows: [quietPage] };
@@ -230,7 +236,7 @@ describe("a delivery that crosses the wire", () => {
       quiet: [alpha.title],
     },
     {
-      name: "the task list, one task renamed and one come at the head, the rest and the open plan's document kept",
+      name: "the task list, one task renamed and one come at the head, and the rest kept",
       sent: taskList([invites, billing]),
       next: taskList([
         summary("delta", "Quarterly review"),
@@ -240,9 +246,22 @@ describe("a delivery that crosses the wire", () => {
       kept: (state: AppStateSnapshot) => [
         state.tasks.tasks.find((row) => row.id === billing.id),
         state.tasks.tasks.find((row) => row.id === invites.id)?.agents,
-        state.tasks.document,
       ],
-      quiet: [billing.name, openPlan.document.body],
+      quiet: [billing.name],
+    },
+    {
+      name: "the held plans, a task's saved, one let go, and one kept",
+      sent: plans({
+        quiet: quietPlan,
+        moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Draft") } } },
+        gone: { failed: true },
+      }),
+      next: plans({
+        quiet: quietPlan,
+        moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Final") } } },
+      }),
+      kept: (state: AppStateSnapshot) => [state[LIVE_READ.PLAN_DOCUMENT].quiet],
+      quiet: [openPlan.document.body],
     },
   ])(
     "crosses a change to $name as what moved alone, what it kept the very one the window held",

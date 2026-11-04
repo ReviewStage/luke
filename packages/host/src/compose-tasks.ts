@@ -53,14 +53,12 @@ import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
-  type TaskCallFailure,
   type TasksBlockAnswer,
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksChangeRelationAnswer,
   type TasksChangeRelationParams,
   type TasksCommentAnswer,
-  type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksFindAnswer,
@@ -98,6 +96,7 @@ import {
   type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   taskBrowserTabsFollowSchema,
+  taskDocumentFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksBlockParamsSchema,
@@ -172,7 +171,6 @@ import {
   MutableHashMap,
   Option,
   Queue,
-  Schedule,
   Schema,
   Scope,
   Semaphore,
@@ -195,6 +193,7 @@ import {
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
 import {
   confirmWrite,
+  FOLLOW_BACKOFF,
   LIVE_GONE,
   type LiveBroken,
   type SealedRead,
@@ -206,11 +205,11 @@ import {
   commentSubjectOf,
   planCommentReads,
 } from "./plan-comment-reads.js";
+import { planDocumentReads } from "./plan-document-reads.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
-import { type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import type { WindowFocus } from "./window-focus.js";
 import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
 import {
@@ -221,12 +220,13 @@ import {
 } from "./workspaces-follow.js";
 
 /**
- * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document.
+ * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and the plans the windows opened.
  *
- * Nothing here writes a document but a restore the developer asks for: the
- * task's coding agents are its writers, on the service. The open task is
- * read when a task opens, when one starts, and on the list's Try again, and
- * never on a clock. The list itself is followed over Neon Realtime from the
+ * Nothing here writes a plan but a restore or an edit the developer asks
+ * for: the task's coding agents are its writers, on the service. Each plan
+ * a window opened is held for it per task (`plan-document-reads.ts`), read
+ * as it is first held and again as its record's plan mark moves, and never
+ * on a clock. The list itself is followed over Neon Realtime from the
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
  * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
@@ -567,48 +567,16 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
 }
 
 /**
- * How long a live follow waits before sealing again after a seal the
- * service did not answer, or a follow that stopped: the first wait, doubling
- * on each that fails again, up to the longest.
- */
-const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
-
-const FOLLOW_BACKOFF = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
-  Schedule.modifyDelay(({ duration }) =>
-    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
-  ),
-);
-
-/**
  * How long after a resync another is let pass, so a wake that lands as
  * several events at once (resume, then unlock) seals the list again once.
  */
 const RESYNC_SETTLE = Duration.seconds(10);
 
-/** Why a live follow is not sealed again: the task is no longer the open one, or the gate closed. */
-const FOLLOW_ENDED = "ended";
-
-/** A live read the service did not seal, `gone` where the task is no longer the account's. */
-type Unsealed = { readonly failure: string; readonly gone?: boolean };
-
-/** Whether a seal is one the service did not answer. */
-function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is Unsealed {
-  return "failure" in sealed;
-}
-
-/** The parts of an open task the view lays apart: its document, and its pin. */
-const OPENED_PART = {
-  DOCUMENT: "document",
-  MARKS: "marks",
-} as const;
-
-type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
-
 /**
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
- * starting one replaces whichever was, and a read still out for the replaced
- * task is dropped when it lands. The list, the workspaces, and the sidebar
+ * starting one replaces whichever was, and the plans the windows opened are
+ * held apart, per task, on the app state. The list, the workspaces, and the sidebar
  * are followed from the account gate opening, whether or not a window shows
  * them. Behind a closed account gate, or on a run that sends nothing, nothing
  * is read.
@@ -692,8 +660,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * One read of the service at a time, whichever ask made it. Note that the
    * answers are applied in the order the reads were made, because a list
    * that left before a task started would otherwise land last and roll the
-   * view back. The open task's document is read outside it, ordered by its
-   * own numbers instead (`partReads`).
+   * view back. A held plan is read outside it, ordered by its task's own
+   * numbers instead (`plan-document-reads.ts`).
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
 
@@ -722,14 +690,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The one live follow of the open task's plan; running another interrupts it. */
-  const recordFollow = yield* FiberHandle.make<void>();
-
-  /** The tasks whose plan was saved past the copy held, read one at a time by the loop below. */
-  const planReads = yield* Queue.sliding<string>(1);
-
-  /** When the open task's plan was last saved, as its record's follow last delivered it. */
-  let planSaved: { readonly taskId: string; readonly at: number } | undefined;
+  /** Leaves the open task, returning the window to its list; its plan stays held while the window lets it go. */
+  function closeActive(): void {
+    const { activeTaskId: _closed, ...rest } = view;
+    view = rest;
+    publish();
+  }
 
   /** The newest page of each task's history a window's version history follows, by the task. */
   const historyFollows = yield* FiberMap.make<string>();
@@ -923,13 +889,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The windows' hold on each subject's comments, one fiber standing until let go. */
   const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
 
-  /** The document of `taskId` as held now, if the held one is that task's. */
-  function heldTaskOf(taskId: string): TasksDocument["task"] {
-    const held = view.document.task;
-    return held?.id === taskId ? held : undefined;
-  }
+  /**
+   * The plan of each task a window opened, and of the few opened latest,
+   * told whole on the app state every window draws
+   * (`LIVE_READ.PLAN_DOCUMENT`), so a task opened again draws its plan in
+   * its first frame (`plan-document-reads.ts`).
+   */
+  const documents = yield* planDocumentReads({
+    gate,
+    accountId: dependencies.accountId,
+    open: (taskId) => served(client.open(taskId)),
+    recordLive: (taskId, userId, poll, after) =>
+      served(client.recordLive(taskId, userId, poll, after)),
+    listed: asListed,
+    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED, carried(held)),
+  });
+  /** Each edit's waits for its transaction, on its task's record and on the list, by the task, a newer edit's replacing an older one's. */
+  const editWaits = yield* FiberMap.make<string>();
 
-  /** A task's row or document without the assignee it stood with. */
+  /** A task's row or plan without the assignee it stood with. */
   function withoutAssignee<T extends { readonly assignee?: unknown }>(
     standing: T,
   ): Omit<T, "assignee"> {
@@ -957,8 +935,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * from a launch or a sign-in until a sign-out closes their scope, so a
    * write still out for the account signed out draws on nothing the next
    * account sees. Each draw lays the list in the view, and what the service
-   * holds of the open task, its name, pin, status, assignee, and repository,
-   * reaches its document as the list carries it.
+   * holds of each task whose plan is held, its name, pin, status, assignee,
+   * and repository, reaches its plan as the list carries it.
    */
   const openTaskList = Effect.gen(function* () {
     const scope = yield* Scope.make();
@@ -983,7 +961,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             agentPullRequests,
             taskAgentPins,
           });
-          if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
+          documents.relisted();
         },
         txWait: () => listWait,
       }),
@@ -1321,271 +1299,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const githubOpened = yield* FiberHandle.make<void>();
 
   /**
-   * The active task's document as a read of it left it. A copy of the same
-   * task already `held` stays drawn through a read that failed, so a moment
-   * offline blanks nothing; with no copy held, the failure is what the panel
-   * draws.
+   * `task` given everything its row of the list now reads, its name,
+   * status, assignee, and repository among them, so a change a teammate or
+   * an agent made reaches a held plan as it reaches the list; the very task
+   * where the list holds no row of it. Note that the row is the whole of
+   * what the task carries but its plan, so a field the row leaves out is one
+   * the task no longer has, and that the last save is the plan's own, kept
+   * with its body, as are its blocks, which a row of the list never carries.
    */
-  function documentAfter(
-    opened: Effect.Success<ReturnType<typeof client.open>>,
-    held: Task | undefined,
-  ): TasksView["document"] {
-    if (opened.ok) return { status: TASKS_READ.READY, task: opened.answer };
-    if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return { status: TASKS_READ.MISSING };
-    return held === undefined
-      ? { status: TASKS_READ.FAILED }
-      : { status: TASKS_READ.READY, task: held };
-  }
-
-  /**
-   * Each of the open task's parts, its document among them, by the number
-   * of reads of it started and of the newest laid over the view, so a read
-   * that left before a newer one, or before a write of the part, never
-   * lands over it (`laidNow`).
-   */
-  const partReads: Record<OpenedPart, { started: number; laid: number }> = {
-    [OPENED_PART.DOCUMENT]: { started: 0, laid: 0 },
-    [OPENED_PART.MARKS]: { started: 0, laid: 0 },
-  };
-
-  /** Numbers a read of the part as it starts. */
-  function partReadStarted(part: OpenedPart): number {
-    partReads[part].started += 1;
-    return partReads[part].started;
-  }
-
-  /** Whether the read numbered `read` is still the newest of the part to land, which it then is; false where a newer one, or a write, landed first. */
-  function laidNow(part: OpenedPart, read: number): boolean {
-    if (read < partReads[part].laid) return false;
-    partReads[part].laid = read;
-    return true;
-  }
-
-  /** Marks a write of the part, which every read that left before it is older than. */
-  function partWritten(part: OpenedPart): void {
-    laidNow(part, partReadStarted(part));
-  }
-
-  /**
-   * The open task's document as its read `opened` left it, taking the pin
-   * its row of the list carries, or the copy held where the list has no row
-   * of it yet, where a pin was answered after the read numbered `marksRead`
-   * left, since the read's is then the older.
-   */
-  function openedDocument(
-    taskId: string,
-    opened: Effect.Success<ReturnType<typeof client.open>>,
-    marksRead: number,
-  ): TasksView["document"] {
-    const held = heldTaskOf(taskId);
-    const marked = view.tasks.find((each) => each.id === taskId) ?? held;
-    const pinStands = laidNow(OPENED_PART.MARKS, marksRead);
-    if (!opened.ok || marked === undefined || pinStands) return documentAfter(opened, held);
-    return { status: TASKS_READ.READY, task: withMarksOf(opened.answer, marked) };
-  }
-
-  /** The read an open asked for, which a newer open's interrupts. */
-  const openedRead = yield* FiberHandle.make<void>();
-
-  /**
-   * Reads what the active task's page draws of the view, its document, and
-   * tells the window what it read. No read holds the lock (`serial`): the
-   * document is laid where it is still the newest of its reads and no write
-   * of it landed since it left (`laidNow`), so an open never queues behind
-   * another's reads or a write's answer. A copy of the same task already
-   * held stays drawn while the read is out and through a read that failed,
-   * so a save redraws in place. The document says it is reading only where
-   * nothing of it is held, which a switch has already told (`TASKS_OPEN`).
-   * Note that the task's pages are not read here: the window holds them on
-   * a read of their own (`LIVE_READ.PAGES`), so pages it held lately draw in
-   * the task's first frame and others land apart from the document.
-   */
-  function readOpened(taskId: string) {
-    return Effect.gen(function* () {
-      const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
-      const marksRead = partReadStarted(OPENED_PART.MARKS);
-      if (heldTaskOf(taskId) === undefined) write({ document: { status: TASKS_READ.READING } });
-      const opened = yield* served(client.open(taskId));
-      // Another task opened while this read was out: its answer is not the panel's any more.
-      if (view.activeTaskId !== taskId) return;
-      // Note that a document an answer wrote after this read left stands, since it is the newer.
-      if (laidNow(OPENED_PART.DOCUMENT, documentRead)) {
-        write({ document: openedDocument(taskId, opened, marksRead) });
-      }
-      readPlanWhereSaved();
-    });
-  }
-
-  /** Whether the open task's plan was saved past the copy held, as its follow last delivered it. */
-  function savedPastHeld(taskId: string): boolean {
-    const held = heldTaskOf(taskId);
-    return (
-      view.activeTaskId === taskId &&
-      planSaved?.taskId === taskId &&
-      held !== undefined &&
-      planSaved.at > held.updatedAt
-    );
-  }
-
-  /**
-   * Reads the open task's plan again where its follow delivered a save newer
-   * than the copy held, so a teammate's or an agent's edit reaches the
-   * window without anything else asking. Note that it waits for a copy to
-   * stand, since an open still reading asks again once it lands, and that
-   * only a newer save asks, so a read that answered ahead of the follow does
-   * not ask again until the follow catches up.
-   */
-  function readPlanWhereSaved(): void {
-    const taskId = view.activeTaskId;
-    if (taskId !== undefined && savedPastHeld(taskId)) Queue.offerUnsafe(planReads, taskId);
-  }
-
-  /**
-   * Reads the open task's document again, as an open does, for a save
-   * someone else made. A read that left before a write of the document, or
-   * a newer read, lands nothing. Note that a failed read is asked again on
-   * `FOLLOW_BACKOFF` for as long as the save stands newer than the copy held,
-   * because the follow delivers no other move for a mark that stood still.
-   */
-  function readPlan(taskId: string) {
-    const wanted = () => gate() && savedPastHeld(taskId);
-    const once = Effect.gen(function* () {
-      if (!wanted()) return;
-      const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
-      const marksRead = partReadStarted(OPENED_PART.MARKS);
-      const opened = yield* served(client.open(taskId));
-      if (view.activeTaskId !== taskId) return;
-      if (!opened.ok) {
-        if (opened.failure === TASK_CALL_FAILURE.NOT_FOUND) return;
-        return yield* Effect.fail(opened.failure);
-      }
-      if (!laidNow(OPENED_PART.DOCUMENT, documentRead)) return;
-      write({ document: openedDocument(taskId, opened, marksRead) });
-    });
-    return Effect.ignore(Effect.retry(once, { schedule: FOLLOW_BACKOFF, while: wanted }));
-  }
-
-  /**
-   * Follows one of `taskId`'s live reads while it is the open task, each
-   * move handed to `moved`, the first delivery among them. A seal the
-   * service did not answer, or a follow that stops before it delivered, is
-   * sealed again on `FOLLOW_BACKOFF`; a follow that delivered and then
-   * stopped is sealed again after `FOLLOW_RESEAL.FIRST`, its backoff started
-   * over. A task the service no longer holds, or a gate that closed, ends it.
-   */
-  function followLive<Answer extends object, Moved>(
-    taskId: string,
-    read: {
-      readonly seal: (
-        userId: string,
-        poll: boolean,
-        after: string | undefined,
-      ) => Effect.Effect<
-        TaskCallResult<Answer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-        never,
-        HttpClient.HttpClient
-      >;
-      readonly moves: (
-        following: {
-          readonly poll: (after: string | undefined) => Effect.Effect<Answer | Unsealed>;
-        },
-        first: Answer,
-      ) => Stream.Stream<Moved, LiveBroken>;
-      readonly moved: (moved: Moved) => void;
-    },
-  ) {
-    const following = () => gate() && view.activeTaskId === taskId;
-    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-    const userId = dependencies.accountId();
-    const seal = (poll = false, after?: string): Effect.Effect<Answer | Unsealed> =>
-      userId === undefined
-        ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(served(read.seal(userId, poll, after)), (sealed) =>
-            sealed.ok ? sealed.answer : { failure: sealed.failure },
-          );
-    // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
-    const sealedFor = (poll: boolean, after?: string): Effect.Effect<Answer | Unsealed> =>
-      following()
-        ? Effect.map(seal(poll, after), (renewed) =>
-            isUnsealed(renewed) && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
-              ? { ...renewed, gone: true }
-              : renewed,
-          )
-        : Effect.succeed({ failure: FOLLOW_ENDED, gone: true });
-    /** One seal followed until it stops: whether it delivered, or why it never did. */
-    const attempt = Effect.gen(function* () {
-      if (!following()) return yield* Effect.fail(FOLLOW_ENDED);
-      const sealed = yield* seal();
-      if (isUnsealed(sealed)) return yield* Effect.fail(sealed.failure);
-      let delivered = false;
-      const moves = read.moves({ poll: (after) => sealedFor(true, after) }, sealed);
-      yield* Stream.runForEach(moves, (moved) =>
-        Effect.sync(() => {
-          delivered = true;
-          if (view.activeTaskId === taskId) read.moved(moved);
-        }),
-      ).pipe(Effect.ignore);
-      if (!delivered) return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
-      return true;
-    });
-    const followed = attempt.pipe(
-      Effect.retry({
-        schedule: FOLLOW_BACKOFF,
-        while: (why) =>
-          why !== TASK_CALL_FAILURE.NOT_FOUND &&
-          why !== LIVE_SIGNED_OUT.failure &&
-          why !== FOLLOW_ENDED &&
-          following(),
-      }),
-      Effect.option,
-    );
-    return Effect.asVoid(
-      Effect.repeat(followed, {
-        schedule: Schedule.spaced(FOLLOW_RESEAL.FIRST),
-        while: (delivered) => Option.isSome(delivered) && following(),
-      }),
-    );
-  }
-
-  /**
-   * Follows `taskId`'s plan live while it is the open task, read again once
-   * a save newer than the copy held lands, each seal's first delivery among
-   * them. Note that its pages are the windows' own read (`LIVE_READ.PAGES`),
-   * so a page shown moves nothing here.
-   */
-  function followRecord(taskId: string) {
-    return followLive(taskId, {
-      seal: (userId, poll, after) => client.recordLive(taskId, userId, poll, after),
-      moves: taskRecordMoves,
-      moved: ({ planSavedAt }: TaskRecordMove) => {
-        if (planSavedAt === undefined) return;
-        planSaved = { taskId, at: planSavedAt };
-        readPlanWhereSaved();
-      },
-    });
-  }
-
-  /** Follows `taskId`'s plan live, in place of any follow standing; with `standing`, only where none stands. */
-  function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
-    return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
-  }
-
-  /**
-   * The open document of `taskId` given everything its row of the list now
-   * reads, its name, status, assignee, and repository among them, so a
-   * change a teammate or an agent made reaches the open task as it reaches
-   * the list. Note that the row is the whole of what the task carries but
-   * its document, so a field the row leaves out is one the task no longer
-   * has, and that the last save is the document's own, kept with its body,
-   * as are its blocks, which a row of the list never carries.
-   */
-  function heldAsListed(taskId: string): void {
-    const held = heldTaskOf(taskId);
-    const listed = view.tasks.find((row) => row.id === taskId);
-    if (held === undefined || listed === undefined) return;
+  function asListed(task: Task): Task {
+    const listed = view.tasks.find((row) => row.id === task.id);
+    if (listed === undefined) return task;
     const { agents: _agents, ...row } = listed;
-    const { updatedAt, document, agentEdits, lastEdit, sectionEdits, blockedBy, blocks } = held;
-    const task: Task = {
+    const { updatedAt, document, agentEdits, lastEdit, sectionEdits, blockedBy, blocks } = task;
+    return {
       ...row,
       updatedAt,
       document,
@@ -1595,7 +1322,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(blockedBy === undefined ? undefined : { blockedBy }),
       ...(blocks === undefined ? undefined : { blocks }),
     };
-    write({ document: { ...view.document, task } });
   }
 
   /** The fields of a task's row of the list as the service answered the task. */
@@ -1675,40 +1401,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Draws `task` as the service answered it on the open document where it
-   * is the one held, and answers what it says of the task's row of the list,
-   * which the caller holds over the list (`heldOverList`). Note that the
-   * assignee standing is dropped first, because an answer names one only
-   * where the task has one, so an answer that names none is a task assigned
-   * to no one.
+   * Draws `task` as the service answered it on its plan wherever that is
+   * held, and answers what it says of the task's row of the list, which the
+   * caller holds over the list (`heldOverList`). Note that the assignee
+   * standing is dropped first, because an answer names one only where the
+   * task has one, so an answer that names none is a task assigned to no one.
    */
   function takeAnswered(task: Task): {
     readonly taskId: string;
     readonly fields: Partial<PlanRow>;
   } {
-    write({
-      ...documentTook(task.id, task, (held) => ({ ...withoutAssignee(held), ...task })),
-    });
+    documentTook(task.id, task, (held) => ({ ...withoutAssignee(held), ...task }));
     return { taskId: task.id, fields: planFieldsOf(task) };
   }
 
   /**
-   * The open document as `answered`, a write's answer about `taskId`, leaves
-   * it, laid over the copy held by `lay`, so no read that left before the
-   * answer lands over it; an open still reading takes the answer whole. A
-   * task not open has no document to take it.
+   * Lays `answered`, a write's answer about `taskId`, on its plan wherever
+   * that is held, over the copy held by `lay`, so no read that left before
+   * the answer lands over it; a plan whose first read is still out takes the
+   * answer whole (`plan-document-reads.ts`).
    */
-  function documentTook(
-    taskId: string,
-    answered: Task,
-    lay: (held: Task) => Task,
-  ): Pick<TasksView, "document"> | undefined {
-    if (view.activeTaskId !== taskId) return undefined;
-    partWritten(OPENED_PART.DOCUMENT);
-    const held = heldTaskOf(taskId);
-    return {
-      document: { status: TASKS_READ.READY, task: held === undefined ? answered : lay(held) },
-    };
+  function documentTook(taskId: string, answered: Task, lay: (held: Task) => Task): void {
+    documents.written(taskId, (held) => (held === undefined ? answered : lay(held)));
   }
 
   /** The pin a task answered carries, and where it stands, each only where it stands. */
@@ -1726,17 +1440,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Draws the pin `task` was answered with on the open document where it is
-   * the one held, which keeps everything else it holds, because a draft
-   * drawn meanwhile may be ahead of the copy the service answered.
+   * Draws the pin `task` was answered with on its plan wherever a copy is
+   * held, which keeps everything else it holds, because a draft drawn
+   * meanwhile may be ahead of the copy the service answered. Note that a
+   * plan whose first read is still out takes the pin from the list's row as
+   * the read lands (`asListed`).
    */
   function takeMarks(task: Task): void {
-    // Note that an open still reading takes the pin from the row once its read lands (`openedDocument`).
-    if (view.activeTaskId === task.id) partWritten(OPENED_PART.MARKS);
-    const held = heldTaskOf(task.id);
-    if (held !== undefined) {
-      write({ document: { status: TASKS_READ.READY, task: withMarksOf(held, task) } });
-    }
+    documents.written(task.id, (held) =>
+      held === undefined ? undefined : withMarksOf(held, task),
+    );
   }
 
   /**
@@ -1776,7 +1489,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * A task renamed, its name drawn on its row at once and kept once the list
-   * carries it (`task-list-collections.ts`); the open document takes the
+   * carries it (`task-list-collections.ts`); its held plan takes the
    * service's answer in place, and nothing is read again.
    */
   const renamed: WriteDeclaration<
@@ -1797,13 +1510,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const written = yield* served(client.rename(taskId, { name }));
               if (written === undefined) return { refused: { renamed: false } };
               const answered = written.task;
-              write({
-                ...documentTook(taskId, answered, (held) => ({
-                  ...held,
-                  name: answered.name,
-                  document: answered.document,
-                })),
-              });
+              documentTook(taskId, answered, (held) => ({
+                ...held,
+                name: answered.name,
+                document: answered.document,
+              }));
               return {
                 answer: { renamed: true },
                 txid: written.txid,
@@ -1816,8 +1527,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Where a task stands, drawn on its row at once, a member assigned by the
-   * name the window knows them by, and kept once the list carries it; the
-   * open document takes the service's answer in place, and nothing is read
+   * name the window knows them by, and kept once the list carries it; its
+   * held plan takes the service's answer in place, and nothing is read
    * again.
    */
   const stood: WriteDeclaration<
@@ -1858,9 +1569,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const answered = yield* served(client.setStanding(taskId, standing));
               if (answered === undefined) return { refused: { changed: false } };
               const { task } = answered;
-              write({
-                ...documentTook(taskId, task, (held) => ({ ...withoutAssignee(held), ...task })),
-              });
+              documentTook(taskId, task, (held) => ({ ...withoutAssignee(held), ...task }));
               return {
                 answer: { changed: true },
                 txid: answered.txid,
@@ -1874,7 +1583,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * A task pinned or unpinned, drawn on its row at once, a pin newest pinned
    * and standing where it was dragged, and kept once the list carries it;
-   * the open document takes the service's answer.
+   * its held plan takes the service's answer.
    */
   const pinned: WriteDeclaration<
     PlanRow,
@@ -1918,7 +1627,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * A task deleted once its question was answered, drawn gone at once and
    * kept once the list carries it; a refusal puts it back. What this host
-   * kept of it goes, and the open document closes, once the service
+   * kept of it goes, and the task closes where it is open, once the service
    * deleted it.
    */
   const deleted: WriteDeclaration<
@@ -1937,12 +1646,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               const written = yield* served(client.delete(taskId));
               if (written === undefined) return { refused: { deleted: false } };
               yield* kept.forget(keptOfTask(taskId));
-              if (view.activeTaskId === taskId) {
-                yield* FiberHandle.clear(recordFollow);
-                const { activeTaskId: _deleted, ...rest } = view;
-                view = { ...rest, document: { status: TASKS_READ.IDLE } };
-                publish();
-              }
+              if (view.activeTaskId === taskId) closeActive();
               return { answer: { deleted: true }, txid: written.txid };
             }),
           )
@@ -1952,8 +1656,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * A task changed by a call the service answers with the task, drawn at
    * once on every row `keys` names, the task's and the other task's a
-   * relation joins, and kept once the list carries it; the open document
-   * takes the service's answer in place, and a refusal answers why and puts
+   * relation joins, and kept once the list carries it; its held plan takes
+   * the service's answer in place, and a refusal answers why and puts
    * every row back. Note that the change is read off the input alone, which
    * holds what the list knew as it was asked, so the change taken where the
    * list hands no wait is the one drawn: the task's own row as the service
@@ -2080,7 +1784,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function relationReachOf(taskId: string, otherId: string): RelationReach {
     const openId = view.activeTaskId;
     const blockedBy =
-      openId === taskId || openId === otherId ? heldTaskOf(openId)?.blockedBy : undefined;
+      openId === taskId || openId === otherId ? documents.heldTask(openId)?.blockedBy : undefined;
     const opened =
       openId === undefined || blockedBy === undefined ? undefined : { taskId: openId, blockedBy };
     return {
@@ -2091,19 +1795,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   const methods: HostMethodTable = {
     // The list's Try again: what is followed already stands (`open`), so it
-    // starts only a follow that is not running, and reads the open task and,
-    // where the last read is stale, GitHub's connection again.
+    // starts only a follow that is not running, and reads GitHub's
+    // connection again where the last read is stale. A held plan has a Try
+    // again of its own (`TASKS_DOCUMENT_RETRY`).
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
         yield* followAccount;
-        const open = view.activeTaskId;
-        if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
-        const tasks = Effect.suspend(() => {
-          const taskId = view.activeTaskId;
-          return taskId === undefined ? Effect.void : readOpened(taskId);
-        });
-        yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
+        yield* readGithubWhenStale;
         return {};
       }),
     // A follow may have died in a sleep or a lost network without a word,
@@ -2140,29 +1839,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "opening a task names one task",
         );
         if (!gate()) return { opened: false };
-        const { taskId } = read;
         screenAsks += 1;
-        // A press on the task already open, drawn or being read, asks nothing again.
-        const status = view.document.status;
-        if (
-          view.activeTaskId === taskId &&
-          (status === TASKS_READ.READY || status === TASKS_READ.READING)
-        ) {
-          yield* openRecord(taskId, { onlyIfMissing: true });
-          return { opened: true };
-        }
-        if (view.activeTaskId !== taskId) {
-          // Note that the document is told twice in all: that it is reading, then what it read.
-          view = {
-            ...view,
-            activeTaskId: taskId,
-            document: { status: TASKS_READ.READING },
-          };
-          publish();
-        }
-        yield* openRecord(taskId);
-        // Note that the open answers once the page is drawn, its read left running, so nothing waits on the network.
-        yield* FiberHandle.run(openedRead, readOpened(taskId));
+        // Note that the open reads nothing: the window holds the task's plan (`TASKS_DOCUMENT_FOLLOW`), which draws at once where it was held lately.
+        write({ activeTaskId: read.taskId });
         return { opened: true };
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
@@ -2465,6 +2144,40 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(pageHolds, pageOwnerOf(read));
         return {};
       }),
+    // A task's plan is held for a window while it has the task open, and
+    // told only on the app state (`PLAN_DOCUMENTS_CHANGED`). Note that the
+    // windows' hold is one fiber standing until let go, so a window holding
+    // it again holds nothing anew.
+    [GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskDocumentFollowSchema,
+          params,
+          "following a plan names the task",
+        );
+        yield* documents.follow(read.taskId);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskDocumentFollowSchema,
+          params,
+          "letting a plan go names the task",
+        );
+        yield* documents.unfollow(read.taskId);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_DOCUMENT_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskDocumentFollowSchema,
+          params,
+          "reading a plan again names the task",
+        );
+        if (gate()) yield* documents.retry(read.taskId);
+        return {};
+      }),
     // A picture's bytes are answered to the window that asked and kept by
     // its id, which no other upload is given, so they never enter the view
     // every window is told.
@@ -2566,9 +2279,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const kept = yield* served(client.keepPicture(read.planId, read.picture));
         return carried<TasksPictureKeepAnswer>(kept);
       }),
-    // The service answers the task as restored, so the list's row and the
-    // open document take it in place and nothing is read again. It is
-    // confirmed once its transaction reached the history the window follows.
+    // The service answers the task as restored, so the list's row and its
+    // held plan take it in place and nothing is read again. It is confirmed
+    // once its transaction reached the history the window follows.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2602,14 +2315,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
         screenAsks += 1;
-        yield* FiberHandle.clear(recordFollow);
-        yield* serial(
-          Effect.sync(() => {
-            const { activeTaskId: _closed, ...rest } = view;
-            view = { ...rest, document: { status: TASKS_READ.IDLE } };
-            publish();
-          }),
-        );
+        yield* serial(Effect.sync(closeActive));
         return {};
       }),
     [GATEWAY_METHOD.TASKS_START]: (params) =>
@@ -2661,13 +2367,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             });
             // A start the developer went on from, to another task or another start, opens nothing.
             if (screenAsks !== asked) return answer;
-            view = {
-              ...view,
-              activeTaskId: task.id,
-              document: { status: TASKS_READ.READY, task },
-            };
-            publish();
-            yield* openRecord(task.id);
+            // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
+            yield* documents.started(task);
+            write({ activeTaskId: task.id });
             return answer;
           }),
         );
@@ -2813,7 +2515,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         ),
     ),
     // The task the service answered is drawn in place, so the edit stands on
-    // the document at once and the notetaker's drafts drawn before it drop.
+    // its plan at once and the notetaker's drafts drawn before it drop. It
+    // stands until the task's record and the list carry its transaction,
+    // which is waited for behind the answer.
     [GATEWAY_METHOD.TASKS_EDIT]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2823,7 +2527,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksEditAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { taskId, edit } = read;
-        // Note that the row the edit answered is held over the list outside the serial reads, as a list's wait is.
         const edited = yield* serial(
           Effect.gen(function* () {
             const written = yield* served(client.edit(taskId, edit));
@@ -2837,11 +2540,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             return {
               answer: carried<TasksEditAnswer>({ saved: true }),
               held: takeAnswered(answer.plan),
+              txid: answer.txid,
             };
           }),
         );
+        // Note that the waits stand outside the serial reads and behind the answer, so neither a read nor the editor waits on them.
         if (edited.held !== undefined) {
-          yield* heldOverList(edited.held.taskId, edited.held.fields, undefined);
+          const { held, txid } = edited;
+          yield* FiberMap.run(
+            editWaits,
+            taskId,
+            Effect.all(
+              [documents.confirmed(taskId, txid), heldOverList(held.taskId, held.fields, txid)],
+              { concurrency: "unbounded" },
+            ),
+          );
         }
         return edited.answer;
       }),
@@ -3302,12 +3015,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
         const closeOpenTask = Effect.gen(function* () {
           yield* serial(
-            Effect.gen(function* () {
-              if (view.activeTaskId !== openTaskId) return;
-              yield* FiberHandle.clear(recordFollow);
-              const { activeTaskId: _left, ...rest } = view;
-              view = { ...rest, document: { status: TASKS_READ.IDLE } };
-              publish();
+            Effect.sync(() => {
+              if (view.activeTaskId === openTaskId) closeActive();
             }),
           );
         });
@@ -3380,6 +3089,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldBrowserTabs.open;
       yield* comments.open;
       yield* membersReads.held.open;
+      yield* documents.open;
       if (!gate()) return;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
@@ -3390,14 +3100,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      yield* FiberHandle.clear(openedRead);
-      // Note that the windows' holds on pages, tabs, comments, and people stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* comments.end;
       yield* membersReads.held.end;
+      yield* FiberMap.clear(editWaits);
+      yield* documents.end;
       yield* FiberMap.clear(historyFollows);
-      yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
       yield* Scope.close(taskList.scope, Exit.void);
       taskList = yield* openTaskList;
@@ -3416,18 +3126,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The plan reads its followed mark asks for; every other read of the
-    // tasks is an ask's. Note that these reads hold no lock, because each is
-    // ordered by its part's numbers (`laidNow`), and an open must not queue
-    // behind a read of the task it left.
-    lifetime: Effect.gen(function* () {
-      yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.flatMap(Queue.take(planReads), (taskId) =>
-            gate() ? readPlan(taskId) : Effect.void,
-          ),
-        ),
-      );
-    }),
+    // Every read of the tasks is an ask's, or a held read's, which stands in the composer's own scope.
+    lifetime: Effect.void,
   };
 });

@@ -875,6 +875,13 @@ export const LIVE_READ = {
   AUTOMATION_WORKSPACE_RUNS: "automationWorkspaceRuns",
   /** One automation's runs, by the automation: the service's `automationRuns` query, held as the automations are. */
   AUTOMATION_RUNS: "automationRuns",
+  /**
+   * One task's plan, by the task, held for the windows that opened it and a
+   * few they opened lately. Note that no live query carries its text: the
+   * host follows the task's record (`taskRecordLive`), whose plan mark moves
+   * with each save, and reads the plan again where it moved past the copy held.
+   */
+  PLAN_DOCUMENT: "planDocument",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

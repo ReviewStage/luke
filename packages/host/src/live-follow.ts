@@ -537,6 +537,19 @@ export function followTakingRows<Part extends string, Rows>(
  */
 const SYNC_STALL = Duration.seconds(30);
 
+/**
+ * How long a live follow waits before sealing again after a seal the
+ * service did not answer, or a follow that stopped: the first wait, doubling
+ * on each that fails again, up to the longest.
+ */
+export const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
+
+export const FOLLOW_BACKOFF = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
+  ),
+);
+
 /** How long a follow that stopped, or whose read the service did not answer, waits before it is read again. */
 export const LIVE_RESTART = Duration.seconds(5);
 

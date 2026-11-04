@@ -20,7 +20,7 @@ import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
-import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
+import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
@@ -441,6 +441,13 @@ export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
  */
 export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
 
+/**
+ * Each task's plan the host holds for the windows (`compose-tasks.ts`): the
+ * tasks a window opened, and the few it opened lately, by the task's id,
+ * each as its read and the writes since stand.
+ */
+export type AppPlanDocuments = AppHeldById<HeldPlanDocument>;
+
 /** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
 export type AppAutomationReads = Pick<
   AppState,
@@ -490,6 +497,7 @@ export interface AppHostReads {
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
   [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
+  [LIVE_READ.PLAN_DOCUMENT]: HeldPlanDocument;
 }
 
 /**
@@ -570,8 +578,8 @@ export interface AppState {
   audio: AppAudioSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
-   * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it.
+   * hold them: the list and the one active task, whose plan is held apart
+   * (`LIVE_READ.PLAN_DOCUMENT`). Only the panel's Tasks tab draws it.
    */
   tasks: TasksView;
   agents: AppAgentsSlice;
@@ -608,6 +616,8 @@ export interface AppState {
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
   /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
   [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
+  /** Each task's plan the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
+  [LIVE_READ.PLAN_DOCUMENT]: AppPlanDocuments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -766,6 +776,8 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof AutomationRunSummary,
   },
+  // Note that a plan crosses whole, since each save replaces it.
+  [LIVE_READ.PLAN_DOCUMENT]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 
 /** A slice `HOST_READ_SLICE` declares. */

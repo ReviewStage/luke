@@ -208,6 +208,7 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
+  type TaskDocumentFollow,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -382,6 +383,7 @@ import type {
   AppMcpClients,
   AppPages,
   AppPlanComments,
+  AppPlanDocuments,
   AppProviderKeys,
   AppWorkspaceMembers,
   AppWorkspaceTools,
@@ -519,6 +521,14 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
+  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onPlanDocumentsChanged`. */
+  tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** One task's plan let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** One task's held plan read again at once, as Try again asks. */
+  tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** Every task's plan the host holds for the windows, whole, each time any of them moves. */
+  onPlanDocumentsChanged(listener: (held: AppPlanDocuments) => void): () => void;
   /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -1472,6 +1482,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.PAGES_CHANGED,
         // Note that the held pages are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppPages>(payload) : undefined),
+        listener,
+      ),
+    tasksDocumentFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: scope.taskId })),
+    tasksDocumentUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
+    tasksDocumentRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
+    onPlanDocumentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED,
+        // Note that the held plans are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppPlanDocuments>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>
