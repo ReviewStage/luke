@@ -483,15 +483,15 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device this task runs its agents on is away, asleep or with ${PRODUCT_NAME} closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.`,
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device this task runs its agents on is offline, so it cannot take an agent (its vespin-host is not connected). Try again once it is back, or ask the member to start a new task in the cloud.`,
   [LOCAL_AGENT_REFUSAL.CODEX]:
-    "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
+    "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to start a new task in the cloud.",
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
-    "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
+    "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to start a new task in the cloud.",
   [LOCAL_AGENT_REFUSAL.PREPARING]:
     "Not started: the device this task runs its agents on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart vespin-host on that Linux server, to try again, or to change where the task runs.",
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to turn Bring your own host off and on in Settings › Hosts on that Mac, or to restart vespin-host on that Linux server, to try again, or to start a new task in the cloud.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
