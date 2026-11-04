@@ -91,6 +91,8 @@ Connect an agent gives the server's address and each agent's steps.
 [#6632](https://github.com/ReviewStage/vespin/pull/6632),
 [#6690](https://github.com/ReviewStage/vespin/pull/6690))
 
+![vespin.dev/api/mcp in light monospace, its mcp in copper, on Vespin's graphite, with the landing page's gray square dots gathering softly in the top-left and bottom-right corners.](apps/web/public/changelog/0.26.0/your-agents-can-work-vespin.png)
+
 ### Places and things
 
 Places stand in the middle of the window, and things open on the right. A
