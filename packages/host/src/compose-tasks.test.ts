@@ -2761,6 +2761,24 @@ it.effect(
     }),
 );
 
+it.effect("a workspace list of none says failed, and its Retry reads it again at once", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [];
+    const { call, last, settled } = yield* subject(service);
+
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* settled;
+    assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+
+    service.memberships = [PERSONAL];
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* settled;
+    assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+    assert.deepEqual(last()?.workspaces, [PERSONAL]);
+  }),
+);
+
 it.effect(
   "a workspace made reaches the service and the view then holds it over the follow, nothing read again",
   () =>

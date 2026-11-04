@@ -217,7 +217,7 @@ import {
   PlanPictureKey,
 } from "./kept-content.js";
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
-import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, type TxWait } from "./live-follow.js";
+import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import {
   type CommentSubjectKey,
@@ -1374,8 +1374,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * them. Note that there is no other read of them: a seal the service did
    * not answer, or a follow that stopped, is sealed again on
    * `FOLLOW_BACKOFF` while the gate stands open, and what was drawn stays meanwhile.
+   * Every account holds its own workspace, which this read makes where none
+   * stands, so a list of none is a failed read: said as failed, so each
+   * surface shows its failure and reports it, and sealed again on the backoff.
    */
   const followWorkspaces = Effect.gen(function* () {
+    // Note that a list that answered none is sealed again at once on Retry, rather than after the backoff.
+    const failed = view.workspacesStatus === TASKS_READ.FAILED;
     if (view.workspacesStatus !== TASKS_READ.READY) {
       write({ workspacesStatus: TASKS_READ.READING });
     }
@@ -1415,6 +1420,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
           if ([...drawn].some((id) => !listed.has(id))) yield* kept.clear;
           yield* workspaceList.rows.answer(workspaces);
+          if (workspaces.length === 0) {
+            write({ workspacesStatus: TASKS_READ.FAILED });
+            return yield* new LiveBroken({ reason: "the account holds no workspace" });
+          }
           if (view.workspacesStatus !== TASKS_READ.READY) {
             write({ workspacesStatus: TASKS_READ.READY });
           }
@@ -1435,7 +1444,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
       Effect.ignore,
     );
-    yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
+    yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: !failed });
   });
 
   /**
