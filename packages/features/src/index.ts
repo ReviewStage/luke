@@ -9,6 +9,7 @@ export {
   lateCredential,
   NO_CREDENTIAL,
   resolvedCredential,
+  ServiceReach,
   sessionBearer,
 } from "./account-call.js";
 export {

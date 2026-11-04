@@ -7,7 +7,16 @@ import {
   withoutTrailingSlash,
 } from "@repo/wire";
 import { webResponseFromClientResponse } from "@repo/wire/effect";
-import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
+import {
+  Context,
+  Data,
+  Duration,
+  Effect,
+  type Schema as EffectSchema,
+  Option,
+  Result,
+  SubscriptionRef,
+} from "effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -22,9 +31,10 @@ const ACCOUNT_CALL_DEFAULTS = {
  * The name a deadline ends a request under. The deadline is the runtime's own
  * timeout rather than an `AbortSignal.timeout`, and this is the name that
  * signal's reason carried, kept so a caller reporting an end reports the same
- * word it always did.
+ * word it always did, and a reader of a failure can tell a call that got no
+ * answer by it.
  */
-const DEADLINE_ERROR_NAME = "TimeoutError";
+export const DEADLINE_ERROR_NAME = "TimeoutError";
 
 /** The content type a serialized body names, the one type this call sends. */
 const JSON_CONTENT_TYPE = "application/json";
@@ -88,6 +98,19 @@ interface CallFailure {
 
 export type CallAnswer = CallResponse | CallFailure;
 
+/**
+ * Whether the service answered the last call made to it, for a client that
+ * keeps it (`@repo/host`'s network watch): each attempt sets it as it ends,
+ * true for an answer with any status, a refusal among them, and false for
+ * one that ended with none, a transport fault or the deadline. Optional, so
+ * a call made where none is provided, as the service's own calls are, tells
+ * nobody.
+ */
+export class ServiceReach extends Context.Service<
+  ServiceReach,
+  SubscriptionRef.SubscriptionRef<boolean>
+>()("@repo/features/ServiceReach") {}
+
 /** Whether the service answered at all, as distinct from the call never reaching it. */
 export function callAnswered(answer: CallAnswer): answer is CallResponse {
   return "response" in answer;
@@ -125,7 +148,8 @@ interface AccountCallOptions {
  * exactly once, only on a credential that actually changed and only while it
  * still answers for the same holder. Nothing here retries a status other than
  * that one: a rate limit, a server error, and a refusal are each the caller's
- * to read.
+ * to read. Each attempt tells the service's reach, where the client keeps one
+ * (`ServiceReach`), whether it was answered.
  */
 export interface AccountCallEffects {
   /**
@@ -199,6 +223,17 @@ function transportFailure(error: CallTransportError): CallFailure {
     fault: CALL_FAULT.NETWORK,
     ...(error.errorName === undefined ? undefined : { errorName: error.errorName }),
   };
+}
+
+/** Sets the service's reach, where the client keeps one, to whether an attempt was answered. */
+function told(answered: boolean): Effect.Effect<void> {
+  return Effect.flatMap(
+    Effect.serviceOption(ServiceReach),
+    Option.match({
+      onNone: () => Effect.void,
+      onSome: (reach) => SubscriptionRef.set(reach, answered),
+    }),
+  );
 }
 
 function readCredential(
@@ -335,7 +370,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
       effect: Effect.Effect<Read, CallTransportError, HttpClient.HttpClient>,
     ): Effect.Effect<{ readonly read: Read } | CallFailed, never, HttpClient.HttpClient> =>
       Effect.map(
-        Effect.result(effect),
+        Effect.tap(Effect.result(effect), (result) => told(Result.isSuccess(result))),
         Result.match({
           onFailure: (error) => ({ failure: transportFailure(error) }),
           onSuccess: (read) => ({ read }),

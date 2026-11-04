@@ -8,14 +8,16 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@repo/wire/testing";
-import { Effect } from "effect";
+import { Effect, SubscriptionRef } from "effect";
 import {
   accountBearer,
   accountCall,
+  CALL_FAULT,
   type CallCredential,
   callAnswered,
   lateCredential,
   NO_CREDENTIAL,
+  ServiceReach,
 } from "./account-call.js";
 
 const BASE_URL = "https://app.test";
@@ -143,4 +145,31 @@ it.effect("a late credential renews and retries on the bearer it resolves", () =
       ["Bearer stale", "Bearer fresh"],
     );
   }),
+);
+
+it.effect(
+  "a call that ends with no answer sets the service unreachable, and the next answer, a refusal among them, sets it back",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make(true);
+      let asked = 0;
+      const { call, client } = callOn(NO_CREDENTIAL, () => {
+        asked += 1;
+        if (asked === 1) throw new TypeError("Load failed");
+        return refusal();
+      });
+      const send = Effect.provideService(
+        Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client),
+        ServiceReach,
+        reach,
+      );
+
+      const unanswered = yield* send;
+      assert.deepEqual(unanswered, { fault: CALL_FAULT.NETWORK, errorName: "TypeError" });
+      assert.equal(yield* SubscriptionRef.get(reach), false);
+
+      const refused = yield* send;
+      assert.ok(callAnswered(refused) && refused.response.status === HTTP_STATUS.UNAUTHORIZED);
+      assert.equal(yield* SubscriptionRef.get(reach), true);
+    }),
 );

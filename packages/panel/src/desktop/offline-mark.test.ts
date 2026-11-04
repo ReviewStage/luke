@@ -15,8 +15,9 @@ import { OfflineMark } from "./offline-mark.js";
 
 /**
  * The pill says what the window shows may be behind, from main's document:
- * offline while the Mac or the service is, catching up while the host's live
- * follow is behind, and nothing once it is live again. Each document is
+ * offline while the Mac or the service is, the service's calls going
+ * unanswered among it, catching up while the host's live follow is behind,
+ * and nothing once it is live again. Each document is
  * delivered as main's push delivers it.
  */
 
@@ -27,10 +28,15 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Main's document with the Mac's network and the host's live state as given. */
-function documentOf(online: boolean, live: HostLive | undefined, version = 1): AppStateSnapshot {
+/** Main's document with the Mac's network, the host's live state, and whether the service answered its last call, as given. */
+function documentOf(
+  online: boolean,
+  live: HostLive | undefined,
+  version = 1,
+  reachable = true,
+): AppStateSnapshot {
   const tasks = live === undefined ? IDLE_TASKS_VIEW : { ...IDLE_TASKS_VIEW, live };
-  return { ...stateWith({}, { network: { online }, tasks }), version };
+  return { ...stateWith({}, { network: { online, reachable }, tasks }), version };
 }
 
 /** The pill drawn over `first`, and a push that delivers a later document to it. */
@@ -56,6 +62,13 @@ async function mount(first: AppStateSnapshot): Promise<(next: AppStateSnapshot) 
 /** The pill's announced name, or none where nothing is drawn. */
 function said(): string | undefined {
   return document.querySelector(".offline-mark")?.getAttribute("aria-label") ?? undefined;
+}
+
+/** Why the pill says what it says, as its hint's words are heard. */
+function why(): string | undefined {
+  const mark = document.querySelector(".offline-mark");
+  const id = mark?.getAttribute("aria-describedby") ?? mark?.getAttribute("aria-owns");
+  return id == null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
 
 test("nothing is drawn while the Mac is online and live updates are current", async () => {
@@ -97,6 +110,15 @@ test("the pill going offline or catching up is announced politely as it changes,
 test("a service that answers no seal says offline while the Mac is online", async () => {
   const push = await mount(documentOf(true, HOST_LIVE.OFFLINE));
   assert.equal(said(), "Offline");
+
+  await push(documentOf(true, HOST_LIVE.LIVE, 2));
+  assert.equal(said(), undefined);
+});
+
+test("a service whose calls go unanswered says it isn't answering while the Mac is online, and an answer clears it", async () => {
+  const push = await mount(documentOf(true, HOST_LIVE.LIVE, 1, false));
+  assert.equal(said(), "Offline");
+  assert.equal(why(), "The service isn't answering.");
 
   await push(documentOf(true, HOST_LIVE.LIVE, 2));
   assert.equal(said(), undefined);
