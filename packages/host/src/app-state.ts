@@ -22,7 +22,9 @@ import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
+import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
@@ -414,6 +416,18 @@ export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
  */
 export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
 
+/**
+ * Each workspace's own integrations the host holds for the windows
+ * (`workspace-integrations-follow.ts`): its Sentry installations and its
+ * Slack bot, those a window draws and the few drawn lately, by the
+ * workspace's id, each as its read stands with every write drawn over it
+ * until the read carries it.
+ */
+export type AppWorkspaceIntegrations = AppHeldById<WorkspaceIntegrations>;
+
+/** The channels of each workspace's Slack team the host holds for an owner's or an admin's windows, by the workspace's id, as Slack last listed them. */
+export type AppSlackChannels = AppHeldById<readonly SlackListedChannel[]>;
+
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
@@ -505,6 +519,8 @@ export interface AppHostReads {
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: WorkspaceIntegrations;
+  [LIVE_READ.SLACK_CHANNELS]: readonly SlackListedChannel[];
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
@@ -622,6 +638,10 @@ export interface AppState {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
+  /** Each workspace's own integrations the windows draw, held while Settings › Workspace or an automation's editor draws them and a while after: what its Sentry and Slack bot rows read. */
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: AppWorkspaceIntegrations;
+  /** Each workspace's Slack channels an owner's or an admin's window draws, held while Settings › Workspace lists them and a while after: what its Slack channel rows read. */
+  [LIVE_READ.SLACK_CHANNELS]: AppSlackChannels;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
   /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
@@ -783,6 +803,9 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  // Note that a workspace's integrations cross whole, since a write moves one of a few rows.
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.SLACK_CHANNELS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {

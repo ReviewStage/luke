@@ -3,7 +3,8 @@ import { TRIGGER_PROVIDER, type TriggerProvider } from "@repo/features/trigger-c
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { INTEGRATION_INSTALLATION_STATUS } from "../integration-vocabulary.js";
 import {
   integrationInstallation,
@@ -11,6 +12,7 @@ import {
 } from "../schemas/integration-installation.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
+import { workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * integration-installation-store.ts -- which workspace each integration's installed app stands for, and the intents that carry an install there.
@@ -123,6 +125,12 @@ const upsertInstallation = SqlSchema.findAll({
     ),
 });
 
+/**
+ * An active installation marked uninstalled, answering the transaction it
+ * was marked in, read in its own `RETURNING`, so a reader following the
+ * workspace's installations waits for that transaction before it confirms
+ * a disconnect; none where no active row stood.
+ */
 const writeDeleted = SqlSchema.findAll({
   Request: Schema.Struct({
     provider: ProviderSchema,
@@ -130,7 +138,7 @@ const writeDeleted = SqlSchema.findAll({
     organizationId: Schema.optionalKey(Schema.String),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ externalId: Schema.String }),
+  Result: Schema.Struct({ txid: Schema.String }),
   execute: ({ provider, externalId, organizationId, now }) =>
     Database.use((db) =>
       db
@@ -146,7 +154,7 @@ const writeDeleted = SqlSchema.findAll({
               : eq(integrationInstallation.organizationId, organizationId),
           ),
         )
-        .returning({ externalId: integrationInstallation.externalId }),
+        .returning({ txid: sql<string>`pg_current_xact_id()::text` }),
     ),
 });
 
@@ -261,17 +269,18 @@ export function linkIntegrationInstallation(
 }
 
 /**
- * Marks the installation uninstalled; false where no active installation
- * stands under the id. A provider's uninstall names no workspace, since it
- * ends the installation wherever it is linked; a workspace's own disconnect
- * names its `organizationId`, so it never ends one another workspace has
- * linked since it last read.
+ * Marks the installation uninstalled, answering the transaction it was
+ * marked in; none where no active installation stands under the id. A
+ * provider's uninstall names no workspace, since it ends the installation
+ * wherever it is linked; a workspace's own disconnect names its
+ * `organizationId`, so it never ends one another workspace has linked since
+ * it last read.
  */
 export function markIntegrationInstallationDeleted(
   provider: TriggerProvider,
   externalId: string,
   organizationId?: string,
-): TaskStoreEffect<boolean> {
+): TaskStoreEffect<Option.Option<string>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       writeDeleted({
@@ -280,7 +289,7 @@ export function markIntegrationInstallationDeleted(
         now,
         ...(organizationId === undefined ? undefined : { organizationId }),
       }),
-      (rows) => rows.length > 0,
+      (rows) => Option.map(Option.fromNullishOr(rows[0]), (row) => row.txid),
     ),
   );
 }
@@ -292,6 +301,43 @@ export function activeInstallationWorkspace(
 ): TaskStoreEffect<Option.Option<string>> {
   return Effect.map(findActiveWorkspace({ provider, externalId }), (row) =>
     Option.map(row, (found) => found.organizationId),
+  );
+}
+
+/**
+ * A workspace's active Sentry installations as one member's held read
+ * answers them: Sentry's id for each and its organization's slug, null where
+ * none was read, while the reader is a member of the workspace, and none at
+ * all once they are not, so a subscription stays bound to the rule its
+ * endpoint checked. Every column is under the key the wire reads it by
+ * (`@repo/features/workspace-integrations-live`), the instant it was linked
+ * as epoch milliseconds, and the order is the reader's to keep. None where a
+ * statement names a value Realtime cannot carry.
+ */
+export function sentryInstallationsLiveStatement(
+  readerId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            installationId: integrationInstallation.externalId,
+            account: integrationInstallation.accountLabel,
+          },
+          { createdAt: integrationInstallation.createdAt },
+        ),
+      )
+      .from(integrationInstallation)
+      .where(
+        and(
+          eq(integrationInstallation.organizationId, organizationId),
+          eq(integrationInstallation.provider, TRIGGER_PROVIDER.SENTRY),
+          eq(integrationInstallation.status, INTEGRATION_INSTALLATION_STATUS.ACTIVE),
+          workspaceReachableBy(readerId, organizationId),
+        ),
+      ),
   );
 }
 

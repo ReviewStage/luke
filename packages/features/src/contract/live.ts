@@ -24,7 +24,9 @@
  * with whether the reader can generate them; and every integration row the
  * account holds, with the providers it is offered and those that take
  * several accounts; and one workspace's memories, named by `?workspaceId=`,
- * each with its keeper's name and whether the reader may forget it. Each
+ * each with its keeper's name and whether the reader may forget it; and one
+ * workspace's Sentry installations and Slack bot, named by `?workspaceId=`,
+ * with whether this deployment holds each integration. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -66,6 +68,7 @@ import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-li
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
+import { workspaceIntegrationsLiveAnswerSchema } from "../workspace-integrations-live.js";
 import {
   workspaceInvitationsLiveAnswerSchema,
   workspaceMembersLiveAnswerSchema,
@@ -297,6 +300,12 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceMemoriesLiveAnswerSchema)),
+  workspaceIntegrations: hostedProcedure
+    .meta(
+      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),
+    )
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(workspaceIntegrationsLiveAnswerSchema)),
   pullRequestChapters: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),

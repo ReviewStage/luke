@@ -133,6 +133,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /** One workspace's memories under `?workspaceId=`, sealed for following over Neon Realtime (GET), each with its keeper's name and whether the reader may forget it, or `not-found`, or their rows inline where polled. `memory-live.ts` declares the answer. */
   LIVE_WORKSPACE_MEMORIES: "/api/live/workspace-memories",
+  /** One workspace's Sentry installations and Slack bot under `?workspaceId=`, sealed for following over Neon Realtime (GET), with whether this deployment holds each integration, or `not-found`, or their rows inline where polled. `workspace-integrations-live.ts` declares the answer. */
+  LIVE_WORKSPACE_INTEGRATIONS: "/api/live/workspace-integrations",
   /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
   /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */

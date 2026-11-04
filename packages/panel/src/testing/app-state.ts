@@ -29,8 +29,10 @@ import {
   type AppPages,
   type AppPlanComments,
   type AppProviderKeyList,
+  type AppSlackChannels,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppWorkspaceIntegrations,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
   NO_AGENT_ORIGINS,
@@ -113,6 +115,8 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_INTEGRATIONS]: NO_KEYS_HELD,
+    [LIVE_READ.SLACK_CHANNELS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.MCP_CLIENTS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
@@ -221,6 +225,8 @@ export interface HostReadsHanded {
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  readonly deliverIntegrations: (next: AppWorkspaceIntegrations) => void;
+  readonly deliverSlackChannels: (next: AppSlackChannels) => void;
 }
 
 /** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
@@ -300,6 +306,8 @@ export function handHostReads(first: {
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverIntegrations: (next) => deliver({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: next }),
+    deliverSlackChannels: (next) => deliver({ [LIVE_READ.SLACK_CHANNELS]: next }),
   };
 }
 

@@ -17,9 +17,10 @@ import {
   type IntegrationLandingStatus,
   integrationLandingPath,
 } from "@repo/features/integration-wire";
+import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
 import type { WireBoundaryInput } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -393,10 +394,13 @@ it.layer(getTestDB())("a workspace's Sentry installation", (it) => {
 
         assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.NOT_PERMITTED });
         assert.deepEqual(elsewhere.body, { error: HOSTED_API_ERROR.NOT_FOUND });
-        assert.deepEqual(disconnected, {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { configured: true, installations: [] },
-        });
+        // The disconnect answers the transaction it marked the installation in, which a desktop holding the workspace's integrations waits for.
+        assert.equal(disconnected.status, HOSTED_HTTP_STATUS.OK);
+        const { txid, ...answered } = Schema.decodeUnknownSync(workspaceSentryAnswerSchema)(
+          disconnected.body,
+        );
+        assert.deepEqual(answered, { configured: true, installations: [] });
+        assert.ok(txid !== undefined, "the disconnect answered its transaction");
         assert.deepEqual(othersRead.body, {
           configured: true,
           installations: [{ installationId: othersId, account: ORG_SLUG }],

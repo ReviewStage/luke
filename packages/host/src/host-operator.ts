@@ -385,6 +385,8 @@ import type {
   AppPlanComments,
   AppPlanDocuments,
   AppProviderKeys,
+  AppSlackChannels,
+  AppWorkspaceIntegrations,
   AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
@@ -613,17 +615,15 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
   workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** Whether the deployment holds our Sentry integration, and a workspace's installations of it; or why there is no answer. */
-  workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
   workspaceSentryInstall(
     params: TasksWorkspaceParams,
   ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** One of a workspace's Sentry installations disconnected; the workspace's Sentry as it then stands, or why it is not. */
+  /** One of a workspace's Sentry installations disconnected, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands, or why it is not. */
   workspaceSentryDisconnect(
     params: TasksWorkspaceSentryDisconnectParams,
   ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-  /** Whether the deployment holds our Slack bot, and the team a workspace's bot is connected to; or why there is no answer. */
+  /** Whether the deployment holds our Slack bot, and the reader's own Slack notifications; or why there is no answer. */
   workspaceSlackBot(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
   workspaceSlackBotConnect(
@@ -645,6 +645,22 @@ export interface HostOperator {
   workspaceSlackBotChannel(
     params: TasksWorkspaceSlackBotChannelParams,
   ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** One workspace's own integrations held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceIntegrationsChanged`. */
+  workspaceIntegrationsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** One workspace's integrations let go by the windows. */
+  workspaceIntegrationsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** One workspace's held integrations read again at once, as Try again asks. */
+  workspaceIntegrationsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** Every workspace's own integrations the host holds for the windows, whole, each time any of them moves. */
+  onWorkspaceIntegrationsChanged(listener: (held: AppWorkspaceIntegrations) => void): () => void;
+  /** One workspace's Slack channels held for an owner's or an admin's windows from now until let go; what Slack lists is heard through `onSlackChannelsChanged`. */
+  workspaceSlackChannelsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** One workspace's Slack channels let go by the windows. */
+  workspaceSlackChannelsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** One workspace's held Slack channels asked again at once, as Try again asks; done once the ask has landed. */
+  workspaceSlackChannelsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
+  /** Every workspace's Slack channels the host holds for the windows, whole, each time any of them moves. */
+  onSlackChannelsChanged(listener: (held: AppSlackChannels) => void): () => void;
   /** One workspace's people held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceMembersChanged`. */
   workspaceMembersFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
   /** One workspace's people let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -1606,11 +1622,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
-    workspaceSentry: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
     workspaceSentryInstall: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
@@ -1663,6 +1674,56 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, { ...params }),
         answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceIntegrationsFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceIntegrationsUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_UNFOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceIntegrationsRetry: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_RETRY, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    onWorkspaceIntegrationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED,
+        // Note that the held integrations are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceIntegrations>(payload) : undefined),
+        listener,
+      ),
+    workspaceSlackChannelsFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceSlackChannelsUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_UNFOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceSlackChannelsRetry: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_RETRY, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    onSlackChannelsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.SLACK_CHANNELS_CHANGED,
+        // Note that the held channels are the host's own, handed over in this process, so they are passed on as built.
+        (payload) => (isRecord(payload) ? answered<AppSlackChannels>(payload) : undefined),
+        listener,
       ),
     workspaceMembersFollow: (scope) =>
       fire(

@@ -100,7 +100,7 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
       const email = `${member}@APP.test`;
       assert.deepEqual(yield* slackMemberByEmail(ours, email), Option.some(member));
       assert.equal(Option.isNone(yield* slackMemberByEmail(theirs, email)), true);
-      assert.equal(yield* deleteSlackInstallation(theirs), false);
+      assert.equal(Option.isNone(yield* deleteSlackInstallation(theirs)), true);
       assert.equal(Option.isSome(yield* workspaceSlackInstallation(ours)), true);
     }),
   );
@@ -119,7 +119,7 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
       const disconnected = yield* deleteSlackInstallation(workspace);
 
       assert.equal(Option.isNone(afterMove), true);
-      assert.equal(disconnected, true);
+      assert.equal(Option.isSome(disconnected), true);
       assert.equal(Option.isNone(yield* slackMemberLookup(workspace, member)), true);
     }),
   );

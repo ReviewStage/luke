@@ -8,11 +8,16 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
+import {
+  slackChannelRepositoriesLiveStatement,
+  slackInstallationLiveStatement,
+} from "@repo/database/models/slack-installation-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import {
   memberWorkspaceIds,
@@ -42,6 +47,7 @@ import {
   inboxItemSync,
   inboxMessageSync,
   integrationConnectionSync,
+  integrationInstallationSync,
   invitationSync,
   macCommandSync,
   memberSync,
@@ -55,6 +61,8 @@ import {
   planRevisionSync,
   pullRequestChaptersSync,
   repositoryPinSync,
+  slackChannelRepositorySync,
+  slackInstallationSync,
   taskBlockSync,
   taskPinSync,
   taskSectionEntrySync,
@@ -438,6 +446,37 @@ export const workspaceMemoriesLive = defineLiveQuery({
   ],
   statements: ({ userId, workspaceId }) =>
     Option.map(workspaceMemoriesLiveStatement(userId, workspaceId), (memories) => ({ memories })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * A workspace's own integrations, its active Sentry installations, its Slack
+ * bot, and each Slack channel's repository, woken on the workspace's
+ * integrations topic by an install finished in the browser, a disconnect,
+ * Sentry's own uninstall, and a repository named, and on the reader's own by
+ * their membership made or ended, which decides whether they read it at all.
+ * Whether this deployment holds each integration is its configuration, which
+ * no statement reads, so the endpoint answers it beside them.
+ */
+export const workspaceIntegrationsLive = defineLiveQuery({
+  name: LIVE_READ.WORKSPACE_INTEGRATIONS,
+  params: ["userId", "workspaceId"],
+  reads: [
+    integrationInstallationSync,
+    slackInstallationSync,
+    slackChannelRepositorySync,
+    memberSync,
+  ],
+  topics: ({ userId, workspaceId }) => [
+    [TOPIC.WORKSPACE_INTEGRATIONS, workspaceId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, workspaceId }) =>
+    Option.all({
+      sentryInstallations: sentryInstallationsLiveStatement(userId, workspaceId),
+      slackInstallation: slackInstallationLiveStatement(userId, workspaceId),
+      slackChannelRepositories: slackChannelRepositoriesLiveStatement(userId, workspaceId),
+    }),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -851,6 +890,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   workspaceMembersLive,
   workspaceInvitationsLive,
   workspaceMemoriesLive,
+  workspaceIntegrationsLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,

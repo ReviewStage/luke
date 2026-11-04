@@ -1,7 +1,8 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { SlackBotChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
+import type { WorkspaceSlack } from "@repo/features/workspace-integrations-live";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -36,9 +37,10 @@ import { Picker, PickerRow } from "./picker-row.js";
  * asks first, since the bot leaves the channel for everyone in it. Where the
  * bot is in no channel, one row says so and how to add one, a private one by
  * `/invite`. A Slack start works in the repository its message names, else
- * its channel's, else the default. Every write answers the bot as it then
- * stands, which the rows redraw from; a refusal is said under the row that
- * asked.
+ * its channel's, else the default. The repositories are the workspace's
+ * held integrations' and the channels Slack's own list the host holds, so a
+ * repository chosen draws at once, and a channel joined or left draws as
+ * its answer lands; a refusal is said under the row that asked.
  */
 
 /** The menu row that picks no repository: the default in a channel's menu, none in the default's. */
@@ -69,12 +71,12 @@ type RepositoryRows =
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** A channel as a sentence names it, as Slack writes one. */
-function channelName(channel: SlackBotChannel): string {
+function channelName(channel: SlackListedChannel): string {
   return `#${channel.name}`;
 }
 
 /** A channel's mark, which says its kind so its name need not: Slack's hash for a public one, a lock for a private one. */
-function ChannelMark({ channel }: { channel: SlackBotChannel }): React.JSX.Element {
+function ChannelMark({ channel }: { channel: SlackListedChannel }): React.JSX.Element {
   return channel.private ? <GLYPH.PRIVATE_CHANNEL /> : <GLYPH.CHANNEL />;
 }
 
@@ -116,20 +118,17 @@ function useRepositoryRows(workspaceId: string) {
 export function AddSlackChannel({
   workspaceId,
   channels,
-  onChanged,
   onRefused,
 }: {
   workspaceId: string;
-  channels: readonly SlackBotChannel[];
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  channels: readonly SlackListedChannel[];
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const addable = channels.filter((channel) => !channel.private && !channel.member);
   const pick = (channelId: string) => {
     onRefused(undefined);
-    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, member: true }).then(
-      onChanged,
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, member: true }).catch(
       (refused: Error) => onRefused(refused.message),
     );
   };
@@ -152,26 +151,20 @@ export function AddSlackChannel({
 /** The workspace's default repository for Slack starts, inset under the bot's row, named or cleared from its picker. */
 function DefaultRepositoryRow({
   workspaceId,
-  slackBot,
-  onChanged,
+  chosen,
 }: {
   workspaceId: string;
-  slackBot: WorkspaceSlackBot;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  chosen: string | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const repositories = useRepositoryRows(workspaceId);
   const [refusal, setRefusal] = useState<string>();
   const [saves, setSaves] = useState(0);
-  const chosen = slackBot.defaultRepository;
   const pick = (id: string) => {
     setRefusal(undefined);
     const repository = id === NONE_ROW ? null : id;
     act(ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY, { workspaceId, repository }).then(
-      (now) => {
-        onChanged(now);
-        setSaves((count) => count + 1);
-      },
+      () => setSaves((count) => count + 1),
       (refused: Error) => setRefusal(refused.message),
     );
   };
@@ -196,18 +189,19 @@ function DefaultRepositoryRow({
 
 /**
  * One channel the bot is in, inset under the bot's row: its mark and name,
- * its repository picker, and a ⋯ whose Remove from channel asks first.
+ * its repository picker, the default until one is named (`repository`),
+ * and a ⋯ whose Remove from channel asks first.
  */
 function ChannelRow({
   workspace,
   channel,
-  slackBot,
-  onChanged,
+  repository: named,
+  defaultRepository,
 }: {
   workspace: Workspace;
-  channel: SlackBotChannel;
-  slackBot: WorkspaceSlackBot;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  channel: SlackListedChannel;
+  repository: string | undefined;
+  defaultRepository: string | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -219,10 +213,7 @@ function ChannelRow({
     { subject: channel.member, surfaceOpen: true },
     () =>
       act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, member: false }).then(
-        (now) => {
-          onChanged(now);
-          return ACCEPTED;
-        },
+        () => ACCEPTED,
         (refused: Error) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message }),
       ),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
@@ -230,8 +221,7 @@ function ChannelRow({
   const pick = (id: string) => {
     setRefusal(undefined);
     const repository = id === NONE_ROW ? null : id;
-    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, repository }).then(
-      onChanged,
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, repository }).catch(
       (refused: Error) => setRefusal(refused.message),
     );
   };
@@ -263,13 +253,13 @@ function ChannelRow({
               label={`${name} repository`}
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
-              value={channel.repository ?? NONE_ROW}
-              valueLabel={channel.repository ?? WORDS.DEFAULT}
+              value={named ?? NONE_ROW}
+              valueLabel={named ?? WORDS.DEFAULT}
               rows={[
                 {
                   id: NONE_ROW,
                   label: WORDS.DEFAULT,
-                  detail: slackBot.defaultRepository ?? WORDS.NONE,
+                  detail: defaultRepository ?? WORDS.NONE,
                 },
                 ...repositories.rows,
               ]}
@@ -300,29 +290,29 @@ function ChannelRow({
 /**
  * The rows under a connected bot's row, to an owner or admin, each a row of
  * the card: the default repository, then each channel the bot is in, or
- * one row saying it is in none; where Slack's channels could not be read,
- * the default alone.
+ * one row saying it is in none; where Slack's channels have not been
+ * listed, the default alone.
  */
 export function SlackBotChannelRows({
   workspace,
-  slackBot,
-  onChanged,
+  slack,
+  channels,
 }: {
   workspace: Workspace;
-  slackBot: WorkspaceSlackBot;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  slack: WorkspaceSlack;
+  channels: readonly SlackListedChannel[] | undefined;
 }): React.JSX.Element {
-  const joined = slackBot.channels?.filter((channel) => channel.member);
+  const joined = channels?.filter((channel) => channel.member);
   return (
     <>
-      <DefaultRepositoryRow workspaceId={workspace.id} slackBot={slackBot} onChanged={onChanged} />
+      <DefaultRepositoryRow workspaceId={workspace.id} chosen={slack.defaultRepository} />
       {joined?.map((channel) => (
         <ChannelRow
           key={channel.id}
           workspace={workspace}
           channel={channel}
-          slackBot={slackBot}
-          onChanged={onChanged}
+          repository={slack.channelRepositories[channel.id]}
+          defaultRepository={slack.defaultRepository}
         />
       ))}
       {joined?.length === 0 ? (

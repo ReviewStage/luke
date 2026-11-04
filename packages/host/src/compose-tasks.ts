@@ -40,6 +40,11 @@ import {
   type PageOwner,
   type PagePlace,
 } from "@repo/features/page-wire";
+import type {
+  SlackBotChannel,
+  SlackListedChannel,
+  WorkspaceSlackBot,
+} from "@repo/features/slack-bot-wire";
 import {
   TASK_BLOCK_CHANGE,
   TASK_RELATION_KIND,
@@ -177,11 +182,12 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { NO_BROWSER_TABS, NO_PAGES } from "./app-state.js";
+import { NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import { heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   FileAtCommitKey,
@@ -212,6 +218,14 @@ import { sidebarCollections } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import type { WindowFocus } from "./window-focus.js";
+import {
+  heldWorkspaceIntegrations,
+  sentryDisconnect,
+  slackBotAnswered,
+  slackBotChannel,
+  slackBotDisconnect,
+  slackBotRepository,
+} from "./workspace-integrations-follow.js";
 import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
 import {
   followSidebarRows,
@@ -377,6 +391,14 @@ function browserTabsPlaceOf(owner: BrowserTabsOwnerKey): BrowserTabsPlace {
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
+/** A channel of a workspace's Slack team as the held list keeps it, with no repository, which is the workspace's held integrations'. */
+function listedChannel({
+  repository: _repository,
+  ...channel
+}: SlackBotChannel): SlackListedChannel {
+  return channel;
+}
+
 /** Opening or deleting a task names it and nothing else. */
 const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 
@@ -434,7 +456,7 @@ export type TasksClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "sentryInstallations"
+    | "integrationsLive"
     | "sentryInstall"
     | "sentryDisconnect"
     | "slackBot"
@@ -1124,6 +1146,77 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
   const memberHolds = yield* FiberMap.make<string>();
+
+  /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
+  const slackBotOf = (
+    answer: WorkspaceCallResult<WorkspaceSlackBot>,
+  ): TasksWorkspaceSlackBotAnswer =>
+    answer.ok ? { slackBot: answer.answer } : { failure: answer.failure };
+
+  /**
+   * The channels of each workspace's Slack team an owner's or an admin's
+   * window lists, and the few listed latest, as Slack last listed them,
+   * told on the app state every window draws (`LIVE_READ.SLACK_CHANNELS`).
+   * They are Slack's own, which no row carries, so the host asks for them
+   * (`held-fetch.ts`): as a window holds them, as one comes forward, as the
+   * workspace's bot is connected or disconnected, and on Try again; a
+   * channel write lays the channels its answer carries. Each channel's
+   * repository is the workspace's held integrations', so none is kept here,
+   * and an ask that did not land keeps the channels last listed.
+   */
+  const slackChannels = yield* heldFetch<typeof LIVE_READ.SLACK_CHANNELS, string>({
+    empty: NO_KEYS_HELD,
+    path: (workspaceId) => [workspaceId],
+    gate,
+    focus: dependencies.focus,
+    fetch: (workspaceId) =>
+      gate()
+        ? Effect.map(served(client.workspaces.slackBot(workspaceId)), (read) => {
+            if (!read.ok) return Option.none();
+            // Note that a bot not connected is in no channel, and one whose channels Slack did not list keeps those it last listed.
+            if (read.answer.team === undefined) return Option.some([]);
+            return Option.fromNullishOr(read.answer.channels).pipe(
+              Option.map((channels) => channels.map(listedChannel)),
+            );
+          })
+        : Effect.succeed(Option.none()),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.SLACK_CHANNELS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's Slack channels, one fiber standing until let go. */
+  const channelHolds = yield* FiberMap.make<string>();
+
+  /**
+   * Each workspace's own integrations the windows draw, and the few drawn
+   * latest, its Sentry installations and its Slack bot, told on the app state
+   * every window draws (`LIVE_READ.WORKSPACE_INTEGRATIONS`): followed from
+   * the first window's hold into the sync engine's pool, every write to them
+   * drawn there the moment it is asked (`workspace-integrations-follow.ts`).
+   * A workspace the account no longer reaches is followed no longer, until
+   * every window lets it go and one holds it anew.
+   */
+  const integrations = yield* heldWorkspaceIntegrations({
+    seal: (workspaceId, userId, poll, after) =>
+      gate()
+        ? Effect.map(
+            served(client.workspaces.integrationsLive(workspaceId, userId, poll, after)),
+            (sealed) => {
+              if (!("ok" in sealed)) return { ...sealed, gone: true };
+              if (sealed.ok) return sealed.answer;
+              return {
+                failure: sealed.failure,
+                gone: sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
+              };
+            },
+          )
+        : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
+    accountId: dependencies.accountId,
+    gate,
+    pool: dependencies.pool,
+    slackMoved: (workspaceId) => slackChannels.wake((held) => held === workspaceId),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's integrations, one fiber standing until let go. */
+  const integrationHolds = yield* FiberMap.make<string>();
 
   /** What a member write's answer says of each of `userIds`: the role it answers them with, or gone where it names them no more. */
   function membersMoved(
@@ -2724,21 +2817,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
         );
       }),
-    // A workspace's Sentry is answered to the window that asked and held
-    // nowhere: the row reads it as it opens and as the window comes forward.
-    [GATEWAY_METHOD.WORKSPACES_SENTRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "reading Sentry names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
-        const sentry = yield* served(client.workspaces.sentryInstallations(read.workspaceId));
-        return carried<TasksWorkspaceSentryAnswer>(
-          sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
-        );
-      }),
     // Sentry's install address is answered to the caller that opens it and
     // held nowhere: the install lands in the browser.
     [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: (params) =>
@@ -2754,25 +2832,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );
       }),
-    [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: declaredMethod(
+      dependencies.pool,
+      sentryDisconnect(({ workspaceId, installationId }) =>
+        gate()
+          ? Effect.map(
+              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
+              (sentry): TasksWorkspaceSentryAnswer =>
+                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+            )
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceSentryDisconnectParamsSchema,
           params,
           "disconnecting Sentry names a workspace and an installation",
-        );
-        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, installationId } = read;
-        const sentry = yield* served(
-          client.workspaces.sentryDisconnect(workspaceId, installationId),
-        );
-        return carried<TasksWorkspaceSentryAnswer>(
-          sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
-        );
-      }),
+        ),
+    ),
     // A workspace's Slack bot is answered to the window that asked and held
-    // nowhere, as its Sentry is: the row reads it as it opens and as the
-    // window comes forward, and a connect or disconnect answers it anew.
+    // nowhere: the reader's own notifications switch reads it as it opens and
+    // as the window comes forward, since no row of the workspace carries it.
     [GATEWAY_METHOD.WORKSPACES_SLACK_BOT]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2794,24 +2874,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "connecting the Slack bot names a workspace",
         );
         if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
-        );
+        const connected = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
+        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
+        if (connected.ok) yield* integrations.confirmed(read.workspaceId, connected.answer.txid);
+        return slackBotAnswered(slackBotOf(connected));
       }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: declaredMethod(
+      dependencies.pool,
+      slackBotDisconnect(({ workspaceId }) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceParamsSchema,
           params,
           "disconnecting the Slack bot names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(client.workspaces.slackBotDisconnect(read.workspaceId));
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
-        );
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2827,31 +2908,120 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );
       }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: declaredMethod(
+      dependencies.pool,
+      slackBotRepository((repository) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceSlackBotRepositoryParamsSchema,
           params,
           "naming the Slack bot's default repository names a workspace and a repository or none",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(client.workspaces.slackBotRepository(read));
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+        ),
+    ),
+    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: declaredMethod(
+      dependencies.pool,
+      slackBotChannel(
+        (channel) =>
+          gate()
+            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        ({ workspaceId }, answer) => {
+          if (!("slackBot" in answer)) return Effect.void;
+          const { channels } = answer.slackBot;
+          return channels === undefined
+            ? slackChannels.wake((held) => held === workspaceId)
+            : slackChannels.answered(workspaceId, channels.map(listedChannel));
+        },
+      ),
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceSlackBotChannelParamsSchema,
           params,
           "changing a Slack channel names a workspace, the channel, and what changes",
+        ),
+    ),
+    // A workspace's own integrations are held for the windows while they
+    // draw them, and told only on the app state
+    // (`WORKSPACE_INTEGRATIONS_CHANGED`). Note that the windows' hold is one
+    // fiber standing until let go, so a window holding it again holds
+    // nothing anew.
+    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "holding a workspace's integrations names the workspace",
         );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const slackBot = yield* served(client.workspaces.slackBotChannel(read));
-        return carried<TasksWorkspaceSlackBotAnswer>(
-          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        yield* FiberMap.run(
+          integrationHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(integrations.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
         );
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "letting a workspace's integrations go names the workspace",
+        );
+        yield* FiberMap.remove(integrationHolds, workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading a workspace's integrations again names the workspace",
+        );
+        yield* integrations.retry(workspaceId);
+        return {};
+      }),
+    // A workspace's Slack channels are held for an owner's or an admin's
+    // windows while they list them, and told only on the app state
+    // (`SLACK_CHANNELS_CHANGED`), on the terms its integrations are held.
+    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "holding a workspace's Slack channels names the workspace",
+        );
+        yield* FiberMap.run(
+          channelHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(slackChannels.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "letting a workspace's Slack channels go names the workspace",
+        );
+        yield* FiberMap.remove(channelHolds, workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "asking a workspace's Slack channels again names the workspace",
+        );
+        yield* slackChannels.retry(workspaceId);
+        return {};
       }),
     // A workspace's people are held for a window while it draws them, and
     // told only on the app state (`WORKSPACE_MEMBERS_CHANGED`). Note that the
@@ -3115,6 +3285,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldBrowserTabs.open;
       yield* comments.open;
       yield* membersReads.held.open;
+      yield* integrations.open;
+      yield* slackChannels.open;
       yield* documents.open;
       if (!gate()) return;
       yield* followAccount;
@@ -3131,6 +3303,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldBrowserTabs.end;
       yield* comments.end;
       yield* membersReads.held.end;
+      yield* integrations.end;
+      yield* slackChannels.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
       yield* FiberMap.clear(historyFollows);

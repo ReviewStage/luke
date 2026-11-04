@@ -80,8 +80,6 @@ const REFUSAL = {
     "Could not connect GitHub to that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]:
     "Could not disconnect GitHub from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]:
-    "Could not read that workspace's Sentry on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]:
     "Could not install Sentry for that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]:
@@ -215,12 +213,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`disconnect:${params.workspaceId}`, () =>
         script.notPermitted ? refusal() : { workspace: ACME },
       ),
-    workspaceSentry: (params) =>
-      ask(`sentry:${params.workspaceId}`, () =>
-        params.workspaceId === ACME.id
-          ? { sentry: { configured: true, installations: [SENTRY_INSTALLATION] } }
-          : refusal(),
-      ),
     workspaceSentryInstall: (params) =>
       ask(
         `sentry-install:${params.workspaceId}`,
@@ -257,6 +249,18 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceMembersUnfollow: (scope) =>
       ask(`membersUnfollow:${scope.workspaceId}`, () => undefined),
     workspaceMembersRetry: (scope) => ask(`membersRetry:${scope.workspaceId}`, () => undefined),
+    workspaceIntegrationsFollow: (params) =>
+      ask(`integrationsFollow:${params.workspaceId}`, () => undefined),
+    workspaceIntegrationsUnfollow: (params) =>
+      ask(`integrationsUnfollow:${params.workspaceId}`, () => undefined),
+    workspaceIntegrationsRetry: (params) =>
+      ask(`integrationsRetry:${params.workspaceId}`, () => undefined),
+    workspaceSlackChannelsFollow: (params) =>
+      ask(`slackChannelsFollow:${params.workspaceId}`, () => undefined),
+    workspaceSlackChannelsUnfollow: (params) =>
+      ask(`slackChannelsUnfollow:${params.workspaceId}`, () => undefined),
+    workspaceSlackChannelsRetry: (params) =>
+      ask(`slackChannelsRetry:${params.workspaceId}`, () => undefined),
     workspacePhoto: (params) =>
       ask(`photo:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id
@@ -489,14 +493,13 @@ it("a connection's install address opens only where it is GitHub's", async () =>
   assert.deepEqual(browsed, []);
 });
 
-it("a workspace's Sentry install opens only Sentry's own address, its installations are read, and a disconnect answers what remains or is refused in words that say why", async () => {
+it("a workspace's Sentry install opens only Sentry's own address, and a disconnect answers what remains or is refused in words that say why", async () => {
   const { client, browsed, script } = windowPort(PANEL);
   const disconnect = { ...WORKSPACE, installationId: SENTRY_INSTALLATION.installationId };
 
   const installed = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
   script.sentryInstallUrl = "https://sentry.example/sentry-apps/luke/external-install/";
   const elsewhere = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
-  const read = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ, WORKSPACE);
   const disconnected = await settled(
     client,
     WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
@@ -508,9 +511,6 @@ it("a workspace's Sentry install opens only Sentry's own address, its installati
   assert.deepEqual(installed, { answer: undefined });
   assert.deepEqual(elsewhere, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL] });
   assert.deepEqual(browsed, [SENTRY_INSTALL_URL]);
-  assert.deepEqual(read, {
-    answer: { configured: true, installations: [SENTRY_INSTALLATION] },
-  });
   assert.deepEqual(disconnected, { answer: { configured: true, installations: [] } });
   assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
 });

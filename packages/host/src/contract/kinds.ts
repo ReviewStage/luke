@@ -559,7 +559,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
-  WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
   WORKSPACE_SLACK_BOT_READ: "workspace.slackBotRead",
@@ -577,6 +576,25 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_MEMBERS_FOLLOW: "workspace.membersFollow",
   /** A held workspace's people read again at once, as Try again asks. */
   WORKSPACE_MEMBERS_RETRY: "workspace.membersRetry",
+  /**
+   * A workspace's own integrations, its Sentry installations and its Slack
+   * bot, held while the window holds the stream open; the stream carries
+   * nothing, and what they hold reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_INTEGRATIONS`), each write drawn there the moment
+   * it is asked.
+   */
+  WORKSPACE_INTEGRATIONS_FOLLOW: "workspace.integrationsFollow",
+  /** A held workspace's integrations read again at once, as Try again asks. */
+  WORKSPACE_INTEGRATIONS_RETRY: "workspace.integrationsRetry",
+  /**
+   * The channels of a workspace's Slack team, held for an owner's or an
+   * admin's window while it holds the stream open; the stream carries
+   * nothing, and what Slack lists reaches the panel on app state
+   * (`LIVE_READ.SLACK_CHANNELS`).
+   */
+  WORKSPACE_SLACK_CHANNELS_FOLLOW: "workspace.slackChannelsFollow",
+  /** A held workspace's Slack channels asked again at once, as Try again asks. */
+  WORKSPACE_SLACK_CHANNELS_RETRY: "workspace.slackChannelsRetry",
   /**
    * A workspace's pending invitations, followed for an owner or an admin
    * while the window holds the stream open: as they first stand, then each
@@ -896,7 +914,6 @@ export const PORT_ACT_USE = {
   WORKSPACE_INVITATION_CANCEL: ACT_USE.WRITE,
   WORKSPACE_GITHUB_CONNECT: ACT_USE.WRITE,
   WORKSPACE_GITHUB_DISCONNECT: ACT_USE.WRITE,
-  WORKSPACE_SENTRY_READ: ACT_USE.READ,
   WORKSPACE_SENTRY_INSTALL: ACT_USE.WRITE,
   WORKSPACE_SENTRY_DISCONNECT: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_READ: ACT_USE.READ,
@@ -907,6 +924,10 @@ export const PORT_ACT_USE = {
   WORKSPACE_SLACK_BOT_CHANNEL: ACT_USE.WRITE,
   WORKSPACE_MEMBERS_FOLLOW: ACT_USE.READ,
   WORKSPACE_MEMBERS_RETRY: ACT_USE.READ,
+  WORKSPACE_INTEGRATIONS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_INTEGRATIONS_RETRY: ACT_USE.READ,
+  WORKSPACE_SLACK_CHANNELS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_SLACK_CHANNELS_RETRY: ACT_USE.READ,
   WORKSPACE_INVITATIONS: ACT_USE.READ,
   WORKSPACE_MEMBER_REMOVE: ACT_USE.WRITE,
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,

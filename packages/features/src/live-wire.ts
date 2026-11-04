@@ -869,6 +869,10 @@ export const LIVE_READ = {
   DEVICE_PRESENCE: "devicePresence",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
+  /** One workspace's Sentry installations and Slack bot, by the workspace: the service's `workspaceIntegrations` query, held for the windows that draw Settings › Workspace's integrations or an automation's editor, and a few they drew lately. */
+  WORKSPACE_INTEGRATIONS: "workspaceIntegrations",
+  /** The channels of one workspace's Slack team, by the workspace: Slack's own list, fetched by the host while an owner's or an admin's window holds it. */
+  SLACK_CHANNELS: "slackChannels",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
   /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */

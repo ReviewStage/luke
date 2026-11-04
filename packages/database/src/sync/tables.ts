@@ -39,6 +39,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { integrationConnection } from "../schemas/integration.js";
+import { integrationInstallation } from "../schemas/integration-installation.js";
 import { macCommand } from "../schemas/mac-command.js";
 import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
@@ -48,6 +49,7 @@ import { planRevision } from "../schemas/plan-revision.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { runnerLine } from "../schemas/runner-line.js";
+import { slackChannelRepository, slackInstallation } from "../schemas/slack-installation.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
@@ -521,6 +523,36 @@ export const memorySync = defineSyncTable(memory, {
 });
 
 /**
+ * A workspace's installation of an integration's own app, on the
+ * workspace's integrations topic, which only the open integration reads of
+ * the workspace are woken on. No column is ignored: Settings reads the
+ * status and the account's name, and an install, a disconnect, and the
+ * provider's uninstall each move one of them; a link moving the row to
+ * another workspace notifies both.
+ */
+export const integrationInstallationSync = defineSyncTable(integrationInstallation, {
+  topics: [{ kind: TOPIC.WORKSPACE_INTEGRATIONS, column: integrationInstallation.organizationId }],
+});
+
+/**
+ * A workspace's Slack bot, on the workspace's integrations topic: a connect,
+ * a disconnect, and a default repository named each move the row Settings
+ * reads. No column is ignored.
+ */
+export const slackInstallationSync = defineSyncTable(slackInstallation, {
+  topics: [{ kind: TOPIC.WORKSPACE_INTEGRATIONS, column: slackInstallation.organizationId }],
+});
+
+/**
+ * One Slack channel's repository, on its workspace's integrations topic: a
+ * repository named, cleared, or forgotten as the bot leaves, and every one
+ * gone with a disconnect. No column is ignored.
+ */
+export const slackChannelRepositorySync = defineSyncTable(slackChannelRepository, {
+  topics: [{ kind: TOPIC.WORKSPACE_INTEGRATIONS, column: slackChannelRepository.organizationId }],
+});
+
+/**
  * A transcript's message, on its conversation's topic alone. Note that no
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
@@ -646,6 +678,9 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentBrowserTabSync,
   pullRequestChaptersSync,
   memorySync,
+  integrationInstallationSync,
+  slackInstallationSync,
+  slackChannelRepositorySync,
   messagesSync,
   conversationsSync,
   turnsSync,

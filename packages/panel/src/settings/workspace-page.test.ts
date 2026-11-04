@@ -19,6 +19,7 @@ import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksWorkspaceInvitationsAnswer } from "@repo/features/tasks-view";
 import { dayAndTimeText } from "@repo/features/time-format";
+import type { WorkspaceSlack } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -31,7 +32,11 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@repo/host/acts";
-import { type AppWorkspaceMembers, NO_KEYS_HELD } from "@repo/host/app-state";
+import {
+  type AppWorkspaceIntegrations,
+  type AppWorkspaceMembers,
+  NO_KEYS_HELD,
+} from "@repo/host/app-state";
 import {
   type ActPortClient,
   type PortActKind,
@@ -151,10 +156,14 @@ let inviteHeld: Promise<void> | undefined;
 let refuseGitHubOpen = false;
 /** The workspace's Sentry on a deployment that holds no Sentry integration, which every test reads unless it says otherwise. */
 const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
-/** The workspace's Sentry as the service answers it; none where the read is refused. */
+/** The workspace's Sentry as the service holds it; none where the host's read of it fails. */
 let sentry: WorkspaceSentry | undefined = SENTRY_NOT_SET_UP;
 /** The workspace's Slack bot as the fake service holds it; unset, it holds none. */
 let slackBot: WorkspaceSlackBot = { configured: false };
+/** Lays each workspace's integrations on the window's document, as the host does once the page holds them. */
+let deliverIntegrations: HostReadsHanded["deliverIntegrations"] = () => undefined;
+/** Each workspace's integrations the host holds for the window, as last laid. */
+let integrations: AppWorkspaceIntegrations = NO_KEYS_HELD;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -242,6 +251,31 @@ function layPeople(workspaceId: string): void {
   deliverPeople(people);
 }
 
+/** The Slack bot as the workspace's held read carries it: its team, its default repository, and each channel's. */
+function slackOf(bot: WorkspaceSlackBot): WorkspaceSlack {
+  const { configured, team, defaultRepository, channels = [] } = bot;
+  return {
+    configured,
+    ...(team === undefined ? undefined : { team }),
+    ...(defaultRepository === undefined ? undefined : { defaultRepository }),
+    channelRepositories: Object.fromEntries(
+      channels.flatMap((channel) =>
+        channel.repository === undefined ? [] : [[channel.id, channel.repository]],
+      ),
+    ),
+  };
+}
+
+/** Lays a workspace's integrations on the window's document as the service holds them, or as failed where the host's read of them fails. */
+function layIntegrations(workspaceId: string): void {
+  integrations = {
+    ...integrations,
+    [workspaceId]:
+      sentry === undefined ? { failed: true } : { rows: { sentry, slack: slackOf(slackBot) } },
+  };
+  deliverIntegrations(integrations);
+}
+
 /** The bridge, answering the section's acts the way the host would, a member write drawn on the document from its answer. */
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
@@ -297,20 +331,21 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
-    case ACT_KIND.WORKSPACE_SENTRY_READ:
-      if (sentry === undefined) {
-        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
-      }
-      return Promise.resolve(done(sentry));
+    case ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY:
+      layIntegrations(request.payload.workspaceId);
+      return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_SLACK_BOT_READ:
       return Promise.resolve(done(slackBot));
+    // Note that the host draws each write over the workspace's held integrations, so the window reads it there.
     case ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT:
-      slackBot = { configured: true, team: SLACK_TEAM };
+      slackBot = { configured: true, team: SLACK_TEAM, notifications: true };
+      layIntegrations(request.payload.workspaceId);
       return Promise.resolve(done(slackBot));
     case ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT:
       slackBot = { configured: true };
+      layIntegrations(request.payload.workspaceId);
       return Promise.resolve(done(slackBot));
     case ACT_KIND.WORKSPACE_SENTRY_DISCONNECT: {
       const { installationId } = request.payload;
@@ -319,6 +354,7 @@ function answer(request: Asked): Promise<Answered> {
         ...was,
         installations: was.installations.filter((one) => one.installationId !== installationId),
       };
+      layIntegrations(request.payload.workspaceId);
       return Promise.resolve(done(sentry));
     }
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
@@ -537,6 +573,10 @@ beforeEach(() => {
       void Promise.resolve().then(() => layPeople(input.workspaceId));
       return quietHold();
     },
+    [ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW]: (input) => {
+      void Promise.resolve().then(() => layIntegrations(input.workspaceId));
+      return quietHold();
+    },
     [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
       sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
       const stream = pushableStream<TasksWorkspaceInvitationsAnswer>();
@@ -547,8 +587,10 @@ beforeEach(() => {
   });
   handCapabilities(DESKTOP_CAPABILITIES);
   people = NO_KEYS_HELD;
+  integrations = NO_KEYS_HELD;
   const reads = handHostReads({});
   deliverPeople = reads.deliverMembers;
+  deliverIntegrations = reads.deliverIntegrations;
   // Note that a workspace's automations are laid as the leave holds them, where the test names any.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
@@ -1001,7 +1043,6 @@ test("the chosen team workspace's members are listed with their email and role, 
       .filter(
         (request) =>
           request.kind.startsWith("workspace.") &&
-          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => request.kind),
@@ -2048,7 +2089,6 @@ test("the owner invites an address as a role, sees it pending with its link to c
         (request) =>
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_FOLLOW &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
-          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
@@ -2369,42 +2409,14 @@ const sentryFailure = (page: HTMLElement) =>
     (each) => each.textContent === "The workspace's Sentry could not be read.Retry",
   );
 
-test("the Sentry row reads again as the window comes forward: an install made on Sentry shows, and a read that then fails says so in its place rather than keep what may be gone", async () => {
-  sentry = { configured: true, installations: [] };
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const before = rowWords(rowNamed(githubGroup(page), "Sentry"));
-
-  sentry = SENTRY_INSTALLED;
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
-  await settle();
-  const installed = rowWords(rowNamed(githubGroup(page), "Sentry"));
-  sentry = undefined;
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
-  await settle();
-
-  assert.deepEqual(before, [
-    "Sentry",
-    "Not installed. Install to start automations from Sentry alerts.",
-  ]);
-  assert.deepEqual(installed, ["Sentry", "Installed for automations · acme"]);
-  assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
-  assert.ok(sentryFailure(page));
-});
-
-test("a Disconnect still being asked is dismissed once a read finds its installation gone", async () => {
+test("a Disconnect still being asked is dismissed once the read finds its installation gone", async () => {
   sentry = SENTRY_INSTALLED;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect");
   const asked = document.querySelector('[role="alertdialog"]') !== null;
   sentry = { configured: true, installations: [] };
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
+  act(() => layIntegrations(ACME.id));
   await settle();
 
   assert.equal(asked, true);

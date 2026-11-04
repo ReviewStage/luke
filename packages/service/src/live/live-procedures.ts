@@ -67,6 +67,13 @@
  * after the account is read as a member of it, so a workspace it is not in
  * is not found; woken by a memory kept, corrected, or forgotten, and by the
  * reader's own membership moving (`workspaceMemoriesLive`).
+ * `GET /api/live/workspace-integrations?workspaceId=` answers its active
+ * Sentry installations, its Slack bot, and each Slack channel's repository
+ * as three, to a member of it, so a workspace it is not in is not found,
+ * with whether this deployment holds each integration beside them, which no
+ * statement reads; woken by an install, a disconnect, Sentry's uninstall, a
+ * repository named, and the reader's own membership moving
+ * (`workspaceIntegrationsLive`).
  *
  * `GET /api/live/automations?workspaceId=` answers a workspace's automations
  * the account reads, each with its newest run, and
@@ -173,6 +180,7 @@ import {
 import { accountIntegrationConnect } from "../integrations/integration-connect.js";
 import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { SlackBot } from "../slack/slack-bot.js";
 import {
   agentBrowserTabsLive,
   agentInboxLive,
@@ -196,6 +204,7 @@ import {
   taskPagesLive,
   taskRecordLive,
   tasksLive,
+  workspaceIntegrationsLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
   workspaceMemoriesLive,
@@ -209,6 +218,7 @@ import {
   syncMovedOf,
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
+import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
@@ -948,6 +958,25 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         { userId: context.userId, workspaceId: input.workspaceId },
         input,
       );
+    }),
+    workspaceIntegrations: signedIn.workspaceIntegrations.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const sealed = yield* liveQueryParts(
+        workspaceIntegrationsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
+      const sentry = yield* SentryApp;
+      const { configured: slackConfigured } = yield* SlackBot;
+      return {
+        ...sealed,
+        sentryConfigured: Result.isSuccess(yield* Effect.result(sentry.settings)),
+        slackConfigured,
+      };
     }),
     pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

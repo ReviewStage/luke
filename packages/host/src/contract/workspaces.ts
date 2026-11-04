@@ -82,11 +82,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actProcedure(
-    "Could not read that workspace's Sentry on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]: actProcedure(
     "Could not install Sentry for that workspace on this system.",
   )
@@ -137,6 +132,28 @@ export const workspaceActsContract = {
     "Could not read that workspace's members again on this system.",
   )
     .input(exactInput(workspacePeopleFollowSchema))
+    .output(EffectSchema.Void),
+  // Note that the hold's stream carries nothing: the held integrations reach the panel on app state, and the stream is the window's hold on them.
+  [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW]: actProcedure(
+    "Could not follow that workspace's integrations on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(eventIterator(type<never>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY]: actProcedure(
+    "Could not read that workspace's integrations again on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.Void),
+  // Note that the hold's stream carries nothing: the held channels reach the panel on app state, and the stream is the window's hold on them.
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW]: actProcedure(
+    "Could not read that workspace's Slack channels on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(eventIterator(type<never>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY]: actProcedure(
+    "Could not read that workspace's Slack channels again on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actProcedure(
     "Could not follow that workspace's invitations on this system.",
