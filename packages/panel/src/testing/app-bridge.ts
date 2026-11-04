@@ -38,7 +38,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, integrations, and provider keys, an agent's or a server's tools, the outside MCP clients, a workspace's memories and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, a workspace's people, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, integrations, and provider keys, an agent's or a server's tools, the outside MCP clients, a workspace's memories and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -56,6 +56,7 @@ type HoldKind =
   | typeof ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
+  | typeof TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW;
 
@@ -77,6 +78,7 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW,
   AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
+  TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
   TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
 ]);
@@ -117,10 +119,10 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * account's beats, integrations, or provider keys, an agent's or a
  * server's tools, the outside MCP clients, a workspace's memories or
  * repositories, a link's standing, the automations' lists and histories, a
- * plan's or a page's comments, the run that started an agent, a workspace's
- * people, or a task's plan, is held quietly, and an automations', the
- * integrations', the memories', or a repository list's Try again taken,
- * since what the hold reads reaches the window on app state.
+ * plan's or a page's comments, a task's plan history, the run that started
+ * an agent, a workspace's people, or a task's plan, is held quietly, and an
+ * automations', the integrations', the memories', or a repository list's Try
+ * again taken, since what the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.

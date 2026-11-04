@@ -215,7 +215,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * memories, which Settings › Memory holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
- * page's tab each hold; the run that started one agent, which its page
+ * page's tab each hold; one task's plan history, which its version history
+ * holds while it shows; the run that started one agent, which its page
  * holds; one workspace's people, its members and who its work names but
  * left, which every surface naming them holds; and one task's plan, which
  * the window's open task holds. Pages and Browser tabs offer no Try again,
@@ -358,6 +359,12 @@ const HOST_READS = {
         : [COMMENT_SUBJECT.PAGE, subject.pageId],
     hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
     retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),
+  }),
+  [LIVE_READ.HISTORY]: hostRead(LIVE_READ.HISTORY, {
+    slice: APP_SLICE.HISTORY,
+    path: (taskId: string) => [taskId],
+    hold: (taskId) => askAct(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }),
+    retry: (taskId) => tellAct(ACT_KIND.TASKS_HISTORY_RETRY, { taskId }),
   }),
   [LIVE_READ.PLAN_DOCUMENT]: hostRead(LIVE_READ.PLAN_DOCUMENT, {
     slice: APP_SLICE.PLAN_DOCUMENT,

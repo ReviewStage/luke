@@ -694,21 +694,10 @@ export const taskDocumentFollowSchema = EffectSchema.Struct({
 
 export type TaskDocumentFollow = typeof taskDocumentFollowSchema.Type;
 
-/** One plan's newest page of history, followed by a window while its version history stands. */
+/** One task's plan history, held by a window while its version history stands (`LIVE_READ.HISTORY`), and read again at once on its Try again. */
 export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });
 
 export type TaskHistoryFollow = typeof taskHistoryFollowSchema.Type;
-
-/**
- * A followed plan's newest page of history as it now stands, told each time
- * a save lands while followed, or why there is none.
- */
-export const taskHistoryFollowedSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  view: tasksRevisionsAnswerSchema,
-});
-
-export type TaskHistoryFollowed = typeof taskHistoryFollowedSchema.Type;
 
 /** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({

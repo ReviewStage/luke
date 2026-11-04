@@ -22,7 +22,6 @@ import {
   type TaskBrowserTabsFollow,
   type TaskDocumentFollow,
   type TaskHistoryFollow,
-  type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TasksBlockAnswer,
   type TasksBlockParams,
@@ -134,10 +133,10 @@ export interface TasksProceduresDependencies {
     tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
     tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
     tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
-    /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
+    /** A task's plan history held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
-    onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
+    tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
     /** A plan's or page's comments held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
@@ -211,8 +210,8 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
   const openComments: OpenFollows<never, CommentsHeld> = MutableHashMap.empty();
-  /** How many streams stand open of each plan's history. */
-  const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
+  /** Every task's history a window holds a stream open of, so the host lets one go only with the last. */
+  const openHistories: OpenFollows<never> = MutableHashMap.empty();
   return {
     [TASKS_ACT_KIND.TASKS_REFRESH]: actPort[TASKS_ACT_KIND.TASKS_REFRESH].effect(function* ({
       context,
@@ -605,19 +604,25 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const pages = followedStream(
+        // Note that nothing is heard down the hold, since the held history reaches the panel on app state.
+        const hold = followedStream(
           {
             keyOf: (scope: TaskHistoryFollow) => scope.taskId,
             follow: host.tasksHistoryFollow,
             unfollow: host.tasksHistoryUnfollow,
-            onChanged: host.onTaskHistoryChanged,
-            valueOf: (changed: TaskHistoryFollowed, scope: TaskHistoryFollow) =>
-              changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
           },
           openHistories,
           input,
         );
-        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_HISTORY_RETRY]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.tasksHistoryRetry(input);
       },
     ),
     // Note that the picture's answer, a failure among them, is the panel's to

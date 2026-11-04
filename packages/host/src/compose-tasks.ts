@@ -42,6 +42,7 @@ import {
   type PagePlace,
 } from "@repo/features/page-wire";
 import {
+  type PlanRevisionsAnswer,
   TASK_BLOCK_CHANGE,
   TASK_RELATION_KIND,
   TASK_STATUS,
@@ -211,9 +212,10 @@ import {
   commentSubjectOf,
   planCommentReads,
 } from "./plan-comment-reads.js";
+import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
 import type { RunMode } from "./run-mode.js";
-import { sidebarCollections } from "./sidebar-collections.js";
+import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import type { WindowFocus } from "./window-focus.js";
@@ -236,10 +238,13 @@ import {
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
  * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
- * task pinned. A
- * plan's history is read for the version history that asks and held nowhere
- * here; a revision restored is the one write this concern carries to the
- * service on the developer's word, and the view takes the task it answers.
+ * task pinned. Each
+ * task's plan history a version history shows is held for it per task and
+ * told on the app state (`LIVE_READ.HISTORY`): its newest page followed, and
+ * the older pages read past it laid after it. A revision's text is answered
+ * to the version history that asks and held nowhere here; a revision
+ * restored is the one write this concern carries to the service on the
+ * developer's word, and the view takes the task it answers.
  * The pages agents wrote for a task, or for an agent on no task, are held
  * for the windows that draw them, the open task's among them, by title and
  * newest version alone, and told on the app state (`LIVE_READ.PAGES`); a
@@ -328,6 +333,9 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 
 /** A Browser tab opened behind a closed gate, or on a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** What a write to a task's comments answers behind a closed gate: unanswered, which takes back what it drew. */
+const COMMENT_UNANSWERED: TasksCommentAnswer = { failure: TASK_CALL_FAILURE.UNANSWERED };
 
 /** A plan's skills, by its id and the workspace and repository the list names it in, so a plan moved to another of either is another key, its workspace's installed skills among what is read. */
 class PlanSkillsKey extends Data.Class<{
@@ -480,8 +488,10 @@ export interface TasksDependencies {
   kept: KeptContent;
   /** The windows coming forward, raised here as the panel's focus reaches the host and heard by every read asked again on it. */
   focus: WindowFocus;
-  /** The sync engine's pool, which the task list's plans and agents stand in. */
+  /** The sync engine's pool, which the task list's plans and agents, and the comments' threads, stand in. */
   pool: EntityPool;
+  /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
+  member: () => { readonly userId: string; readonly name: string } | undefined;
   /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
 }
@@ -580,6 +590,39 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
     }
     return fields;
   };
+}
+
+/**
+ * A task's newest page of history laid over the history held: the page
+ * whole, then every older revision held past it, so a version history
+ * scrolled back keeps what it read as saves land, and the place the next
+ * older page is read from with them.
+ */
+function withNewestPage(
+  held: PlanRevisionsAnswer | undefined,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const oldest = page.revisions.at(-1)?.seq;
+  if (held === undefined || oldest === undefined || page.earlier === undefined) return page;
+  const older = held.revisions.filter((line) => line.seq < oldest);
+  if (older.length === 0) return page;
+  const revisions = [...page.revisions, ...older];
+  return held.earlier === undefined ? { revisions } : { revisions, earlier: held.earlier };
+}
+
+/**
+ * An older page of a task's history, read before the revision `before`
+ * names, laid past the history held: every revision held at or after
+ * `before`, then the page, and the place the next older page is read from as
+ * the page says.
+ */
+function withOlderPage(
+  held: PlanRevisionsAnswer,
+  before: number,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const revisions = [...held.revisions.filter((line) => line.seq >= before), ...page.revisions];
+  return page.earlier === undefined ? { revisions } : { revisions, earlier: page.earlier };
 }
 
 /**
@@ -790,16 +833,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The newest page of each task's history a window's version history follows, by the task. */
-  const historyFollows = yield* FiberMap.make<string>();
   const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
-  /** How to wait for a write's transaction on each task's followed history, while it is live. */
+  /** How to wait for a write's transaction on each task's held history, while its follow stands. */
   const historyTxWaits = new Map<string, TxWait>();
 
-  /** Follows `taskId`'s newest page of history live until let go, each change emitted as `TASKS_HISTORY_CHANGED`. */
-  function followHistory(taskId: string) {
+  /**
+   * Follows `taskId`'s newest page of history live until let go, each page
+   * laid over the older ones held (`withNewestPage`) and told through
+   * `answers`, and its wait for a write's transaction kept while it stands.
+   */
+  function followHistory(taskId: string, answers: HeldAnswers<PlanRevisionsAnswer>) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
+    /** The wait this follow handed last, so letting it go takes back its own alone. */
+    let handed: TxWait | undefined;
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
@@ -816,16 +863,37 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
-        kernel.emit(
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
+        Effect.sync(() =>
+          page === undefined
+            ? answers.unanswered()
+            : answers.answered(withNewestPage(answers.rows(), page)),
         ),
+      // Note that a follow let go takes back only the wait it handed, since a retry's follow may have handed its own first.
       onTxWait: (wait) => {
-        if (wait === undefined) historyTxWaits.delete(taskId);
-        else historyTxWaits.set(taskId, wait);
+        if (wait !== undefined) {
+          handed = wait;
+          historyTxWaits.set(taskId, wait);
+        } else if (historyTxWaits.get(taskId) === handed) historyTxWaits.delete(taskId);
       },
     });
   }
+
+  /**
+   * Each task's plan history a window's version history shows, and the few
+   * shown latest, told whole on the app state every window draws
+   * (`LIVE_READ.HISTORY`): its newest page followed from the first window's
+   * hold (`heldSlice`), and the older pages read past it laid after it, so a
+   * version history opened again draws its versions in its first frame.
+   */
+  const heldHistories = yield* heldSlice<typeof LIVE_READ.HISTORY, string>({
+    empty: NO_KEYS_HELD,
+    path: (taskId) => [taskId],
+    gate,
+    follow: followHistory,
+    tell: (held) => kernel.emit(GATEWAY_EVENT.HISTORIES_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each task's history, one fiber standing until let go. */
+  const historyHolds = yield* FiberMap.make<string>();
 
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
@@ -884,10 +952,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
           // Note that a read that stops answering keeps its rows, and their lapses, until the next delivery.
-          publish: (rows) => {
-            if (rows === undefined) answers.unanswered();
-            else Queue.offerUnsafe(delivered, rows);
-          },
+          publish: (rows) =>
+            Effect.sync(() => {
+              if (rows === undefined) answers.unanswered();
+              else Queue.offerUnsafe(delivered, rows);
+            }),
         });
       }),
     );
@@ -915,7 +984,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
-      publish: (pages) => (pages === undefined ? answers.unanswered() : answers.answered(pages)),
+      publish: (pages) =>
+        Effect.sync(() => (pages === undefined ? answers.unanswered() : answers.answered(pages))),
     });
   }
 
@@ -959,11 +1029,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Each plan's or page's comments the windows show, and the few let go
-   * latest, each as its read stands with the windows' writes laid over it,
-   * told whole on the app state every window draws
+   * latest, each thread a row of the pool with every write standing drawn
+   * over it, told whole on the app state every window draws
    * (`LIVE_READ.PLAN_COMMENTS`), on the terms the pages are held.
    */
   const comments = yield* planCommentReads({
+    pool: dependencies.pool,
     seal: (subject, userId, poll, after) =>
       Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
         sealed.ok
@@ -981,6 +1052,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each subject's comments, one fiber standing until let go. */
   const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
+  /** The windows' writes to a task's comments, each drawn over its thread at once; behind a closed gate each answers unanswered, taken back as it is drawn. */
+  const commentWrites = planCommentWrites({
+    start: (planId, start) =>
+      gate() ? served(client.startComment(planId, start)) : Effect.succeed(COMMENT_UNANSWERED),
+    act: (planId, threadId, action) =>
+      gate()
+        ? served(client.actOnComment(planId, threadId, action))
+        : Effect.succeed(COMMENT_UNANSWERED),
+    member: dependencies.member,
+    now: kernel.now,
+  });
 
   /**
    * The plan of each task a window opened, and of the few opened latest,
@@ -1342,12 +1424,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const openSidebar = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
-      sidebarCollections({ draw: write, now: kernel.now, txWait: () => sidebarTxWait }),
+      sidebarCollections({
+        pool: dependencies.pool,
+        draw: write,
+        ownerId: dependencies.accountId,
+        txWait: () => sidebarTxWait,
+      }),
     );
     return { scope, collections };
   });
   let sidebar = yield* openSidebar;
   yield* Effect.addFinalizer(() => Scope.close(sidebar.scope, Exit.void));
+  /**
+   * The sidebar's writes, each service call under the serial lock and the
+   * transaction waited for outside it, so no task open, save, or read waits
+   * on the follow behind a pin or a drag.
+   */
+  const sidebarWritten = sidebarWrites({
+    gate,
+    pinRepository: (repository, pinned) => serial(served(client.pinRepository(repository, pinned))),
+    writeSection: (each) => serial(served(client.writeTaskSection(each))),
+    collections: () => sidebar.collections,
+  });
 
   /**
    * Follows the account's sidebar where nothing follows it yet
@@ -2105,9 +2203,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
         );
       }),
-    // A page of the history, and a revision beside the one before it, are
-    // answered to the version history that asked and held nowhere: it keeps
-    // what it read, and reads again as the task moves on.
+    // A page of the history is answered to the caller that asked, and an
+    // older page is laid on the task's held history too, past the revisions
+    // held from where it was read before, so a version history scrolled back
+    // keeps it as saves land. A revision beside the one before it is
+    // answered to the version history that asked and held nowhere.
     [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2120,6 +2220,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const { taskId, before } = read;
         const page = yield* served(client.readRevisions(taskId, before));
+        const held = heldHistories.rowsOf(taskId);
+        if (page !== undefined && before !== undefined && held !== undefined) {
+          heldHistories.lay(taskId, withOlderPage(held, before, page));
+        }
         return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
@@ -2167,9 +2271,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
-    // A plan's newest page of history is followed for its version history
-    // while it stands, and told only as `TASKS_HISTORY_CHANGED`; a follow of
-    // what is already followed does nothing.
+    // A task's plan history is held for a window while its version history
+    // shows, and told only on the app state (`HISTORIES_CHANGED`). Note that
+    // the windows' hold is one fiber standing until let go, so a window
+    // holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2177,9 +2282,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "following a task's history names the task",
         );
-        if (!gate()) return {};
         const { taskId } = read;
-        yield* FiberMap.run(historyFollows, taskId, followHistory(taskId), { onlyIfMissing: true });
+        yield* FiberMap.run(
+          historyHolds,
+          taskId,
+          Effect.scoped(Effect.andThen(heldHistories.hold(taskId), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
@@ -2189,7 +2298,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "letting a task's history go names the task",
         );
-        yield* FiberMap.remove(historyFollows, read.taskId);
+        yield* FiberMap.remove(historyHolds, read.taskId);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_HISTORY_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskHistoryFollowSchema,
+          params,
+          "reading a task's history again names the task",
+        );
+        if (gate()) yield* heldHistories.retry(read.taskId);
         return {};
       }),
     // An agent's or a task's agents' Browser tabs are held for a window's
@@ -2348,30 +2467,30 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* comments.retry(commentSubjectOf(read));
         return {};
       }),
-    [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // A write to a task's comments is drawn over its thread at once, a
+    // thread started drawn under the id its window minted, standing until
+    // the subject's read carries it, or taken back where the service
+    // refused it (`plan-comment-writes.ts`).
+    [GATEWAY_METHOD.TASKS_COMMENT_START]: declaredMethod(
+      dependencies.pool,
+      commentWrites.started,
+      (params: WireRecord) =>
+        readParams(
           tasksCommentStartParamsSchema,
           params,
           "starting a comment names a plan and the thread",
-        );
-        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.startComment(read.planId, read.start));
-        comments.answered(read.planId, answer);
-        return carried<TasksCommentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: declaredMethod(
+      dependencies.pool,
+      commentWrites.acted,
+      (params: WireRecord) =>
+        readParams(
           tasksCommentActParamsSchema,
           params,
           "changing a comment names a plan, a thread, and what to do",
-        );
-        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.actOnComment(read.planId, read.threadId, read.action));
-        comments.answered(read.planId, answer);
-        return carried<TasksCommentAnswer>(answer);
-      }),
+        ),
+    ),
     // The picture is kept and its id answered to the editor that took it;
     // the plan's text names it once the editor lays its address in.
     [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: (params) =>
@@ -2389,7 +2508,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // The service answers the task as restored, so the list's row and its
     // held plan take it in place and nothing is read again. It is confirmed
-    // once its transaction reached the history the window follows.
+    // once its transaction reached the history the windows hold, or held
+    // lately; at once where none is.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2507,41 +2627,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
       readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
     ),
-    // A pin is drawn at once and stands while the service writes it, kept
-    // once the followed sidebar has its transaction and taken back where the
-    // service refused it (`sidebar-collections.ts`). Note that the service is
-    // asked under the serial lock and the transaction waited for outside it,
-    // so no task open, save, or read waits on the follow behind a pin.
-    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPinRepositoryParamsSchema,
-          params,
-          "pinning a repository names it and whether it is pinned",
-        );
-        if (!gate()) return { changed: false };
-        const { repository, pinned } = read;
-        const changed = yield* sidebar.collections.pinRepository(
-          repository,
-          pinned,
-          serial(served(client.pinRepository(repository, pinned))),
-        );
-        return { changed };
-      }),
-    // A drag's or a menu's section writes are drawn and confirmed as a pin is, each written in turn.
-    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
-      Effect.gen(function* () {
-        const { writes } = yield* readParams(
-          tasksWriteSectionParamsSchema,
-          params,
-          "a change to the sections names what it changes",
-        );
-        if (!gate()) return { changed: false };
-        const changed = yield* sidebar.collections.writeSections(writes, (each) =>
-          serial(served(client.writeTaskSection(each))),
-        );
-        return { changed };
-      }),
+    // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
+    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.pinned,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksPinRepositoryParamsSchema,
+            params,
+            "pinning a repository names it and whether it is pinned",
+          ),
+          (read) => ({ ...read, at: kernel.now() }),
+        ),
+    ),
+    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.sectionsWritten,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksWriteSectionParamsSchema,
+            params,
+            "a change to the sections names what it changes",
+          ),
+          (read) => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() }),
+        ),
+    ),
     // A workspace's repositories, or every one's, are held for the windows while a chip or a picker stands, and told only on the app state (`REPOSITORY_LISTS_CHANGED`). Note that the windows' hold is one fiber standing until let go.
     [GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -3202,6 +3314,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
       yield* heldBrowserTabs.open;
+      yield* heldHistories.open;
       yield* comments.open;
       yield* linkStandings.open;
       yield* repositoryLists.open;
@@ -3218,16 +3331,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
+      yield* heldHistories.end;
       yield* comments.end;
       yield* linkStandings.end;
       yield* repositoryLists.end;
       yield* membersReads.held.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
-      yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(listFollow);
       yield* Scope.close(taskList.scope, Exit.void);
       taskList = yield* openTaskList;

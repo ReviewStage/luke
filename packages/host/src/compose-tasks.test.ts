@@ -22,6 +22,7 @@ import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
@@ -64,6 +65,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCallFailure,
+  type TasksCommentAnswer,
   type TasksView,
   tasksViewSchema,
 } from "@repo/features/tasks-view";
@@ -131,6 +133,9 @@ interface FakeService extends TasksClient {
   /** Each task's comment threads, by task id, and every comment write asked, in order. */
   threads: Record<string, PlanCommentThread[]>;
   commentCalls: string[];
+  /** What a write to a thread answers, once `commentGate` opens where one stands; a deletion where none is named. */
+  commentAnswer: TasksCommentAnswer | undefined;
+  commentGate: Deferred.Deferred<void> | undefined;
   /** Each plan's comments' live read by its task's id, and each page's by the page's; none answers unanswered. */
   commentLives: Record<string, PolledLive<CommentPart, typeof NOT_FOUND_LIVE>>;
   /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
@@ -227,6 +232,8 @@ interface FakeService extends TasksClient {
   sectionWrites: TaskSectionWrite[];
   /** The kind of section change the service refuses, where a test names one. */
   sectionRefused: TaskSectionWrite["kind"] | undefined;
+  /** What a section change's answer waits on once the service has it, so a test can ask another meanwhile. */
+  sectionAnswered: Effect.Effect<void>;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** Our GitHub App's install address a connection answers. */
@@ -479,6 +486,8 @@ function fakeService(tasks: Task[]): FakeService {
     tasks,
     threads: {},
     commentCalls: [],
+    commentAnswer: undefined,
+    commentGate: undefined,
     commentLives: {},
     commentsLive: (subject, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["commentsLive"]> => {
@@ -493,7 +502,7 @@ function fakeService(tasks: Task[]): FakeService {
         if ("page" in start) throw new Error("the fake holds no page's threads");
         service.commentCalls.push(`start:${planId}:${start.quote}`);
         const thread: PlanCommentThread = {
-          id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
+          id: start.id ?? "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
           scope: start.scope,
           quote: start.quote,
           anchor: start.anchor,
@@ -516,10 +525,15 @@ function fakeService(tasks: Task[]): FakeService {
         return { thread };
       }),
     actOnComment: (planId, threadId, action) =>
-      Effect.sync(() => {
-        service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
-        return { deleted: threadId };
-      }),
+      Effect.andThen(
+        Effect.suspend(() =>
+          service.commentGate === undefined ? Effect.void : Deferred.await(service.commentGate),
+        ),
+        Effect.sync(() => {
+          service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
+          return service.commentAnswer ?? { deleted: threadId };
+        }),
+      ),
     agents: {},
     tasklessAgents: [],
     liveListReads: 0,
@@ -606,6 +620,7 @@ function fakeService(tasks: Task[]): FakeService {
     sections: undefined,
     sectionWrites: [],
     sectionRefused: undefined,
+    sectionAnswered: Effect.void,
     get memberships() {
       return memberships;
     },
@@ -899,7 +914,7 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => {
         service.sectionWrites.push(write);
         return write.kind === service.sectionRefused ? undefined : service.sections;
-      }),
+      }).pipe(Effect.tap(() => service.sectionAnswered)),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
       Effect.sync((): TaskCallResult<PlanEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
@@ -1213,6 +1228,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       accountId: options.accountId ?? (() => "user-dana"),
+      member: () => ({ userId: options.accountId?.() ?? "user-dana", name: "Dana" }),
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       focus,
       pool: yield* entityPool(),
@@ -1970,6 +1986,55 @@ it.effect(
         changed: false,
       });
       assert.deepEqual(last()?.taskSections, service.sections);
+    }),
+);
+
+it.effect(
+  "two quick drags draw at once, the later over the earlier, and reach the service in the order they were asked, each whole",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, settled } = yield* subject(service);
+      service.sections = { sections: [], entries: [], agentEntries: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const create = {
+        kind: TASK_SECTION_WRITE.CREATE,
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+      };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const rename = {
+        kind: TASK_SECTION_WRITE.EDIT,
+        id: SECTION_ID,
+        title: "Launch week",
+        icon: null,
+      };
+      const answered = yield* Deferred.make<void>();
+      service.sectionAnswered = Deferred.await(answered);
+
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [create, place] }),
+      );
+      yield* settled;
+      const second = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [rename] }),
+      );
+      yield* settled;
+      const drawn = last()?.taskSections;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+
+      assert.deepEqual(
+        [
+          drawn?.sections.map((section) => section.title),
+          drawn?.entries.map((each) => each.taskId),
+        ],
+        [["Launch week"], [INVITES]],
+      );
+      assert.deepEqual(service.sectionWrites, [create, place, rename]);
     }),
 );
 
@@ -4028,57 +4093,52 @@ it.effect(
 );
 
 it.effect(
-  "a thread answered stands until the read holds its revision; a deleted one stays hidden until the read drops it",
+  "a resolve draws over its thread at once, stands through a read from before it until the read carries it, and a refused one is taken back",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const plan = polledLive<CommentPart, typeof NOT_FOUND_LIVE>(["threads", "entries", "files"]);
       service.commentLives[INVITES] = plan;
       const { call, pushed } = yield* subject(service);
-      const drawn = () => {
-        const [, held] = pushed.at(-1) ?? [];
-        return (held as AppPlanComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]?.rows;
+      const status = () => {
+        const [, held] =
+          pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PLAN_COMMENTS_CHANGED) ?? [];
+        const rows = (held as AppPlanComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]?.rows;
+        return rows?.map((thread) => thread.status);
       };
-
-      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
-      yield* followSettled;
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS])));
-      const started = yield* call(GATEWAY_METHOD.TASKS_COMMENT_START, {
-        planId: INVITES,
-        start: {
-          clientKey: "key-1",
-          scope: PLAN_COMMENT_SCOPE.WORDS,
-          quote: "Invites",
-          anchor: { from: 2, to: 9 },
-          text: "# Invites",
-          words: "Why invites?",
-        },
-      });
-      const written = service.threads[INVITES]?.[0];
-      assert.ok(written !== undefined);
-      assert.deepEqual(started, { thread: written });
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-
-      // A read from before the write lands, and the thread the write answered still stands.
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, { ...written, revision: 0 }])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, written])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-
-      yield* call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
+      const resolve = call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
         planId: INVITES,
         threadId: SEVEN_DAYS.id,
-        action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD },
+        action: { action: PLAN_COMMENT_ACTION.RESOLVE },
       });
-      assert.deepEqual(drawn(), [written]);
-      yield* answered(() =>
-        plan.set(commentRows([{ ...SEVEN_DAYS, updatedAt: 1, revision: 2 }, written])),
+      const resolved = { ...SEVEN_DAYS, status: PLAN_COMMENT_STATUS.RESOLVED, revision: 2 };
+      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      // An answer Sync woke hands the follow its wait for a write's transaction.
+      yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-earlier"]));
+
+      service.commentGate = Deferred.makeUnsafe<void>();
+      service.commentAnswer = { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS };
+      const refused = yield* Effect.forkChild(resolve);
+      yield* followSettled;
+      assert.deepEqual(
+        status(),
+        [PLAN_COMMENT_STATUS.RESOLVED],
+        "drawn before the service answers",
       );
-      assert.deepEqual(drawn(), [written], "a read still holding the deleted thread hides it");
-      yield* answered(() => plan.set(commentRows([written])));
-      // Note that the thread is a teammate's again once the read dropped it, so a read that brings it back draws it.
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, written])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
+      Deferred.doneUnsafe(service.commentGate, Effect.void);
+      assert.deepEqual(yield* Fiber.join(refused), { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS });
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.OPEN], "taken back once refused");
+
+      service.commentGate = undefined;
+      service.commentAnswer = { thread: resolved, txid: "tx-resolve" };
+      const kept = yield* Effect.forkChild(resolve);
+      yield* followSettled;
+      yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-other"]));
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED], "a read from before it");
+      yield* answered(() => plan.set(commentRows([resolved]), ["tx-resolve"]));
+      assert.deepEqual(yield* Fiber.join(kept), { thread: resolved, txid: "tx-resolve" });
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED]);
     }),
 );
 
@@ -4167,77 +4227,154 @@ it.effect(
     }),
 );
 
+/** One revision as the history's live read delivers its row: saved by Dean by hand at `at`. */
+function historyRow(seq: number, at: number) {
+  return {
+    seq,
+    actor: PLAN_ACTOR.DEVELOPER,
+    editorId: "user-dean",
+    editorName: "Dean",
+    liveSessionId: null,
+    agentId: null,
+    agentModel: null,
+    agentTitle: null,
+    callId: null,
+    changes: 1,
+    restoredFrom: null,
+    at,
+    startedAt: at,
+    restoredAt: null,
+  };
+}
+
+/** One revision as the version history lists it, from the row `historyRow` delivers. */
+function historyLine(seq: number, at: number) {
+  return {
+    seq,
+    lastEdit: {
+      actor: PLAN_ACTOR.DEVELOPER,
+      by: { userId: "user-dean", name: "Dean" },
+      at,
+      duringCall: false,
+    },
+    startedAt: at,
+    changes: 1,
+  };
+}
+
+/** The revisions `newest` down to `oldest`, newest first. */
+function revisionsFrom(newest: number, oldest: number): readonly number[] {
+  return Array.from({ length: newest - oldest + 1 }, (_, back) => newest - back);
+}
+
 it.effect(
-  "a plan's newest page of history followed for its version history is told as saves land, never in the view",
+  "a plan's newest page of history held for a window is laid on the app state as saves land, never in the view, kept followed once let go, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const history = polledLive<"revisions">(["revisions"]);
       service.historyLives[INVITES] = history;
-      const { call, told, pushed } = yield* subject(service);
-      const row = (seq: number, at: number) => ({
-        seq,
-        actor: PLAN_ACTOR.DEVELOPER,
-        editorId: "user-dean",
-        editorName: "Dean",
-        liveSessionId: null,
-        agentId: null,
-        agentModel: null,
-        agentTitle: null,
-        callId: null,
-        changes: 1,
-        restoredFrom: null,
-        at,
-        startedAt: at,
-        restoredAt: null,
-      });
-      const line = (seq: number, at: number) => ({
-        seq,
-        lastEdit: {
-          actor: PLAN_ACTOR.DEVELOPER,
-          by: { userId: "user-dean", name: "Dean" },
-          at,
-          duringCall: false,
-        },
-        startedAt: at,
-        changes: 1,
-      });
+      const { tasks, call, told, pushed } = yield* subject(service);
+      const held = (read: WireValue) => [GATEWAY_EVENT.HISTORIES_CHANGED, { [INVITES]: read }];
 
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      yield* answered(() => history.set({ revisions: [row(1, 1_000)] }));
-      yield* answered(() => history.set({ revisions: [row(2, 2_000), row(1, 1_000)] }));
+      yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }));
+      yield* answered(() =>
+        history.set({ revisions: [historyRow(2, 2_000), historyRow(1, 1_000)] }),
+      );
       assert.deepEqual(pushed, [
-        [
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          { taskId: INVITES, view: { revisions: [line(1, 1_000)] } },
-        ],
-        [
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          { taskId: INVITES, view: { revisions: [line(2, 2_000), line(1, 1_000)] } },
-        ],
+        held({ rows: { revisions: [historyLine(1, 1_000)] } }),
+        held({ rows: { revisions: [historyLine(2, 2_000), historyLine(1, 1_000)] } }),
       ]);
       assert.equal(told.length, 0, "a plan's history is never told in the view");
+
+      // Let go, the history stays followed among those let go lately, so its version history opened again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
+      assert.equal(history.held(), 1);
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      assert.equal(pushed.length, 2, "a history held again is drawn from where it stands");
+
+      yield* tasks.reset;
+      yield* followSettled;
       assert.equal(history.held(), 0);
+      assert.deepEqual(
+        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED),
+        [GATEWAY_EVENT.HISTORIES_CHANGED, {}],
+      );
     }),
 );
 
-it.effect("a restore puts the revision back and is answered once the service restored it", () =>
+it.effect("an older page laid into a held history stays when a save lands a new newest page", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-    service.revisions[1] = {
-      seq: 1,
-      document: { body: "# Invites", assumptions: [] },
-      previous: null,
-    };
-    const { call } = yield* subject(service);
+    const history = polledLive<"revisions">(["revisions"]);
+    service.historyLives[INVITES] = history;
+    // The service delivers one revision past a page of fifty, so the page reads that an older one stands, here before 3.
+    const rows = (newest: number, oldest: number) =>
+      revisionsFrom(newest, oldest).map((seq) => historyRow(seq, seq * 1_000));
+    const lines = (newest: number, oldest: number) =>
+      revisionsFrom(newest, oldest).map((seq) => historyLine(seq, seq * 1_000));
+    service.olderHistory[3] = { revisions: lines(2, 1) };
+    const { call, pushed } = yield* subject(service);
+    const heldNow = () => pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED);
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
-      restored: true,
+    yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+    yield* followSettled;
+    yield* answered(() => history.set({ revisions: rows(52, 2) }));
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(52, 3), earlier: 3 } } },
+    ]);
+
+    // The reader scrolls back: the older page is answered, and laid after the newest.
+    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_REVISIONS, { taskId: INVITES, before: 3 }), {
+      revisions: lines(2, 1),
     });
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(52, 1) } } },
+    ]);
+
+    // A save lands a newest page that reaches back only to 4, and the versions read past it stay.
+    yield* answered(() => history.set({ revisions: rows(53, 3) }));
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(53, 1) } } },
+    ]);
   }),
+);
+
+it.effect(
+  "a restore puts the revision back and is answered once the history held for its version history carries its transaction",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Invites", assumptions: [] },
+        previous: null,
+      };
+      const history = polledLive<"revisions">(["revisions"]);
+      service.historyLives[INVITES] = history;
+      const { call } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      // An answer Sync woke hands the held history its wait for a write's transaction.
+      yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }, ["tx-earlier"]));
+
+      const restoring = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
+      );
+      yield* followSettled;
+      assert.equal(restoring.pollUnsafe(), undefined, "no answer before the history carries it");
+      yield* answered(() =>
+        history.set({ revisions: [historyRow(2, 2_000), historyRow(1, 1_000)] }, ["txid-1"]),
+      );
+      assert.deepEqual(yield* Fiber.join(restoring), { restored: true });
+    }),
 );
 
 /** The instant the live list is read at, which the test's clock is set to. */
