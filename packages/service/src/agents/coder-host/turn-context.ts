@@ -34,12 +34,10 @@ const TURN_MESSAGE_LEAD = {
 /**
  * What a session has handed its agent in its turns' messages, as content
  * addresses: the task, by the parts of it no save of the plan changes
- * (`taskKey`), and whether its last turn was spoken.
- * Kept in eve's durable session state for an eve session, and on the
- * conversation's row for a native harness's (`native_handed`, which
- * `runner-sessions.ts` reads and writes around each message). Nothing yet
- * for a session whose turns handed none, or whose history was compacted
- * since.
+ * (`taskKey`), and whether its last turn was spoken. Kept on the
+ * conversation's row (`native_handed`, which `runner-sessions.ts` reads and
+ * writes around each message). Nothing yet for a session whose turns handed
+ * none, or whose history was compacted since.
  */
 export const TurnHandedSchema = Schema.Struct({
   task: Schema.optionalKey(Schema.String),

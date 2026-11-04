@@ -97,6 +97,7 @@ import {
   type PinMove,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
+  renamedRegion,
   renamedView,
   repositoryChangeFailureNote,
   type StatusChange,
@@ -144,7 +145,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { APP_SETTINGS_VIEW, useAppSlice, useStartsWithoutRepository } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -1467,11 +1468,28 @@ export function useTasksTab(input: {
   );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = tasksPage(tasks);
-  const region = documentRegion(tasks);
+  // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
+  // its first frame, and one never held reads; a name being typed draws over it as over the list.
+  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
+  const heldPlanRows = heldPlan.rows;
+  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
+  const retryPlan = heldPlan.retry;
+  const openedTaskId = viewed.activeTaskId;
+  const region = useMemo(
+    () =>
+      renamedRegion(
+        documentRegion(
+          { activeTaskId: openedTaskId },
+          { rows: heldPlanRows, failed: heldPlanFailed },
+        ),
+        drafts,
+      ),
+    [openedTaskId, heldPlanRows, heldPlanFailed, drafts],
+  );
   // A started agent's tab opens selected; the column's tabs are built after
   // the agents they draw, so the opening reaches them through this late binding.
   const mainRef = useRef<MainTabsControl | undefined>(undefined);
-  const openDocument = viewed.document.task;
+  const openDocument = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   // The open task's own words, which a dictation into one of its agents' boxes listens for.
   const dictationWords = useMemo(
     () =>
@@ -2195,7 +2213,7 @@ export function useTasksTab(input: {
 
   // The tasks as the list holds them, or the open document where the list does not hold one yet.
   const standingTasksOf = (taskIds: readonly string[]) => {
-    const held = tasks.document.task;
+    const held = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
     return taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
       const task = tasks.tasks.find((each) => each.id === taskId);
       if (task !== undefined) return [task];
@@ -3788,9 +3806,7 @@ export function useTasksTab(input: {
       });
     },
     onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
-    onRetryDocument: () => {
-      if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
-    },
+    onRetryDocument: retryPlan,
     onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {

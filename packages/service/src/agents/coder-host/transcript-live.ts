@@ -67,13 +67,13 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * reader's to ask for at the end of its hold.
  */
 
-/** The statements a transcript is followed by, each a part of the one read. */
 /** The statements a transcript's newest messages are drawn from: the messages, and their parts keyed apart. */
 export interface TranscriptWindowStatements {
   readonly window: LiveStatement;
   readonly windowParts: LiveStatement;
 }
 
+/** The statements a transcript is followed by, each a part of the one read. */
 export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly messages: LiveStatement;
   readonly turns: LiveStatement;

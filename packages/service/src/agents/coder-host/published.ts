@@ -223,7 +223,6 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
-  // No repository, nothing to publish to.
   if (!hasRepository(agent)) return nothing(agent);
   const reached = yield* agentPullRequestReach(userId, agent);
   // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
@@ -246,7 +245,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * What the agent published as GitHub holds it now, written on its row as
- * read. The routes read it through the cache below; the voice brain's read
+ * read. The routes read it through the cache below; an agent tool's read
  * of one agent (`agents/agent-tools.ts`) reads it afresh, once per
  * ask.
  */

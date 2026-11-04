@@ -17,7 +17,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
  *
  * An eve agent ran eve's own tools, authored one file each in the eve app,
  * so the set is exactly this list and eve added nothing
- * beside it but its tools over each connection it was handed (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
+ * beside it but its tools over each connection it was handed (`../../integrations/connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, eve's provider-run web search on the agent's own model call and
  * key, the hosted page read, the delegation of a slice of its
  * work to a worker, the notes it takes on
@@ -27,7 +27,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
  * other coding agents of its workspace, a message to one among it
  * (`../agent-tools.ts`, `agent-message.ts`), the load of one of its
  * repository's skills (`skills.ts`), the pages it shows the developer
- * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
+ * (`../../tasks/page-tool.ts`), and eve's own durable `sleep`, which it waits on its
  * checks or a deploy with. The worker's own rows name
  * the few of the same tools its role is offered (`../agent-runtime/tools.ts`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
@@ -40,7 +40,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
 /**
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
- * the callers that pick one out. Its test holds this to the registry's role.
+ * the callers that pick one out.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,
@@ -305,7 +305,7 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 
 /**
  * The two task controls eve added beside any task, which a coding agent's
- * \`delegate\` was: eve ran them, so they are no
+ * `delegate` was: eve ran them, so they are no
  * tool of ours, but a turn that waits on its worker or stops one names them.
  * Their tasks are eve's subagent tasks, not a task of ours.
  */
@@ -316,12 +316,12 @@ const CODER_TASK_TOOL = {
 
 /**
  * The coding agent's tools as stored rows are held to them, built once for
- * the deployment, with the retired web reads a transcript written before
- * still names, Claude Code's own tools, which an agent running on Claude Code
+ * the deployment, with the retired tools a transcript written before still
+ * names, Claude Code's own tools, which an agent running on Claude Code
  * calls under their CLI names, Codex's own work, which an agent running on
- * Codex does under its items' names (`../native-events/`), and the Linear
- * connection's calls beside them (`../connection-tools.ts`), which the agent
- * and its workers alike make.
+ * Codex does under its items' names (`../native-events/`), and each
+ * connection's calls beside them (`../../integrations/connection-tools.ts`),
+ * which the agent and its workers alike make.
  */
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
   ...[

@@ -129,6 +129,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onPlanCommentsChanged((held) => {
         state.update({ [LIVE_READ.PLAN_COMMENTS]: held });
       }),
+      gateway.host.onPlanDocumentsChanged((held) => {
+        state.update({ [LIVE_READ.PLAN_DOCUMENT]: held });
+      }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
       gateway.host.onSessionReplayChanged((replay) => {
