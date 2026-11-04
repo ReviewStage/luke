@@ -94,6 +94,7 @@ import {
   AskControls,
   bareKey,
   DraftQuestion,
+  DraftResolving,
   HeldControls,
   hasControls,
   INBOX_ASK_BOX,
@@ -107,7 +108,7 @@ import {
   WithdrawnWhy,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { type InboxCloser, useInboxClose } from "./inbox-close.js";
+import { closeAction, type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
@@ -1152,34 +1153,41 @@ function InboxItemMenu({
 
 /**
  * The open question's ×, at its card's top end: Resolve without answering,
- * asked first, as the item's ⋯ offers it (`inbox-close.tsx`). It is keyed by
- * its item where it is drawn, so a question asked on one item never closes
- * the next.
+ * which asks nothing and only stages the resolve on the item's draft, the
+ * box's Send doing it (`DraftResolving`), so the item's ⋯ keeps its own
+ * close and the question it asks (`inbox-close.tsx`). It is keyed by its
+ * item where it is drawn, so a resolve staged on one item never lands on
+ * the next, and takes back the focus Undo had where it came of Undo's press.
  */
 function QuestionClose({
   item,
   closer,
-  shown,
+  takesFocus,
+  onStage,
 }: {
   item: InboxItem;
   closer: InboxCloser | undefined;
-  shown: boolean;
-}): React.JSX.Element {
-  const close = useInboxClose(item, closer, shown);
-  return (
-    <>
-      {close.action === undefined ? null : (
-        <Tooltip label={close.action.label}>
-          <IconButton
-            icon={close.action.icon}
-            label={close.action.label}
-            size={BUTTON_SIZE.COMPACT}
-            onClick={close.action.onSelect}
-          />
-        </Tooltip>
-      )}
-      {close.dialog}
-    </>
+  takesFocus: boolean;
+  /** Stages the resolve on the item's draft. */
+  onStage: () => void;
+}): React.JSX.Element | null {
+  const cross = useRef<HTMLButtonElement>(null);
+  // Note that only the mount reads it, so a question drawn as the item opens takes no focus from where the reader stands.
+  const focused = useRef(takesFocus);
+  useEffect(() => {
+    if (focused.current) cross.current?.focus();
+  }, []);
+  const close = closeAction(item, closer === undefined ? undefined : onStage);
+  return close === undefined ? null : (
+    <Tooltip label={close.label}>
+      <IconButton
+        ref={cross}
+        icon={close.icon}
+        label={close.label}
+        size={BUTTON_SIZE.COMPACT}
+        onClick={close.onSelect}
+      />
+    </Tooltip>
   );
 }
 
@@ -1551,11 +1559,37 @@ export function InboxPane({
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
   // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
+  // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
+  const resolving = open && draft.resolving === true && doors.onClose !== undefined;
+  // Which of the × and Undo was pressed last, and on which item, so the one that takes its place takes its focus, and never on another item the pane goes on to show.
+  const [pressed, setPressed] = useState<
+    { readonly itemId: string; readonly which: "close" | "undo" } | undefined
+  >(undefined);
+  const pressedHere = pressed?.itemId === item.id ? pressed.which : undefined;
   const question =
-    openAsk === undefined || wordsAlone ? undefined : (
+    openAsk === undefined || wordsAlone ? undefined : resolving ? (
+      <DraftResolving
+        takesFocus={pressedHere === "close"}
+        onUndo={() => {
+          setPressed({ itemId: item.id, which: "undo" });
+          onDraft({ ...draft, resolving: undefined });
+        }}
+      />
+    ) : (
       <DraftQuestion
         pane={pane}
-        close={<QuestionClose key={item.id} item={item} closer={doors.onClose} shown={!hidden} />}
+        close={
+          <QuestionClose
+            key={item.id}
+            item={item}
+            closer={doors.onClose}
+            takesFocus={pressedHere === "undo"}
+            onStage={() => {
+              setPressed({ itemId: item.id, which: "close" });
+              onDraft({ ...draft, resolving: true });
+            }}
+          />
+        }
       >
         <AskControls
           ask={openAsk}
@@ -1575,6 +1609,7 @@ export function InboxPane({
           agent={by.subject.agent}
           thread={thread}
           controls={question}
+          resolver={resolving ? doors.onClose : undefined}
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}

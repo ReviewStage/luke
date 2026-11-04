@@ -37,6 +37,7 @@ import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js"
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { focusMissing } from "./inbox-ask-controls.js";
 import { type InboxMissing, missingWords } from "./inbox-ask-words.js";
+import type { InboxCloser } from "./inbox-close.js";
 import {
   acknowledgedOnOpen,
   awaitsNod,
@@ -157,6 +158,18 @@ const SEND = "Send";
 
 /** What Send is named while its send is out. */
 const SENDING = "Sending";
+
+/** What Send reads, in words, while a resolve is staged and the box holds nothing to say beside it. */
+const RESOLVE = "Resolve";
+
+/** What Send reads, in words, while a resolve is staged and the box holds words or files to send beside it. */
+const SEND_AND_RESOLVE = "Send & resolve";
+
+/** A draft's picks let go, which a reply sent beside a staged resolve leaves behind, since a resolve answers nothing. */
+const UNPICKED = { choices: [], values: [], steps: undefined, press: undefined } as const;
+
+/** What the line asks for while a resolve is staged, its words going to the agent beside it. */
+const RESOLVE_PLACEHOLDER = "Tell the agent why (optional)";
 
 /** What Send reads, in words, while the box starts a new thread. */
 const START_THREAD = "Start thread";
@@ -287,6 +300,8 @@ interface AnswerFormProps {
   readonly nod: boolean;
   /** Whether Send reads Start thread, the box starting a new thread rather than replying. */
   readonly starts?: boolean | undefined;
+  /** What Send reads while a resolve is staged; none where none is. */
+  readonly resolves?: typeof RESOLVE | typeof SEND_AND_RESOLVE | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -324,6 +339,7 @@ function AnswerForm({
   says,
   nod,
   starts = false,
+  resolves,
   sending,
   held,
   sendable,
@@ -369,8 +385,8 @@ function AnswerForm({
         actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
         strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
         send={{
-          label: nod ? GOT_IT : starts ? START_THREAD : SEND,
-          inWords: nod || starts,
+          label: nod ? GOT_IT : starts ? START_THREAD : (resolves ?? SEND),
+          inWords: nod || starts || resolves !== undefined,
           empty: !sendable,
           held,
           busy: sending,
@@ -422,6 +438,8 @@ interface AnswerBoxProps {
   thread: readonly InboxMessage[];
   /** The open ask's controls, the card's body over its foot; nothing where none waits, or the ask is of words alone. */
   controls: React.ReactNode;
+  /** Resolves the item without an answer, handed while its question's × has staged that, which Send then does; none otherwise. */
+  resolver?: InboxCloser | undefined;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
@@ -457,6 +475,7 @@ function AnswerCard({
   agent,
   thread,
   controls,
+  resolver,
   skills,
   keywords,
   replyScope,
@@ -476,6 +495,8 @@ function AnswerCard({
   const [starting, setStarting] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const starts = newThread !== undefined && asNew;
+  // Note that a staged resolve goes with Send, the box's words and files beside it as a plain reply, or alone where it holds none.
+  const resolves = resolver !== undefined && !starts;
   const asks = controls !== undefined && !starts;
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
@@ -498,11 +519,12 @@ function AnswerCard({
   const nod = awaitsNod(item) && emptyBox(draft) && !nodded && !starts;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
-  const sendable = starts
-    ? !emptyBox(draft) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
-    : nod || inboxThreadSend(thread, draft) !== undefined;
+  const sendable =
+    starts || resolves
+      ? (resolves || !emptyBox(draft)) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
+      : nod || inboxThreadSend(thread, draft) !== undefined;
   // Note that what an unfinished answer lacks is said only once a send was refused, and goes once it is filled.
-  const missing = starts || nod ? undefined : inboxMissing(thread, draft);
+  const missing = starts || nod || resolves ? undefined : inboxMissing(thread, draft);
   const [wanting, setWanting] = useState(false);
   if (wanting && missing === undefined) setWanting(false);
   const box = useRef<HTMLDivElement>(null);
@@ -510,7 +532,11 @@ function AnswerCard({
     setWanting(true);
     focusMissing(box.current, lacks);
   };
-  const placeholder = starts ? NEW_THREAD_PLACEHOLDER : answerPlaceholder(asks, undefined);
+  const placeholder = starts
+    ? NEW_THREAD_PLACEHOLDER
+    : resolves
+      ? RESOLVE_PLACEHOLDER
+      : answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
     placeholder,
@@ -565,6 +591,21 @@ function AnswerCard({
     setRefusal(undefined);
     setCut(false);
     control.onMessage(item, draft);
+  };
+  // Note that the reply goes first, its picks left behind, and the close once the reply is taken, so the agent reads why before it reads the close.
+  const resolve = (closer: InboxCloser) => {
+    setRefusal(undefined);
+    setCut(false);
+    if (emptyBox(draft)) {
+      void closer(item);
+      return;
+    }
+    // Note that a close refused once the reply went stages the resolve again on what the box holds now, so it can be sent again or undone; one the agent's change refused lapses with the revision it was staged on.
+    control.onMessage(item, { ...draft, ...UNPICKED }, () => {
+      void closer(item).then((closed) => {
+        if (!closed.kept) control.onDraft(item, { ...standing.current, resolving: true });
+      });
+    });
   };
   const acknowledge = () => {
     setRefusal(undefined);
@@ -645,6 +686,7 @@ function AnswerCard({
         }
         nod={nod}
         starts={starts}
+        resolves={resolves ? (emptyBox(draft) ? RESOLVE : SEND_AND_RESOLVE) : undefined}
         sending={sending}
         held={held}
         sendable={sendable}
@@ -659,6 +701,7 @@ function AnswerCard({
         onSubmit={() => {
           if (files.reading) return;
           if (starts) start(newThread);
+          else if (resolver !== undefined) resolve(resolver);
           else if (nod) acknowledge();
           else if (missing !== undefined) refuse(missing);
           else message();
