@@ -113,7 +113,7 @@ test("the repository leads the path as plain words where the page hands its door
   const named = drawn(TASK, () => undefined, { repository: door });
   await act(async () => undefined);
   const path = named.querySelector('nav[aria-label="Task path"]');
-  assert.match(path?.textContent ?? "", /acme\/web.*ACME-42/u, "the repository, then the key");
+  assert.match(path?.textContent ?? "", /web, acme.*ACME-42/u, "the repository, then the key");
   assert.equal(
     [...(path?.querySelectorAll("button") ?? [])].some((each) =>
       each.textContent?.includes("acme/web"),

@@ -305,7 +305,10 @@ test("the card, named New task, holds the composer with its words focused, the r
   }
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
   assert.equal(document.getElementById(name)?.textContent, "New task");
-  assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
+  assert.equal(
+    head?.querySelector(".repository-chip .ui-chip")?.getAttribute("aria-label"),
+    "acme/web",
+  );
   assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
   assert.equal(
     document.querySelector('[aria-label^="Workspace"]'),

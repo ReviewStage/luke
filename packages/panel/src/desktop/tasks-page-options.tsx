@@ -12,6 +12,9 @@ import {
   MENU_ITEM_MARK,
   motionKey,
   motionRows,
+  NoRepositoryGlyph,
+  RepositoryCard,
+  RepositoryPicture,
   ShowMoreRow,
   TaskPriorityMark,
   TaskStatusMark,
@@ -37,7 +40,6 @@ import {
   CircleCheckIcon,
   ClockIcon,
   EyeIcon,
-  FolderXIcon,
   GLYPH,
   ListFilterIcon,
   ListIcon,
@@ -48,6 +50,7 @@ import {
   UserIcon,
   UserXIcon,
 } from "@repo/ui/icons";
+import { NO_REPOSITORY, repositoryParts } from "@repo/ui/task-list-model";
 import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
@@ -79,8 +82,6 @@ import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.j
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, memberRows } from "../member-rows.js";
-import { RepositoryPicture } from "../repository-picture.js";
-import { RepositoryCard, repositoryWords } from "../repository-row.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -229,8 +230,7 @@ const PROPERTY_WORDS = {
   [TASK_PROPERTY.UPDATED]: "Last updated",
 } as const satisfies Record<TaskProperty, string>;
 
-/** What the List calls a task with no repository, and a task nobody is named for. */
-export const NO_REPOSITORY = "No repository";
+/** What the List calls a task nobody is named for. */
 export const NO_CREATOR = "No one";
 
 /** How many values a chip names before it counts the rest. */
@@ -404,17 +404,18 @@ function fieldValues(
           .filter((repository): repository is string => repository !== null)
           .sort(
             (a, b) =>
-              repositoryWords(a).label.localeCompare(repositoryWords(b).label) ||
-              a.localeCompare(b),
+              repositoryParts(a).name.localeCompare(repositoryParts(b).name) || a.localeCompare(b),
           )
           .map((repository) => ({
             value: repository,
-            words: repositoryWords(repository).label,
-            detail: repositoryWords(repository).detail,
+            words: repositoryParts(repository).name,
+            detail: repositoryParts(repository).owner,
             card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: <RepositoryPicture repository={repository} pictures={pictures} />,
           })),
-        ...(held.has(null) ? [{ value: null, words: NO_REPOSITORY, icon: <FolderXIcon /> }] : []),
+        ...(held.has(null)
+          ? [{ value: null, words: NO_REPOSITORY, icon: <NoRepositoryGlyph /> }]
+          : []),
       ];
   }
 }

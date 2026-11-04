@@ -4,6 +4,7 @@ import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
+import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -556,6 +557,21 @@ export function ChipCount({ children }: { children: string }): React.JSX.Element
       className="ui-chip-count text-muted-foreground tabular-nums group-aria-pressed/chip:text-chip-count-pressed"
       aria-hidden="true"
     >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Muted words after a chip's name that say which of its kind it is, as a
+ * menu's row names a repository's owner after its name: kept whole while
+ * the name gives way, since the name is what tells chips apart; a reader
+ * hears them after a pause.
+ */
+export function ChipDetail({ children }: { children: string }): React.JSX.Element {
+  return (
+    <span className="ui-chip-detail flex-none text-muted-foreground">
+      <VisuallyHidden>, </VisuallyHidden>
       {children}
     </span>
   );

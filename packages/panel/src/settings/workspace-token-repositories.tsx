@@ -19,20 +19,20 @@ import {
   ConfirmDialog,
   ErrorState,
   type MenuRow,
+  RepositoryPicture,
+  repositoryMenuRow,
   SETTINGS_ROW_INDENT,
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
   useConfirmDialog,
 } from "@repo/ui";
-import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback } from "react";
 import { useAct } from "../act.js";
-import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
-import { repositoryMenuRow } from "../repository-row.js";
+import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
@@ -51,7 +51,7 @@ import { AddMenuButton } from "./add-menu-button.js";
  * push to that neither the App nor the workspace's list already holds, read
  * as the menu opens from the addable the repository picker's listing
  * answers beside its own, each drawn as the repository chip's menu draws one
- * (`repository-row.tsx`); a pick adds it, and the list the service then
+ * (`repositoryMenuRow`); a pick adds it, and the list the service then
  * answers lands where the host holds it. With no token of the reader's
  * saved, as the host holds it, the menu says to add one. The list is the
  * host's (`LIVE_READ.TOKEN_REPOSITORIES`), read, still being read, or
@@ -144,6 +144,7 @@ function candidatesOf(
   token: { readonly rows: AppGitHubToken | undefined; readonly status: HostReadStatus },
   list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
   listed: readonly { readonly fullName: string }[],
+  pictures: boolean,
 ): Candidates {
   if (token.rows?.token === null) return { kind: "no-token" };
   if (token.status === HOST_READ_STATUS.LOADING) return { kind: "reading" };
@@ -156,7 +157,7 @@ function candidatesOf(
   const offered = addable ?? repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
   const rows = offered
     .filter((one) => !added.has(one.fullName.toLowerCase()))
-    .map((one) => repositoryMenuRow(one.fullName, true));
+    .map((one) => repositoryMenuRow(one.fullName, pictures));
   return { kind: "read", rows };
 }
 
@@ -175,12 +176,13 @@ export function AddTokenRepository({
 }): React.JSX.Element {
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
   // Note that the workspace's repositories and the reader's token are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`, `LIVE_READ.GITHUB_TOKEN`).
+  const pictures = useRepositoryPictures();
   const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
   const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
   const read = () => {
     if (list.status === HOST_READ_STATUS.FAILED) list.retry();
   };
-  const candidates = candidatesOf(token, list, repositories.listed);
+  const candidates = candidatesOf(token, list, repositories.listed, pictures);
   const rows = candidates.kind === "read" ? candidates.rows : [];
   const note = (close: () => void) =>
     candidates.kind === "reading" ? (
@@ -230,21 +232,14 @@ function TokenRepositoryRow({
       ),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
-  const [owner = repository.fullName] = repository.fullName.split("/");
+  const pictures = useRepositoryPictures();
   return (
     <>
       <SettingsRow
         indent={SETTINGS_ROW_INDENT.MARK}
         leading={
           <SettingsRowMark>
-            <WorkspaceTile
-              workspace={{
-                id: `github:${owner}`,
-                name: owner,
-                pictureUrl: githubAccountPictureUrl(owner),
-              }}
-              size={TILE_SIZE.NESTED}
-            />
+            <RepositoryPicture repository={repository.fullName} pictures={pictures} />
           </SettingsRowMark>
         }
         label={repository.fullName}

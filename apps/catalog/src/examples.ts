@@ -99,6 +99,7 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { READABLE_CONTROLS_EXAMPLE } from "./examples/readable-controls";
 import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
+import { REPOSITORIES_EXAMPLE } from "./examples/repositories";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
@@ -165,6 +166,7 @@ export const EXAMPLES: readonly Example[] = [
   WRITING_GLYPHS_EXAMPLE,
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
+  REPOSITORIES_EXAMPLE,
   TASK_MARKS_EXAMPLE,
   TASK_ROWS_EXAMPLE,
   BACK_BUTTONS_EXAMPLE,

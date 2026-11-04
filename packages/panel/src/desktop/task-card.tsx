@@ -15,6 +15,7 @@ import {
   HoverCardRule,
   linesCount,
   ProgressCount,
+  RepositoryPicture,
   TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
@@ -29,7 +30,6 @@ import { repositoryPageUrl } from "@repo/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
-import { RepositoryPicture } from "../repository-picture.js";
 import { agentName, pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
@@ -102,7 +102,7 @@ export const SIDEBAR_ROW_TIME =
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
-  "sidebar-task-repository mr-item-gap inline-block max-w-sidebar-row-repository overflow-hidden whitespace-nowrap text-muted-foreground";
+  "sidebar-task-repository mr-item-gap inline-flex min-w-0 max-w-sidebar-row-repository overflow-hidden whitespace-nowrap text-muted-foreground";
 
 /** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's color where it has one (`pull-request-mark.tsx`). */
 export const TASK_MARK_GLYPH =

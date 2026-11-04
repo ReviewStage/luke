@@ -372,7 +372,7 @@ function PathLine({
   );
 }
 
-/** The path led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under the path: ⌘K's and a task row's Change repository. */
+/** The path led by the task's repository, its owner's picture, its name and its owner muted after it, as the composer's chip names it, whose menu (`useRepositoryMenu`) opens only where the page asks, under the path: ⌘K's and a task row's Change repository. */
 function RepositoryPath({
   task,
   door,
@@ -391,7 +391,13 @@ function RepositoryPath({
     align: POPOVER_ALIGN.START,
   });
   // Note that the crumb is kept, because words that name the repository must not be folded away, yet it may still be cut short, so a long name never pushes the key out of the path.
-  const repository: Crumb = { label: menu.label, glyph: menu.glyph, kept: true };
+  const repository: Crumb = {
+    label: menu.label,
+    detail: menu.owner,
+    glyph: menu.glyph,
+    card: menu.card,
+    kept: true,
+  };
   return (
     <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
   );

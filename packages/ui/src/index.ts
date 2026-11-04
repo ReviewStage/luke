@@ -119,6 +119,7 @@ export * from "./components/public-page/public-page.js";
 export * from "./components/readable-controls/readable-controls.js";
 export * from "./components/rect-float/rect-float.js";
 export * from "./components/remote-surface/remote-surface.js";
+export * from "./components/repository/repository.js";
 export * from "./components/resize-edge/resize-edge.js";
 export * from "./components/retry-button/retry-button.js";
 export * from "./components/reveal/reveal.js";

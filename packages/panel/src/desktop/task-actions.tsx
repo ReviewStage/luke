@@ -934,7 +934,7 @@ function SidebarTaskCard({
  * is on it (`rowFaceOf`, drawn as `AssigneeFaceMark`): its assignee's,
  * where someone other than the reader is assigned, read against the members of the directory around the
  * list, or the dashed unassigned mark where no one is; a task assigned to
- * the reader wears none. Its repository's name, muted, where the list hands one (in one run),
+ * the reader wears none. Its repository, its owner's picture and its name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
  * list's order chooses. Pin
  * and Mark done stand in place of all of it while the row is hovered or
@@ -980,8 +980,8 @@ export function SidebarTask({
   now: number;
   /** The time the row shows, which the list's order chooses: its last update unless said. */
   at?: number;
-  /** The repository's name the row says, muted before its time, where the list hands one. */
-  repository?: string | undefined;
+  /** The repository the row names, its owner's picture and its name,, muted before its time, where the list hands one. */
+  repository?: React.ReactNode;
   /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
   /** How deep the row stands nested under its parent tasks: at the top unless said. */
@@ -1071,9 +1071,7 @@ export function SidebarTask({
             rename.editing ? null : (
               <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <OneLine className={SIDEBAR_ROW_REPOSITORY} words={repository}>
-                    {repository}
-                  </OneLine>
+                  <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}

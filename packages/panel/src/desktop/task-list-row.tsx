@@ -11,14 +11,12 @@ import {
   BLOCKED_WORDS,
   BlockedMark,
   CHIP_LOOK,
-  GLYPH_INK,
-  GlyphSlot,
   InlineEdit,
   type ListRowFold,
   type ListRowNest,
-  OneLine,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
+  RepositoryName,
   RowHint,
   RowHintOptions,
   TASK_AGENTS_MARK_SIZE,
@@ -30,7 +28,6 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
-import { FolderXIcon, GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import {
   type ChildTaskCount,
   repositoryLabel,
@@ -42,7 +39,6 @@ import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { type ReactNode, useRef } from "react";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
-import { RepositoryPicture } from "../repository-picture.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
@@ -59,7 +55,6 @@ import {
   useTaskMenuItems,
 } from "./task-actions.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
-import { NO_REPOSITORY } from "./tasks-page-options.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
 
 /**
@@ -129,39 +124,6 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
           onOpen={() => openLink(pullRequest.url)}
         />
       ))}
-    </>
-  );
-}
-
-/** A task's repository as its row says it, led by its owner's picture, or No repository and its glyph. */
-function RepositoryCell({
-  repository,
-  name,
-  pictures,
-}: {
-  repository: string | null;
-  name: string;
-  /** Whether owners' pictures are drawn at all: not in a fixture run. */
-  pictures: boolean;
-}): React.JSX.Element {
-  return (
-    <>
-      {repository === null ? (
-        <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-          <FolderXIcon />
-        </GlyphSlot>
-      ) : (
-        <RepositoryPicture
-          repository={repository}
-          pictures={pictures}
-          fallback={
-            <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-              <GLYPH.REPOSITORY />
-            </GlyphSlot>
-          }
-        />
-      )}
-      <OneLine>{name}</OneLine>
     </>
   );
 }
@@ -315,9 +277,9 @@ export function TaskListRow({
                   />
                 ),
               [TASK_ROW_CELL.REPOSITORY]: drawn(TASK_ROW_CELL.REPOSITORY) ? (
-                <RepositoryCell
+                <RepositoryName
                   repository={task.repository}
-                  name={repository ?? NO_REPOSITORY}
+                  label={repository}
                   pictures={tasks.pictures}
                 />
               ) : null,

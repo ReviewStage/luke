@@ -14,14 +14,19 @@ import {
   Button,
   CHIP_LOOK,
   Chip,
+  ChipDetail,
   type ChipLook,
   ChipName,
   type ChipWidth,
   ErrorState,
   GearIcon,
   type MenuRow,
+  NoRepositoryGlyph,
   POPOVER_ALIGN,
   type PopoverAlign,
+  RepositoryCard,
+  RepositoryPicture,
+  repositoryMenuRow,
   SearchableMenu,
   Spinner,
   TEXT_ELEMENT,
@@ -31,13 +36,12 @@ import {
   Tooltip,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { NO_REPOSITORY, repositoryParts } from "@repo/ui/task-list-model";
 import { repositoryFailureNote } from "@repo/ui/tasks-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { failureShown } from "../failure-report.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
-import { RepositoryPicture } from "../repository-picture.js";
-import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
@@ -80,7 +84,7 @@ export interface RepositoryChooser {
   recent: readonly string[];
   /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
-  /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
+  /** Whether a repository is drawn with its owner's picture: not in a fixture run (`RepositoryPicture`). */
   pictures: boolean;
   /** The workspace the list is for, where one is chosen, whose repositories the host holds for the chip (`LIVE_READ.REPOSITORY_LISTS`); every workspace's where none is. */
   scope?: string | undefined;
@@ -114,9 +118,6 @@ const PLACE_LOOK = {
 
 /** The chip's words while it waits on a pick. */
 export const CHOOSE_LABEL = "Choose a repository";
-
-/** The chip's words where the workspace's GitHub reaches nothing to pick, or where none is chosen and none may stand, and the row that chooses none. */
-const NONE_LABEL = "No repository";
 
 /** The id of the row pinned under the list that chooses no repository. */
 const NONE_ROW = "none";
@@ -259,8 +260,10 @@ interface RepositoryMenuProps {
 export interface RepositoryMenu {
   readonly open: boolean;
   readonly menuId: string;
-  /** The opener's words: the repository, or the pick it waits on. */
+  /** The opener's words: the repository's name, or the pick it waits on. */
   readonly label: string;
+  /** The repository's owner, muted after its name, as its menu's row names it; none while none is named. */
+  readonly owner: string | undefined;
   /** The owner's picture, or the repository's glyph while none is named. */
   readonly glyph: React.JSX.Element;
   /** The repository's card, none while none is named or the menu stands open. */
@@ -328,7 +331,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
   const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
-  const label = value ?? (none ? NONE_LABEL : CHOOSE_LABEL);
+  const named = value === null ? undefined : repositoryParts(value);
+  const label = named?.name ?? (none ? NO_REPOSITORY : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
@@ -376,9 +380,14 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     open,
     menuId,
     label,
+    owner: named?.owner,
     glyph:
       value === null ? (
-        <GLYPH.REPOSITORY />
+        none ? (
+          <NoRepositoryGlyph />
+        ) : (
+          <GLYPH.REPOSITORY />
+        )
       ) : (
         <RepositoryPicture
           repository={value}
@@ -411,8 +420,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
             : [
                 {
                   id: NONE_ROW,
-                  label: NONE_LABEL,
-                  icon: <GLYPH.REPOSITORY />,
+                  label: NO_REPOSITORY,
+                  icon: <NoRepositoryGlyph />,
                   onPress: () => choose(onClear),
                 },
               ]
@@ -442,6 +451,7 @@ export function RepositoryChip(
   const menu = useRepositoryMenu(props);
   const { held } = props;
   // Note that a held chip is `aria-disabled` rather than disabled, because a disabled button hears no pointer, and its hint says why.
+  // Note that a named chip is called by its whole `owner/name`, because its owner drawn muted after its name would read run into it.
   return (
     <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
       <Tooltip
@@ -452,6 +462,7 @@ export function RepositoryChip(
           look={PLACE_LOOK[props.place]}
           width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
+          aria-label={props.value ?? undefined}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}
           aria-disabled={held === undefined ? undefined : true}
@@ -464,6 +475,7 @@ export function RepositoryChip(
         >
           {menu.glyph}
           <ChipName>{menu.label}</ChipName>
+          {menu.owner === undefined ? null : <ChipDetail>{menu.owner}</ChipDetail>}
         </Chip>
       </Tooltip>
       {menu.menu}

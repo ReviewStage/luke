@@ -25,6 +25,7 @@ import {
   type OneLineEnd,
 } from "../one-line/clipped-line.js";
 import { Tooltip } from "../tooltip/hint.js";
+import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 import { useCrumbFold } from "./crumb-fold.js";
 
 /**
@@ -122,6 +123,8 @@ interface PathCrumb extends CrumbBase {
   readonly icon?: undefined;
   /** A glyph before its words, as a tab names its kind; decoration, since the words say what it is. */
   readonly glyph?: ReactNode;
+  /** Muted words after its own, kept whole while its words give way: a repository's owner after its name. */
+  readonly detail?: string | undefined;
   /** The card its hint hangs in the words' place. */
   readonly card?: ReactNode;
   /** Its name for a reader, where its words alone do not say it ("…"). */
@@ -153,6 +156,7 @@ interface WayBackCrumb extends CrumbBase {
   readonly icon: ReactNode;
   readonly onPress: (crumb: HTMLElement) => void;
   readonly glyph?: undefined;
+  readonly detail?: undefined;
   readonly card?: undefined;
   readonly name?: undefined;
   readonly hint?: undefined;
@@ -263,14 +267,16 @@ function CrumbChevron({
   return at === undefined ? null : <Chevron at={at} variant={variant} />;
 }
 
-/** A crumb's face: its glyph, where it wears one, then its words. */
+/** A crumb's face: its glyph, where it wears one, then its words, and its muted detail where it has one, which a reader hears after a pause. */
 function CrumbFace({
   glyph,
   label,
+  detail,
   end = ONE_LINE_END.FADE,
 }: {
   glyph: ReactNode;
   label: string;
+  detail?: string | undefined;
   end?: OneLineEnd | undefined;
 }): React.JSX.Element {
   return (
@@ -288,6 +294,12 @@ function CrumbFace({
       >
         {label}
       </ClippedLine>
+      {detail === undefined ? null : (
+        <span className="ui-breadcrumb-detail flex-none whitespace-nowrap text-muted-foreground">
+          <VisuallyHidden>, </VisuallyHidden>
+          {detail}
+        </span>
+      )}
     </>
   );
 }
@@ -321,7 +333,7 @@ function CrumbControl({
         className={`flex min-w-0 items-center gap-breadcrumb-gap ${LOOK[variant].words}`}
         aria-current={current}
       >
-        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
+        <CrumbFace glyph={crumb.glyph} label={label} detail={crumb.detail} end={crumb.end} />
       </BreadcrumbPage>
     ) : (
       <BreadcrumbLink
@@ -332,7 +344,7 @@ function CrumbControl({
         aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
         onClick={pulseOnPress((event) => onPress(event.currentTarget))}
       >
-        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
+        <CrumbFace glyph={crumb.glyph} label={label} detail={crumb.detail} end={crumb.end} />
       </BreadcrumbLink>
     );
   return crumb.hint === undefined && crumb.card === undefined ? (

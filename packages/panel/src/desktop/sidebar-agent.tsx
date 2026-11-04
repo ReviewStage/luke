@@ -135,8 +135,8 @@ export function SidebarAgent({
   now: number;
   /** The time the row shows, which the list's order chooses. */
   at: number;
-  /** The repository's name the row says, muted before its time, where its group does not say it. */
-  repository?: string | undefined;
+  /** The repository the row names, its owner's picture and its name,, muted before its time, where its group does not say it. */
+  repository?: React.ReactNode;
   /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;
   /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
@@ -259,9 +259,7 @@ export function SidebarAgent({
             editing ? null : (
               <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <OneLine className={SIDEBAR_ROW_REPOSITORY} words={repository}>
-                    {repository}
-                  </OneLine>
+                  <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
                 )}
                 {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
                 {agent.source?.kind === AGENT_SOURCE.SLACK ? (

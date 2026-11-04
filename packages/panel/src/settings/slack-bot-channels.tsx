@@ -9,17 +9,20 @@ import {
   CONFIRM_LOSS,
   ConfirmDialog,
   type MenuRow as MenuRowChoice,
+  RepositoryPicture,
+  repositoryMenuRow,
   SETTINGS_ROW_INDENT,
   SettingsRow,
   SettingsRowMark,
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { repositoryParts } from "@repo/ui/task-list-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
-import { repositoryMenuRow } from "../repository-row.js";
+import { useRepositoryPictures } from "../repository-pictures.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { MenuRow } from "./menu-row.js";
@@ -81,10 +84,11 @@ function ChannelMark({ channel }: { channel: SlackBotChannel }): React.JSX.Eleme
  * never answered asks for it again.
  */
 function useRepositoryRows(workspaceId: string) {
+  const pictures = useRepositoryPictures();
   const { rows: listed, status, retry } = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
   const rows: readonly MenuRowChoice[] = useMemo(
-    () => listed?.repositories.map((one) => repositoryMenuRow(one.fullName, true)) ?? [],
-    [listed],
+    () => listed?.repositories.map((one) => repositoryMenuRow(one.fullName, pictures)) ?? [],
+    [listed, pictures],
   );
   const failed = status === HOST_READ_STATUS.FAILED;
   const note = failed
@@ -92,7 +96,7 @@ function useRepositoryRows(workspaceId: string) {
     : listed === undefined
       ? readingWords(TERM.REPOSITORY.many)
       : undefined;
-  return { read: failed ? retry : () => undefined, note, rows };
+  return { read: failed ? retry : () => undefined, note, pictures, rows };
 }
 
 /**
@@ -168,7 +172,12 @@ function DefaultRepositoryRow({
       label={WORDS.DEFAULT_LABEL}
       detail={WORDS.DEFAULT_DETAIL}
       value={chosen ?? NONE_ROW}
-      valueLabel={chosen ?? WORDS.NONE}
+      valueLabel={chosen === undefined ? WORDS.NONE : repositoryParts(chosen).name}
+      valueIcon={
+        chosen === undefined ? undefined : (
+          <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
+        )
+      }
       rows={[{ id: NONE_ROW, label: WORDS.NONE }, ...repositories.rows]}
       placeholder={WORDS.REPOSITORY_SEARCH}
       noMatch={noMatchWords(TERM.REPOSITORY)}
@@ -251,7 +260,19 @@ function ChannelRow({
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
               value={channel.repository ?? NONE_ROW}
-              valueLabel={channel.repository ?? WORDS.DEFAULT}
+              valueLabel={
+                channel.repository === undefined
+                  ? WORDS.DEFAULT
+                  : repositoryParts(channel.repository).name
+              }
+              valueIcon={
+                channel.repository === undefined ? undefined : (
+                  <RepositoryPicture
+                    repository={channel.repository}
+                    pictures={repositories.pictures}
+                  />
+                )
+              }
               rows={[
                 {
                   id: NONE_ROW,
