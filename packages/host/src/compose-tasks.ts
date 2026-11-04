@@ -2449,10 +2449,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 if (!created.ok) {
                   const { failure, localAgentRefusal } = created;
                   const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
-                  // Note that a start that waits keeps its task open, and any other unanswered is taken back as refused.
                   const waits =
                     went === WRITE_UNTAKEN.UNANSWERED && key !== undefined && startMayWait(start);
-                  if (opened !== undefined && !waits) yield* startedBack(opened, id);
+                  // Note that a start the service took already was made by an earlier send, so its record is followed again where it stands open, as a made start's is; one that waits keeps its task open, and any other is taken back.
+                  if (went === WRITE_UNTAKEN.ALREADY_WRITTEN) {
+                    if (opened?.drawn === true && view.activeTaskId === id) {
+                      yield* documents.retry(id);
+                    }
+                  } else if (opened !== undefined && !waits) yield* startedBack(opened, id);
                   return untaken<FieldChange<PlanRow>, WireValue>(went, {
                     kept: carried<TasksStartAnswer>({ planId: id }),
                     refused: carried<TasksStartAnswer>(

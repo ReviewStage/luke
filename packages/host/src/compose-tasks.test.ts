@@ -1779,6 +1779,56 @@ it.effect(
 );
 
 it.effect(
+  "a start the service took already as it is sent again stands open and follows its task's record, so a save someone else makes reaches its plan",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.UNANSWERED,
+      };
+      const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
+      const { call, listed, last, settled, plan } = yield* subject(service, { pool });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* call(GATEWAY_METHOD.TASKS_START, {
+        name: "Invitation expiry",
+        workspaceId: billing.workspaceId,
+      });
+
+      // The first send landed though its answer was lost, so the service holds the task, its record, and its key.
+      service.tasks = [...service.tasks, task(INVITES, "Invitation expiry", "", 30)];
+      const record = polledRecord(service, INVITES);
+      service.recordLives[INVITES] = record;
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.ALREADY_WRITTEN,
+      };
+      yield* listed();
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+      // A teammate saves the plan, which the next poll carries.
+      service.tasks = service.tasks.map((each) =>
+        each.id === INVITES
+          ? { ...each, updatedAt: 40, document: { ...each.document, body: "# Theirs" } }
+          : each,
+      );
+      record.move();
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+
+      assert.deepEqual(service.createKeys, ["start-key", "start-key"]);
+      assert.equal(last()?.activeTaskId, INVITES);
+      assert.equal(plan(INVITES)?.document.body, "# Theirs");
+      assert.deepEqual(pool.queued(), []);
+    }),
+);
+
+it.effect(
   "a start that names an agent never waits: one the service did not answer is taken back",
   () =>
     Effect.gen(function* () {
