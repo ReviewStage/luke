@@ -33,9 +33,12 @@ import { Tooltip } from "../tooltip/hint.js";
  * pages it is read past, not every page it holds. What the page draws is the
  * task's, so the frame is left out of the screen recording.
  *
- * Its corner offers, under the pointer or always to a finger, the page full
- * screen, over the dimmed window at the window's size (`PageEmbedViewer`),
- * and the page in its own tab, where the caller can open one.
+ * Its corner offers, under the pointer, the page full screen, over the
+ * dimmed window at the window's size (`PageEmbedViewer`), and the page in
+ * its own tab, where the caller can open one. A screen with no hover draws
+ * no corner, because there it would stand over the page for good, and the
+ * row each caller draws above the page already opens it: on a phone, its tab
+ * and full screen are one screen.
  */
 
 const LABEL = {
@@ -151,7 +154,7 @@ export function PageEmbed({
         style={size.style}
       />
       {acts ? (
-        <div className="ui-page-embed-acts absolute top-ui-8 right-ui-8 flex gap-ui-2 rounded-control bg-veil p-ui-2 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-hover/page-embed:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+        <div className="ui-page-embed-acts absolute top-ui-8 right-ui-8 flex gap-ui-2 rounded-control bg-veil p-ui-2 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-hover/page-embed:opacity-100 focus-within:opacity-100 no-hover:hidden">
           {onOpenInPanel === undefined ? null : (
             <Tooltip label={LABEL.OPEN_IN_PANEL}>
               <IconButton
