@@ -285,6 +285,10 @@ const GONE_AFTER_REFUSALS = 4;
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's process group has to end after SIGTERM before the group is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
+/** How long making an agent's repository may take, a first clone of a large one included, before its launch is given up; the script gives up a wait on another launch's clone in as long (`node/open-on-mac.ts`'s `WORKTREE_TIMING`). */
+const WORKTREE_DEADLINE = Duration.minutes(25);
+/** The exit code the worktree script ends with where it gave up waiting on another launch's clone (`node/open-on-mac.ts`'s `WORKTREE_LOCK_BUSY`). */
+const WORKTREE_LOCK_BUSY = 75;
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 /** How often an agent's GitHub token's age is read off the wall clock, and so how soon one the service did not hand is asked for again, well inside the hour the last one lasts. */
@@ -881,7 +885,8 @@ export function composeLocalAgents(
               worktree: layout.checkoutPath,
               branch,
             });
-            const code = yield* Effect.scoped(
+            // Note that the script's own steps are cut off sooner where a transfer stalls; this bound is for the one that moves, or hangs, in a way they do not catch, and it holds the agent's delivery and the repository's clone for as long as it runs.
+            const finished = yield* Effect.scoped(
               Effect.flatMap(
                 ChildProcess.make("/bin/bash", ["-c", script], {
                   cwd: folder,
@@ -889,11 +894,24 @@ export function composeLocalAgents(
                   stdin: "ignore",
                   stdout: "ignore",
                   stderr: "ignore",
+                  forceKillAfter: KILL_GRACE,
                 }),
                 (handle) => handle.exitCode,
               ),
-            );
-            return Number(code) === 0;
+            ).pipe(Effect.timeoutOption(WORKTREE_DEADLINE));
+            if (Option.isNone(finished)) {
+              report(
+                `a local agent's repository was not made within ${Duration.toMinutes(WORKTREE_DEADLINE)} minutes, so its launch was given up`,
+              );
+              return false;
+            }
+            const code = Number(finished.value);
+            if (code === WORKTREE_LOCK_BUSY) {
+              report(
+                "a local agent's repository was not made, since another launch of it held the clone too long",
+              );
+            }
+            return code === 0;
           }).pipe(Effect.orElseSucceed(() => false));
 
         /**

@@ -28,8 +28,9 @@ import {
 } from "@repo/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { ConfigProvider, Deferred, Effect, Exit, Layer, Option, Stream } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
@@ -269,12 +270,13 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  * The follower on a Linux host, whose agents run straight on it, one launch line
  * handed once for an agent in a repository, whose first lines continue a
  * session, and whose runner ends at once; where `workStands` says, the
- * agent's repository already stands in its folder, as its last turn left it.
- * With the processes spawned, what the repository's script was asked for,
+ * agent's repository already stands in its folder, as its last turn left it,
+ * or, where `repositoryHangs` says, its script never ends. With the
+ * processes spawned, what the repository's script was asked for,
  * the steps the launch reported in the order the service had them, and what
  * waits for the launch's settle and its report that the runner starts.
  */
-const launching = (workStands: boolean) =>
+const launching = (workStands: boolean, repositoryHangs = false) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("agent-launch-");
     const home = path.join(root, "home");
@@ -282,6 +284,8 @@ const launching = (workStands: boolean) =>
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
     const launchSettled = Deferred.makeUnsafe<void>();
     const starting = Deferred.makeUnsafe<void>();
+    const hung = Deferred.makeUnsafe<void>();
+    const reported: string[] = [];
     const steps: string[] = [];
     let linesRead = 0;
     const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
@@ -328,9 +332,11 @@ const launching = (workStands: boolean) =>
       if (program === "/bin/bash" && args[1] === WORKTREE_SCRIPT) {
         return {
           exitCode: 0,
-          until: Effect.sync(() => {
-            mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
-          }),
+          until: repositoryHangs
+            ? Effect.andThen(Deferred.succeed(hung, undefined), Effect.never)
+            : Effect.sync(() => {
+                mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
+              }),
         };
       }
       if (program === "/bin/bash") return { exitCode: 0 };
@@ -343,7 +349,7 @@ const launching = (workStands: boolean) =>
       NodeFileSystem.layer,
       fakeHttpClientLayer(fetchLike),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
-      Layer.succeed(Reporter, { report: () => {} }),
+      Layer.succeed(Reporter, { report: (message) => void reported.push(message) }),
       Layer.succeed(LocalAgentPlatform, {
         ...platform,
         formerlyDirect: false,
@@ -374,6 +380,9 @@ const launching = (workStands: boolean) =>
       spawned: spawner.spawned,
       worktrees,
       steps,
+      reported,
+      hung: Deferred.await(hung),
+      settled: Deferred.await(launchSettled),
       launched: Effect.andThen(Deferred.await(launchSettled), Deferred.await(starting)),
     };
   });
@@ -400,6 +409,26 @@ it.effect.each([
           steps,
           workStands ? ["preparing", "starting"] : ["preparing", "fetching", "starting"],
         );
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch whose repository is still not made after its deadline is given up and settled as not started, its runner never spawned, reporting why",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, reported, hung, settled } = yield* launching(false, true);
+        yield* hung;
+
+        yield* TestClock.adjust(Duration.minutes(25));
+        yield* settled;
+
+        assert.equal(
+          spawned.some((each) => each.program === RUNNER),
+          false,
+        );
+        assert.ok(reported.some((message) => message.includes("not made within 25 minutes")));
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
