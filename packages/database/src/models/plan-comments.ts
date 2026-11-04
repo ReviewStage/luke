@@ -86,12 +86,13 @@ export type PlanCommentWriterRef =
       readonly agentId: string;
     };
 
-/** What a write to a plan's comments came to: done, with what it answers, or no plan, thread, or page the account reaches. */
+/** What a write to a plan's comments came to: done, with what it answers, or no plan, thread, or page the account reaches, or a thread's id another task's thread holds. */
 export const PLAN_COMMENT_OUTCOME = {
   DONE: "done",
   NO_TASK: "no-plan",
   NO_THREAD: "no-thread",
   NO_PAGE: "no-page",
+  ID_TAKEN: "id-taken",
 } as const;
 
 export type PlanCommentOutcome =
@@ -100,10 +101,13 @@ export type PlanCommentOutcome =
       readonly answer: PlanCommentThreadAnswer;
       /** Set where the write was a retry of one under the same key, which wrote nothing this time. */
       readonly repeated?: true;
+      /** The transaction the write committed in, which a reader following the thread waits for; none where it wrote nothing. */
+      readonly txid?: string;
     }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_TASK }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_THREAD }
-  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_PAGE };
+  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_PAGE }
+  | { readonly status: typeof PLAN_COMMENT_OUTCOME.ID_TAKEN };
 
 /** Where one thread stands, without what it says: what a held read compares between looks. */
 export interface PlanCommentStamp {
@@ -303,6 +307,26 @@ const findTaskPageVersion = SqlSchema.findOneOption({
             eq(planPageVersion.version, version),
           ),
         ),
+    ),
+});
+
+/**
+ * The transaction a write runs in, returned beside what it wrote, so a
+ * reader following the thread waits for that transaction to arrive before
+ * it takes the write as shown.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** The task a thread of any task is on, by the thread's id alone: whether an id a start chose is free. */
+const findThreadTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ threadId: Schema.String }),
+  Result: Schema.Struct({ taskId: Schema.String }),
+  execute: ({ threadId }) =>
+    Database.use((db) =>
+      db
+        .select({ taskId: planCommentThread.taskId })
+        .from(planCommentThread)
+        .where(eq(planCommentThread.id, threadId)),
     ),
 });
 
@@ -531,7 +555,7 @@ function fileRowsOf(
   });
 }
 
-/** One entry written to a thread with the files a comment carries, and the thread moved on, so every reader's cursor moves. */
+/** One entry written to a thread with the files a comment carries, and the thread moved on, so every reader's cursor moves; answers the transaction it was written in. */
 function writeEntry(
   place: EntryPlace,
   writer: PlanCommentWriterRef,
@@ -543,12 +567,12 @@ function writeEntry(
     readonly files?: readonly AgentAttachment[];
   },
   now: Date,
-): TaskStoreEffect<void> {
+): TaskStoreEffect<string> {
   return Effect.gen(function* () {
     const { taskId, threadId } = place;
     const id = randomUUID();
     const files = yield* fileRowsOf(place, id, writer.userId, entry.files ?? [], now);
-    const seq = yield* movedOn(threadId, now);
+    const { revision: seq, txid } = yield* movedOn(threadId, now);
     yield* Database.use((db) =>
       db.insert(planComment).values({
         id,
@@ -565,37 +589,46 @@ function writeEntry(
       }),
     );
     if (files.length > 0) yield* Database.use((db) => db.insert(attachment).values(files));
+    return txid;
   });
 }
 
-/** The thread's revision moved on and its instant set, as every change of it does; answers the revision it moved to. */
+/** The thread's revision moved on and its instant set, as every change of it does; answers the revision it moved to and the transaction it moved in. */
 function movedOn(
   threadId: string,
   now: Date,
   set: Partial<typeof planCommentThread.$inferInsert> = {},
-): TaskStoreEffect<number> {
+): TaskStoreEffect<{ readonly revision: number; readonly txid: string }> {
   return Effect.flatMap(
     Database.use((db) =>
       db
         .update(planCommentThread)
         .set({ ...set, revision: sql`${planCommentThread.revision} + 1`, updatedAt: now })
         .where(eq(planCommentThread.id, threadId))
-        .returning({ revision: planCommentThread.revision }),
+        .returning({ revision: planCommentThread.revision, txid: TXID }),
     ),
     // A thread read under the plan's lock that the update then misses is the database breaking its own contract.
     ([row]) =>
       row === undefined
         ? Effect.die(new Error("plan comment thread vanished"))
-        : Effect.succeed(row.revision),
+        : Effect.succeed(row),
   );
 }
 
-/** The thread answered as it now stands. */
-function answered(taskId: string, threadId: string): TaskStoreEffect<PlanCommentOutcome> {
+/** The thread answered as it now stands, with the transaction the write committed in where it wrote. */
+function answered(
+  taskId: string,
+  threadId: string,
+  txid?: string,
+): TaskStoreEffect<PlanCommentOutcome> {
   return Effect.map(threadsOf(taskId, { ids: [threadId] }), ([thread]) =>
     thread === undefined
       ? { status: PLAN_COMMENT_OUTCOME.NO_THREAD }
-      : { status: PLAN_COMMENT_OUTCOME.DONE, answer: { thread } },
+      : {
+          status: PLAN_COMMENT_OUTCOME.DONE,
+          answer: { thread },
+          ...(txid === undefined ? undefined : { txid }),
+        },
   );
 }
 
@@ -734,7 +767,12 @@ function placedOnPage(
  * a version of one of the task's pages. Refused where the plan, or the page,
  * holds its bound of threads, or where none of the words stand in the text
  * now; no page where the task holds no such version; the thread a key
- * already started where the request was taken before.
+ * already started where the request was taken before. A start may name the
+ * thread's id, minted by its client so it can draw the thread before the
+ * service answers: the thread is made under it, a start of this task's
+ * under an id it already holds answers that thread as a retry does, and an
+ * id another task's thread holds is taken, answered as a plan not reached
+ * is, so it says nothing of whose it is.
  */
 export function startPlanCommentThread(
   writer: PlanCommentWriterRef,
@@ -747,6 +785,14 @@ export function startPlanCommentThread(
       if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_TASK } as const;
       const taken = yield* findKeyedThread({ taskId, clientKey: request.clientKey });
       if (Option.isSome(taken)) return yield* answeredAgain(taskId, taken.value.threadId);
+      if (request.id !== undefined) {
+        const held = yield* findThreadTask({ threadId: request.id });
+        if (Option.isSome(held)) {
+          return held.value.taskId === taskId
+            ? yield* answeredAgain(taskId, request.id)
+            : ({ status: PLAN_COMMENT_OUTCOME.ID_TAKEN } as const);
+        }
+      }
       const onPage = "page" in request;
       const { count } = yield* countThreads({
         taskId,
@@ -759,19 +805,25 @@ export function startPlanCommentThread(
         ? yield* placedOnPage(taskId, request)
         : placedOnPlan(locked.value.text, request);
       if ("status" in placed) return placed;
-      const id = randomUUID();
+      const id = request.id ?? randomUUID();
       const now = yield* DateTime.nowAsDate;
-      yield* Database.use((db) =>
-        db.insert(planCommentThread).values({
-          ...placed,
-          id,
-          taskId,
-          status: PLAN_COMMENT_STATUS.OPEN,
-          revision: 0,
-          createdAt: now,
-          updatedAt: now,
-        }),
+      const made = yield* Database.use((db) =>
+        db
+          .insert(planCommentThread)
+          .values({
+            ...placed,
+            id,
+            taskId,
+            status: PLAN_COMMENT_STATUS.OPEN,
+            revision: 0,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing({ target: planCommentThread.id })
+          .returning({ id: planCommentThread.id }),
       );
+      // Note that a start of this task waits on the plan's lock, so an id taken meanwhile is another task's.
+      if (made.length === 0) return { status: PLAN_COMMENT_OUTCOME.ID_TAKEN } as const;
       const first = {
         kind: PLAN_COMMENT_ENTRY.COMMENT,
         words: request.words,
@@ -779,8 +831,8 @@ export function startPlanCommentThread(
         ...(request.attachments === undefined ? undefined : { files: request.attachments }),
       };
       const place = { taskId, organizationId: locked.value.organizationId, threadId: id };
-      yield* writeEntry(place, writer, first, now);
-      return yield* answered(taskId, id);
+      const txid = yield* writeEntry(place, writer, first, now);
+      return yield* answered(taskId, id, txid);
     }),
   );
 }
@@ -825,8 +877,8 @@ function replied(
       ...(reply.clientKey === undefined ? undefined : { clientKey: reply.clientKey }),
       ...(reply.attachments === undefined ? undefined : { files: reply.attachments }),
     };
-    yield* writeEntry(place, writer, entry, now);
-    return yield* answered(taskId, thread.id);
+    const txid = yield* writeEntry(place, writer, entry, now);
+    return yield* answered(taskId, thread.id, txid);
   });
 }
 
@@ -852,16 +904,25 @@ function askedOf(
       return same ? yield* answered(taskId, thread.id) : refused(PLAN_COMMENT_REFUSAL.KEY_TAKEN);
     }
     const entry = { kind: PLAN_COMMENT_ENTRY.ASKED, asked: ask.to, clientKey: ask.clientKey };
-    yield* writeEntry(place, writer, entry, now);
-    return yield* answered(taskId, thread.id);
+    const txid = yield* writeEntry(place, writer, entry, now);
+    return yield* answered(taskId, thread.id, txid);
   });
 }
 
-/** The thread deleted, its entries with it. */
+/** The thread deleted, its entries with it, answered with the transaction it was deleted in. */
 function deletedThread(threadId: string): TaskStoreEffect<PlanCommentOutcome> {
-  return Effect.as(
-    Database.use((db) => db.delete(planCommentThread).where(eq(planCommentThread.id, threadId))),
-    { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: threadId } } as const,
+  return Effect.map(
+    Database.use((db) =>
+      db
+        .delete(planCommentThread)
+        .where(eq(planCommentThread.id, threadId))
+        .returning({ txid: TXID }),
+    ),
+    ([row]) => ({
+      status: PLAN_COMMENT_OUTCOME.DONE,
+      answer: { deleted: threadId },
+      ...(row === undefined ? undefined : { txid: row.txid }),
+    }),
   );
 }
 
@@ -876,7 +937,7 @@ function settled(
   return Effect.gen(function* () {
     const { taskId } = place;
     if (thread.status === status) return yield* answered(taskId, thread.id);
-    yield* movedOn(thread.id, now, { status });
+    const { txid } = yield* movedOn(thread.id, now, { status });
     // Note that past the bound the change is made and goes unsaid, because a resolve must never be refused, and its lines must not grow a thread without end.
     const lines = thread.entries.filter((entry) => entry.kind !== PLAN_COMMENT_ENTRY.COMMENT);
     if (lines.length < PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {
@@ -886,7 +947,7 @@ function settled(
           : PLAN_COMMENT_ENTRY.REOPENED;
       yield* writeEntry(place, writer, { kind }, now);
     }
-    return yield* answered(taskId, thread.id);
+    return yield* answered(taskId, thread.id, txid);
   });
 }
 
@@ -944,14 +1005,14 @@ export function actOnPlanCommentThread(
                 .set({ words: request.words, editedAt: now })
                 .where(eq(planComment.id, entry.id)),
             );
-            yield* movedOn(threadId, now);
-            return yield* answered(taskId, threadId);
+            const { txid } = yield* movedOn(threadId, now);
+            return yield* answered(taskId, threadId, txid);
           }
           const first = entries.find((each) => each.kind === PLAN_COMMENT_ENTRY.COMMENT);
           if (first?.id === entry.id) return yield* deletedThread(threadId);
           yield* Database.use((db) => db.delete(planComment).where(eq(planComment.id, entry.id)));
-          yield* movedOn(threadId, now);
-          return yield* answered(taskId, threadId);
+          const { txid } = yield* movedOn(threadId, now);
+          return yield* answered(taskId, threadId, txid);
         }
       }
     }),
