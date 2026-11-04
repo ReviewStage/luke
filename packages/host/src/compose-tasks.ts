@@ -174,6 +174,7 @@ import {
   FiberMap,
   MutableHashMap,
   Option,
+  PubSub,
   Queue,
   Schema,
   Scope,
@@ -221,6 +222,7 @@ import {
 } from "./plan-comment-reads.js";
 import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
+import type { PullRequestListing } from "./pull-request-parts.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
@@ -545,6 +547,8 @@ export interface TasksComposer extends Composer {
    * waits for nothing.
    */
   listed: (txid: string | undefined) => Effect.Effect<void>;
+  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`). */
+  pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them. */
   repositoriesMoved: Effect.Effect<void>;
 }
@@ -1144,6 +1148,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * holds of each task whose plan is held, its name, pin, status, assignee,
    * and repository, reaches its plan as the list carries it.
    */
+  /** Each drawing of the task list, told to every listener of the Pull request tabs' parts. */
+  const listings = yield* Effect.acquireRelease(
+    PubSub.unbounded<PullRequestListing>(),
+    PubSub.shutdown,
+  );
+
   const openTaskList = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
@@ -1168,6 +1178,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             taskAgentPins,
           });
           documents.relisted();
+          const agents = [...taskAgents, ...(list.planlessAgents ?? [])];
+          PubSub.publishUnsafe(listings, {
+            statuses: new Map(agents.map((agent) => [agent.id, agent.status])),
+            pullRequests: agentPullRequests,
+          });
         },
         txWait: () => listWait,
       }),
@@ -3539,6 +3554,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
     }),
     listed,
+    pullRequestListings: Effect.map(PubSub.subscribe(listings), Stream.fromSubscription),
     repositoriesMoved: repositoryLists.wake(() => true),
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);

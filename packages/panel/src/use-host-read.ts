@@ -3,7 +3,12 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
-import type { AgentInboxScope } from "@repo/features/agent-view";
+import {
+  type AgentInboxScope,
+  type AgentPullRequestReadParams,
+  PULL_REQUEST_PART,
+  type PullRequestPart,
+} from "@repo/features/agent-view";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -22,6 +27,7 @@ import {
   EVERY_WORKSPACE,
   HOST_READ_SLICE,
   KEYS_ON,
+  OWN_PULL_REQUEST,
   READ_KEYS,
 } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
@@ -67,7 +73,8 @@ export interface HeldRead<Rows> {
 
 /** A read a surface offers Try again on, as well. */
 export interface HostRead<Rows> extends HeldRead<Rows> {
-  readonly retry: () => void;
+  /** Try again, settling once the ask lands where the read's Try again waits on it, and at once where it does not. */
+  readonly retry: () => Promise<void>;
 }
 
 /** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
@@ -196,14 +203,31 @@ function automationsRead(kind: AutomationFollow["kind"]) {
   };
 }
 
+/** A Pull request tab's hold on one part of the pull request it names, a stream that carries nothing, and its Try again, which answers once the part's ask has landed, so a write's read-back can wait on it. */
+function pullRequestPartRead(part: PullRequestPart) {
+  return {
+    path: (key: AgentPullRequestReadParams) => [
+      key.agentId,
+      key.number === undefined ? OWN_PULL_REQUEST : String(key.number),
+    ],
+    hold: (key: AgentPullRequestReadParams) =>
+      askAct(ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW, { part, ...key }),
+    retry: (key: AgentPullRequestReadParams) =>
+      askAct(ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY, { part, ...key }),
+  };
+}
+
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
  * inbox; where the account's integrations stand, by the account, which every
  * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
  * page, the panel beside an Inbox item, an agent's page, and a page's card
- * or frame each hold; one agent's pull request's chapters, by the number its
- * Pull request tab's own read of it found; one task's cloud Browser tabs,
+ * or frame each hold; the parts of one agent's pull request a Pull request
+ * tab holds while it shows, its pull request, checks, conversation, and what
+ * the agent published, by the number the tab names or the agent's own; one
+ * agent's pull request's chapters, by the number its Pull request tab's own
+ * read of it found; one task's cloud Browser tabs,
  * every one of its agents', or one agent's, which a side panel listing them
  * holds; the account's devices' beats, by the account, which every surface
  * drawing a device's standing holds; This Mac's host, by the account, which
@@ -299,6 +323,22 @@ const HOST_READS = {
     // Note that the host holds the keys of whoever is signed in, so neither act names an account.
     hold: () => askAct(ACT_KIND.PROVIDER_KEYS_FOLLOW),
     retry: () => tellAct(ACT_KIND.PROVIDER_KEYS_RETRY),
+  }),
+  [LIVE_READ.PULL_REQUEST]: hostRead(LIVE_READ.PULL_REQUEST, {
+    slice: APP_SLICE.PULL_REQUEST,
+    ...pullRequestPartRead(PULL_REQUEST_PART.PULL_REQUEST),
+  }),
+  [LIVE_READ.PULL_REQUEST_CHECKS]: hostRead(LIVE_READ.PULL_REQUEST_CHECKS, {
+    slice: APP_SLICE.PULL_REQUEST_CHECKS,
+    ...pullRequestPartRead(PULL_REQUEST_PART.CHECKS),
+  }),
+  [LIVE_READ.PULL_REQUEST_CONVERSATION]: hostRead(LIVE_READ.PULL_REQUEST_CONVERSATION, {
+    slice: APP_SLICE.PULL_REQUEST_CONVERSATION,
+    ...pullRequestPartRead(PULL_REQUEST_PART.CONVERSATION),
+  }),
+  [LIVE_READ.PULL_REQUEST_PUBLISHED]: hostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, {
+    slice: APP_SLICE.PULL_REQUEST_PUBLISHED,
+    ...pullRequestPartRead(PULL_REQUEST_PART.PUBLISHED),
   }),
   [LIVE_READ.REPOSITORY_LISTS]: hostRead(LIVE_READ.REPOSITORY_LISTS, {
     slice: APP_SLICE.REPOSITORY_LISTS,
@@ -443,9 +483,17 @@ export function useHostRead<Read extends HostReadName>(
       () => undefined,
     );
   }, [entry, first, second]);
-  const retry = useCallback(() => {
-    if (path !== undefined) entry.retry?.(keyed);
-  }, [entry, first, second]);
+  // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the surface draws.
+  const retry = useCallback(
+    (): Promise<void> =>
+      path === undefined
+        ? Promise.resolve()
+        : Promise.resolve(entry.retry?.(keyed)).then(
+            () => undefined,
+            () => undefined,
+          ),
+    [entry, first, second],
+  );
   const drawn = { rows: held?.rows, status: statusOf(held) };
   // SAFETY: a read's rows are its entry's (`AppHostReads`), and Try again stands where its entry offers one (`HostReadOf`).
   return (entry.retry === undefined ? drawn : { ...drawn, retry }) as HostReadOf<Read>;

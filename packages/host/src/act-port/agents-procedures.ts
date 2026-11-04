@@ -28,9 +28,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPageParams,
   type AgentPartParams,
@@ -58,6 +55,8 @@ import {
   type AgentWorkspaceListParams,
   type HostDoneAnswerView,
   type HostsAnswerView,
+  type PullRequestPart,
+  type PullRequestPartParams,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import type {
@@ -115,22 +114,18 @@ export interface AgentProceduresDependencies {
     /** One agent's held origin read again at once, as Try again asks. */
     agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
     agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
+    /** One part of one agent's pull request held at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
+    pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
+    /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
+    pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
     agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
-    agentOverviewPullRequest(
-      params: AgentPullRequestReadParams,
-    ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
     agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
     /** One agent's own tools held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
     agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
     /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
     agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
-    agentOverviewChecks(
-      params: AgentPullRequestReadParams,
-    ): Effect.Effect<AgentOverviewChecksAnswerView>;
-    agentOverviewConversation(
-      params: AgentPullRequestReadParams,
-    ): Effect.Effect<AgentOverviewConversationAnswerView>;
     agentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
     agentPullRequestAction(
       params: AgentPullRequestActionParams,
@@ -165,6 +160,17 @@ class TranscriptStreamKey extends Data.Class<{
   readonly owner: string;
   readonly callId: string | undefined;
 }> {}
+
+/** A pull request's part as a key that equals another naming the same one. */
+class PullRequestPartStreamKey extends Data.Class<{
+  readonly part: PullRequestPart;
+  readonly agentId: string;
+  readonly number: number | undefined;
+}> {}
+
+function pullRequestPartKeyOf({ part, agentId, number }: PullRequestPartParams) {
+  return new PullRequestPartStreamKey({ part, agentId, number });
+}
 
 function transcriptKeyOf(transcript: AgentTranscriptKey): TranscriptStreamKey {
   return new TranscriptStreamKey({
@@ -234,6 +240,8 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const openPresence: OpenFollows<never> = MutableHashMap.empty();
   /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
   const openTools: OpenFollows<never> = MutableHashMap.empty();
+  /** Every pull request's part a window holds a stream open of, so the host lets it go only with the last. */
+  const openParts: OpenFollows<never, PullRequestPartStreamKey> = MutableHashMap.empty();
   const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
     noted(answer, (value) => {
       if ("agent" in value) notices.observeAgents([value.agent]);
@@ -529,11 +537,29 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentChanges(input);
     }),
-    [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: actPort[
-      AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actPort[
+      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentOverviewPullRequest(input);
+      // Note that nothing is heard down the hold, since the held part reaches the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: pullRequestPartKeyOf,
+          follow: host.pullRequestPartFollow,
+          unfollow: host.pullRequestPartUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openParts,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY]: actPort[
+      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.pullRequestPartRetry(input);
     }),
     [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actPort[AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS].effect(
       function* ({ input, context, errors }) {
@@ -564,18 +590,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.agentWorkspaceToolsRetry(input);
-    }),
-    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentOverviewChecks(input);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: actPort[
-      AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentOverviewConversation(input);
     }),
     // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
     [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actPort[AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE].effect(

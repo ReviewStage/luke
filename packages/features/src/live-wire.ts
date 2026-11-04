@@ -863,8 +863,16 @@ export const LIVE_READ = {
   PAGES: "pages",
   /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */
   PROVIDER_KEYS: "providerKeys",
+  /** One agent's pull request as its Pull request tab draws it, by the agent and then the pull request's number, or the agent's own: fetched by the host while a window holds it. */
+  PULL_REQUEST: "pullRequest",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
+  /** The checks on one agent's pull request's head, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_CHECKS: "pullRequestChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_CONVERSATION: "pullRequestConversation",
+  /** What one agent published, its pull request as the service last read it from GitHub, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_PUBLISHED: "pullRequestPublished",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
   PLAN_COMMENTS: "taskComments",
   /** One task's plan history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
