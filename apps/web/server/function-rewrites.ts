@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { AUTH_SERVER_METADATA_PATHS } from "@repo/service/auth/auth-app";
 import { MEMBER_MCP_METADATA_PATHS, MEMBER_MCP_METADATA_ROUTE } from "@repo/service/member-mcp/app";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Schema } from "effect";
@@ -52,8 +53,11 @@ export interface SegmentRewrite {
   readonly query: string;
 }
 
+/** The auth catch-all's route key, which the segment rewrite below and the authorization server's public metadata paths land on. */
+const AUTH_ROUTE = "auth/[...all]";
+
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
-  { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
+  { src: "/api/auth/(.*)", route: AUTH_ROUTE, query: `${DISPATCH_QUERY.PATH}=auth/$1` },
   {
     src: "/api/plans/([^/]+)/attachments/([^/]+)",
     route: "plans/attachment",
@@ -108,15 +112,20 @@ const API_ROUTE_PREFIX = "/api/";
  * own, each by an exact rule onto its route: the host's install script, which
  * a member's install command fetches from `/install.sh` at whichever address
  * of the deployment Settings showed it on, so the route can name that address
- * as the script's origin; and the member MCP server's protected resource
+ * as the script's origin; the member MCP server's protected resource
  * metadata, which an MCP client reads under `/.well-known/` (RFC 9728) at the
- * path it derives from the resource's address and at the well-known root.
- * Vercel runs these rules before it looks at the built site's files, and the
- * build writes no file at such a path besides.
+ * path it derives from the resource's address and at the well-known root; and
+ * the authorization server's own metadata (RFC 8414), which the same client
+ * reads at the well-known name ahead of the issuer's path, carried to the
+ * auth catch-all as the issuer-path form its handler answers (`query`, as
+ * the segment rewrites carry a path). Vercel runs these rules before it looks
+ * at the built site's files, and the build writes no file at such a path
+ * besides.
  */
 interface PublicRewrite {
   readonly path: string;
   readonly route: string;
+  readonly query?: string;
 }
 
 const PUBLIC_REWRITES: readonly PublicRewrite[] = [
@@ -127,6 +136,11 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
   ...MEMBER_MCP_METADATA_PATHS.map((path) => ({
     path,
     route: MEMBER_MCP_METADATA_ROUTE.slice(API_ROUTE_PREFIX.length),
+  })),
+  ...AUTH_SERVER_METADATA_PATHS.map(({ path, carried }) => ({
+    path,
+    route: AUTH_ROUTE,
+    query: `${DISPATCH_QUERY.PATH}=${carried.slice(API_ROUTE_PREFIX.length)}`,
   })),
 ];
 
@@ -212,10 +226,10 @@ export function apiRewrites(
   const orpc = functionOf.get(ORPC_ROUTE_KEY);
   if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
   const rewrites: Rewrite[] = [];
-  for (const { path, route } of publics) {
+  for (const { path, route, query } of publics) {
     const definition = functionOf.get(route);
     if (definition === undefined) throw new Error(`no route behind the public path ${path}`);
-    rewrites.push({ src: exactPattern(path), dest: dest(definition, route) });
+    rewrites.push({ src: exactPattern(path), dest: dest(definition, route, query) });
   }
   const rewritten = new Set<string>([ORPC_ROUTE_KEY]);
   for (const segment of segments) {

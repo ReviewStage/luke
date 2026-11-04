@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 2 November 2026
+Last updated: 3 November 2026
 
 Vespin is an inbox for all your coding agents. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -875,6 +875,30 @@ transcripts are marked deleted and removed seven days later, as is every
 conversation a task held with its own Vespin before tasks lost it (see
 "Tasks").
 
+**Apps you connect as MCP clients.** An app that speaks MCP, such as Claude
+Code, Codex, Claude.ai, ChatGPT, or Cursor, can connect to our service's
+MCP server and act as you. It first names itself to our service, either by
+the address of a document it publishes about itself, which our service
+fetches and keeps a copy of (the app's name and redirect addresses) for up
+to an hour before fetching it again, or by registering its name and redirect
+addresses with our service, which anyone may do, five times a minute per
+network address. We keep that as a client record, with no secret in it. The
+app then sends you to our sign-in page in your browser, where you sign in if
+you are not, and to a consent page that names the app, says what it will be
+able to do, and says where its answer goes; nothing is granted until you
+allow it. If you do, we keep your consent and mint the app an access token
+for our MCP server alone, good for fifteen minutes, and a refresh token that
+lapses after thirty days unused, both kept hashed under your account. That
+token opens only our MCP server, never the account routes the Mac app uses.
+What the app then receives is whatever the server's tools answer it, as the
+Mac app would read the same: your workspaces, and, as tools are added, your
+tasks and their plans, your agents' transcripts, and your inbox threads. The
+app keeps what it receives under its maker's own policy. The client record,
+your consent, and the tokens go when you delete your account; Settings does
+not yet list or revoke them. To hold the registration and sign-in limits, our
+service keeps the network address and the path of each request to the
+sign-in service for the length of its limit's window, a minute at most.
+
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
 signs you in to Linear in your browser through Vercel Connect, which stores
 Linear's token for your account, encrypted, and renews it. Our service never
@@ -1466,6 +1490,11 @@ team's Slack; the screenshots stay in the email.
   agent, on your Mac or the host, so the site sees that machine's address. The
   query, what the search found, and what the agent read of the page are
   stored with the agent's transcript like any other tool call.
+- Any app you connect as an MCP client, such as Claude Code or Cursor: once
+  you allow it on the consent page, our service answers its tool calls, made
+  as you, with what the Mac app would read, and the app keeps that under its
+  maker's own policy. See "Apps you connect as MCP clients" under [What we
+  collect](#what-we-collect).
 - OpenAI, for dictation. Pressing the microphone in a message box records it,
   in memory and never on disk, until you press ✓ or Enter (or for two minutes
   at most); ✕ or Escape discards the recording. It goes through our service,
