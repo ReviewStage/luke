@@ -72,6 +72,11 @@ interface AccountDependencies {
   settings: SettingsComposer;
 }
 
+/** The id of the person signed in, where the session names one; none while nobody is. */
+function signedInId(account: AccountSnapshot): string | undefined {
+  return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+}
+
 /**
  * The account concern, over the kernel it takes as a tag rather than as a
  * constructor argument. What the merge links late is a set-once `Deferred`
@@ -146,10 +151,19 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     const previousAccountKey =
       previousAccount.status === ACCOUNT_STATUS.SIGNED_IN ? previousAccount.email : undefined;
     const nextAccountKey = signedIn ? next.email : undefined;
+    // Note that another person under a session that stays signed in, as a
+    // renewal whose identity read names someone else, is a departure and an
+    // arrival, never a swap under the gate, as a browser's cookie session
+    // reads one: the capabilities of whoever stood before stop before the
+    // next person is shown, so nothing they held, their transcripts among
+    // it, is drawn for the next.
+    const [previousId, nextId] = [signedInId(previousAccount), signedInId(next)];
+    const anotherPerson = previousId !== undefined && nextId !== undefined && previousId !== nextId;
     previousAccount = next;
     if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
-    // An account that stays signed in under a new address had its preferences dropped with the old one, and no sign-in reads them again.
-    if (wasSignedIn && signedIn && previousAccountKey !== nextAccountKey) {
+    if (anotherPerson) yield* Effect.flatMap(late.value, (links) => links.stopCapabilities);
+    // An account that stays signed in under a new address had its preferences dropped with the old one, and no sign-in reads them again; another person's are read as their capabilities start.
+    if (wasSignedIn && signedIn && previousAccountKey !== nextAccountKey && !anotherPerson) {
       yield* settings.reconcileAccountPreferences();
     }
     // A deletion stands recording down until the next sign-in, which starts it again.
@@ -159,6 +173,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     yield* settings.emitSettings();
     yield* emitSessionReplay;
     if (signedIn && !wasSignedIn) settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    if (anotherPerson) yield* Effect.flatMap(late.value, (links) => links.startCapabilities);
   });
 
   function capabilitiesActive(): boolean {
