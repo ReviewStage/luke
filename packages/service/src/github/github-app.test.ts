@@ -10,7 +10,10 @@ import { createTask, readTask } from "@repo/database/models/task-store";
 import { listWorkspaces } from "@repo/database/models/workspace-store";
 import { getTestDB, openWorkspace } from "@repo/database/testing";
 import { noDatabase } from "@repo/database/testing/no-database";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  GITHUB_REPOSITORY_SELECTION,
+} from "@repo/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
@@ -37,7 +40,7 @@ import {
   openTokenMember,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
-import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
+import { GitHubApp } from "./github-app.js";
 import {
   installationsOfWorkspace,
   mendInstallationStatus,

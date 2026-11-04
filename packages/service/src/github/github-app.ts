@@ -93,7 +93,12 @@ import {
   type RepositorySighting,
 } from "@repo/database/models/github-repositories";
 import { account } from "@repo/database/schemas/auth";
-import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  GITHUB_REPOSITORY_SELECTION,
+  type GitHubAccess,
+  type GitHubRepositorySelection,
+} from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   GITHUB_SSO_URL_PATTERN,
@@ -313,6 +318,15 @@ interface GitHubInstallation {
   readonly suspended: boolean;
 }
 
+/** A workspace's repositories as its running installations list them, with each installation's repository selection, the first linked first. */
+export interface WorkspaceListing {
+  readonly repositories: readonly GitHubRepository[];
+  readonly installations: readonly {
+    readonly installationId: number;
+    readonly repositorySelection: GitHubRepositorySelection;
+  }[];
+}
+
 /** One GitHub account as a commit names it: its id and login, which together make its noreply address, and the name it set, if any. */
 export interface GitHubUser {
   readonly id: number;
@@ -320,13 +334,6 @@ export interface GitHubUser {
   /** The display name the account set; absent where it set none. */
   readonly name: string | undefined;
 }
-
-export const GITHUB_REPOSITORY_SELECTION = {
-  ALL: "all",
-  SELECTED: "selected",
-} as const;
-type GitHubRepositorySelection =
-  (typeof GITHUB_REPOSITORY_SELECTION)[keyof typeof GITHUB_REPOSITORY_SELECTION];
 
 /** The deployment holds no App, or not all of it: every read answers this and the routes answer unavailable. */
 class GitHubAppNotConfigured extends Data.TaggedError("GitHubAppNotConfigured")<{
@@ -560,6 +567,18 @@ export interface GitHubAppService {
     organizationId: string,
   ) => Effect.Effect<
     Option.Option<readonly GitHubRepository[]>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The same read as `workspaceRepositories`, with each installation it
+   * listed and whether that installation was given all its account's
+   * repositories or a selection, which the read already holds.
+   */
+  readonly workspaceListing: (
+    organizationId: string,
+  ) => Effect.Effect<
+    Option.Option<WorkspaceListing>,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -1596,6 +1615,21 @@ function githubAppService(
       (minted) => repositoriesOnInstallationToken(minted.token, enough),
     );
 
+  /** Every running installation's repositories, read whole, with the installations themselves; none where none runs. */
+  const workspaceListing = (organizationId: string) =>
+    Effect.gen(function* () {
+      const live = yield* liveWorkspaceInstallations(organizationId);
+      if (live.length === 0) return Option.none<WorkspaceListing>();
+      const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
+      return Option.some<WorkspaceListing>({
+        repositories: combinedRepositories(listed.flat()),
+        installations: live.map((one) => ({
+          installationId: one.id,
+          repositorySelection: one.repositorySelection,
+        })),
+      });
+    });
+
   /**
    * The repository a name the installation no longer lists stood for, where
    * GitHub renamed or transferred it and the installation reaches it under
@@ -2055,12 +2089,11 @@ function githubAppService(
           return Option.some(installations);
         }),
       workspaceRepositories: (organizationId) =>
-        Effect.gen(function* () {
-          const live = yield* liveWorkspaceInstallations(organizationId);
-          if (live.length === 0) return Option.none();
-          const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
-          return Option.some(combinedRepositories(listed.flat()));
-        }),
+        Effect.map(
+          workspaceListing(organizationId),
+          Option.map((listing) => listing.repositories),
+        ),
+      workspaceListing,
       memberRepositories: (member) =>
         Effect.gen(function* () {
           const held = yield* memberToken(member);

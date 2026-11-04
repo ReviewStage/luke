@@ -10,13 +10,16 @@ import {
 } from "@repo/features/automation-wire";
 import {
   GITHUB_ACCESS,
+  GITHUB_REPOSITORY_SELECTION,
   type GitHubAccess,
+  type GitHubRepositoriesAnswer,
   type WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { dayAndTimeText } from "@repo/features/time-format";
 import type { WorkspaceSlack } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
@@ -176,18 +179,30 @@ let refusePhoto = false;
 let refuseRole = false;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
+/** The repositories GitHub holds public, by full name; every other is private. */
+let publicRepositories: string[] = [];
+/** What the listing says each installation was given; absent, as from a service older than it. */
+let listedInstallations: GitHubRepositoriesAnswer["installations"];
+/** Whether the workspace's repositories' read never answers, as one still out on the wire. */
+let repositoriesReadHeld = false;
+/** Whether the workspace's repositories' read is refused rather than answered. */
+let repositoriesReadFails = false;
 /** A repository as the picker's listing answers it, by its full name and what reaches it. */
 function listedRepository(fullName: string, access: GitHubAccess) {
   const [owner = "", name = ""] = fullName.split("/");
-  return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
+  const shut = !publicRepositories.includes(fullName);
+  return { owner, name, fullName, defaultBranch: "main", private: shut, updatedAt: 1, access };
 }
 
 /** The repositories the workspace's picker lists, as the service answers them: the App's, and the reader's token's as addable, or among them from a service older than `addable`. */
-function listing(): RepositoriesRead {
+function listing(): RepositoriesRead | undefined {
+  if (repositoriesReadHeld) return undefined;
+  if (repositoriesReadFails) return { failure: TASK_CALL_FAILURE.UNANSWERED };
   return {
     repositories: {
       installed: true,
       installationUrl: "https://github.com/apps/luke/installations/new",
+      ...(listedInstallations === undefined ? {} : { installations: listedInstallations }),
       ...(beforeAddable
         ? {
             repositories: [
@@ -509,6 +524,10 @@ beforeEach(() => {
   refuseRole = false;
   automations = undefined;
   githubRepositories = [];
+  publicRepositories = [];
+  listedInstallations = undefined;
+  repositoriesReadHeld = false;
+  repositoriesReadFails = false;
   tokenReach = [];
   beforeAddable = false;
   tokenRepositories = [];
@@ -1584,7 +1603,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
       ["GitHub", undefined],
-      ["acme-org", "Connected"],
+      ["acme-org", "Connected · 0 repositories"],
       ["acme-labs", "Suspended or removed on GitHub."],
     ]);
     assert.equal(
@@ -1609,6 +1628,98 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
   }
 });
 
+/** What each line folded open under an account's row says, a lock's name before a private one's. */
+const foldLines = (row: HTMLElement) =>
+  [...row.querySelectorAll("li")].map((line) =>
+    [line.querySelector('[role="img"]')?.getAttribute("aria-label"), line.textContent]
+      .filter((part) => part !== undefined)
+      .join(" "),
+  );
+
+/** The chevron that folds an account's repositories open under its row. */
+const foldOn = (row: HTMLElement) =>
+  row.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? assert.fail("no fold");
+
+test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it, a lock before a private one, and a suspended account shows neither", async () => {
+  githubRepositories = ["acme-org/relay", "ACME-ORG/site", "acme-labs/old", "other/thing"];
+  publicRepositories = ["ACME-ORG/site"];
+  tokenReach = ["acme-org/forked"];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  const group = githubGroup(page);
+  const org = rowNamed(group, "acme-org");
+
+  assert.deepEqual(integrationRows(page).slice(1), [
+    ["acme-org", "Connected · 2 repositories"],
+    ["acme-labs", "Suspended or removed on GitHub."],
+  ]);
+  assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
+  assert.equal(foldOn(org).getAttribute("aria-expanded"), "true");
+  assert.deepEqual(foldLines(org), ["Private relay", "site"]);
+  const labs = rowNamed(group, "acme-labs");
+  assert.deepEqual(foldLines(labs), []);
+  assert.equal(labs.querySelector("button"), null);
+});
+
+test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected, and one the service says nothing of says the count alone", async () => {
+  const shown = Array.from({ length: 8 }, (_, at) => `acme-org/r${at + 1}`);
+  githubRepositories = [...shown, "acme-labs/one", "acme-tools/a", "acme-tools/b"];
+  listedInstallations = [
+    { installationId: 11, repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL },
+    { installationId: 12, repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED },
+  ];
+  const { page } = await mount({
+    ...CONNECTED,
+    githubInstallations: [
+      { installationId: 11, login: "acme-org", active: true },
+      { installationId: 12, login: "acme-labs", active: true },
+      { installationId: 13, login: "acme-tools", active: true },
+    ],
+  });
+  const org = rowNamed(githubGroup(page), "acme-org");
+
+  assert.deepEqual(integrationRows(page).slice(1), [
+    ["acme-org", "Connected · All 8 repositories"],
+    ["acme-labs", "Connected · 1 selected repository"],
+    ["acme-tools", "Connected · 2 repositories"],
+  ]);
+  assert.deepEqual(foldLines(org), [], "more than five start folded");
+  act(() => foldOn(org).click());
+  assert.deepEqual(foldLines(org), [
+    "All repositories, including ones created later.",
+    ...shown.slice(0, 6).map((fullName) => `Private ${fullName.split("/")[1]}`),
+    "Show all 8",
+  ]);
+  act(() => button(org, "Show all 8").click());
+  assert.deepEqual(foldLines(org), [
+    "All repositories, including ones created later.",
+    ...shown.map((fullName) => `Private ${fullName.split("/")[1]}`),
+  ]);
+});
+
+test("while the repositories are read each active account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {
+  repositoriesReadHeld = true;
+  const reading = await mount(SEVERAL);
+  assert.deepEqual(integrationRows(reading.page).slice(1), [
+    ["acme-org", "Connected · Reading repositories"],
+    ["acme-labs", "Suspended or removed on GitHub."],
+  ]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  repositoriesReadHeld = false;
+  repositoriesReadFails = true;
+  const { page } = await mount(SEVERAL);
+  const group = githubGroup(page);
+  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected"]]);
+  assert.equal(group.textContent?.includes("Repositories could not be read."), true);
+
+  repositoriesReadFails = false;
+  githubRepositories = ["acme-org/relay"];
+  act(() => button(group, "Retry").click());
+  await settle();
+  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected · 1 repository"]]);
+  assert.equal(group.textContent?.includes("Repositories could not be read."), false);
+});
+
 test("Manage on GitHub opens GitHub through the same connect as Connect, and nothing on the page disconnects GitHub", async () => {
   const { page } = await mount(SEVERAL);
 
@@ -1627,7 +1738,7 @@ test("a service from before several connections names one GitHub account alone, 
 
   assert.deepEqual(integrationRows(page), [
     ["GitHub", undefined],
-    ["acme-org", "Connected"],
+    ["acme-org", "Connected · 0 repositories"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
@@ -1688,7 +1799,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
 
   assert.deepEqual(integrationRows(connected.page), [
     ["GitHub", MANAGED_ON_GITHUB],
-    ["acme-org", "Connected"],
+    ["acme-org", "Connected · 0 repositories"],
     ["acme-labs", "Suspended or removed on GitHub."],
   ]);
   assert.deepEqual(integrationRows(unconnected.page), [

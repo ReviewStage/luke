@@ -142,8 +142,8 @@ export const GLYPH = {
   COMMENT: CommentsIcon,
   // A Slack channel, as the Slack bot's settings list it.
   CHANNEL: lucideGlyph(Hash),
-  // A channel only its members see, as Slack marks a private one.
-  PRIVATE_CHANNEL: lucideGlyph(Lock),
+  // What only its members see: a private Slack channel, a private GitHub repository.
+  PRIVATE: lucideGlyph(Lock),
   // A thread, the Inbox's item, where no ask of its own says more.
   THREAD: lucideGlyph(MessagesSquare),
   TERMINAL: TerminalIcon,

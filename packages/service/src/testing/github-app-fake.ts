@@ -20,16 +20,12 @@ import { Database } from "@repo/database/core/query";
 import { saveGitHubToken } from "@repo/database/models/github-token-store";
 import { parseKeyRing, sealGitHubToken } from "@repo/database/models/provider-key-seal";
 import { account, user } from "@repo/database/schemas/auth";
+import { GITHUB_REPOSITORY_SELECTION } from "@repo/features/github-repositories-wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { Clock, Effect, Layer, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  GITHUB_PROVIDER_ID,
-  GITHUB_REPOSITORY_SELECTION,
-  GitHubApp,
-  type GitHubAppSettings,
-} from "../github/github-app.js";
+import { GITHUB_PROVIDER_ID, GitHubApp, type GitHubAppSettings } from "../github/github-app.js";
 import { linkInstallation } from "../github/github-installations.js";
 
 export const GITHUB_FIXTURE = {

@@ -23,7 +23,6 @@ import {
   WORKSPACE_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
-  type WorkspaceGithubInstallation,
   type WorkspaceMember,
   workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
@@ -52,7 +51,6 @@ import {
   MENU_DETAIL,
   OneLine,
   ProviderMark,
-  SETTINGS_ROW_INDENT,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
@@ -91,7 +89,6 @@ import {
   XIcon,
 } from "@repo/ui/icons";
 import { inputProblem } from "@repo/ui/reported-failure";
-import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
@@ -113,6 +110,7 @@ import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
 import { AddSlackChannel, SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
+import { GitHubAccountRows, type ShownConnection } from "./workspace-github-accounts.js";
 import {
   AddTokenRepository,
   TokenRepositoryRows,
@@ -141,7 +139,9 @@ import {
  * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of our GitHub App is connected, each
- * inset under GitHub's row with its picture on GitHub, Connected or suspended;
+ * inset under GitHub's row with its picture on GitHub, Connected with the
+ * repositories it gave the App folded under it, or suspended
+ * (`workspace-github-accounts.tsx`);
  * an owner or an admin connects the first with Connect, and once one is,
  * Manage on GitHub opens the one GitHub page that both adds an account and
  * chooses an account's repositories, where which accounts and repositories
@@ -250,12 +250,6 @@ const TRANSFER_WORDS = {
 /** The outline face an invited address wears until it is a member, so its words stand in the members' column. */
 const INVITED_ACTOR = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED } as const;
 
-/** What the connected GitHub account's line says once the App's installation was suspended or removed. */
-const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
-
-/** What a connected account's row says while its installation stands. */
-const GITHUB_CONNECTED = "Connected";
-
 /** What the GitHub row says where no GitHub is connected, by who is reading it. */
 const GITHUB_UNCONNECTED = {
   MANAGES: "Not connected.",
@@ -312,10 +306,6 @@ const SENTRY_LINE = {
   MANAGES: "Not installed. Install to start automations from Sentry alerts.",
   MEMBER: "Not installed. Ask an owner or admin to install it for automations.",
 } as const;
-
-/** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
-type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
-  Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -1182,49 +1172,6 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
 }
 
 /**
- * One connected account's row, inset under GitHub's so it reads as one of
- * GitHub's accounts rather than an integration of its own: its picture on
- * GitHub, an organization's logo or a person's avatar, its login, and under
- * it Connected, or that GitHub suspended or removed its installation. The
- * tile is a workspace's, keyed by the login, so the login's letter stands
- * until the picture loads and wherever it fails to. It is `@repo/ui`'s
- * `SettingsRow`, indented to GitHub's words.
- */
-function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
-  return (
-    <SettingsRow
-      indent={SETTINGS_ROW_INDENT.MARK}
-      leading={
-        <SettingsRowMark>
-          <WorkspaceTile
-            workspace={{
-              id: `github:${connection.login}`,
-              name: connection.login,
-              pictureUrl: githubAccountPictureUrl(connection.login),
-            }}
-            size={TILE_SIZE.NESTED}
-          />
-        </SettingsRowMark>
-      }
-      label={connection.login}
-      description={
-        connection.active ? (
-          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-            {GITHUB_CONNECTED}
-          </SettingsRowStateLine>
-        ) : (
-          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
-            {GITHUB_SUSPENDED}
-          </SettingsRowStateLine>
-        )
-      }
-    >
-      {() => null}
-    </SettingsRow>
-  );
-}
-
-/**
  * The workspace's GitHub, for an owner or an admin: Connect while none is,
  * which installs our GitHub App on a GitHub account for this
  * workspace, and once one is, Manage on GitHub, which opens the same page:
@@ -1344,12 +1291,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           {() => add}
         </SettingsRow>
       )}
-      {connections.map((connection) => (
-        <ConnectionRow
-          key={connection.installationId ?? connection.login}
-          connection={connection}
-        />
-      ))}
+      <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
       <TokenRepositoryRows repositories={repositories} />
     </>
   );

@@ -76,7 +76,7 @@ function channelName(channel: SlackListedChannel): string {
 
 /** A channel's mark, which says its kind so its name need not: Slack's hash for a public one, a lock for a private one. */
 function ChannelMark({ channel }: { channel: SlackListedChannel }): React.JSX.Element {
-  return channel.private ? <GLYPH.PRIVATE_CHANNEL /> : <GLYPH.CHANNEL />;
+  return channel.private ? <GLYPH.PRIVATE /> : <GLYPH.CHANNEL />;
 }
 
 /**
@@ -252,10 +252,7 @@ function ChannelRow({
               valueLabel={named ?? WORDS.DEFAULT}
               valueIcon={
                 named === undefined ? undefined : (
-                  <RepositoryPicture
-                    repository={named}
-                    pictures={repositories.pictures}
-                  />
+                  <RepositoryPicture repository={named} pictures={repositories.pictures} />
                 )
               }
               rows={[
