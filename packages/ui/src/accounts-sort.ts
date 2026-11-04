@@ -4,8 +4,7 @@ import { SORT_DIRECTION, type SortDirection } from "./sort-direction.js";
 /**
  * The account fields both admin tables' rows carry — the shared columns'
  * whole vocabulary, so a row from either endpoint draws through the one
- * `AccountsTable`. The hosted-tier fields are the roster's alone: the
- * overview's rows count meaningful actions instead and leave them out.
+ * `AccountsTable`. Active days count meaningful actions on both.
  */
 export interface AccountsTableRow {
   id: string;
@@ -14,8 +13,6 @@ export interface AccountsTableRow {
   image: string | null;
   admin: boolean;
   activeDays: number;
-  lastActiveDay?: string | null;
-  calls?: number;
 }
 
 /** The sortable columns, one per header the roster draws. */
@@ -25,7 +22,6 @@ export const ACCOUNTS_SORT_KEY = {
   LAST_SEEN: "lastSeen",
   ACTIVE_DAYS: "activeDays",
   LAST_ACTIVE: "lastActive",
-  CALLS: "calls",
   TASKS: "tasks",
   AGENTS: "agents",
   PRS_MERGED: "prsMerged",
@@ -40,7 +36,6 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
   [ACCOUNTS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.CALLS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.TASKS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.AGENTS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.PRS_MERGED]: SORT_DIRECTION.DESCENDING,
@@ -48,10 +43,9 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
 
 /**
  * What each shared column orders by. An account sorts by the name its row
- * shows — falling back to the email exactly as the cell does — and a
- * last-active day is an ISO date, so its lexicographic order is its
- * chronological one. A detail column's ordering rides the column itself,
- * because its fields exist only on the rows of the surface that draws it.
+ * shows, falling back to the email exactly as the cell does. A detail
+ * column's ordering rides the column itself, because its fields exist only
+ * on the rows of the surface that draws it.
  */
 const SHARED_SORT_VALUE = new Map<
   AccountsSortKey,
@@ -59,13 +53,11 @@ const SHARED_SORT_VALUE = new Map<
 >([
   [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
-  [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay ?? null],
-  [ACCOUNTS_SORT_KEY.CALLS, (row) => row.calls ?? null],
 ]);
 
 /**
- * A column one surface adds beside the shared ones — the roster's Joined and
- * Last seen, the overview's per-feature counts. It carries its own cell and ordering because
+ * A column one surface adds beside the shared ones — the roster's Joined,
+ * Last seen, and Last active, the overview's per-feature counts. It carries its own cell and ordering because
  * its fields exist only on that surface's rows; the shared columns are fixed
  * in the table itself.
  */

@@ -10,7 +10,7 @@ import { type AdminDoors, AdminDoorsProvider } from "./admin-doors.js";
 /**
  * admin-accounts-table.test.ts -- the one table both account lists draw
  * through: a row names its account, marks an admin in words, and counts its
- * days and calls; a sortable header's press reorders the rows, says the
+ * active days; a sortable header's press reorders the rows, says the
  * order it chose, and is remembered for the next visit; a press on a row or
  * on its name opens the account, a modified press on the name is left to the
  * browser, and a star's press asks to star without opening the row.
@@ -39,8 +39,6 @@ const ADA: AccountsTableRow = {
   image: null,
   admin: true,
   activeDays: 12,
-  lastActiveDay: "2026-10-12",
-  calls: 1204,
 };
 
 const GRACE: AccountsTableRow = {
@@ -50,8 +48,6 @@ const GRACE: AccountsTableRow = {
   image: null,
   admin: false,
   activeDays: 3,
-  lastActiveDay: null,
-  calls: 37,
 };
 
 const ZED: AccountsTableRow = {
@@ -61,8 +57,6 @@ const ZED: AccountsTableRow = {
   image: null,
   admin: false,
   activeDays: 20,
-  lastActiveDay: "2026-10-14",
-  calls: 9,
 };
 
 interface Mounted {
@@ -146,7 +140,7 @@ function press(element: Element | null | undefined, init: MouseEventInit = {}): 
   return event;
 }
 
-test("a row names its account, marks an admin in words, and counts its days and calls", () => {
+test("a row names its account, marks an admin in words, and counts its active days", () => {
   const { table } = mount([ADA, GRACE]);
   const [ada, grace] = [...table.querySelectorAll("tbody tr")];
 
@@ -154,10 +148,8 @@ test("a row names its account, marks an admin in words, and counts its days and 
   expect(ada?.textContent).toContain("Admin");
   expect(ada?.textContent).toContain("ada@example.test");
   expect(ada?.textContent).toContain("12 of 30");
-  expect(ada?.textContent).toContain("1,204");
   expect(grace?.textContent).not.toContain("Admin");
   expect(grace?.textContent?.match(/grace@example\.test/g)).toHaveLength(1);
-  expect(grace?.textContent).toContain("—");
 });
 
 test("no rows shows the surface's empty line in place of the table", () => {
@@ -176,27 +168,27 @@ test("an unsortable table keeps the server's order and offers no sort", () => {
 
 test("a header's press sorts by it, a second flips it, and the choice is remembered", () => {
   const { table } = mount([ADA, GRACE, ZED], { sortable: true });
-  const calls = () => header(table, "Calls");
+  const activeDays = () => header(table, "Active days");
 
-  press(calls().querySelector("button"));
-  expect(calls().getAttribute("aria-sort")).toBe("descending");
-  expect(order(table)).toEqual(["ada", "grace", "zed"]);
+  press(activeDays().querySelector("button"));
+  expect(activeDays().getAttribute("aria-sort")).toBe("descending");
+  expect(order(table)).toEqual(["zed", "ada", "grace"]);
 
-  press(calls().querySelector("button"));
-  expect(calls().getAttribute("aria-sort")).toBe("ascending");
-  expect(order(table)).toEqual(["zed", "grace", "ada"]);
+  press(activeDays().querySelector("button"));
+  expect(activeDays().getAttribute("aria-sort")).toBe("ascending");
+  expect(order(table)).toEqual(["grace", "ada", "zed"]);
   expect(header(table, "Account").hasAttribute("aria-sort")).toBe(false);
 
   const again = remount([ADA, GRACE, ZED], { sortable: true });
-  expect(header(again.table, "Calls").getAttribute("aria-sort")).toBe("ascending");
-  expect(order(again.table)).toEqual(["zed", "grace", "ada"]);
+  expect(header(again.table, "Active days").getAttribute("aria-sort")).toBe("ascending");
+  expect(order(again.table)).toEqual(["grace", "ada", "zed"]);
 });
 
 test("a plain press on a row or its name opens the account, a modified one is left to the browser", () => {
   const { table, opened } = mount([ADA, GRACE]);
   const [ada, grace] = [...table.querySelectorAll("tbody tr")];
 
-  press(ada?.querySelectorAll("td")[2]);
+  press(ada?.querySelectorAll("td")[1]);
   const plain = press(grace?.querySelector("a"));
   const modified = press(grace?.querySelector("a"), { metaKey: true });
 

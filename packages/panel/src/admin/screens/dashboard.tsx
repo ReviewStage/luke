@@ -182,7 +182,6 @@ function DashboardSections({
     windowDays: metrics?.windowDays ?? windowDays,
     minWidth: ACCOUNTS_TABLE_MIN_WIDTH.ROSTER,
     onOpen: onOpenAccount,
-    hostedColumns: false,
     trailingColumns: OVERVIEW_ACCOUNT_COLUMNS,
   };
   return (

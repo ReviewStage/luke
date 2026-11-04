@@ -5,7 +5,7 @@ import {
   type AdminMetricsWindow,
 } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
-import { formatDate } from "@repo/features/time-format";
+import { formatDate, formatDayTick } from "@repo/features/time-format";
 import {
   type Noun,
   noMatchWords,
@@ -75,6 +75,17 @@ const ROSTER_DETAIL_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] =
   },
 ];
 
+/** The roster's column after Active days: the day of the account's latest meaningful action. */
+const ROSTER_TRAILING_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] = [
+  {
+    key: ACCOUNTS_SORT_KEY.LAST_ACTIVE,
+    label: "Last active",
+    cell: (row) => (row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)),
+    // Note that an ISO date's lexicographic order is its chronological one.
+    sortValue: (row) => row.lastActiveDay,
+  },
+];
+
 /** How many accounts the roster's skeleton stands a row for, enough to fill a window. */
 const ROSTER_SKELETON_ROWS = 10;
 
@@ -104,6 +115,7 @@ function UsersSections({
     minWidth: ACCOUNTS_TABLE_MIN_WIDTH.ROSTER,
     onOpen: onOpenAccount,
     detailColumns: ROSTER_DETAIL_COLUMNS,
+    trailingColumns: ROSTER_TRAILING_COLUMNS,
     sortable: true,
     favorite: { starred: (row: AdminUserListRow) => row.favorite, onToggle: onToggleFavorite },
   };

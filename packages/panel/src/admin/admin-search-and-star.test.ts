@@ -30,7 +30,6 @@ const JANE = {
   activeDays: 1,
   lastActiveDay: null,
   lastSeenAt: null,
-  calls: 0,
   favorite: false,
 };
 

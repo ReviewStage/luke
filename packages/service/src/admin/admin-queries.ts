@@ -1,4 +1,9 @@
-import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@repo/database/core/query";
 import { InstantColumnSchema, NumberFromBigIntColumn } from "@repo/database/models/columns";
 import { utcDayKey } from "@repo/database/models/quota";
 import { account, session, user } from "@repo/database/schemas/auth";
@@ -31,6 +36,7 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
+import { meaningfulActions, utcDay } from "./admin-activity-queries.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
@@ -45,9 +51,9 @@ import {
 } from "./admin-metrics.js";
 import { type AdminUserSource, calendarDayKeys } from "./admin-user.js";
 import {
+  ADMIN_USERS_LAST_ACTIVE_DAYS,
   ADMIN_USERS_LIMIT,
   type AdminUserListSource,
-  lastSeenInstant,
   searchLikePatterns,
 } from "./admin-users.js";
 
@@ -455,75 +461,67 @@ const findSessionsSeen = SqlSchema.findAll({
     ),
 });
 
-const findUsageSeen = SqlSchema.findAll({
-  Request: RosterFilterSchema,
-  Result: Schema.Struct({
-    userId: Schema.String,
-    lastUsageDay: Schema.NullOr(Schema.String),
-  }),
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ userId: hostedUsage.userId, lastUsageDay: max(hostedUsage.day) })
-        .from(hostedUsage)
-        .innerJoin(user, eq(user.id, hostedUsage.userId))
-        .where(keptByRoster(request))
-        .groupBy(hostedUsage.userId),
-    ),
-});
-
 const RosterRowSchema = Schema.Struct({
   ...ACCOUNT_FACE_FIELDS,
   createdAt: InstantColumnSchema,
-  activeDays: AggregateColumnSchema,
+  activeDays: NullableAggregateColumnSchema,
   lastActiveDay: Schema.NullOr(Schema.String),
-  calls: NullableAggregateColumnSchema,
-  favorite: Schema.NullOr(Schema.Boolean),
+  favorite: Schema.Boolean,
 });
 
 /**
- * Whether the viewer starred the account. At most one star row joins per
- * account, so aggregating its presence leaves the usage aggregates' fan-out
- * untouched; there is no builder spelling for `bool_or`, so it is a fragment
- * over the same join's own column.
+ * Each account's meaningful actions since the lookback, folded to one row:
+ * the UTC days inside the window that hold one, and the instant of its latest.
+ * Folding before the join keeps the roster's own read one row per account, so
+ * the star's join cannot fan anything out.
  */
-const VIEWER_STARRED = sql<boolean | null>`bool_or(${isNotNull(adminFavorite.adminId)})`;
+function rosterActivity(lookbackStart: Date, windowStart: Date) {
+  const actions = meaningfulActions(lookbackStart);
+  const inWindow = sql`${actions.at} >= ${windowStart.toISOString()}::timestamptz`;
+  return queryBuilder
+    .select({
+      userId: actions.userId,
+      activeDays: sql<number>`count(distinct ${utcDay(actions.at)}) filter (where ${inWindow})`.as(
+        "active_days",
+      ),
+      lastActionAt: sql<Date>`max(${actions.at})`.as("last_action_at"),
+    })
+    .from(actions)
+    .groupBy(actions.userId)
+    .as("roster_activity");
+}
 
 const findRosterRows = SqlSchema.findAll({
   Request: Schema.Struct({
     scope: AdminMetricsScopeSchema,
     search: Schema.NullOr(Schema.String),
-    windowStartDay: Schema.String,
+    lookbackStart: Schema.Date,
+    windowStart: Schema.Date,
     viewerId: Schema.String,
   }),
   Result: RosterRowSchema,
   execute: (request) => {
-    const lastActiveDay = max(hostedUsage.day);
+    const activity = rosterActivity(request.lookbackStart, request.windowStart);
     // Note that the ordering spells the modifier out, because Postgres puts
-    // a descending null first by default and an account never active inside
-    // the window belongs at the tail. The builder has no spelling for it.
-    const mostRecentlyActiveFirst = sql`${lastActiveDay} desc nulls last`;
+    // a descending null first by default and an account with no action inside
+    // the lookback belongs at the tail. The builder has no spelling for it.
+    const mostRecentlyActiveFirst = sql`${activity.lastActionAt} desc nulls last`;
     return Database.use((db) =>
       db
         .select({
           ...ACCOUNT_FACE_COLUMNS,
           createdAt: user.createdAt,
-          activeDays: count(hostedUsage.day),
-          lastActiveDay,
-          calls: sum(hostedUsage.calls),
-          favorite: VIEWER_STARRED,
+          activeDays: activity.activeDays,
+          lastActiveDay: utcDay(activity.lastActionAt),
+          favorite: isNotNull(adminFavorite.adminId),
         })
         .from(user)
-        .leftJoin(
-          hostedUsage,
-          and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, request.windowStartDay)),
-        )
+        .leftJoin(activity, eq(activity.userId, user.id))
         .leftJoin(
           adminFavorite,
           and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, request.viewerId)),
         )
         .where(keptByRoster(request))
-        .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
         .orderBy(mostRecentlyActiveFirst, desc(user.createdAt))
         .limit(ADMIN_USERS_LIMIT),
     );
@@ -680,22 +678,21 @@ export function readAdminDaySource(input: {
 }
 
 /**
- * Reads the whole account roster with each account's window aggregates. The
- * usage rows arrive through a left join carrying the window bound in its own
- * condition, so an account that never touched the hosted tier is still a row
- * — with zero active days and no last-active day — instead of vanishing the
- * way it does from every inner-joined aggregate above. Most recently active
- * first, the never-active tail ordered by youngest account, and the roster
- * cut at the stated bound while `total` still counts everyone. A search
- * narrows the rows and the total alike, so a truncated answer still states
- * how many accounts match. Last-seen instants ride two queries of their own,
- * folded by `lastSeenInstant`: the freshest session write, which cannot join
- * the main read because a second one-to-many join would fan the usage
- * aggregates out across each account's session rows, and the all-time last
- * usage day, which the main read's own usage join cannot say because that
- * join is cut at the window where last-seen must not be. The sign-in methods
- * count every account the scope keeps, searched or not, because the chart
- * they draw describes the population rather than the rows listed.
+ * Reads the whole account roster with each account's meaningful-action
+ * aggregates. The actions arrive folded per account through a left join, so an
+ * account that never created a task, wrote a plan, or started an agent is
+ * still a row — with zero active days and no last-active day — instead of
+ * vanishing the way it does from every inner-joined aggregate above. Active
+ * days count the window; the last-active day reads back the wider lookback,
+ * so an account quiet for the window still says when it last worked. Most
+ * recently active first, the never-active tail ordered by youngest account,
+ * and the roster cut at the stated bound while `total` still counts everyone.
+ * A search narrows the rows and the total alike, so a truncated answer still
+ * states how many accounts match. Last seen is the freshest session write,
+ * read on its own because a one-to-many join would fan the roster's rows out
+ * across each account's sessions. The sign-in methods count every account the
+ * scope keeps, searched or not, because the chart they draw describes the
+ * population rather than the rows listed.
  */
 export function readAdminUsersSource(input: {
   now: number;
@@ -705,28 +702,28 @@ export function readAdminUsersSource(input: {
   windowDays: AdminMetricsWindow;
 }): Effect.Effect<AdminUserListSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
+    const windowStart = dayStart(
+      lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now),
+    );
+    const lookbackStart = dayStart(
+      lastNDayKeys(input.now, ADMIN_USERS_LAST_ACTIVE_DAYS)[0] ?? utcDayKey(input.now),
+    );
     const kept = { scope: input.scope, search: nullableSearch(input.search) };
 
-    const [total, sessionSeenRows, usageSeenRows, rows, accounts, links] = yield* Effect.all(
+    const [total, sessionSeenRows, rows, accounts, links] = yield* Effect.all(
       [
         findRosterTotal(kept),
         findSessionsSeen(kept),
-        findUsageSeen(kept),
-        findRosterRows({ ...kept, windowStartDay, viewerId: input.viewerId }),
+        findRosterRows({ ...kept, lookbackStart, windowStart, viewerId: input.viewerId }),
         findUserTotal(input.scope),
         findSignInLinks(input.scope),
       ],
       { concurrency: "unbounded" },
     );
 
-    const sessionSeenByUser = new Map<string, Date>();
+    const sessionSeenByUser = new Map<string, number>();
     for (const seen of sessionSeenRows) {
-      if (seen.seenAt) sessionSeenByUser.set(seen.userId, seen.seenAt);
-    }
-    const lastUsageDayByUser = new Map<string, string>();
-    for (const seen of usageSeenRows) {
-      if (seen.lastUsageDay) lastUsageDayByUser.set(seen.userId, seen.lastUsageDay);
+      if (seen.seenAt) sessionSeenByUser.set(seen.userId, seen.seenAt.getTime());
     }
 
     return {
@@ -739,14 +736,10 @@ export function readAdminUsersSource(input: {
         image: row.image,
         admin: isAdminRole(row.role),
         createdAt: row.createdAt.getTime(),
-        activeDays: row.activeDays,
+        activeDays: row.activeDays ?? 0,
         lastActiveDay: row.lastActiveDay,
-        lastSeenAt: lastSeenInstant(
-          sessionSeenByUser.get(row.id) ?? null,
-          lastUsageDayByUser.get(row.id) ?? null,
-        ),
-        calls: row.calls ?? 0,
-        favorite: row.favorite === true,
+        lastSeenAt: sessionSeenByUser.get(row.id) ?? null,
+        favorite: row.favorite,
       })),
     };
   });

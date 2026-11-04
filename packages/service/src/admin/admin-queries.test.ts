@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { agentTable } from "@repo/database/schemas/agent";
 import { account, user } from "@repo/database/schemas/auth";
-import { getTestDB } from "@repo/database/testing";
+import { conversations } from "@repo/database/schemas/storage";
+import { task } from "@repo/database/schemas/task";
+import { hostedUsage } from "@repo/database/schemas/usage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_WINDOW,
@@ -17,7 +22,8 @@ import { readAdminUsersSource } from "./admin-queries.js";
  * admin-queries.test.ts -- the Users read carries the sign-in methods the
  * Overview used to: every account the scope keeps, by each method it linked,
  * whatever the search narrowed the rows to, and an admin's own left out
- * while admins are hidden. Synthetic accounts throughout.
+ * while admins are hidden; and it ranks and counts accounts by meaningful
+ * actions, never by hosted calls. Synthetic accounts throughout.
  *
  * The file has its database to itself (`getTestDB` opens a fresh PGlite, or
  * clones the migrated Postgres, per file), so a user id needs no random part
@@ -43,6 +49,44 @@ const openAccount = (name: string, providers: readonly string[], role: string = 
       });
     }
     return id;
+  });
+
+/** The numbers the tasks below take, each its own whatever its workspace. */
+let taskNumbers = 0;
+
+const createTask = (userId: string, organizationId: string, createdAt: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    taskNumbers += 1;
+    yield* db.insert(task).values({
+      id: randomUUID(),
+      userId,
+      organizationId,
+      name: "Synthetic task",
+      number: taskNumbers,
+      document: "",
+      createdAt: new Date(createdAt),
+    });
+  });
+
+const startAgent = (userId: string, organizationId: string, createdAt: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const conversationId = randomUUID();
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.AGENT });
+    yield* db.insert(agentTable).values({
+      id: randomUUID(),
+      organizationId,
+      userId,
+      conversationId,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/api",
+      idempotencyKey: randomUUID(),
+      createdAt: new Date(createdAt),
+    });
   });
 
 it.layer(getTestDB())("the Users read", (it) => {
@@ -74,6 +118,47 @@ it.layer(getTestDB())("the Users read", (it) => {
         accounts: 4,
         methods: { github: 2, google: 2, other: 1 },
       });
+    }),
+  );
+
+  it.effect("ranks and counts accounts by meaningful actions, not hosted calls", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const viewerId = yield* openAccount("viewer", [], USER_ROLE.ADMIN);
+      const builder = yield* openAccount("rank-builder", []);
+      const lapsed = yield* openAccount("rank-lapsed", []);
+      const dictating = yield* openAccount("rank-dictating", []);
+      const workspace = yield* openWorkspace(builder);
+      // Two days inside the 30-day window, and one action before it that the
+      // window's count leaves out.
+      yield* createTask(builder, workspace, "2026-10-20T09:00:00Z");
+      yield* startAgent(builder, workspace, "2026-10-20T10:00:00Z");
+      yield* startAgent(builder, workspace, "2026-10-21T08:00:00Z");
+      yield* createTask(builder, workspace, "2026-08-01T09:00:00Z");
+      // Quiet for the window, active months before it.
+      yield* createTask(lapsed, workspace, "2026-05-04T09:00:00Z");
+      // Hosted calls every day of the window, and nothing else.
+      yield* db.insert(hostedUsage).values([
+        { userId: dictating, day: "2026-10-20", calls: 40 },
+        { userId: dictating, day: "2026-10-21", calls: 60 },
+      ]);
+
+      const list = yield* readAdminUsersSource({
+        now: NOW,
+        scope: ADMIN_METRICS_SCOPE.NON_ADMINS,
+        search: "rank",
+        viewerId,
+        windowDays: ADMIN_METRICS_WINDOW.MONTH,
+      });
+
+      assert.deepEqual(
+        list.rows.map((row) => [row.id, row.activeDays, row.lastActiveDay, row.lastSeenAt]),
+        [
+          [builder, 2, "2026-10-21", null],
+          [lapsed, 0, "2026-05-04", null],
+          [dictating, 0, null, null],
+        ],
+      );
     }),
   );
 });

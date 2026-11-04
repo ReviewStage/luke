@@ -276,17 +276,12 @@ export interface AdminUserListRow {
   admin: boolean;
   /** When the account was created, in epoch milliseconds. */
   createdAt: number;
-  /** Window days with a hosted-usage row; zero for an account never active. */
+  /** Window days with at least one meaningful action; zero for an account never active. */
   activeDays: number;
-  /** The account's most recent active day inside the window, if any. */
+  /** The UTC day of the account's latest meaningful action in the trailing year, if any. */
   lastActiveDay: string | null;
-  /**
-   * When the account last touched the service at all, in epoch milliseconds,
-   * as `lastSeenInstant` folds it. Null for an account whose sessions have
-   * all been pruned and which never touched the hosted tier.
-   */
+  /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
   lastSeenAt: number | null;
-  calls: number;
   /** Whether the viewing admin starred this account, theirs alone to see. */
   favorite: boolean;
 }
@@ -586,7 +581,7 @@ export type AdminAccountFailure =
   | { kind: typeof ADMIN_FAILURE_KIND.AUTOMATION; at: number; reason: AutomationRunReason | null };
 
 export interface AdminAccountSupport {
-  /** When the account last touched the service, as the roster's `lastSeenInstant` folds it; null where nothing says. */
+  /** When the account last touched the service, as `lastSeenInstant` folds it; null where nothing says. */
   lastSeenAt: number | null;
   totals: {
     tasksCreated: number;
