@@ -171,6 +171,8 @@ interface ToolWords {
   readonly sandbox: string;
   /** How a server is kept running for a screenshot. */
   readonly serve: string;
+  /** Where its commands run under a sandbox of their own in the cloud that `serve` does not fit: how a server and the screenshot of it share a command (in place of `serve`, through "with Playwright"), and what the sandbox refuses; nothing where `serve` holds there too. */
+  readonly commandSandbox?: { readonly serve: string; readonly limits: string };
   /** What becomes of what the agent started, once its turn ends. */
   readonly started: string;
   /** The tool a file or a picture is read with, and the one a folder is looked through with. */
@@ -227,6 +229,20 @@ const SCHEDULE_WAKEUP_WORDS =
   "wait with ScheduleWakeup for about as long as the checks usually take, though its description speaks of a /loop you are not in: its `prompt` is what to do once it fires, such as `Read the checks on pull request #<number>`, its `noop` is false, and its `reason` is one short sentence";
 
 /**
+ * What a Claude Code agent in a cloud sandbox is told of the command sandbox
+ * each Bash command runs under (`commandSandbox` in `runner.ts`: bubblewrap
+ * with its own network namespace, and a seccomp filter that refuses
+ * `socket(AF_UNIX)` with EPERM, `socketpair` still allowed). Note that this is
+ * a stopgap, which goes with the command sandbox in the cloud, and that a host
+ * runs none (`RUNNER_PLACE.HOST`), so a local agent keeps `serve` as it is.
+ */
+const CLAUDE_CODE_COMMAND_SANDBOX_WORDS = {
+  serve:
+    "Start the app in the background of one Bash command (with `&`), screenshot it from that same command with Playwright",
+  limits: `Each Bash command runs under a command sandbox with a \`localhost\` of its own, so a server another command started, with \`run_in_background\` or not, cannot be reached from the next: start the server and whatever reaches it (curl, Playwright) in one Bash command, and stop the server in that same command. That sandbox also refuses Unix sockets, path or abstract, with \`EPERM Operation not permitted\`, so use TCP where a tool allows it, such as Postgres on \`127.0.0.1\` with \`unix_socket_directories=''\`; a tool that needs a socket, such as Docker, runs on the developer's own Mac with \`${CODER_TOOL.RUN_ON_MAC}\`. Never search Claude Code's own binary for settings.`,
+} as const;
+
+/**
  * Each harness's words. Claude Code owns the
  * shell, the files, the web, skills, to-dos, waiting, and its subagents
  * (the `Agent` tool), so a Claude Code agent is told of those by the names
@@ -246,6 +262,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every Bash command runs there, and Read, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION}`,
     serve:
       "Start the app with Bash in the background (`run_in_background`), which keeps a server running until you stop it",
+    commandSandbox: CLAUDE_CODE_COMMAND_SANDBOX_WORDS,
     started:
       "Stop every background task you started, a server or a Monitor among them, with TaskStop before you end your turn, because one left running holds your session open.",
     readFile: "Read",
@@ -613,7 +630,9 @@ function seeingWords(tools: ToolWords, machine: CoderMachine): string {
   if (machine.local) {
     return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the machine has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
-  return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 ${SHARED_FILES_DIRECTORY}/home.png\`, saving every picture, video, and page you show or post under \`${SHARED_FILES_DIRECTORY}/\` (\`mkdir -p ${SHARED_FILES_DIRECTORY}\` where it is missing) or the checkout, which ${PRODUCT_NAME} reads, never in a temp folder of your harness's own, which only you can read, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="${PLAYWRIGHT_PIN.PREFIX}/lib/node_modules:$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, draw your pointer, its clicks, and its typing into the page as ${PRODUCT_NAME} draws them, with \`await page.addInitScript({ path: "${RECORDING_CURSOR_FILE.PATH}" })\` before \`page.goto\`, and start it once the page has drawn, never before it loads, which a dev server's first compile can leave blank for seconds: after \`page.goto\`, \`page.screencast.start({ path: "${SHARED_FILES_DIRECTORY}/flow.webm", size: { width: 1280, height: 800 } })\`, and after the flow \`page.screencast.stop()\`, which writes the WebM that \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. ${tools.started}`;
+  const serve = tools.commandSandbox?.serve ?? `${tools.serve}, then screenshot it with Playwright`;
+  const limits = tools.commandSandbox === undefined ? "" : ` ${tools.commandSandbox.limits}`;
+  return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${serve}, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 ${SHARED_FILES_DIRECTORY}/home.png\`, saving every picture, video, and page you show or post under \`${SHARED_FILES_DIRECTORY}/\` (\`mkdir -p ${SHARED_FILES_DIRECTORY}\` where it is missing) or the checkout, which ${PRODUCT_NAME} reads, never in a temp folder of your harness's own, which only you can read, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="${PLAYWRIGHT_PIN.PREFIX}/lib/node_modules:$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, draw your pointer, its clicks, and its typing into the page as ${PRODUCT_NAME} draws them, with \`await page.addInitScript({ path: "${RECORDING_CURSOR_FILE.PATH}" })\` before \`page.goto\`, and start it once the page has drawn, never before it loads, which a dev server's first compile can leave blank for seconds: after \`page.goto\`, \`page.screencast.start({ path: "${SHARED_FILES_DIRECTORY}/flow.webm", size: { width: 1280, height: 800 } })\`, and after the flow \`page.screencast.stop()\`, which writes the WebM that \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. ${tools.started}${limits}`;
 }
 
 /**
