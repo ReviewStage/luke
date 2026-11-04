@@ -29,7 +29,9 @@
  * answers its caller as soon as the service does, and goes on standing until
  * each read holding its keys carries its transaction, through the wait that
  * read hands in (`Confirmation`); where a read hands none, what the service
- * answered is taken in that read's place. Writes to one key stand down in the
+ * answered is taken in that read's place, and where the service answered no
+ * transaction, the write stands until its own wait for its reads settles
+ * first, where it hands one (`Written.carried`). Writes to one key stand down in the
  * order asked, so an older one never stands over a newer one the reads
  * already carry. From the service's answer on, a write may stand as what the
  * service said of its rows (`Written.standsAs`), as an inbox item answered
@@ -182,6 +184,16 @@ export interface Written<Change, Answer> {
   readonly taken?: Change;
   /** What the write stands as from the service's answer on, drawn in place of its change until its reads carry it, as an inbox item the service answered is. */
   readonly standsAs?: Change;
+  /**
+   * The write's own wait for its reads to carry it, for a write whose
+   * service cannot answer a transaction, as one made through another
+   * system's statement: the write goes on standing until it settles, and
+   * only then is what the service answered taken in a read's place. A write
+   * that can answer a transaction answers it instead. Nothing waits on it:
+   * the caller is answered, and the next write to the keys sent, as the
+   * service answers.
+   */
+  readonly carried?: Effect.Effect<void>;
 }
 
 /** A write the service refused, which takes back what it drew, and what the caller answers for it. */
@@ -580,7 +592,8 @@ function takenInPlace<Row extends object, Change>(
 /**
  * A kept write confirmed on one read showing its keys by the read's own
  * wait, or, where it hands none or the write committed no transaction, what
- * the service answered taken in its place.
+ * the service answered taken in its place, once the write's own wait for
+ * its reads settles where it has one.
  */
 function confirmedOn<Row extends object, Change, Answer>(
   rows: KindRows<Row, Change>,
@@ -590,7 +603,8 @@ function confirmedOn<Row extends object, Change, Answer>(
 ): Effect.Effect<void> {
   const wait = holding.read.confirmation();
   if (wait !== undefined && written.txid !== undefined) return wait(written.txid);
-  return takenInPlace(rows, [holding], write.keys, written.taken ?? write.change);
+  const taken = takenInPlace(rows, [holding], write.keys, written.taken ?? write.change);
+  return written.carried === undefined ? taken : Effect.andThen(written.carried, taken);
 }
 
 /**

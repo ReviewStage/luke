@@ -7,15 +7,10 @@
  * moved and nothing for the rest, so a reader of it hears only what moved
  * (`@repo/sync`'s `syncedCollection`, which never truncates).
  *
- * A write is drawn over the collections it changes the moment it is asked,
- * as an optimistic transaction, and stands until its work settles: kept
- * where the work succeeds, by when the read carries it, and taken back
- * where it fails. While it stands, what the read answers for those
- * collections is held, and lands with the drop of what the write drew, so
- * nothing flickers back between the two. TanStack takes the work as a
- * promise, so this is the one door between the two: the work runs on the
- * caller's own fiber, and the promise TanStack holds is only the wait for
- * it to settle, run on the services the caller handed it.
+ * A write is drawn over a read's rows by the sync engine's pool
+ * (`@repo/sync`), never here; a write the service answers with no
+ * transaction stands there until the rows its read answered carry it
+ * (`carriedWaits`).
  *
  * Every collection here lives for as long as the scope that made it, never
  * by TanStack's own timer (`@repo/sync`'s `KEPT_BY_SCOPE`). How long a
@@ -37,16 +32,13 @@ import {
   rowOf,
   syncedCollection,
 } from "@repo/sync";
-import { createTransaction, type WithoutVirtualProps } from "@tanstack/db";
+import type { WithoutVirtualProps } from "@tanstack/db";
 import {
-  Cause,
   Clock,
-  type Context,
   Deferred,
   Duration,
   Effect,
   Equal,
-  Exit,
   FiberMap,
   MutableHashMap,
   Option,
@@ -121,8 +113,6 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   /**
    * Takes the rows the read answered, whole: one sync transaction writing
    * each that moved, or none where nothing did, answering the keys it wrote.
-   * While a write on the collection stands, the transaction is held, and
-   * lands with its drop.
    */
   readonly answer: (rows: readonly Row[]) => readonly Key[];
   /**
@@ -134,16 +124,6 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
   /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
   readonly confirmGone: (key: Key) => void;
-  /**
-   * Waits until the rows the read answered first satisfy `until`, at once
-   * where they do already: how a write whose service hands no transaction
-   * keeps what it drew until the read carries it. It settles too once the
-   * collection's scope closes, so a read that ends holds no write, and gives
-   * up after `TX_WAIT_TIMEOUT`, said in the log, since the write committed.
-   * Note that it reads the rows the read answered, never what the
-   * collection shows, since a write's draw stands over them meanwhile.
-   */
-  readonly carried: (until: (rows: readonly Row[]) => boolean) => Effect.Effect<void>;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
@@ -152,46 +132,7 @@ export function answeredCollection<Row extends object, Key extends string>(optio
 }): Effect.Effect<AnsweredCollection<Row, Key>, never, Scope.Scope> {
   return Effect.gen(function* () {
     const synced = yield* syncedCollection(options.getKey);
-    const { collection, held } = synced;
-    /** The waits on the read's rows (`carried`), each by what it waits for, while the scope stands. */
-    const waits = new Map<Deferred.Deferred<void>, (rows: readonly Row[]) => boolean>();
-    let open = true;
-    /** Settles every wait the rows now satisfy, or every one where `all` says the scope closed. */
-    const settleWaits = (all: boolean) => {
-      const rows = [...held().values()];
-      for (const [settled, until] of waits) {
-        if (!all && !until(rows)) continue;
-        waits.delete(settled);
-        Deferred.doneUnsafe(settled, Effect.void);
-      }
-    };
-    /** Takes the rows `next` holds as the synced ones (`syncedCollection`), settling every wait they now satisfy. */
-    const take = (next: ReadonlyMap<Key, Row>) => {
-      const keys = synced.take(next);
-      if (keys.length > 0) settleWaits(false);
-      return keys;
-    };
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        open = false;
-        settleWaits(true);
-      }),
-    );
-    const carried = (until: (rows: readonly Row[]) => boolean) =>
-      Effect.suspend(() => {
-        if (!open || until([...held().values()])) return Effect.void;
-        const settled = Deferred.makeUnsafe<void>();
-        waits.set(settled, until);
-        return Deferred.await(settled).pipe(
-          Effect.timeoutOption(TX_WAIT_TIMEOUT),
-          Effect.flatMap((arrived) =>
-            Option.isSome(arrived)
-              ? Effect.void
-              : Effect.logWarning("live-collection: a write's rows did not arrive on its read"),
-          ),
-          Effect.ensuring(Effect.sync(() => waits.delete(settled))),
-        );
-      });
+    const { collection, held, take } = synced;
     return {
       collection,
       answer: (rows: readonly Row[]) =>
@@ -206,52 +147,65 @@ export function answeredCollection<Row extends object, Key extends string>(optio
         next.delete(key);
         take(next);
       },
-      carried,
     };
   });
 }
 
-/**
- * The promise TanStack waits on before it keeps or takes back a write: the
- * work's settling, run on the services the caller handed it, failing as the
- * work failed so the write is taken back.
- */
-function settling<E>(
-  services: Context.Context<never>,
-  settled: Deferred.Deferred<void, E>,
-): Promise<void> {
-  return Effect.runPromiseExitWith(services)(Deferred.await(settled)).then((exit) => {
-    if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
-  });
+/** The waits on a read's own rows, each until they carry what a write changed. */
+export interface CarriedWaits<Row> {
+  /** Settles every wait the rows the read answered now satisfy; the read calls it after each answer. */
+  readonly answered: Effect.Effect<void>;
+  /**
+   * Waits until the rows the read answered satisfy `until`, at once where
+   * they do already: how a write whose service hands no transaction stands
+   * until the read carries it (`@repo/sync`'s `Written.carried`). It settles
+   * too once the scope closes, so a read that ends holds no write, and gives
+   * up after `TX_WAIT_TIMEOUT`, said in the log, since the write committed.
+   * Note that it reads the rows the read answered, never what the read
+   * shows, since a write's draw stands over them meanwhile.
+   */
+  readonly carried: (until: (rows: readonly Row[]) => boolean) => Effect.Effect<void>;
 }
 
-/**
- * `work`, with what `draw` changes in the collections drawn over them from
- * now until `work` settles: kept where it succeeds, taken back where it
- * fails or is interrupted, and answered only once TanStack has done either.
- * Where `draw` changed nothing, nothing stands and `work` runs alone.
- */
-export function optimistically<A, E>(
-  draw: () => void,
-  work: Effect.Effect<A, E>,
-): Effect.Effect<A, E> {
+/** The waits on the rows `answered` reads, each as the read last answered them, for as long as the scope stands. */
+export function carriedWaits<Row>(
+  answered: () => readonly Row[],
+): Effect.Effect<CarriedWaits<Row>, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const services = yield* Effect.context<never>();
-    const settled = yield* Deferred.make<void, E>();
-    const transaction = createTransaction<Record<string, unknown>>({
-      autoCommit: true,
-      mutationFn: () => settling(services, settled),
-    });
-    transaction.mutate(draw);
-    if (transaction.mutations.length === 0) return yield* work;
-    const kept = () =>
-      transaction.isPersisted.promise.then(
-        () => undefined,
-        () => undefined,
-      );
-    return yield* Effect.onExit(work, (exit) =>
-      Effect.andThen(Deferred.done(settled, Exit.asVoid(exit)), Effect.promise(kept)),
+    /** Each wait standing, by what it waits for. */
+    const waits = new Map<Deferred.Deferred<void>, (rows: readonly Row[]) => boolean>();
+    let open = true;
+    /** Settles every wait the rows now satisfy, or every one where `all` says the scope closed. */
+    const settle = (all: boolean) => {
+      const rows = answered();
+      for (const [settled, until] of waits) {
+        if (!all && !until(rows)) continue;
+        waits.delete(settled);
+        Deferred.doneUnsafe(settled, Effect.void);
+      }
+    };
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        open = false;
+        settle(true);
+      }),
     );
+    const carried = (until: (rows: readonly Row[]) => boolean) =>
+      Effect.suspend(() => {
+        if (!open || until(answered())) return Effect.void;
+        const settled = Deferred.makeUnsafe<void>();
+        waits.set(settled, until);
+        return Deferred.await(settled).pipe(
+          Effect.timeoutOption(TX_WAIT_TIMEOUT),
+          Effect.flatMap((arrived) =>
+            Option.isSome(arrived)
+              ? Effect.void
+              : Effect.logWarning("live-collection: a write's rows did not arrive on its read"),
+          ),
+          Effect.ensuring(Effect.sync(() => waits.delete(settled))),
+        );
+      });
+    return { answered: Effect.sync(() => settle(false)), carried };
   });
 }
 
