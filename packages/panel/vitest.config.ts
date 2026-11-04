@@ -36,6 +36,7 @@ export default defineConfig({
       "../wire/src/testing/file-time-cap.ts",
       "src/testing/resize-observer.ts",
       "src/testing/match-media.ts",
+      "src/testing/duplicate-keys.ts",
     ],
     css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown", "@pierre/diffs"] } },

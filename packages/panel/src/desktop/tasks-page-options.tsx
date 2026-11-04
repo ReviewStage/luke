@@ -464,6 +464,8 @@ function filterEntries(
       items: [
         ...fieldValues(field, tasks, filter, reader, pictures).map(
           ({ value, words, label, icon, detail, card }): MenuAction => ({
+            // Note that a value is keyed by itself, because two repositories, or two people, may be named alike.
+            key: value ?? undefined,
             label: label ?? words,
             icon,
             ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),

@@ -181,12 +181,29 @@ test("Back held opens its list and its release takes no step, while a quick pres
   assert.deepEqual(window.pressed, ["back"], "and its release took no step");
 });
 
-test("a step named nothing as the window stood on it is listed all the same", () => {
-  const window = mount([{ at: 0, title: undefined, page: { kind: "home", of: undefined } }]);
+test("steps named nothing as the window stood on them are each listed all the same, a page returned to after another its own group again", () => {
+  const home = { kind: "home", of: undefined } as const;
+  const window = mount([
+    { at: 3, title: undefined, page: home },
+    { at: 2, title: undefined, page: home },
+    {
+      at: 1,
+      title: { label: "Inbox", detail: "Desktop shell" },
+      page: { kind: "inbox", of: undefined },
+    },
+    { at: 0, title: undefined, page: home },
+  ]);
   act(() => {
     window.back.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });
-  assert.deepEqual(menuWords(), ["Earlier page"]);
+  assert.deepEqual(menuWords(), [
+    "Earlier page",
+    "Earlier page",
+    "—",
+    "InboxDesktop shell",
+    "—",
+    "Earlier page",
+  ]);
 });
 
 test("a press held into the list and let go there leaves the list's first click its own", () => {

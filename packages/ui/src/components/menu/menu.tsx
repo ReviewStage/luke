@@ -187,6 +187,8 @@ export type MenuKeyMatch = (event: React.KeyboardEvent) => boolean;
 
 export interface MenuAction {
   label: string;
+  /** What tells it from the other items of its menu, as a list's key, where its label may not: a value already its own, such as a repository's full name or a step's place on a trail; its label where none is given. */
+  key?: string | number | undefined;
   /** The glyph leading the label, drawn in a column every item in a menu keeps whether or not it has one; a field's pinned row without one keeps none, its label starting at the row's inset. */
   icon?: React.JSX.Element;
   /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
@@ -274,6 +276,17 @@ export type MenuEntry = MenuAction | MenuSubmenu | MenuPanel;
 /** Whether an entry opens a panel its owner draws rather than acting or opening a menu of items. */
 function isPanel(entry: MenuEntry): entry is MenuPanel {
   return "panel" in entry;
+}
+
+/** What tells an entry from the others of its group, as a list's key: an action's own key where it names one, else its label. */
+function entryKey(entry: MenuEntry): string | number {
+  return "onSelect" in entry ? (entry.key ?? entry.label) : entry.label;
+}
+
+/** What tells a group from the others of its menu: its first entry's key. */
+function groupKey(group: readonly MenuEntry[]): string | number | undefined {
+  const first = group[0];
+  return first === undefined ? undefined : entryKey(first);
 }
 
 /**
@@ -1162,7 +1175,7 @@ function Submenu({
       >
         <MenuRows>
           {entry.items.map((action) => (
-            <MenuItem key={action.label} action={action} onChoose={() => onChoose(action)} />
+            <MenuItem key={entryKey(action)} action={action} onChoose={() => onChoose(action)} />
           ))}
         </MenuRows>
       </DropdownMenuSubContent>
@@ -1672,7 +1685,7 @@ function FloatingMenu({
             </>
           )}
           {groups.map((group, index) => (
-            <Fragment key={group[0]?.label}>
+            <Fragment key={groupKey(group)}>
               {index > 0 ? <DropdownMenuSeparator className="ui-menu-rule" /> : null}
               {group.map((entry) =>
                 isPanel(entry) ? (
@@ -1704,7 +1717,7 @@ function FloatingMenu({
                     onChoose={choose}
                   />
                 ) : (
-                  <MenuItem key={entry.label} action={entry} onChoose={() => choose(entry)} />
+                  <MenuItem key={entryKey(entry)} action={entry} onChoose={() => choose(entry)} />
                 ),
               )}
             </Fragment>
@@ -1823,7 +1836,7 @@ function SheetRows({
   return (
     <>
       {groups.map((group, index) => (
-        <Fragment key={group[0]?.label}>
+        <Fragment key={groupKey(group)}>
           {index > 0 ? <hr className={cn("ui-menu-rule", DROPDOWN_MENU_RULE)} /> : null}
           {group.map((entry) =>
             !("onSelect" in entry) ? (
@@ -1834,7 +1847,7 @@ function SheetRows({
                 onChoose={() => onOpen(entry.label)}
               />
             ) : (
-              <SheetItem key={entry.label} action={entry} onChoose={() => onChoose(entry)} />
+              <SheetItem key={entryKey(entry)} action={entry} onChoose={() => onChoose(entry)} />
             ),
           )}
         </Fragment>

@@ -162,6 +162,8 @@ export function peopleFilterActions({
     ...rows
       .filter((row) => !row.actor.you)
       .map((row) => ({
+        // Note that a person is keyed by their id, because two members may share a name.
+        key: row.member.userId,
         label: row.label,
         icon: row.icon,
         detail: row.detail,

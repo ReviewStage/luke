@@ -1585,7 +1585,18 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
         body: "",
         at: 2_000,
         url: `${PAGE}#pullrequestreview-2`,
-        threads: [thread({ resolved: true }), thread({ path: "src/other.ts" })],
+        threads: [
+          thread({ resolved: true }),
+          thread({
+            path: "src/other.ts",
+            comments: [
+              {
+                ...(thread().comments[0] ?? assert.fail("a comment")),
+                url: `${PAGE}#discussion_r2`,
+              },
+            ],
+          }),
+        ],
       },
       {
         kind: CONVERSATION_ENTRY.REVIEW,
@@ -1681,7 +1692,18 @@ test("a phone draws the filters as one chip saying what is hidden, whose menu tu
         body: "",
         at: 2_000,
         url: `${PAGE}#pullrequestreview-2`,
-        threads: [thread({ resolved: true }), thread({ path: "src/other.ts" })],
+        threads: [
+          thread({ resolved: true }),
+          thread({
+            path: "src/other.ts",
+            comments: [
+              {
+                ...(thread().comments[0] ?? assert.fail("a comment")),
+                url: `${PAGE}#discussion_r2`,
+              },
+            ],
+          }),
+        ],
       },
       {
         kind: CONVERSATION_ENTRY.COMMENT,
