@@ -173,9 +173,10 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * Pages offer no Try again, because the host reads pages that did not
  * answer again on its own, and pages it was refused, a plan's or an agent's
  * the reader cannot reach, stand failed until every surface lets them go
- * and one holds them anew (`@repo/host`'s `live-push.ts`); nor do the
- * beats, which the host asks for again every `MAC_PRESENCE.POLL_MS` while
- * they are held (`held-fetch.ts`).
+ * and one holds them anew (`@repo/host`'s `live-push.ts`). The beats, which
+ * the host asks for again every `MAC_PRESENCE.POLL_MS` while they are held
+ * (`held-fetch.ts`), offer theirs to the window coming back online
+ * (`device-presence.ts`), never to a press.
  */
 const HOST_READS = {
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
@@ -210,9 +211,9 @@ const HOST_READS = {
   [LIVE_READ.DEVICE_PRESENCE]: hostRead(LIVE_READ.DEVICE_PRESENCE, {
     slice: APP_SLICE.DEVICE_PRESENCE,
     path: (accountId: string) => [accountId],
-    // Note that the host holds the beats of whoever is signed in, so the hold names no account.
+    // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
     hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
-    retry: undefined,
+    retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
   }),
   [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
     slice: APP_SLICE.WORKSPACE_TOOLS,

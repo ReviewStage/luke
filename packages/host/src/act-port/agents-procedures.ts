@@ -82,6 +82,7 @@ export interface AgentProceduresDependencies {
     /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     hostsPresenceFollow(): Effect.Effect<void>;
     hostsPresenceUnfollow(): Effect.Effect<void>;
+    hostsPresenceRefresh(): Effect.Effect<void>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
     hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
@@ -273,6 +274,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
           input,
         );
         return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH].effect(
+      function* ({ context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.hostsPresenceRefresh();
       },
     ),
     [AGENT_ACT_KIND.HOSTS_REMOVE]: actPort[AGENT_ACT_KIND.HOSTS_REMOVE].effect(function* ({

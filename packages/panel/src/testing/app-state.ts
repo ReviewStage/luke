@@ -354,17 +354,18 @@ const BEATING_ACCOUNT_ID = "user-beating";
 /**
  * Lays the signed-in account's beats as the host holds them over whatever
  * document the window was handed: each device named having beat `ageMs` ago
- * on the window's clock, the latest ask failed after it as `stale` says, or,
- * where none are given, the read failed before it ever answered. The account
+ * on the window's clock, by a read that landed `askedAgoMs` ago (now where
+ * not given), the latest ask failed after it as `stale` says, or, where none
+ * are given, the read failed before it ever answered. The account
  * is given an id where the document names none, since the beats are held by
  * it.
  */
 export function handBeats(
   ages: Readonly<Record<string, number>> | undefined,
-  options: { readonly stale?: true } = {},
+  { askedAgoMs = 0, ...options }: { readonly stale?: true; readonly askedAgoMs?: number } = {},
 ): void {
   const handed = fakeAppBridgeCalls().requestAppState;
-  const at = Date.now();
+  const now = Date.now();
   const read: AppHostRead<AppDevicePresence> =
     ages === undefined
       ? { failed: true }
@@ -372,9 +373,9 @@ export function handBeats(
           rows: {
             beats: Object.entries(ages).map(([deviceId, ageMs]) => ({
               deviceId,
-              beatAt: at - ageMs,
+              beatAt: now - ageMs,
             })),
-            askedAt: at,
+            askedAt: now - askedAgoMs,
             ...options,
           },
         };

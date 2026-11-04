@@ -119,6 +119,8 @@ export const AGENT_ACT_KIND = {
    * nothing.
    */
   HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
+  /** The beats a window holds asked again now, as the window comes back online. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
@@ -649,6 +651,7 @@ export const PORT_ACT_USE = {
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
   HOSTS_LIST: ACT_USE.READ,
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
+  HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.READ,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,

@@ -270,8 +270,10 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
-  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says. */
-  let presence: DevicePresenceAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
+  let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
+  });
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
@@ -297,7 +299,7 @@ function fakeService() {
       }),
     hosts: () => Effect.succeed({ failure: "unanswered" }),
     devicePresence: () =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         asked.push("presence");
         return presence;
       }),
@@ -725,7 +727,11 @@ function fakeService() {
     },
     /** How long ago the account's devices beat, as the service answers from now on. */
     answerPresence: (next: DevicePresenceAnswerView) => {
-      presence = next;
+      presence = Effect.succeed(next);
+    },
+    /** The service never answering how long ago the devices beat, from now on. */
+    hangPresence: () => {
+      presence = Effect.never;
     },
   };
 }
@@ -837,6 +843,7 @@ function subject(
       asked: service.asked,
       startCommits: service.startCommits,
       answerPresence: service.answerPresence,
+      hangPresence: service.hangPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
       holdPages: service.holdPages,
@@ -3077,5 +3084,36 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(60));
       yield* settled;
       assert.equal(presenceAsks(), 2);
+    }),
+);
+
+it.effect(
+  "a read of the beats the service never answers counts as failed past its bound, the beats it answered before kept, stale",
+  () =>
+    Effect.gen(function* () {
+      const { call, answerPresence, hangPresence, beats } = yield* subject();
+      const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
+      answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
+      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+      yield* settled;
+
+      hangPresence();
+      yield* TestClock.adjust(Duration.seconds(20));
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(11));
+      yield* settled;
+      assert.deepEqual(
+        beats().at(-1),
+        { "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } } },
+        "a read still within its bound has not failed",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(beats().at(-1), {
+        "user-dana": {
+          rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 32_000, stale: true },
+        },
+      });
     }),
 );
