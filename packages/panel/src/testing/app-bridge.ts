@@ -8,6 +8,7 @@ import type { AppBridge } from "@repo/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
+  AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   actContract,
@@ -90,11 +91,13 @@ function followedFromReads(
     );
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, and a pull request's chapters. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, and an agent's own tools. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
-  | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW;
+  | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
+  | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
+  | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW;
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
@@ -119,9 +122,10 @@ export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>>
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A follow of the automations it does
  * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold on a task's or an agent's inbox or pages, or a pull
- * request's chapters, it does not answer is held quietly, since what the
- * hold reads reaches the window on app state.
+ * that, and a hold it does not answer, on a task's or an agent's inbox or
+ * pages, a pull request's chapters, the account's beats, or an agent's own
+ * tools, is held quietly, since what the hold reads reaches the window on
+ * app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
@@ -131,6 +135,8 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
+    [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: quietHold,
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: quietHold,
     ...procedures,
   };
   const answered: Partial<FakeActPort> =

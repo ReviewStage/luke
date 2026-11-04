@@ -107,11 +107,18 @@ export const AGENT_ACT_KIND = {
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts as Settings › Hosts reads and changes
-   * them: listed, the beats of the account's devices read, and one removed; and a box's pairing, by the code its link
+   * them: listed, the beats of the account's devices held, and one removed; and a box's pairing, by the code its link
    * named, read, approved, or denied.
    */
   HOSTS_LIST: "hosts.list",
-  HOSTS_PRESENCE: "hosts.presence",
+  /**
+   * When the account's own devices last beat, held for the window while it
+   * holds the stream open and a while after among those let go lately, asked
+   * again every `MAC_PRESENCE.POLL_MS` while held: what it holds reaches the
+   * panel on app state (`LIVE_READ.DEVICE_PRESENCE`), so the stream carries
+   * nothing.
+   */
+  HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
@@ -157,7 +164,15 @@ export const AGENT_ACT_KIND = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /**
+   * Our own tools one agent is offered, held for the window while it holds
+   * the stream open and a while after among those let go lately, asked again
+   * as a window comes forward: what it holds reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_TOOLS`), so the stream carries nothing.
+   */
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
+  /** One agent's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
+  AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -633,7 +648,7 @@ export const PORT_ACT_USE = {
   AGENTS_DEFAULT_READ: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
   HOSTS_LIST: ACT_USE.READ,
-  HOSTS_PRESENCE: ACT_USE.READ,
+  HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.READ,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
@@ -662,7 +677,8 @@ export const PORT_ACT_USE = {
   AGENTS_CHANGES: ACT_USE.FETCH,
   AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
   AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
-  AGENTS_WORKSPACE_TOOLS: ACT_USE.READ,
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
+  AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
   AGENTS_OVERVIEW_CHECKS: ACT_USE.READ,
   AGENTS_OVERVIEW_CONVERSATION: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,

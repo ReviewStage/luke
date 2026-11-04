@@ -197,8 +197,16 @@ export const GATEWAY_METHOD = {
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /** The account's hosts, as Settings lists them, read from the service now. */
   HOSTS_LIST: "hosts.list",
-  /** How long ago the account's own devices last beat, read from the service now; the ages, or why not. */
-  HOSTS_PRESENCE: "hosts.presence",
+  /**
+   * When the account's own devices last beat, held for a window from now
+   * until it is let go, asked of the service at once and again every
+   * `MAC_PRESENCE.POLL_MS` while held, and a while after among the reads let
+   * go lately. What it holds is heard as `DEVICE_PRESENCE_CHANGED` events, on
+   * the app state every window draws, never answered.
+   */
+  HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
+  /** The account's devices' beats let go by the window that held them. */
+  HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
@@ -308,7 +316,18 @@ export const GATEWAY_METHOD = {
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /**
+   * Our own tools one agent is offered, held for a window from now until it
+   * is let go, asked of the service at once and again as a window comes
+   * forward, and a while after among the reads let go lately. What it holds
+   * is heard as `WORKSPACE_TOOLS_CHANGED` events, on the app state every
+   * window draws, never answered.
+   */
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
+  /** One agent's own tools let go by the window that held them. */
+  AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
+  /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
+  AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
@@ -563,6 +582,10 @@ export const GATEWAY_EVENT = {
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
+  /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
+  /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

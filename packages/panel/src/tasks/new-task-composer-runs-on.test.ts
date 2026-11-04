@@ -19,8 +19,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useSteadyDoors } from "../steady-door.js";
-import { fakeActPort } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
+import { fakeActPort, quietHold } from "../testing/app-bridge.js";
+import { handBeats, handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -75,26 +75,13 @@ const SUB_TASK: NewTaskRelation = {
   },
 };
 
-/** The devices the service holds for the card now, which the presence read answers the beats of. */
-let offeredNow: readonly MacOffer[] = [];
-
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   handState(experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST));
-  // The service answers the shared presence read with no beat later than the lists carry.
-  fakeActPort({
-    [ACT_KIND.HOSTS_PRESENCE]: () =>
-      Promise.resolve({
-        devices: offeredNow.flatMap((device) =>
-          device.seenAt === undefined
-            ? []
-            : [{ deviceId: device.deviceId, ageMs: Date.now() - device.seenAt }],
-        ),
-      }),
-  });
+  fakeActPort({});
 });
 
 afterEach(() => {
@@ -153,7 +140,14 @@ interface Offered {
  * hands back the list already standing.
  */
 async function mount(offered: Offered = { devices: devicesWith() }, relation?: NewTaskRelation) {
-  offeredNow = offered.devices ?? [];
+  // The host holds the devices' beats no later than the lists carry them.
+  handBeats(
+    Object.fromEntries(
+      (offered.devices ?? []).flatMap((device) =>
+        device.seenAt === undefined ? [] : [[device.deviceId, Date.now() - device.seenAt]],
+      ),
+    ),
+  );
   const control = tasksControl();
   let reads = offered.reads ?? READS.LAND;
   let devices = offered.devices;
@@ -176,7 +170,6 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
     const generation = modelsRead.generation + 1;
     if (reads === READS.LAND) {
       devices = [...(offered.reread ?? offered.devices ?? [])];
-      offeredNow = devices;
     }
     const state = {
       [READS.LAND]: MODELS_READ.READ,
@@ -369,9 +362,9 @@ test("while Bring your own host is off the card reads no devices, offers Cloud a
   handState(experimentsOn());
   let beats = 0;
   fakeActPort({
-    [ACT_KIND.HOSTS_PRESENCE]: () => {
+    [ACT_KIND.HOSTS_PRESENCE_FOLLOW]: () => {
       beats += 1;
-      return Promise.resolve({ devices: [] });
+      return quietHold();
     },
   });
   window.localStorage.setItem("app.newTaskRunsOn", STUDIO);

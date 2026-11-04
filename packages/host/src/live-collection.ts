@@ -525,6 +525,8 @@ export const RECENT_READS = 8;
 interface HeldReads<Key> {
   /** Holds `key`'s read for the caller's scope, opening it unless it stands. */
   readonly hold: (key: Key) => Effect.Effect<void, never, Scope.Scope>;
+  /** Whether any window holds `key` now, rather than having let it go lately or never held it. */
+  readonly held: (key: Key) => boolean;
   /** Opens `key`'s read again at once, as Try again asks, where a window holds it or let it go lately; nothing otherwise. */
   readonly reopen: (key: Key) => Effect.Effect<void>;
   /** Opens every read a window holds again, as the account signing in asks, so a hold taken while nobody was signed in reads now. */
@@ -575,6 +577,7 @@ function heldReads<Key>(
           yield* FiberMap.run(fibers, key, read(key), { onlyIfMissing: true });
           yield* Effect.addFinalizer(() => release(key));
         }),
+      held: (key) => holdersOf(key) > 0,
       reopen: (key) =>
         Effect.suspend(() =>
           holdersOf(key) > 0 || recent.some((other) => Equal.equals(other, key))
@@ -597,7 +600,7 @@ function heldReads<Key>(
 }
 
 /** A held read whose keys stand in its slice itself, as every read on `heldSlice` does; the feed's stand under its rows. */
-type SliceKeyed = {
+export type SliceKeyed = {
   [Slice in HostReadSlice &
     LiveRead]: (typeof HOST_READ_SLICE)[Slice]["on"] extends typeof KEYS_ON.SLICE ? Slice : never;
 }[HostReadSlice & LiveRead];
@@ -608,12 +611,17 @@ export interface HeldAnswers<Rows> {
   readonly answered: (rows: Rows) => void;
   /** That its read did not answer: failed where it never has, and kept as it stood otherwise, since its next answer brings it up to date. */
   readonly unanswered: () => void;
+  /** That its read is asked again, as Try again asks: unread meanwhile where it had failed, so it draws as loading. */
+  readonly retried: () => void;
+  /** The rows its read holds now, as its last answer left them; none before it first answers. */
+  readonly rows: () => Rows | undefined;
 }
 
 /** The keys the windows hold of one held read, and what the host does for them. */
 export interface HeldSlice<Key> {
   /** Holds `key`'s read for the caller's scope, following it unless it stands. */
   readonly hold: HeldReads<Key>["hold"];
+  readonly held: HeldReads<Key>["held"];
   /** Reads `key` again at once, as Try again asks, telling it unread meanwhile where it had failed. */
   readonly retry: (key: Key) => Effect.Effect<void>;
   /** Follows every held key anew, as the account gate opening asks. */
@@ -682,6 +690,11 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
       unanswered: () => {
         if (readOf(key)?.rows === undefined) lay(key, { failed: true });
       },
+      retried: () => {
+        if (readOf(key)?.failed === true) lay(key, UNREAD);
+      },
+      // SAFETY: what a key's path holds is that key's read (`HostReadKeyPath`), whose rows are its slice's.
+      rows: () => readOf(key)?.rows as AppHostReads[Slice] | undefined,
     });
     const reads = yield* heldReads<Key>(
       (key) =>
@@ -694,13 +707,8 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
     );
     return {
       hold: reads.hold,
-      retry: (key) =>
-        Effect.andThen(
-          Effect.sync(() => {
-            if (readOf(key)?.failed === true) lay(key, UNREAD);
-          }),
-          reads.reopen(key),
-        ),
+      held: reads.held,
+      retry: (key) => Effect.andThen(Effect.sync(answers(key).retried), reads.reopen(key)),
       open: reads.reopenHeld,
       end: reads.end,
     };
