@@ -248,6 +248,10 @@ function fakeService() {
   let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
   let itemsLive: typeof LIVE_ANSWERED | undefined;
+  /** What the account's items' read keeps to answer by sync id, so a read past one is answered what moved since. */
+  const itemsBySync: ItemsBySync = { rows: new Map(), at: new Map() };
+  /** The sync id the account's items stand still at, as behind a long transaction; none while it moves. */
+  let itemsStalledAt: string | undefined;
   // Each live read's rows, polled; every followed scope's inbox reads the one script.
   const live = {
     transcript: polledLive(TRANSCRIPT_PARTS),
@@ -661,15 +665,25 @@ function fakeService() {
         if (typeof accountLive === "object") return Effect.succeed(accountLive);
         return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
       }),
-    accountInboxItemsLive: (userId, since, poll, after) =>
+    accountInboxItemsLive: (userId, sync) =>
       Effect.suspend((): ReturnType<AgentClient["accountInboxItemsLive"]> => {
-        if (poll !== true) asked.push(`account-items-live:${userId}`);
+        if (sync === "") asked.push(`account-items-live:${userId}`);
+        if (sync === undefined) asked.push(`account-items-whole:${userId}`);
         if (itemsLive === undefined) {
           return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
         }
-        if (poll !== true) return Effect.succeed(changedSince(live.items.first(), since));
-        if (after === undefined) asked.push(`account-items-again:${since}`);
-        return Effect.map(live.items.poll(after), (answer) => changedSince(answer, since));
+        if (sync === undefined) return Effect.succeed(live.items.first());
+        const settled = (answer: ItemsAnswer) =>
+          itemsStalledAt ?? answer.queries.stamps.digest ?? "0";
+        if (sync === "") {
+          const whole = live.items.first();
+          return Effect.succeed(
+            "failure" in whole ? whole : bySyncId(whole, undefined, settled(whole), itemsBySync),
+          );
+        }
+        return Effect.map(live.items.poll(sync), (answer) =>
+          "failure" in answer ? answer : bySyncId(answer, sync, settled(answer), itemsBySync),
+        );
       }),
   };
   return {
@@ -722,6 +736,10 @@ function fakeService() {
     sealItems: (next: typeof LIVE_ANSWERED | undefined) => {
       itemsLive = next;
     },
+    /** Holds the account items' sync id where it stands, as a long transaction does, so each read past it is answered nothing moved. */
+    stallItems: () => {
+      itemsStalledAt = live.items.first().queries.stamps.digest;
+    },
     /** The transaction a Start answers it committed in; none answers none. */
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
@@ -768,22 +786,94 @@ const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
 const ITEMS_PARTS = ["stamps", "items", "messages", "files"] as const;
 
-/** The account's items' read as the service answers it: every stamp, and the items changed at or after `since` alone, every one where it names none. */
-function changedSince<Answer extends { readonly queries: { readonly items: SealedLiveQueryWire } }>(
-  answer: Answer,
-  since: number | undefined,
-): Answer {
-  const { items } = answer.queries;
-  if (items.rows === undefined) return answer;
-  const rows = items.rows.filter(
-    (row) =>
-      typeof row === "object" &&
-      row !== null &&
-      "updatedAt" in row &&
-      typeof row.updatedAt === "number" &&
-      row.updatedAt >= (since ?? 0),
+/** The account's items' read as the service answers it, before it is read by sync id. */
+type ItemsAnswer = Exclude<
+  ReturnType<PolledLive<(typeof ITEMS_PARTS)[number]>["first"]>,
+  { failure: string }
+>;
+
+/** A row's text field `name`; none where it carries none. */
+function textOf(row: unknown, name: string): string | undefined {
+  const value = typeof row === "object" && row !== null ? Reflect.get(row, name) : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+/** The id a row of the account's items names its item by: its own, or the item its message is on. */
+function itemIdOf(row: unknown): string | undefined {
+  return textOf(row, "itemId") ?? textOf(row, "id");
+}
+
+/** What the fake keeps of the account's items to answer them by sync id: each item's last row set, and the items as they stood at each id answered. */
+interface ItemsBySync {
+  readonly rows: Map<string, unknown>;
+  readonly at: Map<string, ReadonlyMap<string, string>>;
+}
+
+/**
+ * The account's items' read as the service answers it by sync id. The
+ * items there are are those the stamps a test set name, each its last row
+ * set, its read mark the stamp's, as a service that resends an item whole
+ * with its mark. Past no id it is every one, each part with the id to read
+ * past next; past an id, only those that moved since, with the ids of
+ * those that stand no longer, and nothing where the id stands still.
+ */
+function bySyncId(
+  answer: ItemsAnswer,
+  past: string | undefined,
+  next: string,
+  items: ItemsBySync,
+): ItemsAnswer {
+  for (const row of answer.queries.items.rows ?? []) {
+    const id = itemIdOf(row);
+    if (id !== undefined) items.rows.set(id, row);
+  }
+  const stamps = answer.queries.stamps.rows ?? [];
+  const current = new Map(
+    stamps.flatMap((stamp) => {
+      const id = itemIdOf(stamp);
+      const row = id === undefined ? undefined : items.rows.get(id);
+      if (id === undefined || typeof row !== "object" || row === null) return [];
+      const unread =
+        typeof stamp === "object" && stamp !== null ? Reflect.get(stamp, "unread") : undefined;
+      return [[id, { stamp, row: { ...row, unread } }] as const];
+    }),
   );
-  return { ...answer, queries: { ...answer.queries, items: { ...items, rows } } };
+  const now = new Map([...current].map(([id, each]) => [id, JSON.stringify(each)] as const));
+  const before = past === undefined ? undefined : items.at.get(past);
+  items.at.set(next, now);
+  const stood = past !== undefined && past === next;
+  const moved = [...current.keys()].filter((id) => !stood && before?.get(id) !== now.get(id));
+  const gone = before === undefined || stood ? [] : [...before.keys()].filter((id) => !now.has(id));
+  const movedMessages = (answer.queries.messages.rows ?? []).filter((row) =>
+    moved.includes(itemIdOf(row) ?? ""),
+  );
+  const messageIds = new Set(movedMessages.flatMap((row) => textOf(row, "id") ?? []));
+  // Note that a read answered before the test set any rows carries none, as one Realtime sealed does.
+  const part = (query: SealedLiveQueryWire, rows: readonly unknown[]): SealedLiveQueryWire => ({
+    ...query,
+    ...(query.rows === undefined ? undefined : { rows }),
+    sync: past === undefined ? { next } : { past, next },
+    ...(past === undefined ? undefined : { gone }),
+  });
+  const { queries } = answer;
+  return {
+    ...answer,
+    queries: {
+      stamps: part(
+        queries.stamps,
+        moved.flatMap((id) => current.get(id)?.stamp ?? []),
+      ),
+      items: part(
+        queries.items,
+        moved.flatMap((id) => current.get(id)?.row ?? []),
+      ),
+      messages: part(queries.messages, movedMessages),
+      files: part(
+        queries.files,
+        (queries.files.rows ?? []).filter((row) => messageIds.has(textOf(row, "messageId") ?? "")),
+      ),
+    },
+  };
 }
 
 /** Every step a follow has to take, taken: it runs on a fiber of its own. */
@@ -854,6 +944,7 @@ function subject(
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       sealItems: service.sealItems,
+      stallItems: service.stallItems,
       commitIn: service.commitIn,
       changeFirst: service.changeFirst,
       live: service.live,
@@ -2597,50 +2688,62 @@ it.effect(
 );
 
 it.effect(
-  "an item's read mark moving with no resend are patched from its stamp, and who it waits on moving asks for it again from its change",
+  "the account's items asked past a sync id that stands still longer than a hold are asked whole once, and take what moved behind it",
   () =>
     Effect.gen(function* () {
-      const { open, asked, sealItems, live, accountItems } = yield* subject();
+      const { open, asked, sealItems, stallItems, live, accountItems } = yield* subject();
       sealItems(LIVE_ANSWERED);
       yield* open;
       yield* settled;
-      deliverItems(
-        live,
-        [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)],
-        [HELD_ITEM, OTHER_ITEM],
-      );
+      deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
       yield* toldTimes(accountItems, 1);
 
-      // Only the stamp moves: the item changed before the latest held, so it is not sent.
-      const marked = { ...OTHER_ITEM, unread: true };
-      deliverItems(
-        live,
-        [stampOf(HELD_ITEM, TASK_ID), stampOf(marked, OTHER_TASK_ID)],
-        [HELD_ITEM, OTHER_ITEM],
-      );
+      // A long transaction holds the sync id, so each read past it is answered nothing moved.
+      stallItems();
+      const moved = { ...HELD_ITEM, revision: 3, updatedAt: HELD_ITEM.updatedAt + 1_000 };
+      deliverItems(live, [stampOf(moved, TASK_ID)], [moved]);
       yield* nextPoll;
-      yield* toldTimes(accountItems, 2);
-      assert.deepEqual(
-        accountItems().at(-1),
-        byPlan({ [TASK_ID]: [HELD_ITEM], [OTHER_TASK_ID]: [marked] }),
-      );
-
-      const reassigned = { ...marked, waitsOn: { userId: "user-sam", name: "Sam" } };
-      deliverItems(
-        live,
-        [stampOf(HELD_ITEM, TASK_ID), stampOf(marked, OTHER_TASK_ID, { waitsOn: "user-sam" })],
-        [HELD_ITEM, { ...marked, waitsOn: "user-sam", waitsOnName: "Sam" }],
-      );
-      yield* nextPoll;
+      const behind = accountItems().at(-1);
+      yield* TestClock.adjust(Duration.seconds(31));
       yield* nextPoll;
 
+      assert.deepEqual(behind, byPlan({ [TASK_ID]: [HELD_ITEM] }));
+      assert.deepEqual(accountItems().at(-1), byPlan({ [TASK_ID]: [moved] }));
       assert.deepEqual(
-        accountItems().at(-1),
-        byPlan({ [TASK_ID]: [HELD_ITEM], [OTHER_TASK_ID]: [reassigned] }),
+        asked.filter((each) => each.startsWith("account-items-whole:")),
+        ["account-items-whole:user-dana"],
       );
+    }),
+);
+
+it.effect(
+  "an item the account's items took earlier never rolls back the newer one a plan's inbox took since, as another item moves",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, sealScope, sealItems, live } = harness;
+      sealScope(LIVE_ANSWERED);
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* harness.open;
+      yield* settled;
+      live.scope.set({ items: [ITEM_ROW], messages: [], files: [] });
+      const both = [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)];
+      deliverItems(live, both, [HELD_ITEM, OTHER_ITEM]);
+      yield* toldTimes(harness.told, 1);
+      yield* toldTimes(harness.accountItems, 1);
+      const retitled = { title: "Push to main instead?", updatedAt: ITEM.updatedAt + 1_000 };
+
+      // The plan's inbox takes the item as it moved, before the account's items hear of it.
+      live.scope.set({ items: [{ ...ITEM_ROW, ...retitled }] });
+      yield* nextPoll;
+      const other = { ...OTHER_ITEM, revision: OTHER_ITEM.revision + 1 };
+      deliverItems(live, [both[0], stampOf(other, OTHER_TASK_ID)], [HELD_ITEM, other]);
+      yield* nextPoll;
+
       assert.deepEqual(
-        asked.filter((each) => each.startsWith("account-items-again:")),
-        [`account-items-again:${OTHER_ITEM.updatedAt}`],
+        bothHold(harness, (item) => item.title === retitled.title),
+        [true, true],
       );
     }),
 );
