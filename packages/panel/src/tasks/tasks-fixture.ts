@@ -22,7 +22,6 @@ import {
   COMMENT_SUBJECT,
   TASK_CALL_FAILURE,
   TASKS_READ,
-  type TasksRepositoriesAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
@@ -32,7 +31,9 @@ import {
   type AppHistories,
   type AppPlanComments,
   type AppPlanDocuments,
+  type AppRepositoryLists,
   type AppStateSnapshot,
+  EVERY_WORKSPACE,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
@@ -356,15 +357,30 @@ const FIXTURE_REPOSITORIES = new Map([
   [FIXTURE_TEAM.id, [fixtureRepository("acme", "relay", "2026-10-06T11:00:00Z")]],
 ]);
 
-/** The repositories a fixture run's chip lists for a workspace, read from nowhere; the first workspace's before one is chosen. */
-export function fixtureRepositories(workspaceId: string | undefined): TasksRepositoriesAnswer {
-  return {
-    repositories: {
-      installed: true,
-      repositories: FIXTURE_REPOSITORIES.get(workspaceId ?? FIXTURE_FIRST.id) ?? [],
-      installationUrl: "https://github.com/apps/vespin-agent/installations/new",
+/** The repositories a fixture run's chips list, as the host holds them for each fixture workspace, the first's standing for every workspace's; read from nowhere. */
+const FIXTURE_REPOSITORY_LISTS: AppRepositoryLists = Object.fromEntries(
+  [...FIXTURE_WORKSPACE_IDS, EVERY_WORKSPACE].map((workspace) => [
+    workspace,
+    {
+      rows: {
+        installed: true,
+        repositories:
+          FIXTURE_REPOSITORIES.get(workspace === EVERY_WORKSPACE ? FIXTURE_FIRST.id : workspace) ??
+          [],
+        installationUrl: "https://github.com/apps/vespin-agent/installations/new",
+      },
     },
-  };
+  ]),
+);
+
+/** Main's document with the fixture workspaces' repositories held, beside any a staged profile laid; one object across deliveries where nothing moved. */
+const STAGED_LISTS = new WeakMap<AppRepositoryLists, AppRepositoryLists>();
+
+function repositoriesAppState(state: AppStateSnapshot): AppStateSnapshot {
+  const held = state[LIVE_READ.REPOSITORY_LISTS];
+  const staged = STAGED_LISTS.get(held) ?? { ...FIXTURE_REPOSITORY_LISTS, ...held };
+  STAGED_LISTS.set(held, staged);
+  return { ...state, [LIVE_READ.REPOSITORY_LISTS]: staged };
 }
 
 const FIXTURE_TASK_LIST: TasksView = {
@@ -697,13 +713,16 @@ function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles
  * (`automations-fixture.ts`), its plan's comment threads held under the
- * tasks-comments profile, and as main holds it under any other.
+ * tasks-comments profile, and the fixture workspaces' repositories held
+ * under every profile, which main holds as it does under any other.
  */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
-  return commentsAppState(
-    automationsAppState(
-      agentAppState(settingsAppState(state.run.profile, plannedAppState(state)), FIXTURE_TASK_ID),
-      FIXTURE_WORKSPACE_IDS,
+  return repositoriesAppState(
+    commentsAppState(
+      automationsAppState(
+        agentAppState(settingsAppState(state.run.profile, plannedAppState(state)), FIXTURE_TASK_ID),
+        FIXTURE_WORKSPACE_IDS,
+      ),
     ),
   );
 }

@@ -60,6 +60,7 @@
     "./models/agent-queue-store": "./src/models/agent-queue-store.js",
     "./models/runner-line-store": "./src/models/runner-line-store.js",
     "./models/run-agents": "./src/models/run-agents.js",
+    "./models/run-tasks": "./src/models/run-tasks.js",
     "./models/agent-owners": "./src/models/agent-owners.js",
     "./models/runs-on-pick": "./src/models/runs-on-pick.js",
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",

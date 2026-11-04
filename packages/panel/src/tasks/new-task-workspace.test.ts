@@ -3,11 +3,14 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -44,6 +47,7 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, listOf);
 });
 
 afterEach(() => {
@@ -58,47 +62,37 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The chooser each workspace's repository chip is handed, Acme's reaching its installation's repositories and Personal's none. */
+/** What the service answers each workspace's repositories with: Acme's installation's, and none for Personal, which has no GitHub. */
+function listOf(workspace: string): RepositoriesRead {
+  const installationUrl = "https://github.com/apps/luke/installations/new";
+  if (workspace !== ACME.id) {
+    return { repositories: { installed: false, repositories: [], installationUrl } };
+  }
+  return {
+    repositories: {
+      installed: true,
+      repositories: [
+        {
+          owner: "acme-corp",
+          name: "relay",
+          fullName: "acme-corp/relay",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+        },
+      ],
+      installationUrl,
+    },
+  };
+}
+
+/** The chooser each workspace's repository chip is handed, the host holding Acme's installation's repositories and Personal's none. */
 function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   const base = tasksControl().repositories;
   if (workspaceId !== ACME.id) {
-    return {
-      ...base,
-      scope: workspaceId,
-      workspaceName: PERSONAL.name,
-      read: () =>
-        Promise.resolve({
-          repositories: {
-            installed: false,
-            repositories: [],
-            installationUrl: "https://github.com/apps/luke/installations/new",
-          },
-        }),
-    };
+    return { ...base, scope: workspaceId, workspaceName: PERSONAL.name };
   }
-  return {
-    ...base,
-    recent: ["acme-corp/relay"],
-    scope: ACME.id,
-    workspaceName: ACME.name,
-    read: () =>
-      Promise.resolve({
-        repositories: {
-          installed: true,
-          repositories: [
-            {
-              owner: "acme-corp",
-              name: "relay",
-              fullName: "acme-corp/relay",
-              defaultBranch: "main",
-              private: true,
-              updatedAt: 1,
-            },
-          ],
-          installationUrl: "https://github.com/apps/luke/installations/new",
-        },
-      }),
-  };
+  return { ...base, recent: ["acme-corp/relay"], scope: ACME.id, workspaceName: ACME.name };
 }
 
 test("New task offers no workspace picker, and its head row's repository chip lists the listed workspace's repositories, where the plan starts", async () => {
@@ -128,23 +122,28 @@ async function openNewTask(workspaceId: string, preset?: string) {
   const control = tasksControl();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
+  // The window's document is read on a registry of this test's own, so what the host lays reaches it.
+  const registry = AtomRegistry.make();
   const draw = (listed: string) =>
     act(() =>
       root.render(
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            preset: preset === undefined ? undefined : { repository: preset },
-            workspaces: [PERSONAL, ACME],
-            workspaceId: listed,
-            repositoriesIn: chooserFor,
-            start: (_name, repository, startsIn) => {
-              starts.push([repository, startsIn]);
-              return Promise.resolve(undefined);
+        onRegistry(
+          registry,
+          createElement(NewTaskDialog, {
+            newTask: {
+              ...control.newTask,
+              open: true,
+              preset: preset === undefined ? undefined : { repository: preset },
+              workspaces: [PERSONAL, ACME],
+              workspaceId: listed,
+              repositoriesIn: chooserFor,
+              start: (_name, repository, startsIn) => {
+                starts.push([repository, startsIn]);
+                return Promise.resolve(undefined);
+              },
             },
-          },
-        }),
+          }),
+        ),
       ),
     );
   draw(workspaceId);

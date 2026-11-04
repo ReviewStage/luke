@@ -1,7 +1,7 @@
 /* chip.css -- what the chip's utilities cannot say (`chip.tsx`, drawn in
    the shared Tailwind theme): a tone's ink and the dot it draws where the
    chip leads with no glyph, the motions a chip arrives and waits in, and
-   the fades and cuts its words give way by. */
+   how a name cut in its middle keeps its end. */
 
 @layer components {
   /* A compact chip a finger presses takes the press a finger's target
@@ -22,22 +22,6 @@
       transform: translate(-50%, -50%);
       content: "";
     }
-  }
-
-  /* A chip's words fade out over their last few pixels only while they are
-     measured cut short, as a browser's tab ends a long title, so short words
-     end on their last letter. Words cut in their middle fade the end of
-     their start instead, where the cut stands, their kept end standing
-     whole after it. Note that the fades stay here, because Tailwind's mask
-     utilities compose the gradient through variables rather than drawing
-     it, as the badge's label fade does (`badge.css`). */
-  .ui-chip-name[data-overflow="true"],
-  .ui-chip-name-start[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
-  }
-
-  .ui-chip-name[data-cut="middle"] {
-    mask-image: none;
   }
 
   /* The end stands whole while the start can give way; once the start is

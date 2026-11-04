@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { Badge as ShadcnBadge } from "../../shadcn/badge.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
-import { useClipped } from "../../use-clipped.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js";
 
 /**
@@ -39,8 +39,7 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
  *
  * It is drawn by shadcn/ui's badge (`../../shadcn/badge.tsx`), whose tones
  * are this badge's, in the shared Tailwind theme; `badge.css` keeps what
- * utilities cannot say: the words given up under a room's width, and a
- * filled label's fade.
+ * utilities cannot say: the words given up under a room's width.
  */
 
 /** The one spelling of a provider's color a swatch paints: six hex digits, with or without its `#`. */
@@ -119,17 +118,18 @@ function fillColors(color: string): CSSProperties | undefined {
   });
 }
 
-/** A filled badge's words, on one line in their own direction, marked while the badge cuts them short. */
+/** A filled badge's words, on one line in their own direction, ending in an ellipsis where the badge cuts them short. */
 function FilledWords({ children }: { children: string }): React.JSX.Element {
-  const [measured, clipped] = useClipped(children);
   return (
-    <bdi
-      ref={measured}
-      className="ui-badge-line block overflow-hidden"
-      data-overflow={String(clipped)}
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="ui-badge-line block"
+      dir="auto"
     >
       {children}
-    </bdi>
+    </Text>
   );
 }
 

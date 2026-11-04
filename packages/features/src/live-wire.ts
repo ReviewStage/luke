@@ -855,20 +855,32 @@ export const LIVE_READ = {
   INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",
+  /** What GitHub holds of the pull request or issue a link names, by the workspace it is read through and then the link's own address: fetched by the host while a chip holds it. */
+  LINK_STANDINGS: "linkStandings",
   /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
   MEMORIES: "workspaceMemories",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
   /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */
   PROVIDER_KEYS: "providerKeys",
+  /** One agent's pull request as its Pull request tab draws it, by the agent and then the pull request's number, or the agent's own: fetched by the host while a window holds it. */
+  PULL_REQUEST: "pullRequest",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
+  /** The checks on one agent's pull request's head, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_CHECKS: "pullRequestChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_CONVERSATION: "pullRequestConversation",
+  /** What one agent published, its pull request as the service last read it from GitHub, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_PUBLISHED: "pullRequestPublished",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
   PLAN_COMMENTS: "taskComments",
   /** One task's plan history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
   HISTORY: "taskHistory",
   /** One task's cloud Browser tabs, every one of its agents', or one agent's, by what they are listed for: the service's `taskBrowserTabsLive` or `agentBrowserTabsLive` query, by its kind, held for the windows whose side panel lists them and a few they listed lately. */
   BROWSER_TABS: "browserTabs",
+  /** The repositories the account reaches in one workspace, or in every one where a list names none, by the workspace: fetched by the host while a window holds it. */
+  REPOSITORY_LISTS: "repositoryLists",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
   /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */

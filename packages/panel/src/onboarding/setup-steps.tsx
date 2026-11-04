@@ -278,12 +278,7 @@ export function SetupSteps({
     return (
       <AuthPage mark={<ProductMark />} title="Connect GitHub" foot={foot(reached, true)}>
         {workspaceId === undefined ? null : (
-          <GitHubSetup
-            key={workspaceId}
-            workspaceId={workspaceId}
-            repositories={tasks.newTask.repositoriesIn(workspaceId)}
-            onReached={onReached}
-          />
+          <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={onReached} />
         )}
       </AuthPage>
     );

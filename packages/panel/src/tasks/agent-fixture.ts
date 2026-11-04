@@ -19,7 +19,14 @@
  */
 
 import { AsyncIteratorClass } from "@orpc/client";
-import { AGENT_CALL_FAILURE, type AgentTranscriptPage } from "@repo/features/agent-view";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPullRequestAnswerView,
+  type AgentTranscriptPage,
+} from "@repo/features/agent-view";
 import {
   AGENT_AUTHOR,
   AGENT_BRIEF,
@@ -69,7 +76,9 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppChapters,
   type AppPages,
+  type AppPullRequestPart,
   type AppStateSnapshot,
+  OWN_PULL_REQUEST,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
@@ -605,6 +614,23 @@ const EXPIRY_THREAD = {
   more: 0,
 };
 
+/** What the agent published, as the service answers it. */
+const PUBLISHED: AgentPullRequestAnswerView = {
+  repository: REPOSITORY,
+  branch: PULL_REQUEST.head,
+  pullRequest: {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    url: PULL_REQUEST.url,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: ADDITIONS,
+    deletions: DELETIONS,
+    changedFiles: CHANGED_FILES.length,
+    queued: true,
+  },
+};
+
 /** The pull request's tab, read by read, as the service answers each. */
 const OVERVIEW_PULL_REQUEST = {
   pullRequest: {
@@ -976,24 +1002,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
   [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.AGENTS_PULL_REQUEST]: () => ({
-    repository: REPOSITORY,
-    branch: PULL_REQUEST.head,
-    pullRequest: {
-      number: PULL_REQUEST.number,
-      title: PULL_REQUEST.title,
-      url: PULL_REQUEST.url,
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: ADDITIONS,
-      deletions: DELETIONS,
-      changedFiles: CHANGED_FILES.length,
-      queued: true,
-    },
-  }),
-  [ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
-  [ACT_KIND.AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
-  [ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
+  [ACT_KIND.AGENTS_PULL_REQUEST]: () => PUBLISHED,
   [ACT_KIND.AGENTS_REVIEW_OPTIONS]: () => ({
     labels: OVERVIEW_PULL_REQUEST.pullRequest.labels,
     users: [ADA, GRACE],
@@ -1114,11 +1123,39 @@ const STAGED_PAGES = new WeakMap<AppPages, AppPages>();
 /** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
 const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
 
+/** Lays `rows` as one part of the agent's own pull request over main's held part, one object for each of main's. */
+function stagedPart<Part>(
+  rows: Part,
+): (held: AppPullRequestPart<Part>) => AppPullRequestPart<Part> {
+  const staged = new WeakMap<AppPullRequestPart<Part>, AppPullRequestPart<Part>>();
+  return (held) => {
+    let laid = staged.get(held);
+    if (laid === undefined) {
+      laid = {
+        ...held,
+        [FIXTURE_AGENT_ID]: { ...held[FIXTURE_AGENT_ID], [OWN_PULL_REQUEST]: { rows } },
+      };
+      staged.set(held, laid);
+    }
+    return laid;
+  };
+}
+
+/** The parts of the agent's own pull request its Pull request tab holds, as the host would lay each. */
+const STAGED_PARTS = {
+  [LIVE_READ.PULL_REQUEST]: stagedPart<AgentOverviewPullRequestAnswerView>(OVERVIEW_PULL_REQUEST),
+  [LIVE_READ.PULL_REQUEST_CHECKS]: stagedPart<AgentOverviewChecksAnswerView>(OVERVIEW_CHECKS),
+  [LIVE_READ.PULL_REQUEST_CONVERSATION]:
+    stagedPart<AgentOverviewConversationAnswerView>(OVERVIEW_CONVERSATION),
+  [LIVE_READ.PULL_REQUEST_PUBLISHED]: stagedPart<AgentPullRequestAnswerView>(PUBLISHED),
+};
+
 /**
  * Main's document as an agent profile draws it: the open task's pages held
  * with the page its agent showed, as the window's read of them holds them
- * (`LIVE_READ.PAGES`), and the agent's pull request's chapters held as its
- * Pull request tab's read of them holds them (`LIVE_READ.PULL_REQUEST_CHAPTERS`).
+ * (`LIVE_READ.PAGES`), and the agent's pull request's chapters and parts
+ * held as its Pull request tab's reads of them hold them
+ * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings).
  * The same document, the very object, under any other profile.
  */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
@@ -1142,7 +1179,21 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     };
     STAGED_CHAPTERS.set(heldChapters, chapters);
   }
-  return { ...state, [LIVE_READ.PAGES]: staged, [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters };
+  return {
+    ...state,
+    [LIVE_READ.PAGES]: staged,
+    [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters,
+    [LIVE_READ.PULL_REQUEST]: STAGED_PARTS[LIVE_READ.PULL_REQUEST](state[LIVE_READ.PULL_REQUEST]),
+    [LIVE_READ.PULL_REQUEST_CHECKS]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CHECKS](
+      state[LIVE_READ.PULL_REQUEST_CHECKS],
+    ),
+    [LIVE_READ.PULL_REQUEST_CONVERSATION]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CONVERSATION](
+      state[LIVE_READ.PULL_REQUEST_CONVERSATION],
+    ),
+    [LIVE_READ.PULL_REQUEST_PUBLISHED]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_PUBLISHED](
+      state[LIVE_READ.PULL_REQUEST_PUBLISHED],
+    ),
+  };
 }
 
 /**

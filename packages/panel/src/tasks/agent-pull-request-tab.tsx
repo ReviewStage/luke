@@ -29,6 +29,7 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import type { FailureSurface } from "@repo/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -152,6 +153,7 @@ import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -159,7 +161,6 @@ import {
   type ChangesThreads,
   THREAD_PLACE,
   type ThreadPlace,
-  useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
 import { pullRequestNumberLabel } from "./agent-model.js";
@@ -206,7 +207,7 @@ import {
 } from "./pull-request-comment-box.js";
 import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
-import { PullRequestNumberProvider } from "./pull-request-number.js";
+import { PullRequestNumberProvider, pullRequestAsked } from "./pull-request-number.js";
 import { HeaderReviewers, OpenedLine, ReviewStanding, useNamer } from "./pull-request-people.js";
 import {
   LabelPicker,
@@ -245,7 +246,6 @@ import {
   useWindowThreadReveal,
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
-import { usePushedLineMoved } from "./use-agent-pull-request.js";
 import type { AgentsControl } from "./use-agents.js";
 import {
   linkPressOf,
@@ -259,13 +259,15 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
  *
- * The overview is read from GitHub afresh by the service on each ask, on
- * the App's token for the agent's repository rather than anyone's own, so
- * nothing here reads on a clock: each read is asked as what draws it first
- * comes on screen, when the developer presses Retry or Refresh, and the
- * moment the agent ends, since that is when what it published settles
- * (`useAgentRead`, as the Changes tab reads). It is three reads, each
- * landing on its own, all asked as the tab is shown: the pull request
+ * The overview is three parts the host holds while the tab shows
+ * (`LIVE_READ.PULL_REQUEST` and its siblings), each read from GitHub by the
+ * service on the App's token for the agent's repository rather than anyone's
+ * own, so nothing here reads on a clock: the host asks each as the tab is
+ * shown, as a window comes forward, and on Retry or Refresh, and all of them
+ * again together as the agent's status moves, its end among it, and as the
+ * task list's line for the pull request moves: its state, its checks, its
+ * place in the queue, or its head, which a push moves. Each lands on its
+ * own, and a tab drawn again draws the last answers at once: the pull request
  * itself (its description, branches, mergeability, and people); its
  * conversation, whose reviews say where each reviewer the header draws
  * stands; and its checks, whose deployments the header's Preview opens, as
@@ -434,14 +436,31 @@ type Part<A> =
   | { readonly kind: typeof PART.NONE }
   | { readonly kind: typeof PART.LANDED; readonly value: A };
 
-/** One of the overview's reads as `useAgentRead` holds it. */
+/** One of the overview's parts as the tab reads it: its answer, none before one lands; whether its read is out; and Try again, settling once it lands. */
 interface PartRead<A> {
   readonly answer:
     | { readonly pullRequest: A | null }
     | { readonly failure: AgentCallFailure }
     | undefined;
   readonly out: boolean;
-  readonly ask: () => void;
+  readonly ask: () => Promise<void>;
+}
+
+/**
+ * One part as the host holds it, drawn as the tab reads it: its answer,
+ * that it was not answered where the host's read failed before one landed,
+ * and out while the host's first ask is, or a Try again or Refresh the tab
+ * made, until it lands.
+ */
+function usePartRead<Answer>(held: HostRead<Answer>) {
+  const [asking, setAsking] = useState(0);
+  const { retry } = held;
+  const ask = useCallback(() => {
+    setAsking((count) => count + 1);
+    return retry().finally(() => setAsking((count) => count - 1));
+  }, [retry]);
+  const answer = held.rows ?? (held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined);
+  return { answer, out: asking > 0 || held.status === HOST_READ_STATUS.LOADING, ask };
 }
 
 /** Where one read stands. Note that a failure gives way to the wait as soon as it is asked again, while a part drawn stands until its answer lands. */
@@ -3014,7 +3033,6 @@ function PullRequestTabBody({
   onView,
   onActions,
 }: Omit<AgentPullRequestTabProps, "control"> & { source: PullRequestSource }): React.JSX.Element {
-  const { ended } = source;
   const id = useId();
   // A phone names the chosen tab and draws the others by their glyphs and counts, so the four fit its row without scrolling; a tab pressed is named.
   const tabsFold =
@@ -3025,33 +3043,22 @@ function PullRequestTabBody({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
   });
-  // The header's reads are asked as the tab is shown, the conversation among them for where its reviewers stand, and the checks for the deployments its Preview opens.
-  const pullRequestRead = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    source.readOverviewPullRequest,
-    UNANSWERED,
-  );
-  const conversationRead = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    source.readOverviewConversation,
-    UNANSWERED,
-  );
-  const checksRead = useAgentRead(agentId, shown, ended, source.readOverviewChecks, UNANSWERED);
+  // The header's parts are held while the tab is shown, the conversation among them for where its reviewers stand, the checks for the deployments its Preview opens, and what the agent published, which names a tab and its pin by the pull request's title.
+  const asked = shown ? pullRequestAsked(agentId, number) : undefined;
+  const pullRequestRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST, asked));
+  const conversationRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CONVERSATION, asked));
+  const checksRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CHECKS, asked));
+  const publishedRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, asked));
   const ask = {
     pullRequest: pullRequestRead.ask,
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads, the checks among them, and what the agent published, which names this
-  // tab and its pin by the pull request's title; the chapters are held live, so Refresh does not read them.
-  // It settles once the header's reads land, which a change waits on before its press lets go.
+  // Refresh reads again the header's parts, the checks among them, and what the agent published; the chapters are held live, so Refresh does not read them.
+  // It settles once the header's parts land, which a change waits on before its press lets go.
   const refresh = () => {
     const header = Promise.all([ask.pullRequest(), ask.conversation(), ask.checks()]);
-    void source.readPublished().catch(() => undefined);
+    void publishedRead.ask();
     return header;
   };
   const parts: OverviewParts = {
@@ -3061,15 +3068,18 @@ function PullRequestTabBody({
     ask,
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
-  const { published } = source;
+  // Note that a tab naming its pull request by number draws what the host last read of it, as the task list draws the agent's own.
+  const publishedPart = publishedRead.answer;
+  const published =
+    number !== undefined && publishedPart !== undefined && "pullRequest" in publishedPart
+      ? (publishedPart.pullRequest ?? source.published)
+      : source.published;
   const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
   // The toolbar's ⋯ copies and opens the pull request on GitHub and reads it again while the header draws it,
   // Refresh dimmed while a read is out; a read saying there is none takes them away with the header.
-  const refreshNow = useRef(refresh);
-  refreshNow.current = refresh;
   // Note that the ⋯'s Refresh reads Files changed again too where its view was shown, because it is the one Refresh
   // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
   const refreshAllNow = useRef<() => void>(refresh);
@@ -3108,8 +3118,6 @@ function PullRequestTabBody({
           ...(phone && viewActions.held?.view === view ? viewActions.held.actions : []),
         ].filter((group) => group.length > 0),
   );
-  // Note that the reads Refresh runs run again as the task list's pushed line of the pull request moves (its state, its checks, or its place in the queue), so an open tab and its merge box never go stale.
-  usePushedLineMoved(url, shown, () => refreshNow.current());
   // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
@@ -3125,6 +3133,17 @@ function PullRequestTabBody({
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   const overview = landed(parts.pullRequest);
+  // Note that Files changed is read again as the pull request's head moves, as a push moves it, where it was read, because a diff is too large to hold on app state and nothing else asks it again.
+  const head = overview?.merging?.headSha;
+  const headSeen = useRef(head);
+  const changesNow = useRef(changes);
+  changesNow.current = changes;
+  useEffect(() => {
+    const was = headSeen.current;
+    headSeen.current = head;
+    if (was === undefined || head === undefined || was === head) return;
+    if (askedYet(changesNow.current)) changesNow.current.ask();
+  }, [head]);
   // The chapters, held while the tab is shown once the pull request's own read has answered, naming the number it found, so their tab says where they stand before their view is opened.
   const chapters = useChaptersRead(
     agentId,
