@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import {
+  linkIntegrationInstallation,
+  markIntegrationInstallationDeleted,
+} from "@repo/database/models/integration-installation-store";
+import {
+  linkSlackInstallation,
+  writeSlackChannelRepository,
+  writeSlackDefaultRepository,
+} from "@repo/database/models/slack-installation-store";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { user } from "@repo/database/schemas/auth";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
@@ -10,11 +19,12 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@repo/features/github-installation-wire";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { linkInstallation, setInstallationStatus } from "../github/github-installations.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { workspacesLive } from "./live-queries.js";
+import { workspaceIntegrationsLive, workspacesLive } from "./live-queries.js";
 
 /**
  * The account's workspaces (`workspacesLive`) on the migrated capture:
@@ -26,7 +36,9 @@ import { workspacesLive } from "./live-queries.js";
  * linked to it or suspended, which notify the workspace; and for the
  * account's first workspace named its own, which notifies the account.
  * Workspaces and memberships are written by the organization plugin, as
- * our routes write them.
+ * our routes write them. A workspace's own integrations
+ * (`workspaceIntegrationsLive`) are on a narrower topic of their own, which
+ * every write to its Sentry installations or its Slack bot notifies alone.
  *
  * Synthetic accounts, workspaces, and installations throughout.
  */
@@ -149,6 +161,78 @@ it.effect(
             [TOPIC.ACCOUNT, userId],
           ],
           userId,
+        );
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a Sentry link, a disconnect, Sentry's uninstall, a Slack connect, a default repository, and a channel's repository forgotten each notify the workspace's integrations alone, and each write that answers its transaction answers the one it notified in",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const owner = yield* openAccount("Ada Lovelace");
+        const workspaceId = yield* openTeam(plugin, owner);
+        const integrations: readonly SyncTopic[] = [[TOPIC.WORKSPACE_INTEGRATIONS, workspaceId]];
+        const woken = workspaceIntegrationsLive.topics({ userId: owner, workspaceId });
+        assert.ok(
+          woken.some(([kind, id]) => kind === TOPIC.WORKSPACE_INTEGRATIONS && id === workspaceId),
+          "the integrations read is woken by the workspace's integrations topic",
+        );
+        const sentry = (externalId: string) =>
+          linkIntegrationInstallation({
+            provider: TRIGGER_PROVIDER.SENTRY,
+            externalId,
+            organizationId: workspaceId,
+            userId: owner,
+          });
+        const [disconnected, uninstalled] = [randomUUID(), randomUUID()];
+        /** A write that answers its transaction, which must be the one its notification carries. */
+        const answersItsTransaction = (fired: {
+          readonly value: Option.Option<string> | string;
+          readonly txids: readonly string[];
+        }) => {
+          const txid =
+            typeof fired.value === "string" ? fired.value : Option.getOrThrow(fired.value);
+          assert.deepEqual(fired.txids, [txid]);
+        };
+
+        yield* expectTopicsFire(sentry(disconnected), integrations);
+        answersItsTransaction(
+          yield* expectTopicsFire(
+            markIntegrationInstallationDeleted(TRIGGER_PROVIDER.SENTRY, disconnected, workspaceId),
+            integrations,
+          ),
+        );
+        yield* sentry(uninstalled);
+        yield* expectTopicsFire(
+          markIntegrationInstallationDeleted(TRIGGER_PROVIDER.SENTRY, uninstalled),
+          integrations,
+        );
+        answersItsTransaction(
+          yield* expectTopicsFire(
+            linkSlackInstallation({
+              organizationId: workspaceId,
+              teamId: "T0001",
+              teamName: "Acme",
+              userId: owner,
+            }),
+            integrations,
+          ),
+        );
+        answersItsTransaction(
+          yield* expectTopicsFire(
+            writeSlackDefaultRepository(workspaceId, "acme/relay"),
+            integrations,
+          ),
+        );
+        yield* writeSlackChannelRepository(workspaceId, "C0001", "acme/api");
+        answersItsTransaction(
+          yield* expectTopicsFire(
+            writeSlackChannelRepository(workspaceId, "C0001", null),
+            integrations,
+          ),
         );
       }).pipe(Effect.provide(plugin.database));
     }),

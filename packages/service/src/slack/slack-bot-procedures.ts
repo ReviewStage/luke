@@ -23,7 +23,11 @@
  *   default repository.
  *
  * The read answers an owner or admin the team's channels as Slack lists
- * them, each with its default repository; a member is answered none.
+ * them, each with its default repository; a member is answered none. A
+ * connect, a disconnect, and a repository named or forgotten answer the
+ * transaction their row was written in beside the bot, which a desktop
+ * holding the workspace's integrations live waits for
+ * (`workspaceIntegrationsLive`); a write that wrote no row answers none.
  *
  * A workspace the account is not in is not found, whatever it asked. The
  * bearer is resolved before the body is read, by the middleware on the
@@ -124,6 +128,14 @@ const workspaceSlackBot = Effect.fn("web/workspaceSlackBot")(function* (
   };
 });
 
+/** The bot as it then stands, with the transaction a write committed its row in, where it wrote one. */
+function withTxid(slackBot: WorkspaceSlackBot, txid: Option.Option<string>): WorkspaceSlackBot {
+  return Option.match(txid, {
+    onNone: () => slackBot,
+    onSome: (id) => ({ ...slackBot, txid: id }),
+  });
+}
+
 /** The repository named, as GitHub spells it, where the workspace reaches it; null clears. */
 const reachedRepository = Effect.fn("web/slackBotRepository")(function* (
   workspaceId: string,
@@ -172,7 +184,7 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
         ),
         Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
       );
-      yield* hostedStoreOrUnavailable(
+      const txid = yield* hostedStoreOrUnavailable(
         linkSlackInstallation({
           organizationId: workspace.id,
           teamId: team.id,
@@ -180,13 +192,13 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
           userId: context.userId,
         }),
       );
-      return yield* workspaceSlackBot(workspace, context.userId);
+      return withTxid(yield* workspaceSlackBot(workspace, context.userId), Option.some(txid));
     }),
     /** The bot disconnected from the workspace; disconnecting one already gone answers it as it stands. */
     disconnect: resource.disconnect.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
-      yield* hostedStoreOrUnavailable(deleteSlackInstallation(workspace.id));
-      return yield* workspaceSlackBot(workspace, context.userId);
+      const txid = yield* hostedStoreOrUnavailable(deleteSlackInstallation(workspace.id));
+      return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
     /** The member's own Slack notifications turned on or off, which holds in every workspace. */
     notifications: resource.notifications.effect(function* ({ input, context }) {
@@ -198,8 +210,10 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
     repository: resource.repository.effect(function* ({ input, context }) {
       const { workspace } = yield* connectedWorkspace(context.userId, input.workspaceId);
       const repository = yield* reachedRepository(workspace.id, context.userId, input.repository);
-      yield* hostedStoreOrUnavailable(writeSlackDefaultRepository(workspace.id, repository));
-      return yield* workspaceSlackBot(workspace, context.userId);
+      const txid = yield* hostedStoreOrUnavailable(
+        writeSlackDefaultRepository(workspace.id, repository),
+      );
+      return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
     /** The bot put in a public channel or taken out of one, and the channel's default repository named or cleared; unavailable where Slack refused. */
     channel: resource.channel.effect(function* ({ input, context }) {
@@ -208,19 +222,22 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
       if (input.member === false) {
         if (!(yield* bot.leave(channelId))) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
         // A channel the bot left keeps no repository, so a later join starts from the workspace's.
-        yield* hostedStoreOrUnavailable(writeSlackChannelRepository(workspace.id, channelId, null));
-        return yield* workspaceSlackBot(workspace, context.userId);
+        const txid = yield* hostedStoreOrUnavailable(
+          writeSlackChannelRepository(workspace.id, channelId, null),
+        );
+        return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
       }
       if (input.member === true && !(yield* bot.join(channelId))) {
         return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       }
+      let txid = Option.none<string>();
       if (input.repository !== undefined) {
         const repository = yield* reachedRepository(workspace.id, context.userId, input.repository);
-        yield* hostedStoreOrUnavailable(
+        txid = yield* hostedStoreOrUnavailable(
           writeSlackChannelRepository(workspace.id, channelId, repository),
         );
       }
-      return yield* workspaceSlackBot(workspace, context.userId);
+      return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
   };
 }

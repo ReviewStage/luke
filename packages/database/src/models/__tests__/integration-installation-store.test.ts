@@ -122,9 +122,9 @@ it.layer(getTestDB())("the integration installation store", (it) => {
           userId: owner,
         });
 
-        assert.equal(deleted, true);
-        assert.equal(deletedAgain, false, "only an active installation is marked deleted");
-        assert.equal(unknown, false);
+        assert.ok(Option.isSome(deleted));
+        assert.ok(Option.isNone(deletedAgain), "only an active installation is marked deleted");
+        assert.ok(Option.isNone(unknown));
         assert.ok(Option.isNone(afterUninstall));
         assert.deepEqual(
           listed.map((row) => row.status),
@@ -158,9 +158,9 @@ it.layer(getTestDB())("the integration installation store", (it) => {
         const standing = yield* activeInstallationWorkspace(SENTRY, externalId);
         const fromTheirs = yield* markIntegrationInstallationDeleted(SENTRY, externalId, theirs);
 
-        assert.equal(fromOurs, false);
+        assert.ok(Option.isNone(fromOurs));
         assert.deepEqual(standing, Option.some(theirs));
-        assert.equal(fromTheirs, true);
+        assert.ok(Option.isSome(fromTheirs));
         assert.ok(Option.isNone(yield* activeInstallationWorkspace(SENTRY, externalId)));
       }),
   );

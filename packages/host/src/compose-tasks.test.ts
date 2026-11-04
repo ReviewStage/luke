@@ -10,6 +10,7 @@ import {
   type TaskStarted,
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallResult,
 } from "@repo/features";
 import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
@@ -30,6 +31,8 @@ import {
   type PlanCommentThread,
 } from "@repo/features/plan-comment-wire";
 import type { PlanEditAnswer } from "@repo/features/plan-edit";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -73,6 +76,7 @@ import {
   type TasksView,
   tasksViewSchema,
 } from "@repo/features/tasks-view";
+import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_TYPE,
@@ -274,6 +278,9 @@ interface FakeService extends TasksClient {
       { readonly failure: typeof WORKSPACE_CALL_FAILURE.NOT_FOUND }
     >;
     readonly invitations: PolledLive<"invitations">;
+    readonly integrations: PolledLive<
+      "sentryInstallations" | "slackInstallation" | "slackChannelRepositories"
+    >;
     readonly list: PolledLive<
       "plans" | "agents" | "issues",
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
@@ -287,6 +294,12 @@ interface FakeService extends TasksClient {
   photos: Record<string, { contentType: WorkspacePhotoType; base64: string }>;
   /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
+  /** What a Sentry disconnect answers, once `integrationsGate` lets it. */
+  sentryAnswer: WorkspaceCallResult<WorkspaceSentry>;
+  /** What the Slack bot's read and every Slack write answer, once `integrationsGate` lets a write. */
+  slackBotAnswer: WorkspaceCallResult<WorkspaceSlackBot>;
+  /** What a Sentry or Slack write waits on before the service answers it; nothing from the start. */
+  integrationsGate: Effect.Effect<void>;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
   connection: GitHubConnection | undefined;
   /** Where a GitHub connection read waits before answering what it read, so a test can hold one on the wire. */
@@ -473,6 +486,9 @@ function fakeService(tasks: Task[]): FakeService {
       { readonly failure: typeof WORKSPACE_CALL_FAILURE.NOT_FOUND }
     >(["members", "former"]),
     invitations: polledLive<"invitations">(["invitations"]),
+    integrations: polledLive<
+      "sentryInstallations" | "slackInstallation" | "slackChannelRepositories"
+    >(["sentryInstallations", "slackInstallation", "slackChannelRepositories"]),
     list: polledLive<
       "plans" | "agents" | "issues",
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
@@ -657,6 +673,9 @@ function fakeService(tasks: Task[]): FakeService {
     invitations: {},
     photos: {},
     notPermitted: false,
+    sentryAnswer: UNANSWERED_WORKSPACE,
+    slackBotAnswer: UNANSWERED_WORKSPACE,
+    integrationsGate: Effect.void,
     connection: { connected: false, login: null },
     githubGate: Effect.void,
     connectPages: [],
@@ -802,15 +821,39 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }),
-      sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      // A workspace's integrations are read for a member alone, as the service reads them, with both integrations held by the deployment; a poll is not counted among the reads.
+      integrationsLive: (workspaceId, _userId, poll, after) =>
+        Effect.suspend((): ReturnType<TasksClient["workspaces"]["integrationsLive"]> => {
+          if (poll !== true) service.reads.push(`integrations-live:${workspaceId}`);
+          return Effect.map(asked(live.integrations, poll, after), (answer) => ({
+            ok: true as const,
+            answer: { ...answer, sentryConfigured: true, slackConfigured: true },
+          }));
+        }),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      slackBot: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      sentryDisconnect: (workspaceId, installationId) =>
+        Effect.suspend(() => {
+          service.reads.push(`sentry-disconnect:${workspaceId}:${installationId}`);
+          return Effect.as(service.integrationsGate, service.sentryAnswer);
+        }),
+      slackBot: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`slack-bot:${workspaceId}`);
+          return service.slackBotAnswer;
+        }),
       slackBotConnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      slackBotDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotDisconnect: (workspaceId) =>
+        Effect.suspend(() => {
+          service.reads.push(`slack-bot-disconnect:${workspaceId}`);
+          return Effect.as(service.integrationsGate, service.slackBotAnswer);
+        }),
       slackBotNotifications: () => Effect.succeed(UNANSWERED_WORKSPACE),
       slackBotRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      slackBotChannel: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotChannel: (channel) =>
+        Effect.suspend(() => {
+          service.reads.push(`slack-bot-channel:${channel.workspaceId}:${channel.channelId}`);
+          return Effect.as(service.integrationsGate, service.slackBotAnswer);
+        }),
       photo: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`photo:${workspaceId}`);
@@ -3124,6 +3167,178 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(heldMembers(pushed).at(-1), left);
+    }),
+);
+
+/** An active Sentry installation of the workspace, as the integrations read delivers it. */
+const SENTRY_ROW = { installationId: "sentry-installation-1", account: "acme", createdAt: 1 };
+
+/** The workspace's Slack bot, connected, as the integrations read delivers it. */
+const SLACK_ROW = {
+  workspaceId: ACME.id,
+  teamId: "T0001",
+  teamName: "Acme",
+  defaultRepository: null,
+};
+
+/** A channel of the workspace's Slack team, the bot not in it, as Slack lists it. */
+const ENG_CHANNEL = { id: "C0001", name: "eng", private: false, member: false };
+
+/** What the host last told the windows of `workspaceId`'s integrations; none where it told none. */
+function integrationsShown(
+  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  workspaceId: string,
+): WorkspaceIntegrations | undefined {
+  const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED);
+  const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
+  // SAFETY: the host tells its held integrations whole as this event's payload, each workspace's read under its id.
+  return (isRecord(read) ? read.rows : undefined) as WorkspaceIntegrations | undefined;
+}
+
+/** What the host last told the windows of `workspaceId`'s Slack channels; none where it told none. */
+function channelsShown(
+  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  workspaceId: string,
+): readonly SlackListedChannel[] | undefined {
+  const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.SLACK_CHANNELS_CHANGED);
+  const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
+  // SAFETY: the host tells its held channels whole as this event's payload, each workspace's list under its id.
+  return (isRecord(read) ? read.rows : undefined) as readonly SlackListedChannel[] | undefined;
+}
+
+it.effect(
+  "a Sentry disconnect draws its installation gone before the service answers and keeps it gone through a poll from before it until the read carries its transaction, and a refused Slack disconnect puts the bot back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
+      const { call, pushed, settled } = yield* subject(service);
+      const integrations = service.live.integrations;
+      const installations = () =>
+        integrationsShown(pushed, ACME.id)?.sentry.installations.map((one) => one.installationId);
+      const team = () => integrationsShown(pushed, ACME.id)?.slack.team?.name;
+      yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      // The read is woken by a write once, so it hands a wait for the next.
+      integrations.set(
+        {
+          sentryInstallations: [SENTRY_ROW],
+          slackInstallation: [SLACK_ROW],
+          slackChannelRepositories: [],
+        },
+        ["9100"],
+      );
+      yield* nextPoll(settled);
+      assert.deepEqual(installations(), [SENTRY_ROW.installationId]);
+      assert.equal(team(), "Acme");
+
+      const answering = yield* Deferred.make<void>();
+      service.integrationsGate = Deferred.await(answering);
+      service.sentryAnswer = {
+        ok: true,
+        answer: { configured: true, installations: [], txid: "9200" },
+      };
+      const disconnecting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
+          workspaceId: ACME.id,
+          installationId: SENTRY_ROW.installationId,
+        }),
+      );
+      yield* settled;
+      assert.equal(disconnecting.pollUnsafe(), undefined, "no answer while the service is asked");
+      assert.deepEqual(installations(), [], "gone before the service answers");
+
+      yield* Deferred.succeed(answering, undefined);
+      assert.deepEqual(yield* Fiber.join(disconnecting), {
+        sentry: { configured: true, installations: [] },
+      });
+      // The read answers once more from before the disconnect, which still stands over it.
+      integrations.set({ sentryInstallations: [SENTRY_ROW] });
+      yield* nextPoll(settled);
+      assert.deepEqual(installations(), []);
+      integrations.set({ sentryInstallations: [] }, ["9200"]);
+      yield* nextPoll(settled);
+      assert.deepEqual(installations(), []);
+
+      const refusing = yield* Deferred.make<void>();
+      service.integrationsGate = Deferred.await(refusing);
+      service.slackBotAnswer = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const refused = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, { workspaceId: ACME.id }),
+      );
+      yield* settled;
+      assert.equal(team(), undefined, "gone before the service answers");
+      yield* Deferred.succeed(refusing, undefined);
+      assert.deepEqual(yield* Fiber.join(refused), {
+        failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+      });
+      yield* settled;
+      assert.equal(team(), "Acme", "put back once the service refused it");
+    }),
+);
+
+it.effect(
+  "Slack's channels are asked for an owner's window as it holds them and again as the bot is connected or disconnected, a channel joined lays the channels its answer carries, and a window holding the integrations alone asks for none",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
+      const { call, pushed, settled } = yield* subject(service);
+      const integrations = service.live.integrations;
+      const channelAsks = () =>
+        service.reads.filter((read) => read === `slack-bot:${ACME.id}`).length;
+      const connected = {
+        configured: true,
+        team: { id: SLACK_ROW.teamId, name: SLACK_ROW.teamName },
+        channels: [ENG_CHANNEL],
+      };
+      service.slackBotAnswer = { ok: true, answer: { configured: true } };
+      // A member's window holds the workspace's integrations and never its channels.
+      yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      integrations.set({
+        sentryInstallations: [],
+        slackInstallation: [],
+        slackChannelRepositories: [],
+      });
+      yield* nextPoll(settled);
+      service.slackBotAnswer = { ok: true, answer: connected };
+      integrations.set({ slackInstallation: [SLACK_ROW] });
+      yield* nextPoll(settled);
+      assert.equal(channelAsks(), 0, "no window holds the channels");
+
+      // An owner's window holds them, and they are asked as it does.
+      yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      assert.equal(channelAsks(), 1);
+      assert.deepEqual(channelsShown(pushed, ACME.id), [ENG_CHANNEL]);
+
+      // A teammate's disconnect, then a connect, each move the bot's row, and each asks again.
+      service.slackBotAnswer = { ok: true, answer: { configured: true } };
+      integrations.set({ slackInstallation: [] });
+      yield* nextPoll(settled);
+      assert.equal(channelAsks(), 2);
+      assert.deepEqual(channelsShown(pushed, ACME.id), []);
+      service.slackBotAnswer = { ok: true, answer: connected };
+      integrations.set({ slackInstallation: [SLACK_ROW] });
+      yield* nextPoll(settled);
+      assert.equal(channelAsks(), 3);
+      assert.deepEqual(channelsShown(pushed, ACME.id), [ENG_CHANNEL]);
+
+      // A channel joined lays the channels its answer carries, the bot in it.
+      const joined = { ...ENG_CHANNEL, member: true };
+      service.slackBotAnswer = { ok: true, answer: { ...connected, channels: [joined] } };
+      yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, {
+        workspaceId: ACME.id,
+        channelId: ENG_CHANNEL.id,
+        member: true,
+      });
+      yield* settled;
+      assert.deepEqual(channelsShown(pushed, ACME.id), [joined]);
+      assert.deepEqual(
+        service.reads.filter((read) => read.startsWith("slack-bot-channel:")),
+        [`slack-bot-channel:${ACME.id}:${ENG_CHANNEL.id}`],
+      );
     }),
 );
 

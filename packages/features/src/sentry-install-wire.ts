@@ -55,11 +55,15 @@ export type WorkspaceSentryInstallation = typeof workspaceSentryInstallationSche
 /**
  * A workspace's Sentry as it stands: whether this deployment holds our
  * Sentry integration, without which nothing is offered, and the workspace's
- * active installations, the first linked first.
+ * active installations, the first linked first. A disconnect that marked an
+ * installation uninstalled carries the transaction it was marked in, which
+ * a desktop holding the workspace's integrations live waits for; a read,
+ * and a disconnect that marked none, carry none.
  */
 export const workspaceSentryAnswerSchema = EffectSchema.Struct({
   configured: EffectSchema.Boolean,
   installations: EffectSchema.Array(workspaceSentryInstallationSchema),
+  txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type WorkspaceSentry = typeof workspaceSentryAnswerSchema.Type;

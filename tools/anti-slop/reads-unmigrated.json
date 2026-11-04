@@ -1,10 +1,9 @@
 {
   "packages/panel/src/act-stream.ts": "P22: the hold's door",
-  "packages/panel/src/desktop/automations-page.tsx": "P14: Sentry and Slack bot settings",
   "packages/panel/src/desktop/use-run-choices.ts": "P28: the default agent and models",
   "packages/panel/src/settings/agents-page.tsx": "P28: default agent, models",
   "packages/panel/src/settings/chapters-model-section.tsx": "P28: chapters model",
-  "packages/panel/src/settings/workspace-page.tsx": "P14: Sentry and Slack bot settings",
+  "packages/panel/src/settings/workspace-page.tsx": "P28: Slack notifications",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P28: transcript, models and default"
 }

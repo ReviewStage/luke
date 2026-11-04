@@ -54,6 +54,14 @@ export const TOPIC = {
    */
   MEMORY: "memory",
   /**
+   * A workspace's own integrations, its Sentry installations and its Slack
+   * bot, by organization id: narrower than the workspace's own topic, so an
+   * install finished in the browser wakes the open integration reads of that
+   * workspace and never its members' task lists, and a plan saved never
+   * wakes them.
+   */
+  WORKSPACE_INTEGRATIONS: "workspace-integrations",
+  /**
    * A workspace's skills, by organization id: narrower than the workspace's
    * own topic, so a skill installed or toggled wakes the open skills reads of
    * that workspace and never its members' task lists.

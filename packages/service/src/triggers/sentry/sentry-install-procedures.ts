@@ -15,7 +15,9 @@
  * - `POST /api/workspaces/sentry/disconnect` takes an owner or admin, and
  *   marks one of the workspace's installations deleted, so its deliveries
  *   fire nothing; the integration stays installed on Sentry until the
- *   organization uninstalls it there.
+ *   organization uninstalls it there. It answers the transaction it was
+ *   marked in beside the installations, which a desktop holding the
+ *   workspace's integrations live waits for (`workspaceIntegrationsLive`).
  *
  * A workspace the account is not in is not found, whatever it asked. The
  * bearer is resolved before the body is read, by the middleware on the
@@ -136,14 +138,18 @@ export function sentryInstallProcedures(seams: SentryInstallProcedureSeams) {
       if (!before.installations.some((one) => one.installationId === input.installationId)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       }
-      yield* hostedStoreOrUnavailable(
+      const marked = yield* hostedStoreOrUnavailable(
         markIntegrationInstallationDeleted(
           TRIGGER_PROVIDER.SENTRY,
           input.installationId,
           workspace.id,
         ),
       );
-      return yield* workspaceSentry(workspace.id);
+      const sentry = yield* workspaceSentry(workspace.id);
+      return Option.match(marked, {
+        onNone: () => sentry,
+        onSome: (txid) => ({ ...sentry, txid }),
+      });
     }),
   };
 }

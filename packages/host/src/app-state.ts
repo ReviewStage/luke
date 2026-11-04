@@ -41,8 +41,10 @@ import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
+import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
@@ -496,6 +498,18 @@ export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
  */
 export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
 
+/**
+ * Each workspace's own integrations the host holds for the windows
+ * (`workspace-integrations-follow.ts`): its Sentry installations and its
+ * Slack bot, those a window draws and the few drawn lately, by the
+ * workspace's id, each as its read stands with every write drawn over it
+ * until the read carries it.
+ */
+export type AppWorkspaceIntegrations = AppHeldById<WorkspaceIntegrations>;
+
+/** The channels of each workspace's Slack team the host holds for an owner's or an admin's windows, by the workspace's id, as Slack last listed them. */
+export type AppSlackChannels = AppHeldById<readonly SlackListedChannel[]>;
+
 /** One workspace's photo as the host last fetched it: the version the workspaces named it by, and its bytes as a `data:` URL. */
 export interface AppWorkspacePhoto {
   version: string;
@@ -659,6 +673,8 @@ export interface AppHostReads {
   [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: WorkspaceIntegrations;
+  [LIVE_READ.SLACK_CHANNELS]: readonly SlackListedChannel[];
   [LIVE_READ.TOKEN_REPOSITORIES]: readonly WorkspaceTokenRepository[];
   [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhoto;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
@@ -807,6 +823,10 @@ export interface AppState {
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
+  /** Each workspace's own integrations the windows draw, held while Settings › Workspace or an automation's editor draws them and a while after: what its Sentry and Slack bot rows read. */
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: AppWorkspaceIntegrations;
+  /** Each workspace's Slack channels an owner's or an admin's window draws, held while Settings › Workspace lists them and a while after: what its Slack channel rows read. */
+  [LIVE_READ.SLACK_CHANNELS]: AppSlackChannels;
   /** Each workspace's token repositories the windows draw, held while a window draws them and a while after: what Settings › Workspace and onboarding's GitHub step list. */
   [LIVE_READ.TOKEN_REPOSITORIES]: AppTokenRepositories;
   /** Each listed workspace's photo, held for the signed-in session and fetched again as its version moves: what every workspace's tile draws. */
@@ -997,6 +1017,9 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  // Note that a workspace's integrations cross whole, since a write moves one of a few rows.
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.SLACK_CHANNELS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.TOKEN_REPOSITORIES]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_PHOTOS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },

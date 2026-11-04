@@ -20,7 +20,6 @@ import {
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import {
-  WORKSPACE_SENTRY_QUERY,
   type WorkspaceSentry,
   workspaceSentryDisconnectRequestSchema,
   workspaceSentryRequestSchema,
@@ -45,6 +44,7 @@ import {
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "./workspace-call.js";
+import type { WorkspaceIntegrationsLiveAnswer } from "./workspace-integrations-live.js";
 import {
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
@@ -261,6 +261,33 @@ export class HostedWorkspaceClient {
     );
   }
 
+  /**
+   * A workspace's Sentry installations and Slack bot sealed for following
+   * over Neon Realtime, to a member of it and for the account named, with
+   * whether this deployment holds each integration, or with their rows
+   * inline where `poll` asks for them; signed out where the session is
+   * another account's, or why not.
+   */
+  integrationsLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspaceIntegrationsLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(
+        this.#hosted.live.workspaceIntegrations,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
   /** A workspace created with the name given, the account its owner; a name the service would refuse by shape never travels. */
   create(
     name: string,
@@ -343,22 +370,6 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hosted.workspaceGithub.disconnect, admitted),
       (answer) => answer.workspace,
-    );
-  }
-
-  /** Whether the deployment holds our Sentry integration, and the workspace's active installations of it. */
-  sentryInstallations(
-    workspaceId: string,
-  ): Effect.Effect<WorkspaceCallResult<WorkspaceSentry>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(workspaceSentryRequestSchema)({ workspaceId }),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceSentry.installations, {
-        [WORKSPACE_SENTRY_QUERY.WORKSPACE_ID]: admitted.workspaceId,
-      }),
-      (answer) => answer,
     );
   }
 

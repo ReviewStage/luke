@@ -39,7 +39,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters and parts, the account's beats, hosts, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, and invitations, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters and parts, the account's beats, hosts, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -63,6 +63,8 @@ type HoldKind =
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW;
@@ -91,6 +93,8 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
   TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
+  WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW,
+  WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW,
   TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
@@ -133,10 +137,12 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * an agent's or a server's tools, the outside MCP clients, a workspace's
  * memories, skills, or repositories, a link's standing, the automations'
  * lists and histories, a plan's or a page's comments, a task's plan
- * history, the run that started an agent, a workspace's people or token
- * repositories, or a task's plan, is held quietly, and an automations', the
- * integrations', the memories', the skills', or a repository list's Try
- * again taken, since what the hold reads reaches the window on app state.
+ * history, the run that started an agent, a workspace's people, token
+ * repositories, own integrations, or Slack channels, or a task's plan, is
+ * held quietly, and an automations', the integrations', the memories', the
+ * skills', a repository list's, a workspace's integrations', or its Slack
+ * channels' Try again taken, since what the hold reads reaches the window
+ * on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
@@ -148,6 +154,8 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
     [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: () => Promise.resolve(),
     [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_RETRY]: () => Promise.resolve(),
     [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY]: () => Promise.resolve(),
+    [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY]: () => Promise.resolve(),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY]: () => Promise.resolve(),
     ...procedures,
   };
   answeringPort = answered;

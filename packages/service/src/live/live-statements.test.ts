@@ -5,10 +5,15 @@ import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-ta
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { hostsLiveStatement } from "@repo/database/models/host-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
+import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
+import {
+  slackChannelRepositoriesLiveStatement,
+  slackInstallationLiveStatement,
+} from "@repo/database/models/slack-installation-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import { workspacesLiveStatements } from "@repo/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
@@ -111,6 +116,15 @@ function liveStatements() {
     ),
     "installed-skills.skills": Option.getOrThrow(
       installedSkillsLiveStatement(USER_ID, randomUUID()),
+    ),
+    "workspace-integrations.sentryInstallations": Option.getOrThrow(
+      sentryInstallationsLiveStatement(USER_ID, randomUUID()),
+    ),
+    "workspace-integrations.slackInstallation": Option.getOrThrow(
+      slackInstallationLiveStatement(USER_ID, randomUUID()),
+    ),
+    "workspace-integrations.slackChannelRepositories": Option.getOrThrow(
+      slackChannelRepositoriesLiveStatement(USER_ID, randomUUID()),
     ),
     "hosts.hosts": Option.getOrThrow(hostsLiveStatement(USER_ID)),
     ...Object.fromEntries(

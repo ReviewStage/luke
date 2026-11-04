@@ -14,6 +14,7 @@ import {
 } from "@repo/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@repo/features/automation-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { momentText } from "@repo/features/time-format";
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -69,11 +70,11 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
-import { useWorkspaceRead } from "../settings/use-workspace-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
@@ -920,17 +921,18 @@ const SENTRY_UNREAD: SentryOffer = {
 };
 
 /**
- * A listed workspace's Sentry as its automations' editor offers it: read as
- * the page opens and each time the window comes forward, which is how the
- * developer comes back from installing on Sentry, and installed in the
+ * A listed workspace's Sentry as its automations' editor offers it: held
+ * by the host while the editor shows, followed live on the service, so an
+ * install finished in the browser draws as it lands, and installed in the
  * browser, a refusal (only owners and admins install) said at its row.
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const { read: answer, retry } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspaceId);
+  const integrations = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspaceId);
   // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
-  const read = answer !== undefined && "answer" in answer ? answer.answer : undefined;
-  const failed = answer !== undefined && "failed" in answer;
+  const read = integrations.rows?.sentry;
+  const failed = read === undefined && integrations.status === HOST_READ_STATUS.FAILED;
+  const retry = integrations.retry;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const onInstall = () => {
@@ -944,10 +946,10 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
   return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
-/** Whether a listed workspace's Slack bot is connected, read as Sentry is; not while the read is out or failed. */
+/** Whether a listed workspace's Slack bot is connected, held as Sentry is; not while the read is out or failed. */
 function useWorkspaceSlackBot(workspaceId: string): boolean {
-  const { read } = useWorkspaceRead(ACT_KIND.WORKSPACE_SLACK_BOT_READ, workspaceId);
-  return read !== undefined && "answer" in read && read.answer.team !== undefined;
+  const integrations = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspaceId);
+  return integrations.rows?.slack.team !== undefined;
 }
 
 /** The editor over a listed workspace, offered that workspace's Sentry and Slack bot. */

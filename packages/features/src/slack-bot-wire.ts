@@ -76,6 +76,9 @@ export const slackBotChannelSchema = EffectSchema.Struct({
 
 export type SlackBotChannel = typeof slackBotChannelSchema.Type;
 
+/** One channel of the team as the host holds Slack's list of them for Settings: its repository is the workspace's held read's (`workspace-integrations-live.ts`), so it carries none. */
+export type SlackListedChannel = Omit<SlackBotChannel, "repository">;
+
 /**
  * A workspace's Slack bot as it stands: whether this deployment holds the
  * bot, without which nothing is offered, the team it is connected to,
@@ -83,7 +86,10 @@ export type SlackBotChannel = typeof slackBotChannelSchema.Type;
  * that wait on them, which is on until they turn it off; absent from a
  * service before the switch. Where it is connected, the workspace's default
  * repository for Slack starts, absent while none is named, and, to an owner
- * or admin, the team's channels, absent where Slack could not be read.
+ * or admin, the team's channels, absent where Slack could not be read. A
+ * write that changed the bot's rows carries the transaction it committed
+ * in, which a desktop holding the workspace's integrations live waits for;
+ * a read, and a write that changed none, carry none.
  */
 export const workspaceSlackBotAnswerSchema = EffectSchema.Struct({
   configured: EffectSchema.Boolean,
@@ -91,6 +97,7 @@ export const workspaceSlackBotAnswerSchema = EffectSchema.Struct({
   notifications: EffectSchema.optionalKey(EffectSchema.Boolean),
   defaultRepository: EffectSchema.optionalKey(EffectSchema.String),
   channels: EffectSchema.optionalKey(EffectSchema.Array(slackBotChannelSchema)),
+  txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type WorkspaceSlackBot = typeof workspaceSlackBotAnswerSchema.Type;

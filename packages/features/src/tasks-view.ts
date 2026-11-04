@@ -827,7 +827,7 @@ export const tasksWorkspacePhotoSetParamsSchema = workspacePhotoSetRequestSchema
 
 export type TasksWorkspacePhotoSetParams = typeof tasksWorkspacePhotoSetParamsSchema.Type;
 
-/** One workspace, as the window names it to read its invitations, or to connect or disconnect its GitHub organization. */
+/** One workspace, as the window names it to read its invitations, to connect or disconnect its GitHub organization, or to hold its own integrations or its Slack channels. */
 export const tasksWorkspaceParamsSchema = workspaceGithubRequestSchema;
 
 export type TasksWorkspaceParams = typeof tasksWorkspaceParamsSchema.Type;
