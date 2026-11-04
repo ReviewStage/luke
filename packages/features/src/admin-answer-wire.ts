@@ -31,6 +31,7 @@ import type { GitHubInstallationStatus } from "./github-installation-wire.js";
 import type { IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
+import type { WorkspaceRole } from "./workspace-wire.js";
 
 /* ----- The Overview's metrics (`@repo/service/admin/admin-metrics`) ----- */
 
@@ -593,8 +594,8 @@ export interface AdminWorkspaceList {
 /** One member of a workspace: their account, their role in it, and when they joined it. */
 export interface AdminWorkspaceMember {
   account: AdminWorkspaceOwner;
-  /** `WORKSPACE_ROLE`: owner, admin, or member. */
-  role: string;
+  /** The highest role the member holds (`roleOf`). */
+  role: WorkspaceRole;
   /** When they joined, in epoch milliseconds. */
   joinedAt: number;
 }

@@ -22,15 +22,18 @@ export interface ExternalPlace {
   href: string;
 }
 
-/** One page outside the dashboard, its provider's mark leading its words. */
+/** One page outside the dashboard, its provider's mark leading its words inside the one link. */
 export function ExternalLink({ place }: { place: ExternalPlace }): React.JSX.Element {
   return (
-    <Inline gap={GAP.ICON} wrap={false}>
-      <ProviderMark provider={place.provider} size={PROVIDER_MARK_SIZE.CAPTION} />
-      <TextLink href={place.href} variant={TEXT_VARIANT.CAPTION} external newTab>
-        {place.label}
-      </TextLink>
-    </Inline>
+    <TextLink
+      href={place.href}
+      variant={TEXT_VARIANT.CAPTION}
+      lead={<ProviderMark provider={place.provider} size={PROVIDER_MARK_SIZE.CAPTION} />}
+      external
+      newTab
+    >
+      {place.label}
+    </TextLink>
   );
 }
 
