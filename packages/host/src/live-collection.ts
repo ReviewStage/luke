@@ -160,12 +160,6 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
   /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
   readonly confirmGone: (key: Key) => void;
-  /**
-   * Takes a write's own answer of a row it made in the read's place, as
-   * `confirmRow` takes a change. A row the read answered already is left as
-   * it answered it, which is as new.
-   */
-  readonly confirmNew: (row: Row) => void;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
@@ -184,10 +178,6 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       const next = new Map(held());
       next.delete(key);
       take(next);
-    },
-    confirmNew: (row) => {
-      const key = options.getKey(row);
-      if (!held().has(key)) take(new Map(held()).set(key, row));
     },
   }));
 }

@@ -26,8 +26,8 @@ const ROW = fieldKind((row: Row) => row.id);
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
-/** A read stood on the pool in a scope of its own, which the test closes to let it go, counting how often the pool draws it again. */
-function standing(pool: EntityPool) {
+/** A read stood on the pool in a scope of its own, which the test closes to let it go, counting how often the pool draws it again; one that `adopts` shows every row a write makes. */
+function standing(pool: EntityPool, adopts = false) {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
     const drawn = { times: 0 };
@@ -37,9 +37,31 @@ function standing(pool: EntityPool) {
           drawn.times += 1;
         }),
         confirmation: () => undefined,
+        ...(adopts ? { adopts: () => true } : undefined),
       }),
     );
     return { rows, drawn, letGo: Scope.close(scope, Exit.void) };
+  });
+}
+
+/** A write that makes `row` and stands until the service answers, which it never does. */
+const MAKES: WriteDeclaration<Row, FieldChange<Row>, Row, void> = {
+  kind: ROW,
+  keys: (row) => [row.id],
+  change: (row) => ({ made: row }),
+  send: () => Effect.never,
+};
+
+/** What a read that adopts shows of `row`'s key while a write making it stands: the pool's own row where it still holds one, else the one made. */
+function shownOver(pool: EntityPool, row: Row) {
+  return Effect.gen(function* () {
+    const probe = yield* standing(pool, true);
+    const write = yield* Effect.forkChild(pool.write(MAKES, row));
+    yield* settled;
+    const shown = probe.rows.rows();
+    yield* Fiber.interrupt(write);
+    yield* probe.letGo;
+    return shown;
   });
 }
 
@@ -57,17 +79,13 @@ it.effect("two reads hold one row, which leaves the pool only once the last lets
     assert.equal(inbox.drawn.times, 1, "the other read is drawn again");
 
     yield* feed.letGo;
-    const later = yield* standing(pool);
-    yield* later.rows.confirmNew({ id: "1", name: "Made", runs: 0 });
-    assert.deepEqual(later.rows.rows(), [{ id: "1", name: "Triage issues", runs: 1 }]);
+    const made = { id: "1", name: "Made", runs: 0 };
+    assert.deepEqual(yield* shownOver(pool, made), [{ id: "1", name: "Triage issues", runs: 1 }]);
 
     yield* inbox.letGo;
-    yield* later.letGo;
-    const next = yield* standing(pool);
-    yield* next.rows.confirmNew({ id: "1", name: "Made", runs: 0 });
     assert.deepEqual(
-      next.rows.rows(),
-      [{ id: "1", name: "Made", runs: 0 }],
+      yield* shownOver(pool, made),
+      [made],
       "nothing of a row every read let go is left",
     );
   }).pipe(Effect.scoped),

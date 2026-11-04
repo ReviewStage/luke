@@ -109,13 +109,6 @@ export interface HeldRows<Row extends object> {
    * read draws itself.
    */
   readonly answer: (rows: readonly Row[]) => Effect.Effect<void>;
-  /**
-   * Takes a row the service answered made in the read's place, where the
-   * read can confirm no write yet: held from now as if the read had answered
-   * it. A row the read holds already is left as it answered it, which is as
-   * new.
-   */
-  readonly confirmNew: (row: Row) => Effect.Effect<void>;
   /** Whether the read shows `key`'s row. */
   readonly holds: (key: string) => boolean;
   /** The rows the read shows, in the order it answered them and then those it adopted, each as the writes standing draw it. */
@@ -346,15 +339,6 @@ function stood<Row extends object, Change>(
           const next = new Map([...rows.synced.held(), ...keyed]);
           for (const key of was) if (!heldByAny(rows.reads, key)) next.delete(key);
           return takenAndDrawn(rows, next, holding);
-        }),
-      confirmNew: (row) =>
-        Effect.sync(() => {
-          const key = rows.kind.key(row);
-          if (holding.held.has(key)) return;
-          holding.order = [...holding.order, key];
-          holding.held = new Set([...holding.held, key]);
-          const synced = rows.synced.held();
-          if (!synced.has(key)) rows.synced.take(new Map(synced).set(key, row));
         }),
       holds: (key) => shows(holding, key),
       rows: () => shown(holding).flatMap((key) => drawnRow(rows, key) ?? []),

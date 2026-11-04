@@ -2635,8 +2635,20 @@ export function useTasksTab(input: {
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
+    // Note that the host opens a start's task at once, so a bare one pressed on Home's own
+    // composer, whose page the task's took the place of, says its refusal in a toast, as no
+    // card stands to say it.
+    const saidInToast = handed === undefined && !stays && newTaskAsk === undefined;
     // Note that a refusal keeps what refused it, so the box that shows it reports that in its place.
     const refusedWith = (note: ComposerNote): ComposerNote => {
+      if (saidInToast) {
+        toast({
+          words: note.text,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_START, cause: note.cause },
+        });
+      }
       if (handed !== undefined) {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.

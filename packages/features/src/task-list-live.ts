@@ -95,8 +95,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   updatedAt: countedNumber,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
-  /** The task's number in its workspace, from 1, as the list says it. */
-  number: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  /** The task's number in its workspace, from 1, as the list says it; absent from a row the host draws for a task it started before the service numbered it. */
+  number: EffectSchema.optionalKey(EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1))),
   /** Who made the task for its owner (`PLAN_ACTOR`); absent from a service before it was sent, read as made by hand. */
   creatorActor: EffectSchema.optionalKey(
     EffectSchema.Literals([PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
@@ -379,7 +379,7 @@ function taskSummaryOf(
       : { completedAt: row.completedAt }),
     status: row.status,
     priority: row.priority,
-    number: row.number,
+    ...(row.number === undefined ? undefined : { number: row.number }),
     ...(row.assigneeId === null || row.assigneeName === null
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
