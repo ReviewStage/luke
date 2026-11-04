@@ -253,9 +253,6 @@ const UNDECLARED_ROW_WRITES = [
   // New tasks and automations, declared by W2.
   GATEWAY_METHOD.TASKS_START,
   GATEWAY_METHOD.AUTOMATIONS_CREATE,
-  // The sidebar's writes, declared by W3's second PR.
-  GATEWAY_METHOD.TASKS_PIN_REPOSITORY,
-  GATEWAY_METHOD.TASKS_WRITE_SECTION,
   // Workspace, member, and invitation writes, declared by W5.
   GATEWAY_METHOD.WORKSPACES_RENAME,
   GATEWAY_METHOD.WORKSPACES_SLUG_SET,

@@ -209,7 +209,7 @@ import {
 import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
 import type { RunMode } from "./run-mode.js";
-import { sidebarCollections } from "./sidebar-collections.js";
+import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import type { WindowFocus } from "./window-focus.js";
@@ -1317,12 +1317,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const openSidebar = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
-      sidebarCollections({ draw: write, now: kernel.now, txWait: () => sidebarTxWait }),
+      sidebarCollections({
+        pool: dependencies.pool,
+        draw: write,
+        ownerId: dependencies.accountId,
+        txWait: () => sidebarTxWait,
+      }),
     );
     return { scope, collections };
   });
   let sidebar = yield* openSidebar;
   yield* Effect.addFinalizer(() => Scope.close(sidebar.scope, Exit.void));
+  /**
+   * The sidebar's writes, each service call under the serial lock and the
+   * transaction waited for outside it, so no task open, save, or read waits
+   * on the follow behind a pin or a drag.
+   */
+  const sidebarWritten = sidebarWrites({
+    gate,
+    pinRepository: (repository, pinned) => serial(served(client.pinRepository(repository, pinned))),
+    writeSection: (each) => serial(served(client.writeTaskSection(each))),
+    collections: () => sidebar.collections,
+  });
 
   /**
    * Follows the account's sidebar where nothing follows it yet
@@ -2505,41 +2521,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
       readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
     ),
-    // A pin is drawn at once and stands while the service writes it, kept
-    // once the followed sidebar has its transaction and taken back where the
-    // service refused it (`sidebar-collections.ts`). Note that the service is
-    // asked under the serial lock and the transaction waited for outside it,
-    // so no task open, save, or read waits on the follow behind a pin.
-    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPinRepositoryParamsSchema,
-          params,
-          "pinning a repository names it and whether it is pinned",
-        );
-        if (!gate()) return { changed: false };
-        const { repository, pinned } = read;
-        const changed = yield* sidebar.collections.pinRepository(
-          repository,
-          pinned,
-          serial(served(client.pinRepository(repository, pinned))),
-        );
-        return { changed };
-      }),
-    // A drag's or a menu's section writes are drawn and confirmed as a pin is, each written in turn.
-    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
-      Effect.gen(function* () {
-        const { writes } = yield* readParams(
-          tasksWriteSectionParamsSchema,
-          params,
-          "a change to the sections names what it changes",
-        );
-        if (!gate()) return { changed: false };
-        const changed = yield* sidebar.collections.writeSections(writes, (each) =>
-          serial(served(client.writeTaskSection(each))),
-        );
-        return { changed };
-      }),
+    // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
+    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.pinned,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksPinRepositoryParamsSchema,
+            params,
+            "pinning a repository names it and whether it is pinned",
+          ),
+          (read) => ({ ...read, at: kernel.now() }),
+        ),
+    ),
+    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.sectionsWritten,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksWriteSectionParamsSchema,
+            params,
+            "a change to the sections names what it changes",
+          ),
+          (read) => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() }),
+        ),
+    ),
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile
     // shows on the next opening.

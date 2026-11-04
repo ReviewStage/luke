@@ -1,29 +1,25 @@
 /**
- * sidebar-collections.ts -- the account's sidebar held in TanStack DB collections: its sections, the tasks and agents in them, and its pinned repositories, fed by the sidebar's follow, drawn in the held reads' order, and changed by a pin or a section write the moment it is asked.
+ * sidebar-collections.ts -- the account's sidebar as rows of the sync engine's pool: its sections and what stands in them as one row, and each pinned repository as one, fed by the sidebar's follow, drawn in the held reads' order, and changed by a write the moment it is asked.
  *
- * Each part of the sidebar's read is a collection of its own
- * (`live-collection.ts`), drawn through a live query in the order the held
- * reads kept: sections, and the rows in them, oldest first, and pins newest
- * pinned first, each by id among one instant. The sidebar is drawn whole,
- * once for a whole answer of the follow however many parts it moved, once
- * as a write is drawn, and once as it settles, so a window never draws a
- * section without its rows.
+ * The sections and the tasks and agents in them are one kind of the pool
+ * (`SECTIONS`), one row under the account's own id, because the read
+ * answers them whole under one owner and a drag rewrites them as one write
+ * (`@repo/features/task-section-writes`); each pinned repository is a row of
+ * its own (`REPOSITORY_PIN`). The sidebar stands on both for the signed-in
+ * session and is drawn whole, in the order the held reads kept: sections,
+ * and the rows in them, oldest first, and pins newest pinned first, each by
+ * id among one instant. It is drawn once for a whole answer of the follow
+ * however many parts it moved, and once as a write is drawn or settles, so
+ * a window never draws a section without its rows.
  *
- * A pin, or a drag's or a menu's section writes, is drawn at once, as the
- * service will keep it (`@repo/features/task-section-writes`), and stands
- * while it is written: kept once the followed sidebar has its transaction,
- * and taken back where the service refused it. Where the follow hands no
- * wait yet, as before Sync first woke it, the service's own answer is
- * taken in the read's place. Either lands with the drop of what was drawn,
- * so nothing flickers back between the two. A drag's writes go to the
- * service one after another, and after every drag's asked before it, since
- * each was drawn over the ones before; one refused takes the drag back
- * onto what the service kept of the rest.
- *
- * Note that a write's wait settles once the follow has handed on the answer
- * carrying its transaction (`live-follow.ts`), whose reader is woken before
- * the writer, so the answer is in its collection, held behind the write,
- * before the write settles.
+ * A pin, or a drag's or a menu's section writes, is a write the pool draws
+ * at once (`compose-tasks.ts` declares them), standing until the followed
+ * sidebar carries its transaction, or taken back where the service refused
+ * it; where the follow hands no wait yet, as before Sync first woke it, the
+ * service's own answer is taken in the read's place. Every drag stands on
+ * the one row of sections, so the pool sends drags in the order they were
+ * asked. A drag the service refused part of lands on what the service kept
+ * of the rest before what it drew is taken back (`keep`).
  */
 
 import type { SidebarRead, SidebarRows } from "@repo/features/sidebar-live";
@@ -37,107 +33,109 @@ import type {
 } from "@repo/features/task-section-wire";
 import { applySectionWrite } from "@repo/features/task-section-writes";
 import type { RepositoryPin, RepositoryPinsWritten } from "@repo/features/task-wire";
-import { KEPT_BY_SCOPE, scopedCollection } from "@repo/sync";
-import { createLiveQueryCollection } from "@tanstack/db";
-import { Data, Deferred, Effect, type Scope } from "effect";
-import { answeredCollection, drawRows, optimistically, rowsOf } from "./live-collection.js";
+import type { TasksPinRepositoryParams, TasksWriteSectionParams } from "@repo/features/tasks-view";
+import {
+  type Confirmation,
+  type EntityKind,
+  type EntityPool,
+  type FieldChange,
+  fieldKind,
+  type HeldRows,
+  ROW_GONE,
+  type WriteDeclaration,
+} from "@repo/sync";
+import { Effect, Equal, type Scope } from "effect";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
-/** How an id breaks a tie between two rows of one instant: by code unit, as the held reads compared them. */
-const BY_CODE_UNIT = { direction: "asc", stringSort: "lexical" } as const;
+/** The account's sections and the rows in them as the pool holds them: one row, under the account's own id. */
+export interface SectionsRow extends TaskSections {
+  readonly ownerId: string;
+}
 
-/** A write the service did not answer, which takes back what it drew. */
-class Unwritten extends Data.TaggedError("Unwritten") {}
+/** A change to the account's sections: what it leaves of them as they are drawn now. */
+export type SectionsChange = (sections: TaskSections) => TaskSections;
+
+/**
+ * The account's sections as the pool holds them, by the account's id, a
+ * change drawn over the row whole. Note that a change that leaves the
+ * sections as they stand leaves the row alone, so a reader holds the very
+ * row.
+ */
+export const SECTIONS: EntityKind<SectionsRow, SectionsChange> = {
+  key: (row) => row.ownerId,
+  drawn: (change, row) => {
+    if (row === undefined) return undefined;
+    const drawn: SectionsRow = { ...change(row), ownerId: row.ownerId };
+    return Equal.equals(drawn, row) ? undefined : drawn;
+  },
+};
+
+/** A pinned repository as the pool holds it, by its full name. */
+export const REPOSITORY_PIN = fieldKind((pin: RepositoryPin) => pin.repository);
+
+/** The sections as `writes` leave them, made at `at`, each drawn over the one before. */
+function sectionsAfter(writes: readonly TaskSectionWrite[], at: number): SectionsChange {
+  return (sections) =>
+    writes.reduce<TaskSections>((held, write) => applySectionWrite(held, write, at), sections);
+}
+
+/** No sections, as the sidebar draws before its follow first answers. */
+const NO_SECTIONS: TaskSections = { sections: [], entries: [], agentEntries: [] };
+
+/** Two ids of one instant in the order the held reads kept them: by code unit. */
+function byCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** The sections and the rows in them oldest first, each by id among one instant. */
+function sectionsInOrder({ sections, entries, agentEntries }: TaskSections): TaskSections {
+  return {
+    sections: sections.toSorted(
+      (a: TaskSection, b) => a.createdAt - b.createdAt || byCodeUnit(a.id, b.id),
+    ),
+    entries: entries.toSorted(
+      (a: TaskSectionEntry, b) => a.addedAt - b.addedAt || byCodeUnit(a.taskId, b.taskId),
+    ),
+    agentEntries: agentEntries.toSorted(
+      (a: AgentSectionEntry, b) => a.addedAt - b.addedAt || byCodeUnit(a.agentId, b.agentId),
+    ),
+  };
+}
+
+/** The pins newest pinned first, each by name among one instant. */
+function pinsInOrder(pins: readonly RepositoryPin[]): readonly RepositoryPin[] {
+  return pins.toSorted((a, b) => b.pinnedAt - a.pinnedAt || byCodeUnit(a.repository, b.repository));
+}
 
 export interface SidebarDependencies {
+  /** The pool the sidebar's rows stand in. */
+  readonly pool: EntityPool;
   /** Draws the sidebar as it now stands. */
   readonly draw: (read: SidebarRead) => void;
-  /** Now, by the host's clock, which a pin or a section made here is stamped with. */
-  readonly now: () => number;
+  /** The account signed in now, whose sections the follow answers; none while nobody is. */
+  readonly ownerId: () => string | undefined;
   /** The followed sidebar's wait for a write's transaction; none while the follow hands none. */
   readonly txWait: () => TxWait | undefined;
 }
 
-/** The account's sidebar in collections, for as long as its scope stands. */
+/** The account's sidebar standing in the pool, for as long as its scope stands. */
 export interface SidebarCollections {
   /** Takes one answer of the sidebar's follow, every part of it, and draws it once. */
-  readonly answer: (rows: SidebarRows) => void;
+  readonly answer: (rows: SidebarRows) => Effect.Effect<void>;
   /**
-   * A repository pinned or unpinned, drawn at once and standing while
-   * `written` writes it, answering whether it was kept.
+   * Lands what the service kept of a drag it refused part of, before what
+   * the drag drew is taken back: once the followed sidebar carries its
+   * transaction, or taken in the read's place where it hands no wait.
    */
-  readonly pinRepository: (
-    repository: string,
-    pinned: boolean,
-    written: Effect.Effect<RepositoryPinsWritten | undefined>,
-  ) => Effect.Effect<boolean>;
-  /**
-   * A drag's or a menu's section writes, drawn at once over every write
-   * before them and standing while `written` writes each in turn, answering
-   * whether they were kept.
-   */
-  readonly writeSections: (
-    writes: readonly TaskSectionWrite[],
-    written: (write: TaskSectionWrite) => Effect.Effect<TaskSectionsWritten | undefined>,
-  ) => Effect.Effect<boolean>;
+  readonly keep: (txid: string | undefined, kept: TaskSections) => Effect.Effect<void>;
 }
 
-/** The account's sidebar, empty until its follow first answers or a write is drawn. */
+/** The account's sidebar, empty until its follow first answers or a pin is drawn. */
 export function sidebarCollections(
   dependencies: SidebarDependencies,
 ): Effect.Effect<SidebarCollections, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const sections = yield* answeredCollection({ getKey: (row: TaskSection) => row.id });
-    const entries = yield* answeredCollection({ getKey: (row: TaskSectionEntry) => row.taskId });
-    const agentEntries = yield* answeredCollection({
-      getKey: (row: AgentSectionEntry) => row.agentId,
-    });
-    const pins = yield* answeredCollection({ getKey: (row: RepositoryPin) => row.repository });
-    const sectionsInOrder = yield* scopedCollection(() =>
-      createLiveQueryCollection({
-        gcTime: KEPT_BY_SCOPE,
-        startSync: true,
-        query: (q) =>
-          q
-            .from({ section: sections.collection })
-            .orderBy(({ section }) => section.createdAt)
-            .orderBy(({ section }) => section.id, BY_CODE_UNIT),
-      }),
-    );
-    const entriesInOrder = yield* scopedCollection(() =>
-      createLiveQueryCollection({
-        gcTime: KEPT_BY_SCOPE,
-        startSync: true,
-        query: (q) =>
-          q
-            .from({ entry: entries.collection })
-            .orderBy(({ entry }) => entry.addedAt)
-            .orderBy(({ entry }) => entry.taskId, BY_CODE_UNIT),
-      }),
-    );
-    const agentEntriesInOrder = yield* scopedCollection(() =>
-      createLiveQueryCollection({
-        gcTime: KEPT_BY_SCOPE,
-        startSync: true,
-        query: (q) =>
-          q
-            .from({ entry: agentEntries.collection })
-            .orderBy(({ entry }) => entry.addedAt)
-            .orderBy(({ entry }) => entry.agentId, BY_CODE_UNIT),
-      }),
-    );
-    const pinsInOrder = yield* scopedCollection(() =>
-      createLiveQueryCollection({
-        gcTime: KEPT_BY_SCOPE,
-        startSync: true,
-        query: (q) =>
-          q
-            .from({ pin: pins.collection })
-            .orderBy(({ pin }) => pin.pinnedAt, "desc")
-            .orderBy(({ pin }) => pin.repository, BY_CODE_UNIT),
-      }),
-    );
-
+    const { pool } = dependencies;
     // Note that a write still standing once the scope closed draws nothing, since a sign-out closed it and its rows were the account's that left.
     let open = true;
     yield* Effect.addFinalizer(() =>
@@ -145,114 +143,157 @@ export function sidebarCollections(
         open = false;
       }),
     );
+    const confirmation = (): Confirmation | undefined => {
+      const wait = dependencies.txWait();
+      return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
+    };
+    const redraw = () => Effect.sync(() => drawn());
+    const sections: HeldRows<SectionsRow> = yield* pool.stand(SECTIONS, { redraw, confirmation });
+    // Note that every pin made is the sidebar's, since it holds every repository the account pinned.
+    const pins: HeldRows<RepositoryPin> = yield* pool.stand(REPOSITORY_PIN, {
+      redraw,
+      confirmation,
+      adopts: () => true,
+    });
 
     /** Draws the sidebar as it stands now, what every standing write drew among it. */
     const drawn = () => {
       if (!open) return;
+      const [held] = sections.rows();
       dependencies.draw({
-        taskSections: {
-          sections: rowsOf(sectionsInOrder),
-          entries: rowsOf(entriesInOrder),
-          agentEntries: rowsOf(agentEntriesInOrder),
-        },
-        repositoryPins: rowsOf(pinsInOrder),
+        taskSections: held === undefined ? NO_SECTIONS : sectionsInOrder(held),
+        repositoryPins: pinsInOrder(pins.rows()),
       });
     };
 
-    /**
-     * A write's work, answering whether it was kept: the sidebar drawn as
-     * the work begins, which shows what the write drew, and again once
-     * TanStack has kept or taken it back.
-     */
-    const kept = (draw: () => void, work: Effect.Effect<void, Unwritten>) =>
-      optimistically(draw, Effect.andThen(Effect.sync(drawn), work)).pipe(
-        Effect.as(true),
-        Effect.catchTag("Unwritten", () => Effect.succeed(false)),
-        Effect.ensuring(Effect.sync(drawn)),
-      );
-
-    /** Confirms a write on the followed sidebar where it hands a wait, or takes the service's answer in its place where it does not. */
-    const confirmed = (txid: string | undefined, answered: () => void) => {
-      const wait = dependencies.txWait();
-      return wait === undefined || txid === undefined
-        ? Effect.sync(answered)
-        : confirmWrite(wait, txid);
+    /** The sections answered, as the account's one row; none while nobody is signed in. */
+    const sectionsRows = (answered: TaskSections): readonly SectionsRow[] => {
+      const ownerId = dependencies.ownerId();
+      if (ownerId === undefined) return [];
+      const { sections: kept, entries, agentEntries } = answered;
+      return [{ ownerId, sections: kept, entries, agentEntries }];
     };
-
-    /** The newest drag's writes settling, which the next drag's writes wait on before they are written. */
-    let lastDrag: Deferred.Deferred<void> | undefined;
 
     return {
-      answer: (rows) => {
-        sections.answer(rows.sections);
-        entries.answer(rows.entries);
-        agentEntries.answer(rows.agentEntries);
-        pins.answer(rows.pins);
-        drawn();
-      },
-      pinRepository: (repository, pinned, written) =>
-        kept(
-          () => {
-            const shown = pins.collection.has(repository);
-            if (pinned && !shown)
-              pins.collection.insert({ repository, pinnedAt: dependencies.now() });
-            if (!pinned && shown) pins.collection.delete(repository);
-          },
-          Effect.gen(function* () {
-            const answered = yield* written;
-            if (answered === undefined) return yield* new Unwritten();
-            yield* confirmed(answered.txid, () => pins.answer(answered.pins));
-          }),
+      answer: (rows) =>
+        Effect.andThen(
+          Effect.andThen(sections.answer(sectionsRows(rows)), pins.answer(rows.pins)),
+          redraw(),
         ),
-      writeSections: (writes, written) =>
-        Effect.gen(function* () {
-          const before = lastDrag;
-          const settled = yield* Deferred.make<void>();
-          lastDrag = settled;
-          const draw = () => {
-            const now = dependencies.now();
-            const next = writes.reduce<TaskSections>(
-              (held, write) => applySectionWrite(held, write, now),
-              {
-                sections: rowsOf(sections.collection),
-                entries: rowsOf(entries.collection),
-                agentEntries: rowsOf(agentEntries.collection),
-              },
-            );
-            drawRows(sections.collection, next.sections);
-            drawRows(entries.collection, next.entries);
-            drawRows(agentEntries.collection, next.agentEntries);
-          };
-          // Note that a write the service refused does not stop the ones after it, since each
-          // stands alone on the service, and what the service kept is confirmed before the drag
-          // is taken back, so taking back what it drew lands on the service's word.
-          const work = Effect.gen(function* () {
-            if (before !== undefined) yield* Deferred.await(before);
-            let last: TaskSectionsWritten | undefined;
-            let txid: string | undefined;
-            let refused = false;
-            for (const write of writes) {
-              const answered = yield* written(write);
-              if (answered === undefined) refused = true;
-              else {
-                last = answered;
-                txid = answered.txid ?? txid;
-              }
-            }
-            if (last !== undefined) {
-              const kept = last;
-              yield* confirmed(txid, () => {
-                sections.answer(kept.sections);
-                entries.answer(kept.entries);
-                agentEntries.answer(kept.agentEntries);
-              });
-            }
-            if (refused) return yield* new Unwritten();
-          });
-          return yield* kept(draw, work).pipe(
-            Effect.ensuring(Deferred.succeed(settled, undefined)),
-          );
-        }),
+      keep: (txid, kept) => {
+        const wait = confirmation();
+        if (wait !== undefined && txid !== undefined) return wait(txid);
+        return Effect.andThen(sections.answer(sectionsRows(kept)), redraw());
+      },
     };
   });
+}
+
+/** A pin's write as it is asked: the repository, whether it is pinned, and the instant it was asked at, which a pin made here is stamped with. */
+export type RepositoryPinInput = TasksPinRepositoryParams & { readonly at: number };
+
+/** A drag's or a menu's section writes as they are asked: the writes as the service takes them, the account whose sections they change, and the instant they were asked at, which a section or an entry made here is stamped with. */
+export type SectionsInput = TasksWriteSectionParams & {
+  readonly ownerId: string | undefined;
+  readonly at: number;
+};
+
+/** What a write to the sidebar answers its caller: whether the service kept it. */
+type SidebarWritten = { readonly changed: boolean };
+
+/** The sidebar's writes, declared once for every session. */
+export interface SidebarWrites {
+  readonly pinned: WriteDeclaration<
+    RepositoryPin,
+    FieldChange<RepositoryPin>,
+    RepositoryPinInput,
+    SidebarWritten
+  >;
+  readonly sectionsWritten: WriteDeclaration<
+    SectionsRow,
+    SectionsChange,
+    SectionsInput,
+    SidebarWritten
+  >;
+}
+
+/** What the sidebar's writes are carried to the service through, and the sidebar standing now. */
+export interface SidebarWriteDependencies {
+  /** Whether the account gate stands open, so a write may reach the service. */
+  readonly gate: () => boolean;
+  readonly pinRepository: (
+    repository: string,
+    pinned: boolean,
+  ) => Effect.Effect<RepositoryPinsWritten | undefined>;
+  readonly writeSection: (
+    write: TaskSectionWrite,
+  ) => Effect.Effect<TaskSectionsWritten | undefined>;
+  /** The account's sidebar standing now, which a sign-out replaces. */
+  readonly collections: () => SidebarCollections;
+}
+
+/** A write refused, which takes back what it drew. */
+const REFUSED = { refused: { changed: false } } as const;
+
+/**
+ * The sidebar's writes: a repository pinned or unpinned, drawn at once, a
+ * pin stamped as it was asked; and a drag's or a menu's section writes,
+ * drawn at once over every drag before them as one write over the
+ * account's sections, so drags go to the service in the order asked. Each
+ * is kept once the followed sidebar carries it, where it hands no wait the
+ * service's answer taken in its place. Note that a section write the
+ * service refused does not stop the ones after it, since each stands alone
+ * on the service, and what the service kept lands before the drag is taken
+ * back (`keep`), so taking back what it drew lands on the service's word.
+ */
+export function sidebarWrites(dependencies: SidebarWriteDependencies): SidebarWrites {
+  const { gate } = dependencies;
+  return {
+    pinned: {
+      kind: REPOSITORY_PIN,
+      keys: ({ repository }) => [repository],
+      change: ({ repository, pinned, at }) =>
+        pinned ? { made: { repository, pinnedAt: at } } : () => ROW_GONE,
+      send: ({ repository, pinned }) =>
+        gate()
+          ? Effect.map(dependencies.pinRepository(repository, pinned), (answered) => {
+              if (answered === undefined) return REFUSED;
+              const kept = answered.pins.find((pin) => pin.repository === repository);
+              return {
+                answer: { changed: true },
+                txid: answered.txid,
+                taken: kept === undefined ? () => ROW_GONE : { made: kept },
+              };
+            })
+          : Effect.succeed(REFUSED),
+    },
+    sectionsWritten: {
+      kind: SECTIONS,
+      keys: ({ ownerId }) => (ownerId === undefined ? [] : [ownerId]),
+      change: ({ writes, at }) => sectionsAfter(writes, at),
+      send: ({ writes }) =>
+        gate()
+          ? Effect.gen(function* () {
+              let kept: TaskSections | undefined;
+              let txid: string | undefined;
+              let refused = false;
+              for (const write of writes) {
+                const answered = yield* dependencies.writeSection(write);
+                if (answered === undefined) refused = true;
+                else {
+                  const { txid: committed, ...sections } = answered;
+                  kept = sections;
+                  txid = committed ?? txid;
+                }
+              }
+              const last = kept;
+              if (!refused && last !== undefined) {
+                return { answer: { changed: true }, txid, taken: () => last };
+              }
+              if (last !== undefined) yield* dependencies.collections().keep(txid, last);
+              return REFUSED;
+            })
+          : Effect.succeed(REFUSED),
+    },
+  };
 }
