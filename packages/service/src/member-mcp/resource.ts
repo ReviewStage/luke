@@ -19,6 +19,7 @@
  */
 
 import type { OAuthResourceInput } from "@better-auth/oauth-provider";
+import { MCP_ACCESS_TOKEN_MINUTES } from "@repo/features/mcp-client-wire";
 import { OAUTH_SCOPE } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 
@@ -31,9 +32,9 @@ export const MEMBER_MCP_SCOPE = {
   OFFLINE_ACCESS: OAUTH_SCOPE.OFFLINE_ACCESS,
 } as const;
 
-/** How long a token for the server lives, in seconds. */
+/** How long a token for the server lives, in seconds; an access token as long as Settings tells a member a revoked client keeps one (`@repo/features/mcp-client-wire`). */
 export const MEMBER_MCP_TOKEN_TTL = {
-  ACCESS: 15 * 60,
+  ACCESS: MCP_ACCESS_TOKEN_MINUTES * 60,
   REFRESH: 30 * 24 * 60 * 60,
 } as const;
 

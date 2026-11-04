@@ -6,6 +6,7 @@ import {
   type BrowserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { AgentOrigin } from "@repo/features/agent-wire";
 import type {
   AutomationRunSummary,
   AutomationSummary,
@@ -14,6 +15,7 @@ import type {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
@@ -21,6 +23,7 @@ import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
+import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import type { MicrophoneRoute, MicrophoneStatus } from "@repo/settings/microphone";
@@ -276,6 +279,19 @@ export interface AppHostRead<Rows> {
 /** A read that has not answered yet, as every read stands as a session opens. */
 export const UNREAD: AppHostRead<never> = {};
 
+/** The run of an automation that started one agent, as the host's read of it stands: null for an agent no run started, once it answered. */
+type AppAgentOrigin = AppHostRead<AgentOrigin | null>;
+
+/**
+ * Each agent's origin the host holds for the windows (`compose-agents.ts`):
+ * those an agent's page chose, and the few let go lately, by the agent's
+ * id, each as its own read stands. One absent is held by nobody.
+ */
+export type AppAgentOrigins = Readonly<Record<string, AppAgentOrigin>>;
+
+/** No origin held, as the host stands before any window shows an agent's page and after the session ends. */
+export const NO_AGENT_ORIGINS: AppAgentOrigins = {};
+
 /** One value for each holder of inbox items, a plan or an agent, by its kind and then its id, never by a key built from both. */
 type ByInboxHolder<Value> = {
   readonly [Kind in InboxHolderKind]: Readonly<Record<string, Value>>;
@@ -386,9 +402,22 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/** One workspace's people, as the host's read of them stands: its members and who its work names but left, once it answered. */
+export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
+
+/**
+ * Each workspace's people the host holds for the windows
+ * (`workspace-members-read.ts`): those a window draws, and the few drawn
+ * lately, by the workspace's id, each as its own read stands. One absent is
+ * held by nobody.
+ */
+export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
+
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
+/** The outside MCP clients the account allowed, by the account, as the host's read of them stands. */
+export type AppMcpClients = Readonly<Record<string, AppHostRead<McpClientsAnswer>>>;
 /** Each integration server's tools the windows hold, by the server's name, as the host's read of them stands: its tools, or why it listed none. */
 export type AppIntegrationTools = Readonly<Record<string, AppHostRead<IntegrationToolsAnswer>>>;
 
@@ -449,6 +478,7 @@ export const NO_PLAN_COMMENTS: AppPlanComments = {
 
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
+  [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
@@ -458,7 +488,9 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
+  [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
@@ -549,6 +581,8 @@ export interface AppState {
   tasks: TasksView;
   agents: AppAgentsSlice;
   inbox: AppInboxSlice;
+  /** Each agent's origin the windows chose, held while an agent's page holds it and a while after: the run its page says started it. */
+  [LIVE_READ.AGENT_ORIGINS]: AppAgentOrigins;
   /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
@@ -567,8 +601,12 @@ export interface AppState {
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
+  [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
+  /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
+  [LIVE_READ.MCP_CLIENTS]: AppMcpClients;
   /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
   [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;
   /** Each workspace's runs the windows chose, by the workspace, newest fired first, held as the automations are: what the Runs tab and the sidebar's Automations row read. */
@@ -684,6 +722,7 @@ interface HostReadSliceEntry {
  * crosses only where it moved.
  */
 export const HOST_READ_SLICE = {
+  [LIVE_READ.AGENT_ORIGINS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INBOX_ITEMS]: {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.ROWS,
@@ -721,7 +760,9 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {
     keys: READ_KEYS.ONE,
     on: KEYS_ON.SLICE,

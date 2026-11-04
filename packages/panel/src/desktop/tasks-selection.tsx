@@ -30,6 +30,7 @@ import {
   useSectionDialogs,
 } from "./sidebar-sections.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
+import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
  * tasks-selection.tsx -- the tasks chosen together on a page of them, the Tasks page's List and Board and the sidebar alike, and what the selection bar and a chosen row's menu do to them all.
@@ -204,6 +205,10 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
   const sections = useSectionDialogs(tasks, tasks.shown);
   // The tasks Permanently delete was asked of, held as it asks, so a selection changed meanwhile deletes none it never named.
   const [doomed, setDoomed] = useState<readonly string[]>([]);
+  // Note that a refusal said once the tab went away is said in a toast, since the question went with it.
+  const heard = useRefusalHeard(doomed.length > 0 && tasks.shown, {
+    surface: FAILURE_SURFACE.TASK_DELETE,
+  });
   // Note that a refusal leaves only the tasks refused asked of, so Retry sends none already deleted.
   const deletion = useConfirmDialog(
     { subject: doomed.length > 0, surfaceOpen: tasks.shown },
@@ -217,11 +222,11 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
         return ACCEPTED;
       }
       setDoomed(refused);
-      // Note that the tasks deleted leave the selection now, rather than once the list stops drawing them.
-      setChosen(
-        (held) => new Set([...held].filter((id) => refused.includes(id) || !doomed.includes(id))),
+      // Note that the tasks refused are chosen again, since each left the selection as the host drew it gone, and the deleted stay out.
+      setChosen((held) => new Set([...[...held].filter((id) => !doomed.includes(id)), ...refused]));
+      return heard(
+        answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED,
       );
-      return answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED;
     },
     confirmFailure(FAILURE_SURFACE.TASK_DELETE),
   );

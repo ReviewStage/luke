@@ -18,6 +18,7 @@ import {
   type PortActPayload,
   type PortActResult,
   TASKS_ACT_KIND,
+  WORKSPACE_ACT_KIND,
 } from "@repo/host/contract";
 import type { WireBoundaryInput } from "@repo/wire";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
@@ -37,8 +38,9 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, a workspace's memories, the automations' lists and histories, and a plan's or a page's comments. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the outside MCP clients, a workspace's memories, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, and a workspace's people. */
 type HoldKind =
+  | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
@@ -46,13 +48,16 @@ type HoldKind =
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
   | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
+  | typeof INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
   | typeof ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
   | typeof ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
-  | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW;
+  | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW;
 
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
+  AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW,
   AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
   TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
   TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
@@ -60,10 +65,12 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW,
   AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW,
   INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW,
+  INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW,
   ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW,
   ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW,
   AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
+  WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
 ]);
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
@@ -99,9 +106,10 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
- * account's beats or provider keys, an agent's or a server's tools, a
- * workspace's memories, the automations' lists and histories, or a plan's
- * or a page's comments, is held quietly, and an automations' or the
+ * account's beats or provider keys, an agent's or a server's tools, the
+ * outside MCP clients, a workspace's memories, the automations' lists and
+ * histories, a plan's or a page's comments, the run that started an agent,
+ * or a workspace's people, is held quietly, and an automations' or the
  * memories' Try again taken, since what the hold reads reaches the window on
  * app state.
  */

@@ -1,5 +1,15 @@
 import { devBuildBadge } from "@repo/settings/dev-build";
-import { BUTTON_SIZE, BuildChip, COPY_LOOK, CopyButton, GAP, Inline } from "@repo/ui";
+import {
+  BUTTON_SIZE,
+  BuildChip,
+  COPY_FIELD_WIDTH,
+  COPY_LOOK,
+  CopyButton,
+  CopyField,
+  GAP,
+  Inline,
+  Stack,
+} from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -9,7 +19,8 @@ import { CatalogSection } from "../section";
  * lands and turns to the check, one the clipboard refuses and turns to the
  * alert, compact, one with nothing to copy, and the chip look that names
  * what it copies, a branch, and a development build's chip, led by its
- * color. The catalog's copy act is
+ * color; and a field that shows what it copies, at a control's width and
+ * across its row. The catalog's copy act is
  * the browser's own clipboard; an app hands in its shell's.
  */
 
@@ -63,6 +74,25 @@ function CopyButtons(): React.JSX.Element {
             copy={refuse}
           />
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="copy-field" title="A field that shows what it copies">
+        <Stack gap={GAP.CONTROL}>
+          <Inline gap={GAP.CONTROL}>
+            <CopyField
+              label="Server URL"
+              value="https://app.example.com/api/mcp"
+              what="URL"
+              copy={copyToClipboard}
+            />
+          </Inline>
+          <CopyField
+            label="Claude Code command"
+            value="claude mcp add --transport http example https://app.example.com/api/mcp"
+            what="command"
+            copy={copyToClipboard}
+            width={COPY_FIELD_WIDTH.FULL}
+          />
+        </Stack>
       </CatalogSection>
       <CatalogSection id="copy-button-build" title="A development build, led by its color">
         <Inline gap={GAP.CONTROL}>

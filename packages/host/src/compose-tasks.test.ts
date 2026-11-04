@@ -41,6 +41,7 @@ import {
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
   TASK_PRIORITY,
+  TASK_RELATION_KIND,
   TASK_SKILL_SOURCE,
   TASK_STATUS,
   type Task,
@@ -67,7 +68,6 @@ import {
 } from "@repo/features/tasks-view";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
-  type FormerMember,
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
@@ -135,6 +135,12 @@ interface FakeService extends TasksClient {
   liveListReads: number;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
+  /** What a delete's answer waits on, so a test can see what is drawn while it is out. */
+  deleteAnswered: Effect.Effect<void>;
+  /** Whether a relation's change is refused, as a service that did not answer refuses it. */
+  relationFails: boolean;
+  /** What a relation change's answer waits on, so a test can see what is drawn while it is out. */
+  relationAnswered: Effect.Effect<void>;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
@@ -235,7 +241,10 @@ interface FakeService extends TasksClient {
   readonly live: {
     readonly workspaces: PolledLive<"workspaces" | "installations">;
     readonly sidebar: PolledLive<"sections" | "entries" | "agentEntries" | "pins">;
-    readonly people: PolledLive<"members" | "former">;
+    readonly people: PolledLive<
+      "members" | "former",
+      { readonly failure: typeof WORKSPACE_CALL_FAILURE.NOT_FOUND }
+    >;
     readonly invitations: PolledLive<"invitations">;
     readonly list: PolledLive<
       "plans" | "agents" | "issues",
@@ -244,8 +253,6 @@ interface FakeService extends TasksClient {
   };
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
-  /** Who each workspace's work names but left, as the service answers beside its members. */
-  former: Record<string, FormerMember[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -379,7 +386,10 @@ function fakeService(tasks: Task[]): FakeService {
       ["sections", "entries", "agentEntries", "pins"],
       () => sidebarLiveRows(service.sections, service.pins),
     ),
-    people: polledLive<"members" | "former">(["members", "former"]),
+    people: polledLive<
+      "members" | "former",
+      { readonly failure: typeof WORKSPACE_CALL_FAILURE.NOT_FOUND }
+    >(["members", "former"]),
     invitations: polledLive<"invitations">(["invitations"]),
     list: polledLive<
       "plans" | "agents" | "issues",
@@ -450,6 +460,9 @@ function fakeService(tasks: Task[]): FakeService {
     tasklessAgents: [],
     liveListReads: 0,
     deleteFails: false,
+    deleteAnswered: Effect.void,
+    relationFails: false,
+    relationAnswered: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
@@ -547,7 +560,6 @@ function fakeService(tasks: Task[]): FakeService {
     renamedAgain: undefined,
     renameAnswered: Effect.void,
     members: {},
-    former: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -617,10 +629,11 @@ function fakeService(tasks: Task[]): FakeService {
           if (service.workspacesFail) return Effect.succeed(UNANSWERED_WORKSPACE);
           return service.members[workspaceId] === undefined
             ? Effect.succeed({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
-            : Effect.map(asked(live.people, poll, after), (answer) => ({
-                ok: true as const,
-                answer,
-              }));
+            : Effect.map(asked(live.people, poll, after), (answer) =>
+                "failure" in answer
+                  ? ({ ok: false, failure: answer.failure } as const)
+                  : ({ ok: true, answer } as const),
+              );
         }),
       // The workspaces as the store holds them, each poll held until they move; a poll is not counted among the reads.
       live: (_userId, poll, after) =>
@@ -704,17 +717,6 @@ function fakeService(tasks: Task[]): FakeService {
       slackBotNotifications: () => Effect.succeed(UNANSWERED_WORKSPACE),
       slackBotRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
       slackBotChannel: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      people: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`members:${workspaceId}`);
-          const members = service.members[workspaceId];
-          return members === undefined
-            ? UNANSWERED_WORKSPACE
-            : ({
-                ok: true,
-                answer: { members, former: service.former[workspaceId] ?? [] },
-              } as const);
-        }),
       photo: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`photo:${workspaceId}`);
@@ -752,7 +754,12 @@ function fakeService(tasks: Task[]): FakeService {
           if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
           const handedOver = (service.members[workspaceId] ?? []).map((member) => ({
             ...member,
-            role: member.userId === userId ? WORKSPACE_ROLE.OWNER : member.role,
+            role:
+              member.userId === userId
+                ? WORKSPACE_ROLE.OWNER
+                : member.role === WORKSPACE_ROLE.OWNER
+                  ? WORKSPACE_ROLE.ADMIN
+                  : member.role,
           }));
           service.members[workspaceId] = handedOver;
           service.memberships = service.memberships.map((each) =>
@@ -989,6 +996,7 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync((): TaskCallResult<TaskWritten, RelationCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        if (service.relationFails) return { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
         const moved = {
           ...found,
           blockedBy: (found.blockedBy ?? []).filter((id) => id !== otherId),
@@ -998,7 +1006,7 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? moved : candidate,
         );
         return { ok: true, answer: { task: moved } };
-      }),
+      }).pipe(Effect.tap(() => service.relationAnswered)),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
       Effect.sync(() => {
@@ -1050,7 +1058,7 @@ function fakeService(tasks: Task[]): FakeService {
         if (service.deleteFails) return undefined;
         service.tasks = service.tasks.filter((candidate) => candidate.id !== taskId);
         return {};
-      }),
+      }).pipe(Effect.tap(() => service.deleteAnswered)),
   };
   return service;
 }
@@ -2085,6 +2093,75 @@ it.effect("a block the service answered stands on the open task through the list
 );
 
 it.effect(
+  "a block turned around between two tasks draws on both at once, and a refusal takes both back",
+  () =>
+    Effect.gen(function* () {
+      const invites = {
+        ...task(INVITES, "Teammate invitations", "# Draft", 10),
+        blockedBy: [BILLING],
+      };
+      const service = fakeService([invites, task(BILLING, "Billing", "# Draft", 11)]);
+      const { call, last, settled, listed, openTask } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      service.live.list.set({
+        plans: service.tasks.map((each) => ({ ...rowOfTask(each), blocked: each.id === INVITES })),
+      });
+      yield* nextPoll(settled);
+      yield* openTask(INVITES);
+      const blocked = () =>
+        [INVITES, BILLING].map(
+          (id) => last()?.tasks.find((row) => row.id === id)?.blocked === true,
+        );
+      const answered = yield* Deferred.make<void>();
+      service.relationAnswered = Deferred.await(answered);
+      service.relationFails = true;
+
+      const turning = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
+          taskId: INVITES,
+          relation: {
+            taskId: BILLING,
+            from: TASK_RELATION_KIND.BLOCKED_BY,
+            to: TASK_RELATION_KIND.BLOCKS,
+          },
+        }),
+      );
+      yield* settled;
+      const drawn = blocked();
+      yield* Deferred.succeed(answered, undefined);
+
+      assert.deepEqual(yield* Fiber.join(turning), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(drawn, [false, true], "the block is drawn turned around while it is out");
+      assert.deepEqual(blocked(), [true, false]);
+    }),
+);
+
+it.effect("a delete asked draws its task gone before the service answers", () =>
+  Effect.gen(function* () {
+    const service = fakeService([
+      task(INVITES, "Teammate invitations", "# Draft", 10),
+      task(BILLING, "Billing", "# Draft", 11),
+    ]);
+    const { call, last, settled, listed } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    const answered = yield* Deferred.make<void>();
+    service.deleteAnswered = Deferred.await(answered);
+
+    const deleting = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_DELETE, { taskId: INVITES }),
+    );
+    yield* settled;
+    const drawn = last()?.tasks.map((row) => row.id);
+    yield* Deferred.succeed(answered, undefined);
+
+    assert.deepEqual(yield* Fiber.join(deleting), { deleted: true });
+    assert.deepEqual(drawn, [BILLING]);
+  }),
+);
+
+it.effect(
   "a parent the service answered stands on the open task and nests the list's row at once, through the list's next draw",
   () =>
     Effect.gen(function* () {
@@ -2521,92 +2598,136 @@ it.effect(
     }),
 );
 
+/** A member's row as the people's live read carries it: the plugin's role text, and no picture. */
+function memberRow(member: WorkspaceMember, role: string = member.role) {
+  return { userId: member.userId, name: member.name, email: member.email, role, image: null };
+}
+
+/** The account signed in under `subject`, a member of the workspace whose people a test holds. */
+const DANA: WorkspaceMember = {
+  userId: "user-dana",
+  name: "Dana Scully",
+  email: "dana@app.test",
+  role: WORKSPACE_ROLE.OWNER,
+};
+const ALAN: WorkspaceMember = {
+  userId: "user-alan",
+  name: "Alan Turing",
+  email: "alan@app.test",
+  role: WORKSPACE_ROLE.MEMBER,
+};
+const LEE = { userId: "user-lee", name: "Lee Park" };
+
+/** Each workspace's people the host told the windows, the latest last. */
+function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED ? [payload] : [],
+  );
+}
+
 it.effect(
-  "a members read carries who the workspace's work names but left, where the service names anyone",
+  "a role change, a removal, and a handover stand from their answers until the held read carries them, through a poll answered before them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
-      service.members[ACME.id] = [ADA];
-      const lee = { userId: "user-lee", name: "Lee Park" };
-      service.former[ACME.id] = [lee];
-      const { call } = yield* subject(service);
-
-      const people = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id });
-
-      assert.deepEqual(people, { members: [ADA], former: [lee] });
-    }),
-);
-
-it.effect(
-  "a workspace's members are read on the service with nothing else, and a removal reads nothing after it",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
-      service.members[ACME.id] = [ADA, GRACE];
-      const { call } = yield* subject(service);
-
-      const members = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id });
-      const remaining = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
-        workspaceId: ACME.id,
-        userId: GRACE.userId,
+      service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
+      service.members[ACME.id] = [DANA, GRACE, ALAN];
+      const { call, pushed, settled } = yield* subject(service);
+      const people = service.live.people;
+      const shown = () => heldMembers(pushed).at(-1);
+      const standing = (members: readonly WorkspaceMember[], former?: readonly unknown[]) => ({
+        [ACME.id]: { rows: { members, ...(former === undefined ? undefined : { former }) } },
       });
-
-      assert.deepEqual(members, { members: [ADA, GRACE] });
-      assert.deepEqual(remaining, { members: [ADA] });
-      assert.deepEqual(service.reads, [`members:${ACME.id}`, `remove:${ACME.id}:${GRACE.userId}`]);
-    }),
-);
-
-it.effect(
-  "a role changed and a handover read nothing after them, and the account's own role after a handover arrives over the follow",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      const owned = { ...ACME, role: WORKSPACE_ROLE.OWNER };
-      const owner = { ...ADA, role: WORKSPACE_ROLE.OWNER };
-      service.memberships = [PERSONAL, owned];
-      service.members[ACME.id] = [owner, GRACE];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
+      people.set({ members: [DANA, GRACE, ALAN].map((each) => memberRow(each)), former: [] });
+      yield* settled;
+      assert.deepEqual(shown(), standing([DANA, ALAN, GRACE]));
       const before = service.reads.length;
 
-      const changed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+      // A role change stands from its answer, through a poll read before it that lands after it.
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
         workspaceId: ACME.id,
         userId: GRACE.userId,
         role: WORKSPACE_ROLE.ADMIN,
       });
-      const roleAfterChange = last()?.workspaces.find((each) => each.id === ACME.id)?.role;
-      const handedOver = yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
+      const admin = { ...GRACE, role: WORKSPACE_ROLE.ADMIN };
+      assert.deepEqual(shown(), standing([DANA, admin, ALAN]));
+      const leeRow = { ...LEE, image: null };
+      people.set({ former: [leeRow] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([DANA, admin, ALAN], [LEE]));
+      // Note that the read's own role text may list several roles.
+      people.set({
+        members: [memberRow(DANA), memberRow(GRACE, "member,admin"), memberRow(ALAN)],
+      });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([DANA, admin, ALAN], [LEE]));
+      // Once the read carries it, the read alone stands.
+      people.set({ members: [DANA, GRACE, ALAN].map((each) => memberRow(each)) });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([DANA, ALAN, GRACE], [LEE]));
+
+      // A removal stands from its answer until the read no longer carries the member.
+      people.set({ members: [DANA, admin, ALAN].map((each) => memberRow(each)) });
+      yield* nextPoll(settled);
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+        workspaceId: ACME.id,
+        userId: ALAN.userId,
+      });
+      assert.deepEqual(shown(), standing([DANA, admin], [LEE]));
+      people.set({ former: [] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([DANA, admin]));
+      people.set({ members: [memberRow(DANA), memberRow(admin)] });
+      yield* nextPoll(settled);
+
+      // A handover stands as the heir's role and the account's own from its answer.
+      yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
         workspaceId: ACME.id,
         userId: GRACE.userId,
       });
-      yield* settled;
-      const toOwner = yield* Effect.exit(
-        call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
-          workspaceId: ACME.id,
-          userId: GRACE.userId,
-          role: WORKSPACE_ROLE.OWNER,
-        }),
-      );
+      const heir = { ...GRACE, role: WORKSPACE_ROLE.OWNER };
+      const handedOver = standing([heir, { ...DANA, role: WORKSPACE_ROLE.ADMIN }]);
+      assert.deepEqual(shown(), handedOver);
+      people.set({ members: [memberRow(DANA), memberRow(heir)] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), handedOver, "the account's own role is not carried yet");
+      people.set({ members: [memberRow(DANA, WORKSPACE_ROLE.ADMIN), memberRow(heir)] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), handedOver);
 
-      const admin = { ...GRACE, role: WORKSPACE_ROLE.ADMIN };
-      assert.deepEqual(changed, { members: [owner, admin] });
-      assert.equal(roleAfterChange, WORKSPACE_ROLE.OWNER);
-      assert.deepEqual(handedOver, {
-        members: [owner, { ...GRACE, role: WORKSPACE_ROLE.OWNER }],
-      });
-      assert.equal(
-        last()?.workspaces.find((each) => each.id === ACME.id)?.role,
-        WORKSPACE_ROLE.ADMIN,
-      );
-      assert.ok(Exit.isFailure(toOwner), "an owner's role is no role a change gives");
       assert.deepEqual(service.reads.slice(before), [
         `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        `remove:${ACME.id}:${ALAN.userId}`,
         `transfer:${ACME.id}:${GRACE.userId}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a leave draws the account gone from the workspace's people, and the read ending as the account no longer reaches it puts nothing back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [DANA, GRACE];
+      const { call, pushed, settled } = yield* subject(service);
+      const people = service.live.people;
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
+      yield* settled;
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const left = { [ACME.id]: { rows: { members: [GRACE] } } };
+      assert.deepEqual(heldMembers(pushed).at(-1), left);
+      people.refuse({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+      yield* settled;
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settled;
+
+      assert.deepEqual(heldMembers(pushed).at(-1), left);
     }),
 );
 
@@ -2976,10 +3097,7 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
       yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
       unanswered,
     );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id }),
-      unanswered,
-    );
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
         workspaceId: ACME.id,
@@ -3393,7 +3511,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last, listed, openTask } = yield* subject(fakeService([invites]));
+      const service = fakeService([invites]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, listed, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);
@@ -4310,91 +4430,96 @@ it.effect(
 );
 
 it.effect(
-  "a workspace's people are followed while a window follows them, each change told in the held read's order, and let go on unfollow or a sign-out",
+  "a workspace's people held for a window are laid on the app state in the held read's order, who left among them, read with nothing else, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [ADA];
-      const { call, events, tasks, settled } = yield* subject(service);
-      const people = () =>
-        events
-          .filter((event) => event.kind === GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED)
-          .map((event) => event.payload);
+      const { call, pushed, tasks, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
-      assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
-      const row = (member: typeof ADA) => ({
-        userId: member.userId,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-        image: null,
-      });
-      service.live.people.set({ members: [row(GRACE), row(ADA)], former: [] });
+      service.live.people.set({ members: [memberRow(GRACE), memberRow(ADA)], former: [] });
       yield* settled;
-      service.live.people.set({ former: [{ userId: "user-lee", name: "Lee Park", image: null }] });
+      service.live.people.set({ former: [{ ...LEE, image: null }] });
       yield* nextPoll(settled);
 
-      assert.deepEqual(people(), [
-        { workspaceId: ACME.id, view: { members: [ADA, GRACE] } },
-        {
-          workspaceId: ACME.id,
-          view: { members: [ADA, GRACE], former: [{ userId: "user-lee", name: "Lee Park" }] },
-        },
+      assert.deepEqual(heldMembers(pushed), [
+        { [ACME.id]: { rows: { members: [ADA, GRACE] } } },
+        { [ACME.id]: { rows: { members: [ADA, GRACE], former: [LEE] } } },
       ]);
-
-      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, { workspaceId: ACME.id });
-      yield* settled;
-      assert.equal(service.live.people.held(), 0, "unfollowed, its poll is let go");
-      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
-      yield* settled;
-      assert.equal(service.live.people.held(), 1, "followed again, its poll is held");
+      assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
       yield* tasks.reset;
       yield* settled;
       assert.equal(service.live.people.held(), 0, "a sign-out lets its poll go");
+      assert.deepEqual(heldMembers(pushed).at(-1), {});
     }),
 );
 
+it.effect("two holds and a remount read one workspace's people once", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, ACME];
+    service.members[ACME.id] = [ADA];
+    const { call, pushed, settled } = yield* subject(service);
+
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+    service.live.people.set({ members: [memberRow(ADA)], former: [] });
+    yield* nextPoll(settled);
+    // Let go, the people stay followed among those let go lately, so a surface drawn again reads nothing anew.
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+
+    assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
+    assert.equal(service.live.people.held(), 1);
+    assert.deepEqual(heldMembers(pushed), [{ [ACME.id]: { rows: { members: [ADA] } } }]);
+  }),
+);
+
 it.effect(
-  "a people read that fails for now is asked again without telling the window, so it keeps the people it holds",
+  "a people read that fails for now stands failed where it never answered, is asked again on its own, and Try again reads it at once",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.members[ACME.id] = [ADA];
       service.workspacesFail = true;
-      const { call, events, settled } = yield* subject(service);
+      const { call, pushed, settled } = yield* subject(service);
+      const seals = () => service.reads.filter((read) => read === `people-live:${ACME.id}`).length;
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
+      assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: { failed: true } });
       yield* TestClock.adjust(Duration.seconds(5));
       yield* settled;
+      assert.equal(seals(), 2, "the read is asked again");
 
-      assert.deepEqual(events, [], "no refusal reaches the window");
-      assert.ok(
-        service.reads.filter((read) => read === `people-live:${ACME.id}`).length > 1,
-        "the read is asked again",
-      );
+      service.workspacesFail = false;
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY, { workspaceId: ACME.id });
+      yield* settled;
+      assert.equal(seals(), 3, "Try again reads at once");
+      assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: {} });
+      service.live.people.set({ members: [memberRow(ADA)], former: [] });
+      yield* settled;
+      assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: { rows: { members: [ADA] } } });
     }),
 );
 
-it.effect("a workspace the account is not in is told not found once, and not asked again", () =>
+it.effect("a workspace the account is not in is told failed once, and not asked again", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call, events, settled } = yield* subject(service);
+    const { call, pushed, settled } = yield* subject(service);
 
-    yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
     yield* settled;
     yield* TestClock.adjust(Duration.minutes(1));
     yield* settled;
 
-    assert.deepEqual(events, [
-      {
-        kind: GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
-        payload: { workspaceId: ACME.id, view: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } },
-      },
-    ]);
+    assert.deepEqual(heldMembers(pushed), [{ [ACME.id]: { failed: true } }]);
     assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
   }),
 );

@@ -14,6 +14,7 @@ import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
@@ -54,6 +55,7 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
     "agent.pages": Option.getOrThrow(agentPagesLiveStatements(USER_ID, randomUUID())).pages,
+    "agent.origin": Option.getOrThrow(agentOriginLiveStatements(USER_ID, randomUUID())).origin,
     "task.browserTabs": Option.getOrThrow(
       browserTabsLiveStatement(USER_ID, { taskId: randomUUID() }),
     ),

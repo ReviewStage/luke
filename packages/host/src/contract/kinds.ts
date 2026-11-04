@@ -165,7 +165,17 @@ export const AGENT_ACT_KIND = {
   AGENTS_SHOWN: "agents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   AGENTS_SEEN: "agents.seen",
+  /** One agent as its own page reads it, by its id, read once where a press must know where the agent stands now, as the archive confirm asks whether a teammate's agent still works before it archives it; answered to the press, never on the document. */
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed while the
+   * window holds the stream open, and a while after among those let go
+   * lately: what it holds reaches the panel on app state
+   * (`LIVE_READ.AGENT_ORIGINS`), so the stream carries nothing.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** A held agent's origin, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -293,6 +303,17 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
+  /**
+   * The outside MCP clients the account allowed, with the server's address,
+   * held for the window while it holds the stream open: what they hold
+   * reaches the panel on app state (`LIVE_READ.MCP_CLIENTS`), so the stream
+   * carries nothing.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The held outside MCP clients read again at once, as Try again asks. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked under the Mac's session, answering the clients as they then stand, or that the revoke did not finish. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
 } as const;
 
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
@@ -529,14 +550,15 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
   WORKSPACE_SLACK_BOT_REPOSITORY: "workspace.slackBotRepository",
   WORKSPACE_SLACK_BOT_CHANNEL: "workspace.slackBotChannel",
-  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
-  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
-   * A workspace's people, followed while the window holds the stream open:
-   * its members and who its work names but left as they first stand, then
-   * each time they move, or why there are none.
+   * A workspace's people, its members and who its work names but left, held
+   * while the window holds the stream open; the stream carries nothing, and
+   * what they hold reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_MEMBERS`).
    */
-  WORKSPACE_PEOPLE: "workspace.people",
+  WORKSPACE_MEMBERS_FOLLOW: "workspace.membersFollow",
+  /** A held workspace's people read again at once, as Try again asks. */
+  WORKSPACE_MEMBERS_RETRY: "workspace.membersRetry",
   /**
    * A workspace's pending invitations, followed for an owner or an admin
    * while the window holds the stream open: as they first stand, then each
@@ -696,7 +718,9 @@ export const PORT_ACT_USE = {
   AGENTS_DELETE: ACT_USE.WRITE,
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
-  AGENTS_PAGE: ACT_USE.READ,
+  AGENTS_PAGE: ACT_USE.FETCH,
+  AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
+  AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
   AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
@@ -757,6 +781,9 @@ export const PORT_ACT_USE = {
   INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
   INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
+  MCP_CLIENTS_FOLLOW: ACT_USE.READ,
+  MCP_CLIENTS_RETRY: ACT_USE.READ,
+  MCP_CLIENTS_REVOKE: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
@@ -857,9 +884,8 @@ export const PORT_ACT_USE = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_REPOSITORY: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_CHANNEL: ACT_USE.WRITE,
-  WORKSPACE_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_FORMER_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_PEOPLE: ACT_USE.READ,
+  WORKSPACE_MEMBERS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_MEMBERS_RETRY: ACT_USE.READ,
   WORKSPACE_INVITATIONS: ACT_USE.READ,
   WORKSPACE_MEMBER_REMOVE: ACT_USE.WRITE,
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,

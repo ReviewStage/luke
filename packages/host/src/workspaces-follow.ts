@@ -3,18 +3,12 @@ import {
   sidebarLiveRowsSchema,
   sidebarRowsOfLive,
 } from "@repo/features/sidebar-live";
-import type {
-  TasksWorkspaceInvitationsAnswer,
-  TasksWorkspaceMembersAnswer,
-} from "@repo/features/tasks-view";
+import type { TasksWorkspaceInvitationsAnswer } from "@repo/features/tasks-view";
 import {
   type WorkspaceInvitationsLiveAnswer,
-  type WorkspaceMembersLiveAnswer,
   type WorkspacesLiveAnswer,
   workspaceInvitationsLiveRowsSchema,
   workspaceInvitationsOfLiveRows,
-  workspaceMembersLiveRowsSchema,
-  workspaceMembersOfLiveRows,
   workspacesLiveRowsSchema,
   workspacesOfLiveRows,
 } from "@repo/features/workspace-live";
@@ -29,7 +23,7 @@ import {
 } from "./live-follow.js";
 
 /**
- * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over the service's held poll.
+ * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's pending invitations, followed by the host over the service's held poll.
  *
  * The service answers each read's statements (`workspacesLiveStatements` in
  * the database's workspace store, `workspaceMembersLiveStatements` in the
@@ -75,14 +69,6 @@ export function workspacesMoves(
   first: WorkspacesLiveAnswer,
 ): Stream.Stream<readonly Workspace[], LiveBroken> {
   return liveMoves(dependencies, first, workspacesLiveRowsSchema, workspacesOfLiveRows);
-}
-
-/** One workspace's people each time their rows change, as the held read would answer them. */
-export function peopleMoves(
-  dependencies: LiveReadDependencies<WorkspaceMembersLiveAnswer>,
-  first: WorkspaceMembersLiveAnswer,
-): Stream.Stream<TasksWorkspaceMembersAnswer, LiveBroken> {
-  return liveMoves(dependencies, first, workspaceMembersLiveRowsSchema, workspaceMembersOfLiveRows);
 }
 
 /**

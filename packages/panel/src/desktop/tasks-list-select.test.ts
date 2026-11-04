@@ -23,6 +23,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -144,7 +145,8 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {

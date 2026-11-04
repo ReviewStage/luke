@@ -59,7 +59,12 @@ import {
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
+import {
+  agentsControl,
+  listedAgent,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "./testing/tasks-control.js";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
@@ -649,7 +654,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     activeTaskId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
     taskAgentPins: pinned ? [{ agentId: open.agent.id, taskId: open.plan.id, pinnedAt: 5 }] : [],
-    liveAgents: [open.agent],
+    liveAgents: [listedAgent(open.agent)],
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [pin.tab],

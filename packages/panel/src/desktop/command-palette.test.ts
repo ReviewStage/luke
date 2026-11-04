@@ -25,7 +25,6 @@ import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
-import type { PortActResult } from "@repo/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
@@ -58,13 +57,14 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
   handHostReads,
   handInboxItems,
+  handMembers,
   handState,
   holdAutomations,
 } from "../testing/app-state.js";
@@ -2034,7 +2034,7 @@ test("People lists the listed workspace's members as every people menu does, the
       role: WORKSPACE_ROLE.MEMBER,
     },
   ];
-  membersAnswer(() => Promise.resolve(members));
+  membersAnswer(members);
   const opened: string[] = [];
   const base = tasksControl();
   const sent = openPalette(
@@ -2043,6 +2043,11 @@ test("People lists the listed workspace's members as every people menu does, the
       workspace: { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
       personView: { ...base.personView, onOpen: (userId) => opened.push(userId) },
     }),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    AtomRegistry.make(),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -2080,12 +2085,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A window whose members read is answered on its act port by `members`, every other act refused. */
-function membersAnswer(
-  members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
-): void {
+/** A window whose workspace's people the host holds as `members` once held, every other act refused. */
+function membersAnswer(members: readonly WorkspaceMember[]): void {
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: members });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members } }));
 }
 
 const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
@@ -2106,7 +2110,8 @@ test("under All, a query nothing else matches says the repository's files are st
     ],
   });
   handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -2150,26 +2155,33 @@ test("People says the members are being read until they answer, and a refused re
     email: "charles@example.com",
     role: WORKSPACE_ROLE.MEMBER,
   };
-  let answers: { resolve: (members: readonly WorkspaceMember[]) => void; refuse: () => void }[] =
-    [];
-  membersAnswer(
-    () =>
-      new Promise((resolve, reject) => {
-        answers.push({ resolve, refuse: () => reject(refusedOnPort("No.")) });
-      }),
+  fakeAppBridge({});
+  const reads = handHostReads({});
+  fakeActPort({
+    // Note that Try again stands the read unread until the host reads it again, as the host does.
+    [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
+      reads.deliverMembers({ [workspaceId]: {} });
+      return Promise.resolve();
+    },
+  });
+  openPalette(
+    tasksControl({ me: "user-dean", workspace: ACME }),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    AtomRegistry.make(),
   );
-  openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
   chooseFilter("People");
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members");
 
-  await act(async () => answers.shift()?.refuse());
+  await act(async () => reads.deliverMembers({ [ACME.id]: { failed: true } }));
   await settle();
   const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
   assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
-  answers = [];
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
   );
@@ -2177,13 +2189,13 @@ test("People says the members are being read until they answer, and a refused re
   act(() => retry.click());
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members");
-  await act(async () => answers.shift()?.resolve([member]));
+  await act(async () => reads.deliverMembers({ [ACME.id]: { rows: { members: [member] } } }));
   await settle();
   assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
-  membersAnswer(() => Promise.resolve([]));
+  membersAnswer([]);
   openPalette(tasksControl({ workspace: ACME, listRead: false }));
   chooseFilter("Tasks");
   assert.equal(emptyLine(), "Reading your tasks");
@@ -2192,7 +2204,7 @@ test("Tasks says the account's tasks are being read before the list first answer
 
 test("Tasks says a refused list with a Retry that reads it again", () => {
   const retried: number[] = [];
-  membersAnswer(() => Promise.resolve([]));
+  membersAnswer([]);
   openPalette(
     tasksControl({
       workspace: ACME,

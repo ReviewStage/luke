@@ -1,5 +1,6 @@
 import type { GitHubRepository } from "@repo/features";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@repo/features/tasks-view";
@@ -36,7 +37,7 @@ import { failureShown } from "../failure-report.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
-import { useWorkspaceMembers } from "./use-workspace-members.js";
+import { useHostRead } from "../use-host-read.js";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -176,7 +177,7 @@ function AskOwners({
   workspaceName: string | undefined;
   ask: OwnerAsk;
 }): React.JSX.Element {
-  const members = useWorkspaceMembers(workspaceId === undefined ? undefined : { id: workspaceId });
+  const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId).rows?.members;
   const owners = (members ?? [])
     .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
     .map((each) => each.name);

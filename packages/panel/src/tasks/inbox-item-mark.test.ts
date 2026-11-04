@@ -12,6 +12,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { listedAgent } from "../testing/tasks-control.js";
 import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
 
@@ -56,7 +57,7 @@ test("an item an archived agent posted wears the harness that agent ran on, as t
         ...IDLE_TASKS_VIEW,
         tasks: [TASK],
         taskAgents: [
-          {
+          listedAgent({
             id: ARCHIVED,
             planId: TASK_ID,
             model: "openai/gpt-6.1-sol",
@@ -66,7 +67,7 @@ test("an item an archived agent posted wears the harness that agent ran on, as t
             status: AGENT_STATUS.COMPLETED,
             turnId: null,
             archivedAt: AT,
-          },
+          }),
         ],
       },
     },

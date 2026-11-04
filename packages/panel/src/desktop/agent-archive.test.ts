@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@repo/brand";
-import { ARCHIVE_DRAWN } from "@repo/features/agent-view";
 import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@repo/features/agent-wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -180,7 +179,6 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
   try {
     let answer: () => void = () => undefined;
     let unarchives = 0;
-    let drawn: string | undefined;
     const agents = agentsControl({
       archived: [
         {
@@ -195,9 +193,8 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
           archivedAt: 2,
         },
       ],
-      onArchive: (_id, _archived, when) => {
+      onArchive: () => {
         unarchives += 1;
-        drawn = when;
         return new Promise((resolve) => {
           answer = () => resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
         });
@@ -225,11 +222,6 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     assert.equal(ring(), true);
     act(() => unarchive.click());
     assert.equal(unarchives, 1, "a second press waits for the first");
-    assert.equal(
-      drawn,
-      ARCHIVE_DRAWN.ON_ANSWER,
-      "the row stays to show it, rather than leave at once",
-    );
     await act(async () => answer());
     assert.equal(unarchive.getAttribute("aria-label"), "Unarchive");
     assert.equal(ring(), false);

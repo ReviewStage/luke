@@ -22,6 +22,8 @@ import {
   startTask,
 } from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
@@ -72,6 +74,7 @@ import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -498,6 +501,52 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
+      }),
+  );
+
+  it.effect(
+    "an automation's agent's origin is answered polled to a member, with who asked for the run, not found for a stranger, and no row of the statement reaches one",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const workspaceId = yield* openWorkspace(dana);
+        yield* joinWorkspace(workspaceId, teammate);
+        const started = yield* createAgent(dana, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: "Triage the inbox.",
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          automationOrigin: {
+            name: "Daily triage",
+            firing: { kind: AUTOMATION_FIRING.MANUAL, userId: dana },
+            prompt: "Triage the inbox.",
+          },
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const agentId = Option.getOrThrow(started).agent.id;
+        const path = "/api/live/agent-origin";
+
+        const polled = yield* askTask({ bearer: teammate, taskId: agentId, path });
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(agentOriginLiveAnswerSchema)(polled.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(agentOriginOfLive(answer.queries.origin.rows ?? []), {
+          prompt: "Triage the inbox.",
+          runBy: { userId: dana, name: "Test User" },
+        });
+        assert.deepEqual(yield* askTask({ bearer: stranger, taskId: agentId, path }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        const statement = Option.getOrThrow(agentOriginLiveStatements(stranger, agentId)).origin;
+        const sql = yield* SqlClient.SqlClient;
+        assert.deepEqual(yield* sql.unsafe(statement.sql, [...statement.params]), []);
       }),
   );
 

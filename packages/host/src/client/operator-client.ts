@@ -84,6 +84,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onMacCommandAsksChanged((asks) => {
         state.update({ macCommands: { asks } });
       }),
+      gateway.host.onAgentOriginsChanged((held) => {
+        state.update({ [LIVE_READ.AGENT_ORIGINS]: held });
+      }),
       gateway.host.onInboxItemsChanged((read) => {
         state.update({ [LIVE_READ.INBOX_ITEMS]: read });
       }),
@@ -111,8 +114,14 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),
+      gateway.host.onWorkspaceMembersChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
+      }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
+      }),
+      gateway.host.onMcpClientsChanged((held) => {
+        state.update({ [LIVE_READ.MCP_CLIENTS]: held });
       }),
       gateway.host.onAutomationsChanged((held) => {
         state.update(held);

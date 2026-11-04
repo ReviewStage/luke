@@ -10,7 +10,8 @@
  * comments, its plan's own threads or with `&page=` one page's, as their
  * threads, entries, and files; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
- * statements its pages are read from; and the
+ * statements its pages are read from, and the run of an automation that
+ * started it, as one statement; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
  * claimed, as one statement; and one plan's inbox, or one agent's, named by
  * `?id=`, as its items, their threads, and their files; and the account's
@@ -37,6 +38,7 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
+import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
@@ -207,6 +209,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_PAGES }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
+  agentOrigin: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_ORIGIN }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(agentOriginLiveAnswerSchema)),
   taskHistory: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)

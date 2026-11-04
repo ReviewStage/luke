@@ -843,6 +843,8 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * panel's `useHostRead`.
  */
 export const LIVE_READ = {
+  /** The run of an automation that started one agent, by the agent: the service's `agentOriginLive` query, held for the windows that show the agent's page and a few they showed lately. */
+  AGENT_ORIGINS: "agentOrigins",
   /** Every inbox item the account reaches. */
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
@@ -863,8 +865,12 @@ export const LIVE_READ = {
   BROWSER_TABS: "browserTabs",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
+  /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
+  WORKSPACE_MEMBERS: "workspaceMembers",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
+  /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */
+  MCP_CLIENTS: "mcpClients",
   /** One workspace's automations, by the workspace: the service's `automations` query, held for the windows that draw them and a few they drew lately. */
   AUTOMATIONS: "automations",
   /** Every run of one workspace's automations the account reads, by the workspace: the service's `automationWorkspaceRuns` query, held as the automations are. */

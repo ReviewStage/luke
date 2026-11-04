@@ -133,59 +133,6 @@ const GRACE = {
 };
 
 it.effect(
-  "reads a workspace's members under the workspace's id, as the service ordered them, and nobody who left where the service names none",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
-      });
-
-      const people = yield* Effect.provide(client().people(ACME.id), api.layer);
-
-      assert.deepEqual(people, { ok: true, answer: { members: [ADA, GRACE], former: [] } });
-      assert.deepEqual(
-        api.requests().map(({ method, pathname, search }) => `${method} ${pathname}${search}`),
-        [`GET /api/workspaces/members?workspaceId=${ACME.id}`],
-      );
-    }),
-);
-
-it.effect("reads who the workspace's work names but left beside its members", () =>
-  Effect.gen(function* () {
-    const LEE = {
-      userId: "user-lee",
-      name: "Lee Park",
-      pictureUrl: "https://avatars.githubusercontent.com/u/7",
-    };
-    const api = fakeCloudApi({
-      "GET /api/workspaces/members": { answer: () => ({ members: [ADA], former: [LEE] }) },
-    });
-
-    const people = yield* Effect.provide(client().people(ACME.id), api.layer);
-
-    assert.deepEqual(people, { ok: true, answer: { members: [ADA], former: [LEE] } });
-  }),
-);
-
-it.effect("names a members read the service refused: not permitted, or not a member", () =>
-  Effect.gen(function* () {
-    const route = "GET /api/workspaces/members";
-
-    const notPermitted = yield* Effect.provide(
-      client().people(PERSONAL.id),
-      refusing(route, HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN).layer,
-    );
-    const outsider = yield* Effect.provide(
-      client().people(ACME.id),
-      refusing(route, HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND).layer,
-    );
-
-    assert.deepEqual(notPermitted, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
-    assert.deepEqual(outsider, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
-  }),
-);
-
-it.effect(
   "removes a member and leaves a workspace, answered with those who remain and the workspace left",
   () =>
     Effect.gen(function* () {

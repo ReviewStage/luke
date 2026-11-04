@@ -205,22 +205,23 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
       : undefined;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
-  const { standing: listedStanding, archived: listedArchived } = tasks.listedAgents;
-  // Note that an agent with no task the list carries is drawn from its row, so choosing its item reads nothing of it.
+  const { liveAgents } = tasks;
+  // Note that an agent with no task is drawn from the list's row of it, of whichever workspace, so choosing its item reads nothing of it.
   const listedPage = useMemo(
     () =>
       chosenAgentId === undefined
         ? undefined
-        : [...listedStanding, ...listedArchived].find((agent) => agent.id === chosenAgentId),
-    [chosenAgentId, listedStanding, listedArchived],
+        : liveAgents?.find((agent) => agent.id === chosenAgentId),
+    [chosenAgentId, liveAgents],
   );
   const agents = useAgents({
     acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
-    listedAgents: tasks.liveAgents,
+    listedAgents: liveAgents,
     listedPage,
+    list: { read: tasks.listRead, failed: tasks.listFailed, onRetry: tasks.onRetryList },
     listedPullRequests: tasks.listedPullRequests,
     // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
@@ -391,8 +392,7 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
     retryAgents();
   }, [retryLive, retryAgents]);
   const choose = useCallback((listed: InboxListed) => chooseFirst(choiceOf(listed)), [chooseFirst]);
-  // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
-  const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
+  const closeItem = useInboxCloser({ act });
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
   const failed = read.failed || tasks.listFailed;
   const onRetry = () => {

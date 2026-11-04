@@ -36,9 +36,9 @@ export const PEOPLE_FILTER_WORDS = {
  * menu standing; none while the members stand read.
  */
 export function memberReadNotice(
-  reader: Pick<Directory, "membersReading" | "membersRefused" | "retry">,
+  reader: Pick<Directory, "reading" | "refused" | "retry">,
 ): MenuAction[] {
-  if (reader.membersRefused) {
+  if (reader.refused) {
     return [
       {
         label: readFailedWords(TERM.MEMBER.many),
@@ -49,7 +49,7 @@ export function memberReadNotice(
       },
     ];
   }
-  if (!reader.membersReading) return [];
+  if (!reader.reading) return [];
   return [{ label: `Reading ${TERM.MEMBER.many}…`, disabled: true, onSelect: () => undefined }];
 }
 

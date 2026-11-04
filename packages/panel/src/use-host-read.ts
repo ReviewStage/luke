@@ -36,7 +36,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
  * own inbox, a task's or an agent's pages or cloud Browser tabs, a
- * workspace's automations or runs, or an automation's runs, is held by the
+ * workspace's automations or runs, an automation's runs, or a workspace's
+ * people, is held by the
  * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
@@ -195,11 +196,14 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; one workspace's memories, which Settings › Memory
- * holds; one workspace's automations, one workspace's
- * runs, or one automation's runs, by its id; and one plan's comments, or one
- * page's, which the open task's plan and a page's tab each hold. Pages and
- * Browser tabs offer no Try again, because the host reads those that did
+ * Settings › Agents draws; the outside MCP clients the account allowed, by
+ * the account, which Settings › Integrations holds; one workspace's
+ * memories, which Settings › Memory holds; one workspace's
+ * automations, one workspace's runs, or one automation's runs, by its id;
+ * one plan's comments, or one page's, which the open task's plan and a
+ * page's tab each hold; the run that started one agent, which its page
+ * holds; and one workspace's people, its members and who its work names but
+ * left, which every surface naming them holds. Pages and Browser tabs offer no Try again, because the host reads those that did
  * not answer again on its own, and those it was refused, a plan's or an
  * agent's the reader cannot reach, stand failed until every surface lets
  * them go and one holds them anew (`@repo/host`'s `live-push.ts`). The
@@ -208,6 +212,12 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * online (`device-presence.ts`), never to a press.
  */
 const HOST_READS = {
+  [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
+    slice: APP_SLICE.AGENT_ORIGINS,
+    path: (agentId: string) => [agentId],
+    hold: (agentId) => askAct(ACT_KIND.AGENTS_ORIGIN_FOLLOW, { agentId }),
+    retry: (agentId) => tellAct(ACT_KIND.AGENTS_ORIGIN_RETRY, { agentId }),
+  }),
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
     slice: APP_SLICE.INBOX_ITEMS,
     path: undefined,
@@ -273,11 +283,24 @@ const HOST_READS = {
     hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
     retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
   }),
+  [LIVE_READ.WORKSPACE_MEMBERS]: hostRead(LIVE_READ.WORKSPACE_MEMBERS, {
+    slice: APP_SLICE.WORKSPACE_MEMBERS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
+  }),
   [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
     slice: APP_SLICE.WORKSPACE_TOOLS,
     path: (agentId: string) => [agentId],
     hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
     retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
+  }),
+  [LIVE_READ.MCP_CLIENTS]: hostRead(LIVE_READ.MCP_CLIENTS, {
+    slice: APP_SLICE.MCP_CLIENTS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the clients of whoever is signed in, so the hold names no account.
+    hold: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.MCP_CLIENTS_RETRY),
   }),
   [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
     slice: APP_SLICE.AUTOMATIONS,

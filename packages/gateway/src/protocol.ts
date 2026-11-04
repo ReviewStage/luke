@@ -151,17 +151,18 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
   /** One channel's bot membership or default repository changed on the service by an owner or admin, answered with the bot as it then stands. */
   WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
-  /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_MEMBERS: "workspaces.members",
   /**
-   * A workspace's people, followed from now until let go, over Neon
-   * Realtime. What they hold is heard as `WORKSPACE_PEOPLE_CHANGED` events,
-   * never answered; following again starts over, so its first word is told
-   * again.
+   * One workspace's people, its members and who its work names but left,
+   * held followed for a window from now until it is let go, over Neon
+   * Realtime, and a while after among those let go lately. What they hold is
+   * heard as `WORKSPACE_MEMBERS_CHANGED` events, on the app state every
+   * window draws, never answered.
    */
-  WORKSPACES_PEOPLE_FOLLOW: "workspaces.peopleFollow",
-  /** A followed workspace's people let go: no more `WORKSPACE_PEOPLE_CHANGED` events of it until it is followed again. */
-  WORKSPACES_PEOPLE_UNFOLLOW: "workspaces.peopleUnfollow",
+  WORKSPACES_MEMBERS_FOLLOW: "workspaces.membersFollow",
+  /** One workspace's people let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  WORKSPACES_MEMBERS_UNFOLLOW: "workspaces.membersUnfollow",
+  /** One workspace's held people read again at once, as Try again asks; never answered. */
+  WORKSPACES_MEMBERS_RETRY: "workspaces.membersRetry",
   /**
    * A workspace's pending invitations, followed by an owner or an admin from
    * now until let go, over Neon Realtime: heard as
@@ -267,6 +268,18 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed for a
+   * window from now until it is let go, over the service's held poll, and a
+   * while after among those let go lately. What it holds is heard as
+   * `AGENT_ORIGINS_CHANGED` events, on the app state every window draws,
+   * never answered.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** One agent's origin let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
+  /** One agent's held origin read again at once, as Try again asks; never answered. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
@@ -444,6 +457,19 @@ export const GATEWAY_METHOD = {
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
   /**
+   * The outside MCP clients the account allowed, held for the windows from
+   * now until let go, under the account signed in: read from the service as
+   * held, and again whenever a window comes forward. What it holds is heard
+   * as `MCP_CLIENTS_CHANGED` events, on the state channel, never answered.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The outside MCP clients let go: no more asks for them until they are followed again. */
+  MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
+  /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked on the service under the Mac's session; the clients as they then stand. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
+  /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
@@ -614,10 +640,12 @@ export const GATEWAY_EVENT = {
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
-  /** A followed workspace's people as they now stand, each time they move while followed. */
-  WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
+  /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
+  /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -632,6 +660,8 @@ export const GATEWAY_EVENT = {
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
+  /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
   /** Every workspace's memories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

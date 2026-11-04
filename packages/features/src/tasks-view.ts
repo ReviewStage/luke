@@ -2,8 +2,8 @@ import { Schema as EffectSchema } from "effect";
 import { agentBrowserTabAnswerSchema, browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
-  type AgentSummary,
-  agentSummarySchema,
+  type ListedAgent,
+  listedAgentSchema,
   localAgentRefusalSchema,
   type TasklessAgent,
   tasklessAgentSchema,
@@ -186,12 +186,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
   /**
    * Every agent on a plan, the archived ones among them, each as its plan's
-   * own list names it, the first started first: present only while the list
+   * own list names it, with the workspace and repository its own row names,
+   * the first started first: present only while the list
    * is followed live over Neon Realtime, when it is what the open plan's
-   * tabs draw, and what the notices' ledger reads, the archived left out, in
+   * tabs draw, and an agent's page, and what the notices' ledger reads, the archived left out, in
    * place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
@@ -245,8 +246,8 @@ export const IDLE_TASKS_VIEW: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
-export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+/** An agent with no plan as a plan's agents are named, with its workspace and repository, which names an automation only where one started it. */
+export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): ListedAgent {
   return automationId === null ? agent : { ...agent, automationId };
 }
 
@@ -941,11 +942,6 @@ export const tasksWorkspaceSlackBotChannelParamsSchema = workspaceSlackBotChanne
 export type TasksWorkspaceSlackBotChannelParams =
   typeof tasksWorkspaceSlackBotChannelParamsSchema.Type;
 
-/** A workspace's members, as the window asks for them: the workspace. */
-export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
-
-export type TasksWorkspaceMembersParams = typeof tasksWorkspaceMembersParamsSchema.Type;
-
 /** Removing one member of a workspace, as the window asks it: the workspace and the member's account. */
 export const tasksWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalSchema;
 
@@ -977,18 +973,6 @@ export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSche
 export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
 export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
-
-/**
- * A followed workspace's people as they now stand, told by the host each
- * time they move: its members and who its work names but left, or why there
- * are none.
- */
-export const workspacePeopleFollowedSchema = EffectSchema.Struct({
-  workspaceId: workspaceIdSchema,
-  view: tasksWorkspaceMembersAnswerSchema,
-});
-
-export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
 
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
