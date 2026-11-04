@@ -558,7 +558,8 @@ function Hint({
  * pill's place, its label, the card's one-line summary, heard as the pill's
  * is; `cardBeside` hangs it past the control's end rather
  * than under it, as a list row's card hangs, or before its start where the
- * window ends past the control. A card's buttons and links
+ * window ends past the control, and below it, or above, where the window
+ * holds it on neither side, as a phone's does. A card's buttons and links
  * take it down once chosen, and stay the pointer's alone, so the card is a
  * description the keyboard never enters. `cardRegion` is the row the
  * control stands in, the whole of which counts as the control while its

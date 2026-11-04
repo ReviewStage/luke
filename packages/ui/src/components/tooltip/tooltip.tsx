@@ -9,7 +9,8 @@ import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
  * window ends, so it never covers what it names; a card hangs from the
  * control's start the same way, or beside it, past its end or before its
  * start where the window ends, as a list row's card hangs so it covers none
- * of the rows under it. Either is held a margin inside the window, placed
+ * of the rows under it, and below it or above where the window holds it on
+ * neither side, as a phone's narrow window does. Either is held a margin inside the window, placed
  * by shadcn/ui's Base UI tooltip and hover card (`../../shadcn/tooltip.tsx`,
  * `hover-card.tsx`), which keep it unseen until it is placed and place it
  * again as it, its control, or the window moves or resizes.
@@ -39,6 +40,13 @@ const CARD_CHOICE = "button, a[href]";
 
 /** How a hint keeps inside the window: turning to the other side where its own ends, and pushed along it where it runs past an edge. */
 const HINT_COLLISION = { side: "flip", align: "shift", fallbackAxisSide: "none" } as const;
+
+/**
+ * How a card hung beside its control keeps inside the window: as a hint
+ * does, but hung below it, or above, where the window holds it on neither
+ * side, as a phone's holds none beside a row that fills its width.
+ */
+const BESIDE_COLLISION = { ...HINT_COLLISION, fallbackAxisSide: "end" } as const;
 
 /** The pill's chord, muted against the pill's own dark fill rather than the window's (`hint.tsx`). */
 export const TOOLTIP_CHORD = "ui-tooltip-chord [--ui-shortcut-ink:var(--ui-color-tooltip-chord)]";
@@ -123,7 +131,7 @@ export function TooltipCard({
       <HoverCardContent
         anchor={base.anchor}
         side={beside ? "inline-end" : "bottom"}
-        collisionAvoidance={HINT_COLLISION}
+        collisionAvoidance={beside ? BESIDE_COLLISION : HINT_COLLISION}
         role="tooltip"
         {...hintMarks(base)}
         onPointerEnter={(event) => hover(true, event)}
