@@ -14,6 +14,7 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { appPlatform } from "../app-platform.js";
 import { useHostRead } from "../use-host-read.js";
 import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
+import { usePageTheme } from "./page-theme.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -83,6 +84,8 @@ export function ShownPage({
   const viewerFrame = useRef<HTMLIFrameElement>(null);
   useFrameLinks(frame);
   useFrameLinks(viewerFrame);
+  usePageTheme(frame);
+  usePageTheme(viewerFrame);
   const fit = useFrameFit(frame);
   const [fullScreen, setFullScreen] = useState(false);
   const openPlace = useOpenPlace();
