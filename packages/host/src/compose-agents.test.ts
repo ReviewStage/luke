@@ -2122,6 +2122,7 @@ it.effect(
         assert.ok(seals() > 60, `read ${seals()} times`);
         assert.equal(held().at(-1)?.failure, undefined, "no failure is laid while offline");
 
+        // Note that the read never gave up, so its next ask, a second on, finds the service answering.
         sealTranscript(LIVE_ANSWERED);
         yield* SubscriptionRef.set(reach, { reachable: true, answered: 1 });
         yield* TestClock.adjust("1 second");

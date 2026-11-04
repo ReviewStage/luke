@@ -363,9 +363,10 @@ export function usePlanHistory(input: {
       ),
     [],
   );
-  // A version whose read failed is read again as the app reaches the service again, as its Try again reads it.
+  // A version whose read failed, or is still out and may have been sent while the connection was gone, is read again as the app reaches the service again, as its Try again reads it.
   useRegained(() => {
-    if (chosen?.read.kind === HISTORY_READ.FAILED) onRetryVersion();
+    const read = chosen?.read.kind;
+    if (read === HISTORY_READ.FAILED || read === HISTORY_READ.READING) onRetryVersion();
   });
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {

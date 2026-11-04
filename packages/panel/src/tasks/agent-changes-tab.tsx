@@ -230,9 +230,10 @@ const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWE
  * asked as the tab first comes on screen and again the moment the agent
  * ends, since that is when what it published settles; every ask is
  * numbered, so only the latest one's answer is drawn, and a read that threw
- * rather than answered lands as `unanswered`. One that failed is asked again
- * as the app reaches the service again while the tab shows it
- * (`useRegained`). The Changes and Pull request tabs read through it alike.
+ * rather than answered lands as `unanswered`. One that failed, or is still
+ * out, is asked again as the app reaches the service again while the tab
+ * shows it (`useRegained`), since one out then may have been sent while the
+ * connection was gone. The Changes and Pull request tabs read through it alike.
  */
 export function useAgentRead<A extends object>(
   agentId: string,
@@ -267,7 +268,7 @@ export function useAgentRead<A extends object>(
     ask();
   }, [shown, ended, ask]);
   useRegained(() => {
-    if (shown && answer !== undefined && "failure" in answer) ask();
+    if (shown && (out || (answer !== undefined && "failure" in answer))) ask();
   });
 
   return { answer, out, ask };
