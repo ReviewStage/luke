@@ -25,9 +25,10 @@
  *
  * A message in a thread that speaks for an agent (`slack_agent_thread`), one
  * it was started from or its automation run's result was sent in, is sent to
- * that agent as the writer's own message (`steer.ts`), the thread made the
- * agent's current one, and the agent brought back first where it stands
- * archived, as a chat tool reopens a conversation. Where its session has ended for good (`AGENT_RETIRED`), a new
+ * that agent as the writer's own message (`steer.ts`), the agent brought
+ * back first where it stands archived, as a chat tool reopens a
+ * conversation, and the thread becomes the agent's current one once the
+ * agent took the message. Where its session has ended for good (`AGENT_RETIRED`), a new
  * agent continues it as Continue does, handed its work, a summary of its
  * transcript, and the message, and the thread moves to it, with one line in
  * the thread linking it, the new agent on the ended one's own task, as
@@ -72,8 +73,10 @@
  * from Slack that finished well then
  * archives the agent under the rule an automation's "Archive finished runs"
  * archives by (`archiveFinishedAgents`), so one with a pull request or an
- * inbox item open stands, and the thread's next message brings it back; an
- * automation run's agent is left to its own automation's rule. Its
+ * inbox item open stands, and the thread's next message brings it back; any
+ * other agent, one an automation's runs go to among them, is left to its own
+ * rule, since only a start's thread makes an agent Slack's
+ * (`SLACK_THREAD_ORIGIN`). Its
  * task finishes as the turn's end settles it, as a run's does, with no
  * merge asked (`tasks/task-finish.ts`): once its agents finished well and
  * nothing waits on the writer, a pull request open among it, which its
@@ -99,6 +102,7 @@ import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import {
   claimSlackThreadTurn,
+  isSlackStartedAgent,
   moveSlackAgentThread,
   recordSlackAgentThread,
   recordSlackMemberLookup,
@@ -112,7 +116,7 @@ import {
 } from "@repo/database/models/slack-installation-store";
 import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
-import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { MESSAGE_SENDER, SLACK_THREAD_ORIGIN } from "@repo/database/storage-vocabulary";
 import { shownPicturesOf } from "@repo/features/agent-pictures-model";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_BOUNDS, type AgentAttachment } from "@repo/features/agent-wire";
@@ -660,12 +664,6 @@ const sendToAgent = Effect.fnUntraced(function* (
     yield* bot.reply(addressed.channel, threadOf(addressed), plainReply("That agent is gone."));
     return;
   }
-  // Note that the thread written in becomes the agent's current one first, because the turn it starts is posted there.
-  yield* touchSlackAgentThread({
-    organizationId,
-    channelId: addressed.channel,
-    threadTs: threadOf(addressed),
-  });
   const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
   const attachments = yield* sharedImages(bot, addressed.images);
   const sent = yield* Effect.result(
@@ -705,6 +703,12 @@ const sendToAgent = Effect.fnUntraced(function* (
     );
     return;
   }
+  // Note that the thread becomes the agent's current one only once the agent took the message, so a refusal leaves its turns posted where they were.
+  yield* touchSlackAgentThread({
+    organizationId,
+    channelId: addressed.channel,
+    threadTs: threadOf(addressed),
+  });
   yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
@@ -790,6 +794,7 @@ const startFromSlack = Effect.fnUntraced(function* (
     threadTs: thread,
     agentId,
     userId,
+    origin: SLACK_THREAD_ORIGIN.START,
   });
   // Note that a reaction says the message was heard, as other bots do; the agent's link comes with its reply.
   yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
@@ -997,7 +1002,7 @@ const turnPlace = Effect.fnUntraced(function* (agent: Agent, turnId: string) {
  * DM is kept as the agent's current thread, with this turn posted in it, so
  * a reply there reaches the agent and the turn it starts is answered there.
  * An agent started from Slack is then archived where the turn finished
- * well; an automation run's agent is left to its automation's rule. A
+ * well; any other, an automation's among them, is left to its own rule. A
  * failure is logged by its kind alone, never answered.
  */
 export function postTurnToSlack(
@@ -1035,6 +1040,7 @@ export function postTurnToSlack(
         threadTs: dm.value.ts,
         agentId: agent.value.id,
         userId,
+        origin: SLACK_THREAD_ORIGIN.RUN_RESULT,
         postedTurnId: turn.turnId,
       });
       yield* bot.upload(dm.value.channel, dm.value.ts, uploads);
@@ -1053,7 +1059,7 @@ export function postTurnToSlack(
       ],
     });
     yield* bot.upload(channelId, threadTs, uploads);
-    if (turn.status === TURN_STATUS.SETTLED && agent.value.automationRunId === null) {
+    if (turn.status === TURN_STATUS.SETTLED && (yield* isSlackStartedAgent(agent.value.id))) {
       yield* archivedWhenFinished(agent.value);
     }
   }).pipe(

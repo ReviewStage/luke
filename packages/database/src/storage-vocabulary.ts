@@ -29,6 +29,19 @@ export {
 } from "@repo/features/agent-wire";
 
 /**
+ * Where a Slack thread that speaks for an agent came from: a member's
+ * message to the bot that started the agent, or the DM the bot sent an
+ * automation run's result in. Only a start makes the agent Slack's own,
+ * whose task finishes with no merge and which is archived after a good turn.
+ */
+export const SLACK_THREAD_ORIGIN = {
+  START: "start",
+  RUN_RESULT: "run_result",
+} as const;
+
+export type SlackThreadOrigin = (typeof SLACK_THREAD_ORIGIN)[keyof typeof SLACK_THREAD_ORIGIN];
+
+/**
  * What an inbox item's attachment is: a picture the agent posted with an
  * image block, which the block names, a file the developer's answer
  * carried, which the item names as its answer's, or a file a message on the

@@ -1,4 +1,5 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { SLACK_THREAD_ORIGIN, type SlackThreadOrigin } from "../storage-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
@@ -85,6 +86,8 @@ export const slackAgentThread = pgTable(
     /** The agent's latest turn whose outcome was posted in the thread; null before the first. */
     postedTurnId: text("posted_turn_id"),
     createdAt: timestamptz("created_at").notNull(),
+    /** Where the thread came from: a member's message that started the agent, or its run's result DM. */
+    origin: text("origin").$type<SlackThreadOrigin>().notNull().default(SLACK_THREAD_ORIGIN.START),
     /** When the thread last became its agent's current one, kept for it or written in by a member; a settled turn is posted in the agent's latest. */
     activeAt: timestamptz("active_at").notNull().defaultNow(),
   },

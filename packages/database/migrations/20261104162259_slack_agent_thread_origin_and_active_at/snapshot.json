@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "2f161fc2-0695-4938-8ee9-4ca9ff862ab6",
+  "id": "8a803656-f4af-40e4-9f7d-37f4617da1d5",
   "prevIds": [
     "140ac1d9-880b-4c22-9b02-34cc1a0be2c0",
     "23aec36f-76ed-4bb8-8e39-6783ee61d778",
@@ -8942,6 +8942,19 @@
       "generated": null,
       "identity": null,
       "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "slack_agent_thread"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'start'",
+      "generated": null,
+      "identity": null,
+      "name": "origin",
       "entityType": "columns",
       "schema": "public",
       "table": "slack_agent_thread"

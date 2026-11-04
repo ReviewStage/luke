@@ -14,7 +14,11 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { slackAgentThread } from "@repo/database/schemas/slack-installation";
 import { messages } from "@repo/database/schemas/storage";
-import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
+import {
+  CONVERSATION_RUNTIME,
+  type ConversationRuntime,
+  SLACK_THREAD_ORIGIN,
+} from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
@@ -410,6 +414,7 @@ const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
       threadTs,
       agentId: agent.id,
       userId: owner,
+      origin: SLACK_THREAD_ORIGIN.START,
     });
     const [row] = yield* (yield* Database)
       .select({ email: user.email })
