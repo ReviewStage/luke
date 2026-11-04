@@ -5,7 +5,7 @@ import {
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
 } from "@repo/features/admin-account-wire";
-import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
+import type { AdminActionDay, AdminUserDetail } from "@repo/features/admin-answer-wire";
 import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@repo/features/integration-row-wire";
@@ -33,11 +33,21 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ID = "account-ada";
 
-/** The calendar's trailing year as the read sends it, ending on the fixed day with its last two days active. */
-const ACTIONS_YEAR = Array.from({ length: 371 }, (_, index) => ({
-  day: new Date(Date.UTC(2026, 9, 14 - 370 + index)).toISOString().slice(0, 10),
-  count: index === 369 ? 9 : index === 370 ? 2 : 0,
-}));
+/**
+ * The account's trailing year of actions, as the read folds it: one task on
+ * Jan 7, then a task and an agent on each of the last nine days, ending on
+ * the fixed day. Every figure below is worked from it by hand.
+ */
+const ACTIONS_YEAR: AdminActionDay[] = Array.from({ length: 371 }, (_, index) => {
+  const day = new Date(Date.UTC(2026, 9, 14 - 370 + index)).toISOString().slice(0, 10);
+  const streak = index >= 362;
+  return {
+    day,
+    tasksCreated: streak || day === "2026-01-07" ? 1 : 0,
+    planRevisions: 0,
+    agentsStarted: streak ? 1 : 0,
+  };
+});
 
 /** A synthetic admin account read on a fixed day, with two days of actions and of hosted use. */
 function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserDetail {
@@ -55,14 +65,14 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
       ...overrides,
     },
     actions: {
-      daily: [
-        { day: "2026-10-13", tasksCreated: 2, planRevisions: 3, agentsStarted: 4 },
-        { day: "2026-10-14", tasksCreated: 1, planRevisions: 0, agentsStarted: 1 },
-      ],
-      calendarDaily: ACTIONS_YEAR,
-      actionsTrend: { days: 7, recent: 11, prior: 4 },
-      activeDaysWindow: 21,
-      activeDaysTrend: { days: 7, recent: 6, prior: 2 },
+      daily: ACTIONS_YEAR.slice(-30),
+      calendarDaily: ACTIONS_YEAR.map((day) => ({
+        day: day.day,
+        count: day.tasksCreated + day.planRevisions + day.agentsStarted,
+      })),
+      actionsTrend: { days: 7, recent: 14, prior: 4 },
+      activeDaysWindow: 9,
+      activeDaysTrend: { days: 7, recent: 7, prior: 2 },
       currentStreakDays: 9,
       firstActiveDay: "2026-01-07",
       lastActiveDay: "2026-10-14",
@@ -304,14 +314,17 @@ test("the account's activity by meaningful actions leads the page", async () => 
 
   expect(headings(page, "h2")[0]).toBe("Activity");
   const activity = section(page, "Activity");
-  expect(activity.textContent).toContain("Active days · 30 days21of 30 window days");
+  expect(activity.textContent).toContain("Active days · 30 days9of 30 window days");
   expect(activity.textContent).toContain("Current streak9 days");
-  expect(activity.textContent).toContain("Active days · 7 days62 the week before");
+  expect(activity.textContent).toContain("Active days · 7 days72 the week before");
   expect(activity.textContent).toContain("Last activeOct 14first active Jan 7");
+  expect(activity.textContent).toContain("14 in the last 7 days, against 4 before");
   for (const kind of ["Tasks created", "Plan revisions", "Agents started"]) {
     expect(activity.textContent).toContain(kind);
   }
-  expect(activity.textContent).toContain("This account's meaningful actions");
+  expect(
+    activity.querySelector('[aria-label="Oct 14 (so far today) — 2 meaningful actions"]'),
+  ).not.toBeNull();
 });
 
 test("the account's hosted-tier use stands last, under a retired heading", async () => {

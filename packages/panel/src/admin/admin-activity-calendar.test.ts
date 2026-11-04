@@ -61,7 +61,7 @@ function render(): HTMLElement {
     root?.render(
       createElement(ActivityCalendar, {
         daily: DAILY,
-        measure: CALENDAR_MEASURE.HOSTED_CALLS,
+        measure: CALENDAR_MEASURE.ACTIONS,
         generatedAt: GENERATED_AT,
       }),
     ),
@@ -81,26 +81,26 @@ function heading(page: HTMLElement): string {
   return page.querySelector("h3")?.textContent ?? "";
 }
 
-test("each day reads its date and its count of hosted calls", () => {
+test("each day reads its date and its count of meaningful actions", () => {
   const page = render();
 
   const descriptions = dayDescriptions(page);
   expect(descriptions).toHaveLength(21);
-  expect(descriptions[0]).toBe("Sep 27 — 0 hosted calls");
-  expect(descriptions[2]).toBe("Sep 29 — 2 hosted calls");
-  expect(descriptions[13]).toBe("Oct 10 — 13 hosted calls");
+  expect(descriptions[0]).toBe("Sep 27 — 0 meaningful actions");
+  expect(descriptions[2]).toBe("Sep 29 — 2 meaningful actions");
+  expect(descriptions[13]).toBe("Oct 10 — 13 meaningful actions");
 });
 
 test("today reads as a day still running", () => {
   const page = render();
 
-  expect(dayDescriptions(page).at(-1)).toBe("Oct 17 (so far today) — 20 hosted calls");
+  expect(dayDescriptions(page).at(-1)).toBe("Oct 17 (so far today) — 20 meaningful actions");
 });
 
 test("a card that holds every week names the trailing year and labels its weekdays and months", () => {
   const page = render();
 
-  expect(heading(page)).toBe("This account's hosted calls, trailing year, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, trailing year, week by week");
   for (const label of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sep", "Oct"]) {
     expect(page.textContent).toContain(label);
   }
@@ -112,15 +112,15 @@ test("a narrower card shows its newest weeks and says how many", () => {
   width = widthFor(2);
   act(() => resize?.());
 
-  expect(heading(page)).toBe("This account's hosted calls, last 2 weeks, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, last 2 weeks, week by week");
   const descriptions = dayDescriptions(page);
   expect(descriptions).toHaveLength(14);
-  expect(descriptions[0]).toBe("Oct 4 — 0 hosted calls");
+  expect(descriptions[0]).toBe("Oct 4 — 0 meaningful actions");
 
   width = widthFor(1);
   act(() => resize?.());
 
-  expect(heading(page)).toBe("This account's hosted calls, last 1 week, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, last 1 week, week by week");
   expect(dayDescriptions(page)).toHaveLength(7);
 });
 
@@ -132,10 +132,10 @@ test("hovering a day shows its count in the tooltip, and leaving the grid hides 
   act(() => {
     cell.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
   });
-  expect(page.textContent).toContain("Oct 10Hosted calls13");
+  expect(page.textContent).toContain("Oct 10Meaningful actions13");
 
   act(() => {
     cell.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
   });
-  expect(page.textContent).not.toContain("Hosted calls");
+  expect(page.textContent).not.toContain("Meaningful actions");
 });

@@ -190,15 +190,15 @@ it.layer(getTestDB())("the Users read", (it) => {
       const builder = yield* openAccount("page-builder", []);
       const neighbor = yield* openAccount("page-neighbor", []);
       const workspace = yield* openWorkspace(builder);
-      // Today and yesterday each hold a task or a revision and an agent, the
-      // day before is quiet, and one task stands before that.
-      const today = yield* createTask(builder, workspace, "2026-10-21T09:00:00Z");
-      yield* startAgent(builder, workspace, "2026-10-21T10:00:00Z");
-      yield* revisePlan(today, 1, PLAN_ACTOR.DEVELOPER, builder, "2026-10-20T09:00:00Z");
+      // A task on the 18th, a quiet 19th, then a revision of that task and an
+      // agent yesterday, and a task and an agent today.
+      const planned = yield* createTask(builder, workspace, "2026-10-18T09:00:00Z");
+      yield* revisePlan(planned, 1, PLAN_ACTOR.DEVELOPER, builder, "2026-10-20T09:00:00Z");
       yield* startAgent(builder, workspace, "2026-10-20T08:00:00Z");
-      yield* createTask(builder, workspace, "2026-10-18T09:00:00Z");
+      yield* createTask(builder, workspace, "2026-10-21T09:00:00Z");
+      yield* startAgent(builder, workspace, "2026-10-21T10:00:00Z");
       // An agent's revision is the agent's, and a year and more ago is past the read.
-      yield* revisePlan(today, 2, PLAN_ACTOR.AGENT, builder, "2026-10-19T09:00:00Z");
+      yield* revisePlan(planned, 2, PLAN_ACTOR.AGENT, builder, "2026-10-19T09:00:00Z");
       yield* createTask(builder, workspace, "2025-09-01T09:00:00Z");
       // A neighbor's task on the quiet day, and hosted calls of the neighbor's alone.
       yield* createTask(neighbor, workspace, "2026-10-19T09:00:00Z");
