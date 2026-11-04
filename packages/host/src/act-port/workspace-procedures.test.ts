@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { ORPCError } from "@orpc/client";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type {
-  TasksWorkspaceGitHubConnectAnswer,
-  WorkspaceInvitationsFollowed,
-} from "@repo/features/tasks-view";
+import type { TasksWorkspaceGitHubConnectAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
@@ -72,7 +69,6 @@ const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" 
 const REFUSAL = {
   [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: "Could not make that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_RENAME]: "Could not rename that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ]: "Could not read invitations on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: "Could not invite that address on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL]:
     "Could not cancel that invitation on this system.",
@@ -88,6 +84,8 @@ const REFUSAL = {
     "Could not disconnect Sentry from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]:
     "Could not read that workspace's members again on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY]:
+    "Could not read that workspace's invitations again on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: "Could not remove that member on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE]: "Could not change that member's role on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER]: "Could not transfer that workspace on this system.",
@@ -108,7 +106,6 @@ const WORKSPACE = { workspaceId: ACME.id };
 const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_RENAME, payload: { ...WORKSPACE, name: "Acme Labs" } },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ, payload: WORKSPACE },
   {
     kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITE,
     payload: { ...WORKSPACE, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER },
@@ -120,6 +117,7 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, payload: WORKSPACE },
+  { kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY, payload: WORKSPACE },
   {
     kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE,
     payload: { ...WORKSPACE, userId: GRACE.userId },
@@ -160,7 +158,6 @@ afterEach(() => {
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  const invitationListeners = new Set<(changed: WorkspaceInvitationsFollowed) => void>();
   const script: Script = {
     notPermitted: false,
     alreadyInvited: false,
@@ -272,12 +269,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`leave:${params.workspaceId}`, () =>
         script.notPermitted ? refusal() : ({ left: true } as const),
       ),
-    workspaceInvitations: (params) =>
-      ask(`invitations:${params.workspaceId}`, () =>
-        script.notPermitted || params.workspaceId !== ACME.id
-          ? refusal()
-          : { invitations: [INVITATION] },
-      ),
     workspaceInvite: (params) =>
       ask(`invite:${params.workspaceId}:${params.email}`, () =>
         script.alreadyInvited
@@ -290,10 +281,8 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`invitationsFollow:${scope.workspaceId}`, () => undefined),
     workspaceInvitationsUnfollow: (scope) =>
       ask(`invitationsUnfollow:${scope.workspaceId}`, () => undefined),
-    onWorkspaceInvitationsChanged: (listener) => {
-      invitationListeners.add(listener);
-      return () => invitationListeners.delete(listener);
-    },
+    workspaceInvitationsRetry: (scope) =>
+      ask(`invitationsRetry:${scope.workspaceId}`, () => undefined),
   };
   const port = testActPort(
     workspaceProcedures({
@@ -306,11 +295,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   );
   ports.push(port);
   const client = port.as(actor, { trusted: options.trusted ?? true });
-  /** The host telling a workspace's invitations. */
-  const tellInvitations = (changed: WorkspaceInvitationsFollowed) => {
-    for (const listener of [...invitationListeners]) listener(changed);
-  };
-  return { client, asked, browsed, script, tellInvitations };
+  return { client, asked, browsed, script };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -378,6 +363,9 @@ it("the workspace acts reach the host from a panel and answer what it answered",
   assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, WORKSPACE), {
     answer: undefined,
   });
+  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY, WORKSPACE), {
+    answer: undefined,
+  });
   assert.deepEqual(
     await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE, { ...WORKSPACE, userId: GRACE.userId }),
     { answer: [] },
@@ -394,6 +382,7 @@ it("the workspace acts reach the host from a panel and answer what it answered",
     `connect:${ACME.id}`,
     `disconnect:${ACME.id}`,
     `membersRetry:${ACME.id}`,
+    `invitationsRetry:${ACME.id}`,
     `remove:${ACME.id}:${GRACE.userId}`,
     `leave:${ACME.id}`,
   ]);
@@ -431,11 +420,10 @@ it("a member's role is changed and a workspace handed over from a panel, each an
   ]);
 });
 
-it("an invitation is read, made, and canceled from a panel, and an address already invited is refused in words that say so", async () => {
+it("an invitation is made and canceled from a panel, and an address already invited is refused in words that say so", async () => {
   const { client, asked, browsed, script } = windowPort(PANEL);
   const invite = { ...WORKSPACE, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER };
 
-  const read = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ, WORKSPACE);
   const made = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, invite);
   const canceled = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL, {
     ...WORKSPACE,
@@ -444,12 +432,10 @@ it("an invitation is read, made, and canceled from a panel, and an address alrea
   script.alreadyInvited = true;
   const again = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, invite);
 
-  assert.deepEqual(read, { answer: [INVITATION] });
   assert.deepEqual(made, { answer: INVITATION });
   assert.deepEqual(canceled, { answer: [] });
   assert.deepEqual(again, { refused: ALREADY_INVITED_REFUSAL });
   assert.deepEqual(asked, [
-    `invitations:${ACME.id}`,
     `invite:${ACME.id}:${INVITATION.email}`,
     `cancel:${ACME.id}:${INVITATION.id}`,
     `invite:${ACME.id}:${INVITATION.email}`,
@@ -509,13 +495,13 @@ it("a workspace write the account's role does not allow is refused in words that
     await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: null }),
   ];
   script.notPermitted = false;
-  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ, {
+  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ, {
     workspaceId: "workspace-gone",
   });
 
   const notPermitted = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
   assert.deepEqual(refusedNow, Array(6).fill(notPermitted));
-  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ] });
+  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ] });
   assert.deepEqual(browsed, []);
 });
 
@@ -549,25 +535,4 @@ it("a payload carrying a key its kind's schema does not name is refused, and the
     { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_LEAVE] },
   );
   assert.deepEqual(asked, []);
-});
-
-/** The event loop turned until `ready` holds, or two hundred turns pass. */
-async function until(ready: () => boolean) {
-  for (let turn = 0; turn < 200 && !ready(); turn += 1) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
-}
-
-it("a workspace's invitations stream to the window following them, and the host lets them go with the last stream", async () => {
-  const { client, asked, tellInvitations } = windowPort(PANEL);
-  const stream = await client[WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS](WORKSPACE);
-  const next = stream.next();
-  await until(() => asked.length === 1);
-
-  tellInvitations({ ...WORKSPACE, view: { invitations: [INVITATION] } });
-
-  assert.deepEqual((await next).value, { invitations: [INVITATION] });
-  await stream.return(undefined);
-  await until(() => asked.length === 2);
-  assert.deepEqual(asked, [`invitationsFollow:${ACME.id}`, `invitationsUnfollow:${ACME.id}`]);
 });

@@ -268,3 +268,16 @@ export function workspaceInvitationsOfLiveRows(
       ];
     });
 }
+
+/**
+ * The instant after `now` the soonest pending invitation expires at, where
+ * one does, which is when the held read built from `rows` next leaves one
+ * out with no row moving; none where every one has expired.
+ */
+export function nextInvitationExpiry(
+  rows: typeof workspaceInvitationsLiveRowsSchema.Type,
+  now: number,
+): number | undefined {
+  const pending = rows.invitations.map((one) => one.expiresAt).filter((at) => at > now);
+  return pending.length === 0 ? undefined : Math.min(...pending);
+}

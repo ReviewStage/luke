@@ -466,41 +466,35 @@ const INVITATION = {
   acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-1&email=alan%40example.com",
 };
 
-it.effect(
-  "invites, reads pending invitations, and cancels one, every call under the Mac's session",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        "POST /api/workspaces/invitations": {
-          answer: () => ({ invitation: INVITATION }),
-          status: 201,
-        },
-        "GET /api/workspaces/invitations": { answer: () => ({ invitations: [INVITATION] }) },
-        "POST /api/workspaces/invitations/cancel": { answer: () => ({ invitations: [] }) },
-      });
-      const workspaces = client();
+it.effect("invites and cancels an invitation, every call under the Mac's session", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "POST /api/workspaces/invitations": {
+        answer: () => ({ invitation: INVITATION }),
+        status: 201,
+      },
+      "POST /api/workspaces/invitations/cancel": { answer: () => ({ invitations: [] }) },
+    });
+    const workspaces = client();
 
-      const made = yield* Effect.provide(
-        workspaces.invite(ACME.id, " alan@example.com ", WORKSPACE_ROLE.MEMBER),
-        api.layer,
-      );
-      const pending = yield* Effect.provide(workspaces.invitations(ACME.id), api.layer);
-      const left = yield* Effect.provide(
-        workspaces.cancelInvitation(ACME.id, INVITATION.id),
-        api.layer,
-      );
+    const made = yield* Effect.provide(
+      workspaces.invite(ACME.id, " alan@example.com ", WORKSPACE_ROLE.MEMBER),
+      api.layer,
+    );
+    const left = yield* Effect.provide(
+      workspaces.cancelInvitation(ACME.id, INVITATION.id),
+      api.layer,
+    );
 
-      assert.deepEqual(made, { ok: true, answer: INVITATION });
-      assert.deepEqual(pending, { ok: true, answer: [INVITATION] });
-      assert.deepEqual(left, { ok: true, answer: [] });
-      assert.deepEqual(api.credentials(), ["session-1", "session-1", "session-1"]);
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
-        workspaceId: ACME.id,
-        email: "alan@example.com",
-        role: WORKSPACE_ROLE.MEMBER,
-      });
-      assert.equal(api.requests()[1]?.searchParams.get("workspaceId"), ACME.id);
-    }),
+    assert.deepEqual(made, { ok: true, answer: INVITATION });
+    assert.deepEqual(left, { ok: true, answer: [] });
+    assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+      workspaceId: ACME.id,
+      email: "alan@example.com",
+      role: WORKSPACE_ROLE.MEMBER,
+    });
+  }),
 );
 
 it.effect(

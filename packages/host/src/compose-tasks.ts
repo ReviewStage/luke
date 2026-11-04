@@ -6,7 +6,6 @@ import {
   type TaskCallResult,
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
-  type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "@repo/features";
 import {
@@ -208,14 +207,7 @@ import {
   PlanPictureKey,
 } from "./kept-content.js";
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
-import {
-  confirmWrite,
-  FOLLOW_BACKOFF,
-  LIVE_GONE,
-  type LiveBroken,
-  type SealedRead,
-  type TxWait,
-} from "./live-follow.js";
+import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import {
   type CommentSubjectKey,
@@ -231,13 +223,9 @@ import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import type { WindowFocus } from "./window-focus.js";
+import { workspaceInvitationsReads } from "./workspace-invitations-read.js";
 import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
-import {
-  followSidebarRows,
-  invitationsMoves,
-  type LiveReadDependencies,
-  workspacesMoves,
-} from "./workspaces-follow.js";
+import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and the plans the windows opened.
@@ -501,7 +489,6 @@ export type TasksClient = Pick<
     | "transfer"
     | "leave"
     | "invite"
-    | "invitations"
     | "cancelInvitation"
   >;
   /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
@@ -1345,10 +1332,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const attempt = Effect.gen(function* () {
       const sealed = yield* seal(false);
       if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
-      const moves = workspacesMoves(
-        { poll: (after) => seal(true, after), now: kernel.now },
-        sealed,
-      );
+      const moves = workspacesMoves({ poll: (after) => seal(true, after) }, sealed);
       // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.gen(function* () {
@@ -1397,8 +1381,42 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
   });
 
-  /** The workspaces whose invitations a window follows, each followed while any window does. */
-  const invitationFollows = yield* FiberMap.make<string, void>();
+  /**
+   * One workspace's read sealed for following, or polled past `after`, for
+   * the account the follow starts for, which every seal names, so one under
+   * another's session is refused as signed out. A workspace the account no
+   * longer reaches as the read asks is `gone`, and followed no longer, until
+   * every window lets it go and one holds it anew.
+   */
+  function workspaceSeal<Answer>(
+    seal: (
+      userId: string,
+      poll: boolean,
+      after: string | undefined,
+    ) => Effect.Effect<
+      WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
+      never,
+      HttpClient.HttpClient
+    >,
+  ): (
+    poll: boolean,
+    after?: string,
+  ) => Effect.Effect<Answer | { readonly failure: string; readonly gone: boolean }> {
+    const userId = dependencies.accountId();
+    return (poll, after) =>
+      gate() && userId !== undefined
+        ? Effect.map(served(seal(userId, poll, after)), (sealed) => {
+            if (!("ok" in sealed)) return { ...sealed, gone: true };
+            if (sealed.ok) return sealed.answer;
+            return {
+              failure: sealed.failure,
+              gone:
+                sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
+                sealed.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+            };
+          })
+        : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true });
+  }
 
   /**
    * Each workspace's people the windows draw, and the few drawn latest, told
@@ -1411,26 +1429,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   const membersReads = yield* workspaceMembersReads({
     gate,
-    seal: (workspaceId) => {
-      // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-      const userId = dependencies.accountId();
-      return (poll, after) =>
-        gate() && userId !== undefined
-          ? Effect.map(
-              served(client.workspaces.peopleLive(workspaceId, userId, poll, after)),
-              (sealed) => {
-                if (!("ok" in sealed)) return { ...sealed, gone: true };
-                if (sealed.ok) return sealed.answer;
-                return {
-                  failure: sealed.failure,
-                  gone:
-                    sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
-                    sealed.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-                };
-              },
-            )
-          : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true });
-    },
+    seal: (workspaceId) =>
+      workspaceSeal((userId, poll, after) =>
+        client.workspaces.peopleLive(workspaceId, userId, poll, after),
+      ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
@@ -1471,85 +1473,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * One workspace's followed read over Realtime (`workspaces-follow.ts`),
-   * polled while Realtime fails it, each change told by `told`. A seal the
-   * service did not answer, or a follow that stopped, is sealed again on the
-   * `FOLLOW_BACKOFF` without a word, so the window keeps what it holds; a
-   * workspace the account no longer reaches as the read asks is told so
-   * once, and not asked again; a session that is another account's stops it
-   * quietly.
+   * Each workspace's pending invitations an owner's or an admin's windows
+   * draw, and the few drawn latest, told on the app state every window draws
+   * (`LIVE_READ.WORKSPACE_INVITATIONS`): followed from the first window's
+   * hold, built again as each expires, and drawn over by an invite's or a
+   * cancel's answer until the read carries it
+   * (`workspace-invitations-read.ts`). A workspace the account no longer
+   * owns or administers is followed no longer, as one it left is, until
+   * every window lets it go and one holds it anew.
    */
-  function followWorkspaceRead<Answer extends SealedRead<string>, View>(
-    seal: (
-      userId: string,
-      poll: boolean,
-      after: string | undefined,
-    ) => Effect.Effect<
-      WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
-      never,
-      HttpClient.HttpClient
-    >,
-    moves: (
-      dependencies: LiveReadDependencies<Answer>,
-      first: Answer,
-    ) => Stream.Stream<View, LiveBroken>,
-    told: (view: View | { readonly failure: WorkspaceCallFailure }) => Effect.Effect<void>,
-  ): Effect.Effect<void> {
-    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-    const userId = dependencies.accountId();
-    const sealed = (poll: boolean, after?: string) =>
-      userId === undefined
-        ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(served(seal(userId, poll, after)), (answer) => {
-            if (!("ok" in answer)) return answer;
-            if (answer.ok) return answer.answer;
-            return {
-              failure: answer.failure,
-              gone:
-                answer.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
-                answer.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-            };
-          });
-    /** One seal followed until it stops, which fails it so the backoff seals it again. */
-    const attempt = Effect.gen(function* () {
-      const first = yield* sealed(false);
-      if ("failure" in first) {
-        if (
-          first.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
-          first.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
-        ) {
-          yield* told({ failure: first.failure });
-        }
-        return yield* Effect.fail(first.failure);
-      }
-      const changes = moves({ poll: (after) => sealed(true, after), now: kernel.now }, first);
-      yield* Stream.runForEach(changes, told).pipe(Effect.ignore);
-      return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
-    });
-    return attempt.pipe(
-      Effect.retry({
-        schedule: FOLLOW_BACKOFF,
-        while: (why) =>
-          why !== WORKSPACE_CALL_FAILURE.NOT_FOUND &&
-          why !== WORKSPACE_CALL_FAILURE.NOT_PERMITTED &&
-          why !== LIVE_SIGNED_OUT.failure &&
-          gate(),
-      }),
-      Effect.ignore,
-    );
-  }
-
-  /** One workspace's pending invitations followed, each change told as `WORKSPACE_INVITATIONS_CHANGED`. */
-  function followInvitations(workspaceId: string): Effect.Effect<void> {
-    return followWorkspaceRead(
-      (userId, poll, after) => client.workspaces.invitationsLive(workspaceId, userId, poll, after),
-      invitationsMoves,
-      (view) =>
-        Effect.sync(() =>
-          kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried({ workspaceId, view })),
-        ),
-    );
-  }
+  const invitationsReads = yield* workspaceInvitationsReads({
+    gate,
+    seal: (workspaceId) =>
+      workspaceSeal((userId, poll, after) =>
+        client.workspaces.invitationsLive(workspaceId, userId, poll, after),
+      ),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's invitations, one fiber standing until let go. */
+  const invitationHolds = yield* FiberMap.make<string>();
 
   /**
    * When whether GitHub is connected was last asked, none since a sign-out;
@@ -1639,7 +1581,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* followSidebarRows(
         {
           poll: (after) => seal(true, after),
-          now: kernel.now,
           onTxWait: (wait) => {
             sidebarTxWait = wait;
           },
@@ -3465,19 +3406,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* membersReads.held.retry(read.workspaceId);
         return {};
       }),
-    // An owner's or an admin's window follows a workspace's invitations
-    // while it draws them; following again starts over, so a window that
-    // follows later hears where they stand, and letting them go ends it.
+    // A workspace's invitations are held for an owner's or an admin's
+    // window while it draws them, and told only on the app state
+    // (`WORKSPACE_INVITATIONS_CHANGED`), as its people are.
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           workspacePeopleFollowSchema,
           params,
-          "a follow names a workspace",
+          "holding a workspace's invitations names the workspace",
         );
-        if (!gate()) return {};
         const { workspaceId } = read;
-        yield* FiberMap.run(invitationFollows, workspaceId, followInvitations(workspaceId));
+        yield* FiberMap.run(
+          invitationHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(invitationsReads.held.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW]: (params) =>
@@ -3485,9 +3430,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           workspacePeopleFollowSchema,
           params,
-          "a follow names a workspace",
+          "letting a workspace's invitations go names the workspace",
         );
-        yield* FiberMap.remove(invitationFollows, read.workspaceId);
+        yield* FiberMap.remove(invitationHolds, read.workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "reading a workspace's invitations again names the workspace",
+        );
+        yield* invitationsReads.held.retry(read.workspaceId);
         return {};
       }),
     // A workspace's token repositories are held for a window while it
@@ -3641,21 +3596,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         return carried<TasksWorkspaceLeaveAnswer>({ left: true });
       }),
-    // An invitation is answered to the window that asked and held nowhere,
-    // and moves no workspace or task, so nothing else is read with it.
-    [GATEWAY_METHOD.WORKSPACES_INVITATIONS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "reading invitations names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
-        const pending = yield* served(client.workspaces.invitations(read.workspaceId));
-        return carried<TasksWorkspaceInvitationsAnswer>(
-          pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
-        );
-      }),
+    // An invitation made or canceled moves no workspace or task, so nothing
+    // else is read with it; the invitations' read carries it, drawn from its
+    // answer until then where a window holds them.
     [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3666,9 +3609,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceInvitationAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, email, role } = read;
         const made = yield* served(client.workspaces.invite(workspaceId, email, role));
-        return carried<TasksWorkspaceInvitationAnswer>(
-          made.ok ? { invitation: made.answer } : { failure: made.failure },
-        );
+        if (!made.ok) return carried<TasksWorkspaceInvitationAnswer>({ failure: made.failure });
+        yield* invitationsReads.moved(workspaceId, { made: made.answer });
+        return carried<TasksWorkspaceInvitationAnswer>({ invitation: made.answer });
       }),
     [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: (params) =>
       Effect.gen(function* () {
@@ -3682,9 +3625,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const pending = yield* served(
           client.workspaces.cancelInvitation(workspaceId, invitationId),
         );
-        return carried<TasksWorkspaceInvitationsAnswer>(
-          pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
-        );
+        if (!pending.ok) {
+          return carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure });
+        }
+        // Note that the list it answers is never laid whole, since the read alone says what stands.
+        yield* invitationsReads.moved(workspaceId, { canceled: invitationId });
+        return carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer });
       }),
   };
 
@@ -3702,6 +3648,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* linkStandings.open;
       yield* repositoryLists.open;
       yield* membersReads.held.open;
+      yield* invitationsReads.held.open;
       yield* tokenRepositories.open;
       yield* documents.open;
       if (!gate()) return;
@@ -3724,7 +3671,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, invitations, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* heldHistories.end;
@@ -3732,6 +3679,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* linkStandings.end;
       yield* repositoryLists.end;
       yield* membersReads.held.end;
+      yield* invitationsReads.held.end;
       yield* FiberMap.clear(photoFetches);
       photosAsked.clear();
       tellPhotos(NO_KEYS_HELD);
@@ -3744,7 +3692,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(workspacesFollow);
       yield* FiberHandle.clear(sidebarFollow);
       yield* FiberHandle.clear(githubOpened);
-      yield* FiberMap.clear(invitationFollows);
       yield* Scope.close(sidebar.scope, Exit.void);
       sidebar = yield* openSidebar;
       sidebarAnswered = false;

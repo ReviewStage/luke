@@ -73,6 +73,7 @@ import {
   type AppRepositoryLists,
   type AppStateSnapshot,
   type AppTokenRepositories,
+  type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   EVERY_WORKSPACE,
   RUN_PROFILE,
@@ -216,6 +217,27 @@ export function settingsTasksView(profile: string, list: TasksView): TasksView |
 /** Each workspace's members as the host holds them read (`LIVE_READ.WORKSPACE_MEMBERS`), one object for every delivery. */
 const HELD_MEMBERS: AppWorkspaceMembers = Object.fromEntries(
   [...MEMBERS].map(([workspaceId, members]) => [workspaceId, { rows: { members } }]),
+);
+
+/** Each workspace's pending invitations as the host holds them read (`LIVE_READ.WORKSPACE_INVITATIONS`): one in Acme, none elsewhere, one object for every delivery. */
+const HELD_INVITATIONS: AppWorkspaceInvitations = Object.fromEntries(
+  [...MEMBERS.keys()].map((workspaceId) => [
+    workspaceId,
+    {
+      rows:
+        workspaceId === WORKSPACE.ACME
+          ? [
+              {
+                id: "invitation-sam",
+                email: "sam@example.com",
+                role: WORKSPACE_ROLE.MEMBER,
+                expiresAt: new Date(NOW + 5 * DAY).toISOString(),
+                acceptUrl: "https://vespin.dev/invite/fixture",
+              },
+            ]
+          : [],
+    },
+  ]),
 );
 
 /* ----- Settings › Integrations ----- */
@@ -689,18 +711,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
   }),
-  [ACT_KIND.WORKSPACE_INVITATIONS_READ]: ({ workspaceId }) =>
-    workspaceId === WORKSPACE.ACME
-      ? [
-          {
-            id: "invitation-sam",
-            email: "sam@example.com",
-            role: WORKSPACE_ROLE.MEMBER,
-            expiresAt: new Date(NOW + 5 * DAY).toISOString(),
-            acceptUrl: "https://vespin.dev/invite/fixture",
-          },
-        ]
-      : [],
   [ACT_KIND.WORKSPACE_SENTRY_READ]: ({ workspaceId }) => ({
     configured: true,
     installations:
@@ -887,13 +897,13 @@ const STAGED_INTEGRATIONS: AppIntegrations = {
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
  * staged hosts beating, and its integrations, credentials, GitHub token,
- * servers' tools, the staged workspaces' token repositories, and the staged
- * workspace's memories and skills held. The members are held under
- * every profile rather than only the signed-in ones, because ⌘K's People, a
- * task's assignee and creator faces, and the person page read them wherever
- * the window stands. Each slice laid over is one object across deliveries,
- * but the settings, which carry main's own, so a delivery that moves nothing
- * of them draws nothing again.
+ * servers' tools, the staged workspaces' token repositories and invitations,
+ * and the staged workspace's memories and skills held. The members are held
+ * under every profile rather than only the signed-in ones, because ⌘K's
+ * People, a task's assignee and creator faces, and the person page read them
+ * wherever the window stands. Each slice laid over is one object across
+ * deliveries, but the settings, which carry main's own, so a delivery that
+ * moves nothing of them draws nothing again.
  */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
   const held = { ...state, [LIVE_READ.WORKSPACE_MEMBERS]: HELD_MEMBERS };
@@ -905,6 +915,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
     [LIVE_READ.INSTALLED_SKILLS]: STAGED_SKILLS,
     [LIVE_READ.INTEGRATIONS]: STAGED_INTEGRATIONS,
+    [LIVE_READ.WORKSPACE_INVITATIONS]: HELD_INVITATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,

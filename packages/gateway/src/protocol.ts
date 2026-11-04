@@ -202,14 +202,17 @@ export const GATEWAY_METHOD = {
   /** One workspace's held people read again at once, as Try again asks; never answered. */
   WORKSPACES_MEMBERS_RETRY: "workspaces.membersRetry",
   /**
-   * A workspace's pending invitations, followed by an owner or an admin from
-   * now until let go, over Neon Realtime: heard as
-   * `WORKSPACE_INVITATIONS_CHANGED` events, never answered; following again
-   * starts over.
+   * One workspace's pending invitations, held followed for an owner's or an
+   * admin's window from now until it is let go, over Neon Realtime, and a
+   * while after among those let go lately. What they hold is heard as
+   * `WORKSPACE_INVITATIONS_CHANGED` events, on the app state every window
+   * draws, never answered.
    */
   WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
-  /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
+  /** One workspace's invitations let go by the window that held them: they stay among those let go lately until later ones push them out. */
   WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
+  /** One workspace's held invitations read again at once, as Try again asks; never answered. */
+  WORKSPACES_INVITATIONS_RETRY: "workspaces.invitationsRetry",
   /**
    * The repositories members added to one workspace on their own GitHub
    * tokens, held for a window from now until it is let go, asked of the
@@ -233,11 +236,9 @@ export const GATEWAY_METHOD = {
   WORKSPACES_TRANSFER: "workspaces.transfer",
   /** The account left one workspace on the service; the view's workspaces and tasks are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
-  /** One workspace's pending invitations, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_INVITATIONS: "workspaces.invitations",
-  /** An invitation to a workspace made on the service, answered with its accept link. */
+  /** An invitation to a workspace made on the service, answered with its accept link; the held invitations draw it until their read carries it. */
   WORKSPACES_INVITE: "workspaces.invite",
-  /** A pending invitation canceled on the service, answered with those still pending. */
+  /** A pending invitation canceled on the service, answered with those still pending; the held invitations draw it gone until their read carries it. */
   WORKSPACES_INVITATION_CANCEL: "workspaces.invitationCancel",
   /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
   GITHUB_CONNECT: "github.connect",
@@ -732,7 +733,7 @@ export const GATEWAY_EVENT = {
   WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
   /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
   WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
-  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  /** Every workspace's pending invitations the host holds for the windows, whole, as its reads of them stand, each time any of them moves or expires. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   AGENT_ORIGINS_CHANGED: "agentOrigins.changed",

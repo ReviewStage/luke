@@ -48,7 +48,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * holds rows never says loading again. A keyed read, a plan's or an agent's
  * own inbox, a task's or an agent's pages or cloud Browser tabs, a
  * workspace's automations or runs, an automation's runs, or a workspace's
- * people, is held by the
+ * people or invitations, is held by the
  * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
@@ -248,7 +248,8 @@ function pullRequestPartRead(part: PullRequestPart) {
  * holds; one workspace's people, its members and who its work names but
  * left, which every surface naming them holds; one workspace's token
  * repositories, which Settings › Workspace and onboarding's GitHub step
- * hold; each listed workspace's photo, which the host fetches as its
+ * hold; one workspace's pending invitations, which an owner's or an
+ * admin's Settings › Workspace holds; each listed workspace's photo, which the host fetches as its
  * version moves and holds for the session; and one task's plan, which
  * the window's open task holds. Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
@@ -389,6 +390,12 @@ const HOST_READS = {
     // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
     hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
     retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
+  }),
+  [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
+    slice: APP_SLICE.WORKSPACE_INVITATIONS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_INVITATIONS_RETRY, { workspaceId }),
   }),
   [LIVE_READ.THIS_MAC_HOST]: hostRead(LIVE_READ.THIS_MAC_HOST, {
     slice: APP_SLICE.THIS_MAC_HOST,

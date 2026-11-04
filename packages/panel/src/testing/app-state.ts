@@ -42,6 +42,7 @@ import {
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTokenRepositories,
+  type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
   EVERY_WORKSPACE,
@@ -138,6 +139,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PULL_REQUEST_VIEWED]: NO_KEYS_HELD,
     [LIVE_READ.REVIEW_OPTIONS]: NO_KEYS_HELD,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_INVITATIONS]: NO_KEYS_HELD,
     [LIVE_READ.THIS_MAC_HOST]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
     [LIVE_READ.TOKEN_REPOSITORIES]: NO_KEYS_HELD,
@@ -253,6 +255,7 @@ export interface HostReadsHanded {
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  readonly deliverInvitations: (next: AppWorkspaceInvitations) => void;
   readonly deliverTokenRepositories: (next: AppTokenRepositories) => void;
   /** The account's task list, as the host lays it whole. */
   readonly deliverTasks: (next: TasksView) => void;
@@ -354,6 +357,7 @@ export function handHostReads(first: {
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverRepositoryLists: (next) => deliver({ [LIVE_READ.REPOSITORY_LISTS]: next }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverInvitations: (next) => deliver({ [LIVE_READ.WORKSPACE_INVITATIONS]: next }),
     deliverTokenRepositories: (next) => deliver({ [LIVE_READ.TOKEN_REPOSITORIES]: next }),
     deliverTasks: (next) => deliver({ tasks: next }),
   };
