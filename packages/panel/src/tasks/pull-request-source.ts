@@ -14,15 +14,15 @@ import type { WritePlace } from "./pull-request-writes.js";
 import type { AgentsControl } from "./use-agents.js";
 
 /**
- * pull-request-source.ts -- where a Pull request tab reads and writes the pull request it shows: one door in front of every read and change the tab and its parts make.
+ * pull-request-source.ts -- where a Pull request tab reads and writes the pull request it shows: one door in front of the reads the tab asks itself and every change it and its parts make.
  *
  * The tab and its parts, its header, Conversation, Checks, Chapters, and
- * Files changed, reach the pull request only through a `PullRequestSource`:
- * the pull request as last read, its changed files, its chapters' Generate,
- * and its changes, a review's among them; the reads the host holds for the
- * tab, its parts, the pickers' options, and the viewed marks, are drawn
- * through `useHostRead` under the agent and the number the source names. A
- * tab is an agent's for now (`agentPullRequestSource`), so each read
+ * Files changed, ask through a `PullRequestSource` for the pull request as
+ * last read, its changed files, and its chapters' Generate, and make every
+ * change through it, a review's among them. What the host holds for the tab
+ * apart from these, its parts, the pickers' options, and the viewed marks,
+ * each part draws through `useHostRead`, under the agent and the number the
+ * source names. A tab is an agent's for now (`agentPullRequestSource`), so each read
  * names the agent, and the pull request's number where the tab names one
  * (`pull-request-number.ts`). The tab hands its source down
  * (`PullRequestSourceProvider`), so a change made anywhere under it goes to

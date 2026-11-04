@@ -1,19 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
   type AgentPullRequestAnswer,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { useListedPullRequests } from "./use-agent-pull-request.js";
+import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { useAgentPullRequest, useListedPullRequests } from "./use-agent-pull-request.js";
 
 /**
- * use-agent-pull-request.test.ts -- a task's agents' pull requests are what
- * the task list carries of its own agents, read from nothing. Synthetic ids.
+ * use-agent-pull-request.test.ts -- an agent's tab draws the pull request the
+ * task list carries before what the host read of it, and a task's agents'
+ * pull requests are what the task list carries of its own agents, read from
+ * nothing. Synthetic ids.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -39,6 +45,26 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+});
+
+test("a tab draws the pull request the task list carries over a held read that found none yet, with the branch that read found", async () => {
+  const opened = PUBLISHED.pullRequest ?? assert.fail("a pull request");
+  // The host read the agent's branch before it opened its pull request, which the list now carries.
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PUBLISHED]: () => Promise.resolve({ ...PUBLISHED, pullRequest: null }),
+  });
+  let held: AgentPullRequestAnswer | undefined;
+  function Probe(): null {
+    held = useAgentPullRequest({ agentId: AGENT, shown: true, known: opened }).published;
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(held, PUBLISHED);
 });
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

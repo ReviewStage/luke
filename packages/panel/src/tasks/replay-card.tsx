@@ -410,7 +410,8 @@ function ReplayFoot({
   const held = useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, { agentId }).rows;
   const published = held === undefined || "failure" in held ? undefined : held;
   const doors = useMentionDoors();
-  const pullRequest = published?.pullRequest ?? place.pullRequests.get(agentId);
+  // Note that the task list's pull request stands first, since it moves without a read.
+  const pullRequest = place.pullRequests.get(agentId) ?? published?.pullRequest;
   const branch = published?.branch ?? undefined;
   const words =
     pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);

@@ -212,7 +212,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { parts, asked, draw } = yield* subject();
-      yield* parts.follow({ part: PULL_REQUEST_PART.PUBLISHED, agentId: AGENT });
+      yield* Effect.forEach(MOVING, (part) => parts.follow({ part, agentId: AGENT }));
       const listed = listing();
       yield* draw({
         ...listed,
@@ -222,7 +222,7 @@ it.effect(
 
       yield* draw(listed);
 
-      assert.deepEqual(asked, [`${PULL_REQUEST_PART.PUBLISHED} own`]);
+      assert.deepEqual(asked.toSorted(), MOVING.map((part) => `${part} own`).toSorted());
     }),
 );
 
