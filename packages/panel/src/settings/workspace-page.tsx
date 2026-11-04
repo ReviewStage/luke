@@ -1804,13 +1804,17 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   );
   // Note that focus goes back to Rename once the edit ends, since the host draws the new name on the press.
   const endedByKey = useRefocusAfterEdit(editing, button);
+  /** How many renames were asked, so a refusal of one a newer rename followed is not said under the newer name. */
+  const renames = useRef(0);
   const end = ({ value: name, byKey }: InlineEditEnd) => {
     endedByKey(byKey);
     setEditing(false);
     if (name === undefined) return;
-    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
+    renames.current += 1;
+    const asked = renames.current;
+    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name }).catch((refused: Error) => {
+      if (renames.current === asked) setRefusal(refused.message);
+    });
   };
   const upload = (file: File) => {
     setRefusal(undefined);

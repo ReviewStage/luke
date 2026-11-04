@@ -2949,6 +2949,34 @@ it.effect(
     }),
 );
 
+it.effect("a rename still being written when the account signs out is drawn for nobody after", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last, settled, tasks } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* settled;
+    service.followMisses = true;
+    const answered = yield* Deferred.make<void>();
+    service.renameAnswered = Deferred.await(answered);
+
+    const renaming = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+    );
+    yield* settled;
+    yield* tasks.reset;
+    // A teammate names it back before the next sign-in reads it, so the rename's answer is the only "Acme Labs" left.
+    service.memberships = [PERSONAL, ACME];
+    yield* tasks.open;
+    yield* settled;
+    yield* Deferred.succeed(answered, undefined);
+    yield* Fiber.join(renaming);
+    yield* settled;
+
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+  }),
+);
+
 it.effect(
   "a slug another workspace holds is drawn, then taken back with the service's refusal",
   () =>

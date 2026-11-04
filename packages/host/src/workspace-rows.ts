@@ -15,7 +15,9 @@
  * the workspace the service answered is taken in the follow's place only
  * where the follow has not moved it since the write was sent, as where the
  * follow never carries the write; an answer that lands after a newer move is
- * never drawn over it.
+ * never drawn over it. A write asked in one session draws and takes nothing
+ * once it closes, so a rename still out at a sign-out never reaches the next
+ * account's workspaces.
  */
 
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -74,6 +76,8 @@ export interface WorkspaceRows {
   ) => Effect.Effect<Written<WorkspaceChange, Answer> | Refused<Answer>>;
   /** Draws a workspace a write the service answered says over its row, as a photo set does, until the follow next moves it; answers once it is drawn. */
   readonly answered: (workspace: Workspace) => Effect.Effect<void>;
+  /** `change` drawn only while this session stands, and nothing once it closes. */
+  readonly owned: (change: WorkspaceChange) => WorkspaceChange;
 }
 
 /** `workspace` with the photo `answered` carries in place of its own, or none where it carries none. */
@@ -94,6 +98,12 @@ export function workspaceRows(
 ): Effect.Effect<WorkspaceRows, never, Scope.Scope> {
   return Effect.gen(function* () {
     let answered = false;
+    let open = true;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        open = false;
+      }),
+    );
     /** How many times the follow has moved each workspace, so a write's answer that lands after a newer move is not drawn over it. */
     const moves = new Map<string, number>();
     const drawn = Effect.suspend(() => (answered ? dependencies.draw(held.rows()) : Effect.void));
@@ -116,9 +126,14 @@ export function workspaceRows(
         : {
             answer: sent.answer,
             txid: undefined,
-            taken: (row) => (movesOf(workspaceId) === before ? kept(sent.workspace)(row) : row),
+            taken: (row) =>
+              open && movesOf(workspaceId) === before ? kept(sent.workspace)(row) : row,
             carried: waits.carried(() => movesOf(workspaceId) !== before),
           };
+    const owned =
+      (change: WorkspaceChange): WorkspaceChange =>
+      (row) =>
+        open ? change(row) : row;
     return {
       answer: (workspaces) =>
         Effect.gen(function* () {
@@ -140,7 +155,7 @@ export function workspaceRows(
           {
             kind: WORKSPACE,
             keys: () => [workspace.id],
-            change: () => (row) => withPhotoOf(row, workspace),
+            change: () => owned((row) => withPhotoOf(row, workspace)),
             send: () =>
               Effect.sync(() =>
                 taken(
@@ -153,14 +168,15 @@ export function workspaceRows(
           },
           undefined,
         ),
+      owned,
     };
   });
 }
 
 /**
- * `declared` as a write the pool draws over its workspace at once, sent
- * through the session's workspaces as `rows` names them when it is sent, and
- * standing until the follow next moves the workspace.
+ * `declared` as a write the pool draws over its workspace at once, for the
+ * session `rows` names as it is asked, sent through the session it names as
+ * it is sent, and standing until the follow next moves the workspace.
  */
 export function workspaceWrite<Input, Answer>(
   declared: WorkspaceWrite<Input, Answer>,
@@ -169,7 +185,7 @@ export function workspaceWrite<Input, Answer>(
   return {
     kind: WORKSPACE,
     keys: (input) => [declared.workspaceId(input)],
-    change: declared.change,
+    change: (input) => rows().owned(declared.change(input)),
     send: (input) => rows().sent(declared.workspaceId(input), declared.send(input)),
   };
 }

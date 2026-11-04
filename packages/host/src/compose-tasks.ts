@@ -3994,6 +3994,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       photosAsked.clear();
       tellPhotos(NO_KEYS_HELD);
       yield* tokenRepositories.end;
+      yield* tokenRepositoryWritten.letGo;
       yield* integrations.end;
       yield* slackChannels.end;
       yield* FiberMap.clear(editWaits);

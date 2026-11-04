@@ -9,7 +9,9 @@
  * change names its workspace, since the read beside the pool takes it with
  * no key of its own. The service answers each write with the list as it
  * then stands, which its send lays on the fetch before the write stands
- * down, so a refusal takes back only what the write drew.
+ * down, so a refusal takes back only what the write drew. A write asked in
+ * one session draws and lays nothing once it ends (`letGo`), so one still
+ * out at a sign-out never reaches the next account's lists.
  */
 
 import type { WorkspaceTokenRepository } from "@repo/features/github-repositories-wire";
@@ -81,6 +83,8 @@ export interface TokenRepositoryWrites {
   readonly set: <Answer>(
     send: (set: TokenRepositorySet) => Effect.Effect<TokenRepositorySetWritten<Answer>>,
   ) => WriteDeclaration<TokenRepositoriesRow, TokenRepositoriesChange, TokenRepositorySet, Answer>;
+  /** Ends the session: every write asked in it draws and lays nothing from now on. */
+  readonly letGo: Effect.Effect<void>;
 }
 
 /** Whether `repository` names `fullName`, as GitHub reads a name, whatever its case. */
@@ -104,6 +108,8 @@ export function tokenRepositoryWrites(
   dependencies: TokenRepositoryWritesDependencies,
 ): Effect.Effect<TokenRepositoryWrites, never, Scope.Scope> {
   return Effect.gen(function* () {
+    /** The session writes are asked in, moved on as each ends. */
+    let session = 0;
     const beside: HeldRows<TokenRepositoriesRow, TokenRepositoriesChange> =
       yield* dependencies.pool.stand(TOKEN_REPOSITORIES, {
         redraw: () => dependencies.tell,
@@ -138,19 +144,31 @@ export function tokenRepositoryWrites(
     > => ({
       kind: TOKEN_REPOSITORIES,
       keys: ({ workspaceId }) => [workspaceId],
-      change: (input) => ({ workspaceId: input.workspaceId, listed: listedAfter(input) }),
+      change: (input) => {
+        const asked = session;
+        const listed = listedAfter(input);
+        return {
+          workspaceId: input.workspaceId,
+          listed: (repositories) => (session === asked ? listed(repositories) : repositories),
+        };
+      },
       send: (input) =>
-        Effect.flatMap(
-          send(input),
-          (sent): Effect.Effect<Written<TokenRepositoriesChange, Answer> | Refused<Answer>> =>
-            "refused" in sent
-              ? Effect.succeed(sent)
-              : Effect.as(dependencies.answered(input.workspaceId, sent.repositories), {
-                  answer: sent.answer,
-                  txid: undefined,
-                }),
-        ),
+        Effect.suspend(() => {
+          const asked = session;
+          return Effect.flatMap(
+            send(input),
+            (sent): Effect.Effect<Written<TokenRepositoriesChange, Answer> | Refused<Answer>> => {
+              if ("refused" in sent) return Effect.succeed(sent);
+              const kept = { answer: sent.answer, txid: undefined };
+              if (session !== asked) return Effect.succeed(kept);
+              return Effect.as(dependencies.answered(input.workspaceId, sent.repositories), kept);
+            },
+          );
+        }),
     });
-    return { drawn, set };
+    const letGo = Effect.sync(() => {
+      session += 1;
+    });
+    return { drawn, set, letGo };
   });
 }
