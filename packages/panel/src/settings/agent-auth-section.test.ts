@@ -26,6 +26,7 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { AgentConnectSection } from "./agent-auth-section.js";
 import { AgentsPage } from "./agents-page.js";
 
 /**
@@ -34,7 +35,8 @@ import { AgentsPage } from "./agents-page.js";
  * its plan needs a hand; its dialog's rows save and remove each credential,
  * and while both are saved its default control picks the one new agents
  * use, sent as the plan's `forAgents`. Nothing pasted stands on the page once kept or
- * reaches a log. Synthetic credentials throughout.
+ * reaches a log. Setup's same rows connect in place, with no dialog.
+ * Synthetic credentials throughout.
  */
 
 /** Low-entropy fakes shaped as a pasted key and token are, built at run time. */
@@ -127,6 +129,11 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         ),
       };
       return Promise.resolve(done(held));
+    case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
+      // Ending a sign-in answers it as cancelled, as the host does.
+      signInOpen?.resolve(done({ cancelled: true }));
+      signInOpen = undefined;
+      return Promise.resolve(done(undefined));
     case ACT_KIND.CHATGPT_SIGN_IN:
       if (signInOpen !== undefined) return signInOpen.promise;
       held = { ...held, subscriptions: [...subscriptions, CHATGPT_PLAN] };
@@ -174,6 +181,29 @@ async function mount(
   );
   await settle();
   return container;
+}
+
+/** Setup's Connect an agent, and whether either harness stood connected after each answer. */
+async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }> {
+  const base = stateWith({}, {});
+  handState(
+    {},
+    { access: { admin: false }, run: { ...base.run, capabilities: DESKTOP_CAPABILITIES } },
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const connected: boolean[] = [];
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentConnectSection, { onConnected: (now) => connected.push(now) }),
+      ),
+    ),
+  );
+  await settle();
+  return { page: container, connected };
 }
 
 /** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */
@@ -616,4 +646,78 @@ test("without the sign-in's loopback, Codex's ChatGPT plan row offers nothing an
   const field = labeled(row(dialog, "OpenAI API key"), "API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
   assert.deepEqual(rowState(page, "Codex"), connectedWith("OpenAI API key sk-ant-…wxyz"));
+});
+
+test("setup connects Claude in place, with no dialog: Connect opens one row at a time on the plan's setup-token beside a choice of the key, Cancel closes it, and a saved token closes it to its state line", async () => {
+  const { page, connected } = await mountSetup();
+  assert.match(row(page, "Claude").textContent ?? "", /Claude plan or Anthropic API key/u);
+  assert.match(row(page, "Codex").textContent ?? "", /ChatGPT plan or OpenAI API key/u);
+
+  await press(row(page, "Claude"), "Connect Claude");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "the row opens in place");
+  assert.equal(choice(page, "Claude plan").getAttribute("aria-checked"), "true");
+  const field = labeled(row(page, "Claude"), "Claude setup-token");
+  assert.ok(document.activeElement === field, "the setup-token's field has focus");
+  assert.match(
+    row(page, "Claude").textContent ?? "",
+    /Run claude setup-token in a terminal, then paste what it prints\./u,
+  );
+  act(() => choice(page, "API key").click());
+  await settle();
+  assert.match(row(page, "Claude").textContent ?? "", /Billed by Anthropic per token\./u);
+  assert.ok(labeled(row(page, "Claude"), "Anthropic API key"));
+
+  await press(row(page, "Codex"), "Connect Codex");
+  assert.equal(row(page, "Claude").querySelector("input"), null, "one row stands open");
+  await press(row(page, "Codex"), "Cancel");
+  assert.equal(row(page, "Codex").querySelector("input, [role='radio']"), null, "Cancel closes it");
+  assert.ok(document.activeElement === button(page, "Connect Codex"), "and hands focus back");
+
+  await press(row(page, "Claude"), "Connect Claude");
+  await pasteAndSave(labeled(row(page, "Claude"), "Claude setup-token"), TOKEN);
+  assert.equal(row(page, "Claude").querySelector("input"), null, "connecting closes the row");
+  assert.deepEqual(lineOf(row(page, "Claude")), connectedWith("Claude plan"));
+  assert.equal(button(row(page, "Claude"), "Manage Claude").textContent, "Manage");
+  assert.equal(connected.at(-1), true, "setup hears an agent connected");
+  assert.ok(!document.body.innerHTML.includes(TOKEN));
+});
+
+test("setup's Codex row continues with ChatGPT in place, says where to finish while it waits, ends a waiting sign-in with its Cancel, and meets the first sign-in with OpenAI's notice under the closed row", async () => {
+  signInOpen = Promise.withResolvers();
+  const { page } = await mountSetup();
+  await press(row(page, "Codex"), "Connect Codex");
+  assert.ok(document.activeElement === button(page, "Continue with ChatGPT"));
+  await press(row(page, "Codex"), "Continue with ChatGPT");
+  assert.match(row(page, "Codex").textContent ?? "", /Finish signing in in your browser\./u);
+  assert.equal(button(page, "Waiting for ChatGPT").getAttribute("aria-busy"), "true");
+  await press(row(page, "Codex"), "Cancel");
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN_CANCEL).length, 1);
+
+  await press(row(page, "Codex"), "Connect Codex");
+  await press(row(page, "Codex"), "Continue with ChatGPT");
+  assert.deepEqual(lineOf(row(page, "Codex")), connectedWith("ChatGPT plan"));
+  assert.equal(row(page, "Codex").querySelector("[role='radio']"), null, "connecting closes it");
+  assert.match(row(page, "Codex").textContent ?? "", /You're using your ChatGPT plan/u);
+  await press(row(page, "Codex"), "Got it");
+  assert.doesNotMatch(page.textContent ?? "", /You're using your ChatGPT plan/u);
+});
+
+test("setup's row in place asks before removing a held key, over the window since no dialog holds it", async () => {
+  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
+  const { page } = await mountSetup();
+  assert.deepEqual(lineOf(row(page, "Claude")), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  await press(row(page, "Claude"), "Manage Claude");
+  assert.equal(choice(page, "API key").getAttribute("aria-checked"), "true", "on the key in use");
+  await press(row(page, "Claude"), "Remove Anthropic API key");
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).length, 0);
+  const asked =
+    document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
+    assert.fail("no question asks");
+  assert.match(asked.textContent ?? "", /Remove your Anthropic API key\?/u);
+  await press(asked, "Remove key");
+  assert.deepEqual(
+    sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
+    [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
+  );
+  assert.match(row(page, "Claude").textContent ?? "", /Claude plan or Anthropic API key/u);
 });
