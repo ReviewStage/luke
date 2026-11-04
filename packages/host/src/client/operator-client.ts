@@ -93,6 +93,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onIntegrationToolsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
       }),
+      gateway.host.onMemoriesChanged((held) => {
+        state.update({ [LIVE_READ.MEMORIES]: held });
+      }),
       gateway.host.onPagesChanged((held) => {
         state.update({ [LIVE_READ.PAGES]: held });
       }),

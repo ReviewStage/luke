@@ -50,7 +50,6 @@ import {
   type HostDoneAnswerView,
   type HostsAnswerView,
   type MemoriesAnswerView,
-  type MemoriesReadParams,
   type MemoryForgetParams,
   type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
@@ -132,6 +131,7 @@ import {
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
+import type { WorkspaceMemoriesLiveAnswer } from "./memory-live.js";
 import { MEMORY_QUERY } from "./memory-wire.js";
 import {
   agentDefaultWriteSchema,
@@ -582,14 +582,29 @@ export class HostedAgentClient {
     );
   }
 
-  /** The memories our agents kept in a workspace the account is a member of, most recently kept first. */
-  readMemories(
-    params: MemoriesReadParams,
-  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.account.memories, { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId }),
-      MEMORY_REFUSALS,
-    );
+  /**
+   * The memories our agents kept in a workspace the account is a member of,
+   * sealed for following, each with its keeper's name and whether the
+   * account may forget it, or with their rows inline where `poll` asks for
+   * them; signed out where the session is another account's, or why not.
+   */
+  workspaceMemoriesLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceMemoriesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { workspaceId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.workspaceMemories, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, MEMORY_REFUSALS));
   }
 
   /** One memory forgotten for good, answering the workspace's memories as they then stand. */

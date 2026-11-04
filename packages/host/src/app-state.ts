@@ -14,6 +14,7 @@ import type {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { MemorySummary } from "@repo/features/memory-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -412,6 +413,9 @@ export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
  */
 export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
 
+/** Each workspace's memories the windows hold, by the workspace, most recently kept or corrected first, as the host's read of them stands, with every forget drawn over them until the read carries it (`memory-follow.ts`). */
+export type AppMemories = AppHeldById<readonly MemorySummary[]>;
+
 /** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
 export type AppAutomationReads = Pick<
   AppState,
@@ -448,6 +452,7 @@ export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
+  [LIVE_READ.MEMORIES]: readonly MemorySummary[];
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
@@ -550,6 +555,8 @@ export interface AppState {
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
   [LIVE_READ.INTEGRATION_TOOLS]: AppIntegrationTools;
+  /** Each workspace's memories the windows chose, by the workspace, held while Settings › Memory shows them and a while after: what that page draws. */
+  [LIVE_READ.MEMORIES]: AppMemories;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
   /** The account's own provider keys, held while a window draws them: what Settings › Agents and Call and Dictate read. */
@@ -688,6 +695,11 @@ export const HOST_READ_SLICE = {
     rowId: "id" satisfies keyof InboxItem,
   },
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.MEMORIES]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof MemorySummary,
+  },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },

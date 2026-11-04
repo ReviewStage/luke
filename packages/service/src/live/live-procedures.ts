@@ -62,6 +62,11 @@
  * each accept link is built on, which the desktop needs since it builds the
  * links itself. Both are woken by a write to the workspace's topic
  * (`workspaceMembersLive`, `workspaceInvitationsLive`).
+ * `GET /api/live/workspace-memories?workspaceId=` answers its memories as
+ * one, each with its keeper's name and whether the reader may forget it,
+ * after the account is read as a member of it, so a workspace it is not in
+ * is not found; woken by a memory kept, corrected, or forgotten, and by the
+ * reader's own membership moving (`workspaceMemoriesLive`).
  *
  * `GET /api/live/automations?workspaceId=` answers a workspace's automations
  * the account reads, each with its newest run, and
@@ -174,6 +179,7 @@ import {
   tasksLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
+  workspaceMemoriesLive,
   workspacesLive,
 } from "../sync/live-queries.js";
 import {
@@ -904,6 +910,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
       return { ...sealed, origin: new URL(context.request.url).origin };
+    }),
+    workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(
+        workspaceMemoriesLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

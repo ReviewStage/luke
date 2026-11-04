@@ -9,6 +9,7 @@
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
@@ -43,6 +44,7 @@ import {
   invitationSync,
   macCommandSync,
   memberSync,
+  memorySync,
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
@@ -384,6 +386,28 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * A workspace's memories, each with its keeper's name and whether the
+ * reader may forget it, woken on the workspace's memory topic by a memory
+ * kept, corrected, or forgotten, and on the reader's own by their
+ * membership made, ended, or given another role, which decides what they
+ * read and may forget. Note that a teammate's rename wakes neither, since a
+ * member's row names only their own topic and their workspaces': a keeper's
+ * new name shows at the hold's end.
+ */
+export const workspaceMemoriesLive = defineLiveQuery({
+  name: LIVE_READ.MEMORIES,
+  params: ["userId", "workspaceId"],
+  reads: [memorySync, memberSync, userSync],
+  topics: ({ userId, workspaceId }) => [
+    [TOPIC.MEMORY, workspaceId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, workspaceId }) =>
+    Option.map(workspaceMemoriesLiveStatement(userId, workspaceId), (memories) => ({ memories })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -769,6 +793,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentInboxLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
+  workspaceMemoriesLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,

@@ -195,7 +195,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; one workspace's automations, one workspace's
+ * Settings › Agents draws; one workspace's memories, which Settings › Memory
+ * holds; one workspace's automations, one workspace's
  * runs, or one automation's runs, by its id; and one plan's comments, or one
  * page's, which the open task's plan and a page's tab each hold. Pages and
  * Browser tabs offer no Try again, because the host reads those that did
@@ -224,6 +225,12 @@ const HOST_READS = {
     path: (server: IntegrationServer) => [server.connection ?? server.provider],
     hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
     retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
+  }),
+  [LIVE_READ.MEMORIES]: hostRead(LIVE_READ.MEMORIES, {
+    slice: APP_SLICE.MEMORIES,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
   }),
   [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
     slice: APP_SLICE.PAGES,

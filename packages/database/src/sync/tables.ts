@@ -39,6 +39,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
+import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
@@ -485,6 +486,17 @@ export const pullRequestChaptersSync = defineSyncTable(pullRequestChapters, {
 });
 
 /**
+ * A workspace's memory, on its workspace's memory topic, which only the open
+ * memory reads of the workspace are woken on: the workspace's own topic
+ * would wake every member's task list on each agent's `save_memory`. No
+ * column is ignored, since the page reads every one, and a keep, a
+ * correction, and a forget each move a column it reads or the row itself.
+ */
+export const memorySync = defineSyncTable(memory, {
+  topics: [{ kind: TOPIC.MEMORY, column: memory.organizationId }],
+});
+
+/**
  * A transcript's message, on its conversation's topic alone. Note that no
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
@@ -608,6 +620,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   planPageVersionSync,
   agentBrowserTabSync,
   pullRequestChaptersSync,
+  memorySync,
   messagesSync,
   conversationsSync,
   turnsSync,
