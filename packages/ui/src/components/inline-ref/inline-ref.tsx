@@ -133,7 +133,7 @@ const ROOT =
 const LOOK_ROOT = {
   [INLINE_REF_LOOK.LINK]: "gap-icon-gap bg-transparent",
   [INLINE_REF_LOOK.WASH]:
-    "gap-ui-4 rounded-ui-6 bg-transparent transition-[background-color,box-shadow,color] duration-(--ui-duration-hover) ease-motion-exit [&:hover]:bg-muted [&:hover]:text-foreground [&:hover]:shadow-inline-ref-wash [&:hover]:[--ui-inline-ref-wash:var(--ui-color-fill-hover)]",
+    "gap-ui-4 rounded-ui-6 bg-transparent transition-[background-color,box-shadow,color] duration-(--ui-duration-hover) ease-motion-exit hover:bg-muted hover:text-foreground hover:shadow-inline-ref-wash hover:[--ui-inline-ref-wash:var(--ui-color-fill-hover)]",
   [INLINE_REF_LOOK.PILL]:
     "-my-[0.075em] gap-ui-4 rounded-ui-6 py-[0.075em] pr-ui-6 pl-ui-4 text-foreground data-[look=pill]:leading-[1.2] data-[look=pill]:font-tag transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit",
 } as const satisfies Record<InlineRefLook, string>;
@@ -161,11 +161,11 @@ function rootClass({
     // Note that a pill saying its standing is let wider, so its name is read rather than cut at its first word.
     parts.push(stated ? "max-w-inline-ref-pill-stated" : "max-w-inline-ref-pill");
     if (gone) parts.push("bg-transparent inset-ring inset-ring-border-strong");
-    else if (pressable) parts.push("bg-fill-strong [&:is(:hover,:focus-visible)]:bg-fill-selected");
+    else if (pressable) parts.push("bg-fill-strong hover:bg-fill-selected focus-visible:bg-fill-selected");
     // Note that the lift is what keeps an inert pill seen on a row that is itself a press, because its resting fill is the row's hover fill.
     else
       parts.push(
-        "bg-fill-strong in-[:is(button,summary):is(:hover,:focus-visible)]:bg-fill-selected",
+        "bg-fill-strong [@media(hover:hover)]:in-[:is(button,summary):hover]:bg-fill-selected in-[:is(button,summary):focus-visible]:bg-fill-selected",
       );
   }
   return parts.join(" ");
@@ -194,7 +194,7 @@ function labelClass({
   if (name === INLINE_REF_NAME.PATH) parts.push("[direction:rtl] font-mono");
   if (gone) parts.push("line-through");
   if (look === INLINE_REF_LOOK.LINK && pressable) {
-    parts.push("group-[:hover]/inline-ref:underline group-[:hover]/inline-ref:underline-offset-2");
+    parts.push("group-hover/inline-ref:underline group-hover/inline-ref:underline-offset-2");
   }
   if (look === INLINE_REF_LOOK.WASH) parts.push("py-inline-ref-mark");
   return parts.join(" ");

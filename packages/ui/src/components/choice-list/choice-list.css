@@ -28,8 +28,10 @@
     color: var(--ui-color-text);
   }
 
-  button.ui-choice:hover:not(:disabled, [aria-disabled="true"]) {
-    --ui-choice-fill: var(--ui-color-fill-strong);
+  @media (hover: hover) {
+    button.ui-choice:hover:not(:disabled, [aria-disabled="true"]) {
+      --ui-choice-fill: var(--ui-color-fill-strong);
+    }
   }
 
   .ui-choice[aria-checked="true"],
@@ -56,10 +58,16 @@
 
   /* A card wears the row's box, its head's radio none. */
   .ui-choice-card-head > .ui-choice,
-  .ui-choice-card-head > .ui-choice[aria-checked="true"],
-  .ui-choice-card-head > button.ui-choice:hover:not(:disabled, [aria-disabled="true"]) {
+  .ui-choice-card-head > .ui-choice[aria-checked="true"] {
     background: none;
     box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    .ui-choice-card-head > button.ui-choice:hover:not(:disabled, [aria-disabled="true"]) {
+      background: none;
+      box-shadow: none;
+    }
   }
 
   .ui-choice-detail {

@@ -161,7 +161,17 @@ export const AGENT_ACT_KIND = {
   AGENTS_SHOWN: "agents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   AGENTS_SEEN: "agents.seen",
+  /** One agent as its own page reads it, by its id, read once where a press must know where the agent stands now, as the archive confirm asks whether a teammate's agent still works before it archives it; answered to the press, never on the document. */
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed while the
+   * window holds the stream open, and a while after among those let go
+   * lately: what it holds reaches the panel on app state
+   * (`LIVE_READ.AGENT_ORIGINS`), so the stream carries nothing.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** A held agent's origin, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -289,6 +299,17 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
+  /**
+   * The outside MCP clients the account allowed, with the server's address,
+   * held for the window while it holds the stream open: what they hold
+   * reaches the panel on app state (`LIVE_READ.MCP_CLIENTS`), so the stream
+   * carries nothing.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The held outside MCP clients read again at once, as Try again asks. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked under the Mac's session, answering the clients as they then stand, or that the revoke did not finish. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
 } as const;
 
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
@@ -366,15 +387,15 @@ export const TASKS_ACT_KIND = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
-  /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
-  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's cloud browser through the service, taken over by the member at once, as the side panel's "+" opens one; answered to the panel, never on the document. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /**
-   * A task's agents' Browser tabs, followed while the window holds the
-   * stream open for the side panel's cloud Browser tabs: each time one
-   * moves, the agent's pointer among it, or a takeover lapses, over Neon
-   * Realtime, never on the document.
+   * A task's agents' Browser tabs, or one agent's, held followed while the
+   * window holds the stream open for the side panel's cloud Browser tabs,
+   * and a while after among those let go lately: what they hold, each time
+   * one moves, the agent's pointer among it, or a takeover lapses, reaches
+   * the panel on app state (`LIVE_READ.BROWSER_TABS`), so the stream
+   * carries nothing.
    */
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, colored by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
@@ -691,7 +712,9 @@ export const PORT_ACT_USE = {
   AGENTS_DELETE: ACT_USE.WRITE,
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
-  AGENTS_PAGE: ACT_USE.READ,
+  AGENTS_PAGE: ACT_USE.FETCH,
+  AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
+  AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
   AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
@@ -752,6 +775,9 @@ export const PORT_ACT_USE = {
   INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
   INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
+  MCP_CLIENTS_FOLLOW: ACT_USE.READ,
+  MCP_CLIENTS_RETRY: ACT_USE.READ,
+  MCP_CLIENTS_REVOKE: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
@@ -790,7 +816,6 @@ export const PORT_ACT_USE = {
   TASKS_SKILLS: ACT_USE.FETCH,
   TASKS_PULL_REQUEST: ACT_USE.READ,
   TASKS_ISSUE: ACT_USE.READ,
-  TASKS_BROWSER_TABS: ACT_USE.READ,
   TASKS_BROWSER_TAB_OPEN: ACT_USE.WRITE,
   TASKS_BROWSER_TABS_FOLLOW: ACT_USE.READ,
   TASKS_COLOR_CODE: ACT_USE.FETCH,

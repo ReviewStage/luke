@@ -83,7 +83,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * since the card says what it is, and an automation's drawn before it; on a
  * phone the row wraps, each chip cut short rather than overflowing.
  * The Runs on chip stands after the box's "+", as an agent's box draws where its
- * agent runs: Cloud, and while Bring your own host is on the member's
+ * agent runs, its glyph alone where the card is too narrow for its words,
+ * as the agent's branch chip draws its mark alone there: Cloud, and while Bring your own host is on the member's
  * devices, which the task's agents run on (`runs-on.tsx`); an automation's
  * card and a sub-task's draw none. While the experiment is off the chip offers
  * Cloud alone, the card reads no devices, and every task it makes runs in
@@ -733,14 +734,17 @@ export function NewTaskComposer({
         takesFocus={takesFocus}
         listSide={listSide}
         tools={
-          runsOnStands ? (
-            <NewTaskRunsOnChip
-              devices={devices}
-              device={device}
-              disabled={starting}
-              onChoose={chooseDevice}
-            />
-          ) : undefined
+          runsOnStands
+            ? (narrow) => (
+                <NewTaskRunsOnChip
+                  devices={devices}
+                  device={device}
+                  disabled={starting}
+                  narrow={narrow}
+                  onChoose={chooseDevice}
+                />
+              )
+            : undefined
         }
       />
       {blocked ? (

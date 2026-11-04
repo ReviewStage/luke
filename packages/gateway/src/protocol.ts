@@ -58,8 +58,6 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
-  /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
-  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
@@ -89,13 +87,15 @@ export const GATEWAY_METHOD = {
   /** A followed plan's history let go: no more `TASKS_HISTORY_CHANGED` events of it until it is followed again. */
   TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
   /**
-   * One task's cloud Browser tabs, the agent's pointer on each among them,
-   * followed from now until let go, over Neon Realtime. What they hold is
-   * heard as `TASKS_BROWSER_TABS_CHANGED` events, never answered; following
-   * what is already followed does nothing.
+   * One task's cloud Browser tabs, every one of its agents', or one agent's,
+   * the agent's pointer on each among them, held followed for a window's
+   * side panel from now until it is let go, over Neon Realtime, and a while
+   * after among those let go lately. What they hold is heard as
+   * `BROWSER_TABS_CHANGED` events, on the app state every window draws,
+   * never answered.
    */
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
-  /** A followed task's Browser tabs let go: no more `TASKS_BROWSER_TABS_CHANGED` events of it until it is followed again. */
+  /** One task's or agent's Browser tabs let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
@@ -267,6 +267,18 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed for a
+   * window from now until it is let go, over the service's held poll, and a
+   * while after among those let go lately. What it holds is heard as
+   * `AGENT_ORIGINS_CHANGED` events, on the app state every window draws,
+   * never answered.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** One agent's origin let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
+  /** One agent's held origin read again at once, as Try again asks; never answered. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
@@ -433,6 +445,19 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
+  /**
+   * The outside MCP clients the account allowed, held for the windows from
+   * now until let go, under the account signed in: read from the service as
+   * held, and again whenever a window comes forward. What it holds is heard
+   * as `MCP_CLIENTS_CHANGED` events, on the state channel, never answered.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The outside MCP clients let go: no more asks for them until they are followed again. */
+  MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
+  /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked on the service under the Mac's session; the clients as they then stand. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
   /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
@@ -602,14 +627,14 @@ export const GATEWAY_EVENT = {
   PLAN_COMMENTS_CHANGED: "planComments.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
-  /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
-  TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
+  /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -618,10 +643,14 @@ export const GATEWAY_EVENT = {
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
+  /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
+  BROWSER_TABS_CHANGED: "browserTabs.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
+  /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
   /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

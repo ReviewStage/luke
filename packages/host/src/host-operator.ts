@@ -188,6 +188,12 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
 } from "@repo/features/integration-view";
+import {
+  MCP_CLIENTS_CALL_FAILURE,
+  type McpClientRevokeParams,
+  type McpClientsView,
+  mcpClientsViewSchema,
+} from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
   type ChaptersModelAnswerView,
@@ -202,7 +208,6 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
-  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -210,8 +215,6 @@ import {
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
-  type TasksBrowserTabsAnswer,
-  type TasksBrowserTabsParams,
   type TasksChangeRelationAnswer,
   type TasksChangeRelationParams,
   type TasksCommentActParams,
@@ -289,11 +292,9 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
-  taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
-  tasksBrowserTabsAnswerSchema,
   tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
   tasksEditAnswerSchema,
@@ -372,13 +373,16 @@ import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Resu
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
+  AppAgentOrigins,
   AppAutomationReads,
+  AppBrowserTabs,
   AppChapters,
   AppDevicePresences,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
   AppIntegrationTools,
+  AppMcpClients,
   AppPages,
   AppPlanComments,
   AppProviderKeys,
@@ -499,8 +503,6 @@ export interface HostOperator {
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
-  /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
-  tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
@@ -519,12 +521,12 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
+  /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
+  /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** A followed task's Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
-  onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
+  /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
+  onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
   /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
@@ -565,6 +567,16 @@ export interface HostOperator {
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
   integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
+  /** The outside MCP clients the account allowed, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onMcpClientsChanged`. */
+  mcpClientsFollow(): Effect.Effect<void>;
+  /** The outside MCP clients let go by the windows. */
+  mcpClientsUnfollow(): Effect.Effect<void>;
+  /** The held outside MCP clients asked again at once, as Try again asks; done once the ask has landed. */
+  mcpClientsRetry(): Effect.Effect<void>;
+  /** The outside MCP clients the host holds for the windows, whole, each time they move. */
+  onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
+  /** One outside MCP client revoked under the Mac's session; the clients as they then stand, or why the revoke did not finish. */
+  mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -722,6 +734,14 @@ export interface HostOperator {
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
+  /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
+  agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
+  /** One agent's origin let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
+  /** One agent's held origin read again at once, as Try again asks. */
+  agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
+  /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
+  onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
   /** An automation made; the automation as the service kept it, or why it was not made. */
   automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
   /** One automation changed; the automation as it then stands, or why it is unchanged. */
@@ -1058,6 +1078,9 @@ const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+/** An outside MCP clients call that reached no answer. */
+const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
+
 /** An installed skills call that reached no answer, as every installed skills method answers one. */
 const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
 
@@ -1147,6 +1170,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           label: params.label,
         }),
         answerOf(integrationAccountViewSchema, INTEGRATION_UNANSWERED),
+      ),
+    mcpClientsFollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW, {})),
+    mcpClientsUnfollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW, {})),
+    mcpClientsRetry: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_RETRY, {})),
+    onMcpClientsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MCP_CLIENTS_CHANGED,
+        // Note that the held clients are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppMcpClients>(payload) : undefined),
+        listener,
+      ),
+    mcpClientsRevoke: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: params.clientId }),
+        answerOf(mcpClientsViewSchema, MCP_CLIENTS_UNANSWERED),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -1345,11 +1383,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksBrowserTabs: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, params),
-        answerOf(tasksBrowserTabsAnswerSchema, TASK_UNANSWERED),
-      ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
@@ -1447,13 +1480,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, scope)),
     tasksBrowserTabsUnfollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, scope)),
-    onTaskBrowserTabsChanged: (listener) =>
+    onBrowserTabsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(taskBrowserTabsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.BROWSER_TABS_CHANGED,
+        // Note that the held tabs are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppBrowserTabs>(payload) : undefined),
         listener,
       ),
     tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
@@ -1920,6 +1951,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    agentOriginFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, { agentId: params.agentId })),
+    agentOriginUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, { agentId: params.agentId })),
+    agentOriginRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_RETRY, { agentId: params.agentId })),
+    onAgentOriginsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AGENT_ORIGINS_CHANGED,
+        // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held chapters are.
+        (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
+        listener,
       ),
     automationCreate: (params) =>
       Effect.map(

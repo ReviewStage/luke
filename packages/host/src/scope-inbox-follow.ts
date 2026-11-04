@@ -1,26 +1,34 @@
 import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import {
+  inboxInOrder,
   inboxOfLiveRows,
   type LIVE_READ,
   LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@repo/features/live-wire";
+import type { EntityPool, HeldRows } from "@repo/sync";
 import { Data, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { type AppHolderInboxes, NO_HOLDER_INBOXES } from "./app-state.js";
-import { type InboxReads, itemsRead } from "./inbox-collections.js";
+import { INBOX_ITEM, type InboxChange } from "./inbox-collections.js";
 import { type HeldSlice, heldSlice } from "./live-collection.js";
-import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
+import {
+  confirmWrite,
+  followTakingRows,
+  LIVE_STATE,
+  restarting,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main over the service's held poll while a window holds it, and told whole on the app state as it changes.
  *
  * The host follows the scope's live read (`live-follow.ts`) the first time
- * the scope is held, keeps its items in a collection that stands among the
- * reads an inbox write reaches (`inbox-collections.ts`), takes each
- * answer's rows as its poll answers, and tells the items as they stand
- * after each answer and each write drawn over them. One the account does
+ * the scope is held, stands its items in the sync engine's pool
+ * (`inbox-collections.ts`'s `INBOX_ITEM`), which every inbox write is drawn
+ * over, takes each answer's rows as its poll answers, and tells the items
+ * as they stand after each answer and each write drawn over them. One the account does
  * not reach is not found, as the held read said. A window holds the scopes
  * it chose (`holderInboxes`, on `live-collection.ts`'s `heldSlice`), and
  * the host keeps the few let go latest followed, so a window stepping back
@@ -66,8 +74,8 @@ export interface ScopeInboxDependencies {
   ) => Effect.Effect<ScopeInboxLiveAnswer | { readonly failure: string }>;
   /** The account signed in now, which a follow is read for from its first read on; none where nobody is. */
   readonly accountId: () => string | undefined;
-  /** The reads an inbox write reaches, among which each scope's stands while it is followed. */
-  readonly reads: InboxReads;
+  /** The sync engine's pool, which each scope's items stand in while it is followed. */
+  readonly pool: EntityPool;
 }
 
 /** The follows the windows' reads share, each held while read and a while after. */
@@ -95,24 +103,23 @@ export function scopeInboxes(
           return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const read = yield* itemsRead(dependencies.reads);
         let wait: TxWait | undefined;
         let answered = false;
         // Note that nothing is told before the read first answers, since a write drawn on no items shows nothing of the scope.
-        const drawn = Effect.suspend(() =>
+        const drawn: Effect.Effect<void> = Effect.suspend(() =>
           answered
             ? SubscriptionRef.set(inbox, {
                 kind: LIVE_STATE.STANDING,
-                inbox: { items: read.inOrder() },
+                inbox: { items: inboxInOrder(items.rows()) },
               })
             : Effect.void,
         );
-        yield* dependencies.reads.stand({
-          shown: read.shown,
-          take: read.take,
-          txWait: () => wait,
-          drawn: () => drawn,
-          accountWide: false,
+        const items: HeldRows<InboxItem, InboxChange> = yield* dependencies.pool.stand(INBOX_ITEM, {
+          redraw: () => drawn,
+          confirmation: () => {
+            const handed = wait;
+            return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
+          },
         });
         const taken = followTakingRows(
           {
@@ -124,11 +131,13 @@ export function scopeInboxes(
           first,
           scopeInboxLiveRowsSchema,
           (rows) =>
-            Effect.suspend(() => {
-              read.items.answer(inboxOfLiveRows(rows));
-              answered = true;
-              return drawn;
-            }),
+            Effect.andThen(
+              items.answer(inboxOfLiveRows(rows)),
+              Effect.suspend(() => {
+                answered = true;
+                return drawn;
+              }),
+            ),
         );
         yield* Effect.forkScoped(
           taken.pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN }))),

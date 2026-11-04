@@ -8,6 +8,7 @@ import {
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { MentionLines } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -75,6 +76,7 @@ import {
 import { type PinHolder, PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { useHostRead } from "../use-host-read.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -115,8 +117,10 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * draws the task column's own agent pane (`main-tabs.tsx`'s `AgentPane`):
  * its transcript, its composer, its model and servers, and what it
  * published, at the document's reading width, each through the same
- * control a plan's agents are driven by, here holding the one agent read by
- * its id (`use-agents.ts`'s `agentId`). ⌘F finds in it as in a
+ * control a plan's agents are driven by, here holding the task list's row of
+ * the one agent (`use-agents.ts`'s `agentId`), so opening it reads nothing
+ * of the agent; an automation's agent holds the run that started it beside
+ * it (`LIVE_READ.AGENT_ORIGINS`), read once while it is held. ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
  * them (`tasklessMentions`), the pages the agent showed and the pull request
@@ -142,8 +146,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * reader's own, while the agent is not archived; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
- * Archive's place, and it is not renamed. An agent the service will not hand the reader,
- * deleted or of a workspace they are not in, as a link may name, is not
+ * Archive's place, and it is not renamed. An agent the task list does not carry,
+ * deleted or of a workspace the reader is not in, as a link may name, is not
  * found, and nothing of it is drawn. Whoever sent it a message is read against its
  * workspace's members, as on a plan, and the automation whose run started
  * it against its workspace's automations, so the prompt it opens on names
@@ -412,12 +416,20 @@ export function DesktopAgentPage({
     setFocus(COLUMN.SIDE);
     sidePanel.onNewTab();
   });
+  // The agent as the task list carries it, on a task or with none, with its own workspace and repository.
+  const { liveAgents } = tasks;
+  const listedPage = useMemo(
+    () => liveAgents?.find((each) => each.id === agentId),
+    [liveAgents, agentId],
+  );
   const agents = useAgents({
     acts: { act },
     taskId: undefined,
     agentId,
     repository: null,
-    listedAgents: tasks.liveAgents,
+    listedAgents: liveAgents,
+    listedPage,
+    list: { read: tasks.listRead, failed: tasks.listFailed, onRetry: tasks.onRetryList },
     listedPullRequests: tasks.listedPullRequests,
     // An agent of a task, an archived one opened here among them, offers what that task's mode lets it.
     modeOf: (planId) => tasks.tasks.find((each) => each.id === planId)?.mode,
@@ -428,6 +440,11 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
+  // The run that started an automation's agent, held while its page stands; an agent the list names no automation of has none, and asks nothing.
+  const run = useHostRead(
+    LIVE_READ.AGENT_ORIGINS,
+    agent?.automationName === undefined ? undefined : agentId,
+  );
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -474,6 +491,7 @@ export function DesktopAgentPage({
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? tasks.agents.models,
     keywords,
+    origin: run.rows ?? undefined,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   });
   const tab = useMemo(() => ({ agent: agentId }), [agentId]);

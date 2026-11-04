@@ -36,7 +36,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -197,7 +197,7 @@ async function drawnFor(
           : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
-  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [SENDER_NOW] } });
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [listedAgent(SENDER_NOW)] } });
   const control = agentsControl({
     agents: [agent],
     me: reader,

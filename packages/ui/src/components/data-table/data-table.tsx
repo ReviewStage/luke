@@ -85,7 +85,7 @@ const TABLE_MIN_WIDTH =
 const ROW = "transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /** A row that opens something: lit under the pointer, and pressed with the web's pointing hand but a Mac list's arrow on the desktop. */
-const PRESSABLE_ROW = "cursor-press [&:hover]:bg-muted";
+const PRESSABLE_ROW = "cursor-press hover:bg-muted";
 
 /** A sortable heading's press: its words alone, in the heading's own type and ink, its ring a little off them. */
 const SORT_BUTTON =

@@ -1438,7 +1438,7 @@ export function InboxList({
         <SelectionRegion
           id={regionId}
           selection={{ selected: picked, onChange: setPicked }}
-          order={drawn.map(({ item }) => item.id)}
+          order={[drawn.map(({ item }) => item.id)]}
           bringIn={rows.bringIn}
         >
           <ScrollArea ref={scroller} fade={SCROLL_FADE.START}>

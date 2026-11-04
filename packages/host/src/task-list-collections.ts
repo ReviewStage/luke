@@ -20,7 +20,7 @@
  * tasks a write stands over are the list's pending ones.
  */
 
-import type { AgentSummary } from "@repo/features/agent-wire";
+import type { ListedAgent } from "@repo/features/agent-wire";
 import {
   agentPullRequestsOfLiveRows,
   type TaskListLiveRows,
@@ -76,7 +76,7 @@ const MADE: WriteDeclaration<
 /** The list as the rows make it at one instant, every agent on a plan beside it, and the plans a write stands over. */
 export interface LiveTaskList {
   readonly list: TaskListAnswer;
-  readonly taskAgents: readonly AgentSummary[];
+  readonly taskAgents: readonly ListedAgent[];
   readonly taskPullRequests: readonly TaskPullRequests[];
   readonly agentPullRequests: readonly ListedPullRequest[];
   readonly taskAgentPins: readonly TaskAgentPin[];
@@ -117,7 +117,7 @@ export function taskListCollections(
       const wait = dependencies.txWait();
       return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
     };
-    const redraw = Effect.suspend(() => drawn);
+    const redraw = () => Effect.suspend(() => drawn);
     // Note that every plan made is the list's, since it holds every task the account reaches.
     const plans: HeldRows<PlanRow> = yield* pool.stand(PLAN, {
       redraw,

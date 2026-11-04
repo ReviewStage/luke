@@ -1,4 +1,3 @@
-import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@repo/features/agent-view";
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
@@ -36,6 +35,7 @@ import { keptKey, useKept } from "../use-kept.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { type CountNoun, foldedCount } from "./sidebar-fold.js";
+import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
@@ -118,18 +118,16 @@ function archiveQuestion(name: string): DialogQuestion {
 /** A press that archives or unarchives without a dialog, its refusal said in a toast. */
 function useArchivePress(agents: AgentsControl) {
   const toast = useToast();
-  return (agentId: string, archived: boolean, drawn?: ArchiveDrawn) =>
-    agents
-      .onArchive(agentId, archived, drawn === undefined ? {} : { drawn })
-      .then((result: ActionResult) => {
-        if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
-        toast({
-          words: result.reason,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
-        });
+  return (agentId: string, archived: boolean) =>
+    agents.onArchive(agentId, archived).then((result: ActionResult) => {
+      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+      toast({
+        words: result.reason,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
       });
+    });
 }
 
 /** An agent's Archive as a menu offers it, and the question it asks through. */
@@ -159,10 +157,14 @@ export function useAgentArchive(
   shown: boolean,
 ): AgentArchive {
   const press = useArchivePress(agents);
-  // Note that an archive asked about waits on its answer, so the dialog stands to say a refusal.
+  // Note that an archive asked about is drawn at once, which may take the row the dialog stands on with it.
+  const heard = useRefusalHeard(shown, {
+    surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+    about: { agentId: agent.id },
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => agents.onArchive(agent.id, true, { drawn: ARCHIVE_DRAWN.ON_ANSWER, asked: true }),
+    () => agents.onArchive(agent.id, true, { asked: true }).then(heard),
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);
@@ -219,8 +221,7 @@ function ArchivedAgentRow({
     terminals: { onOpenTerminal: undefined },
   });
   const menu = useRowMenu(rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown));
-  // Note that the button's Unarchive is drawn on the answer, because drawn at once the row would leave and take its ring with it.
-  const unarchiving = useBusyPress(() => press(agent.id, false, ARCHIVE_DRAWN.ON_ANSWER));
+  const unarchiving = useBusyPress(() => press(agent.id, false));
   return (
     <li
       ref={item}

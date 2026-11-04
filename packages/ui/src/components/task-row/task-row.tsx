@@ -226,7 +226,7 @@ const MORE = "ui-task-row-more z-1 flex items-center";
  * Linear's list does, so every row's name lines up whether or not it shows one.
  */
 const ROW_FRAME =
-  "ui-task-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control py-ui-2 text-foreground [transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast),background-color_var(--ui-duration-hover)_var(--ui-motion-exit),opacity_var(--ui-duration-quick)_var(--ui-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge [&:hover]:bg-muted";
+  "ui-task-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control py-ui-2 text-foreground [transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast),background-color_var(--ui-duration-hover)_var(--ui-motion-exit),opacity_var(--ui-duration-quick)_var(--ui-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge hover:bg-muted";
 
 /** A task's row by the room it keeps at its edges: its gutter at its start for its box, or its first cell at its inset. */
 const ROW = {

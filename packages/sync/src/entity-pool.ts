@@ -31,8 +31,16 @@
  * read hands in (`Confirmation`); where a read hands none, what the service
  * answered is taken in that read's place. Writes to one key stand down in the
  * order asked, so an older one never stands over a newer one the reads
- * already carry. A write the service refused is taken back before its caller
- * hears so, and the caller says so, as a toast does.
+ * already carry. From the service's answer on, a write may stand as what the
+ * service said of its rows (`Written.standsAs`), as an inbox item answered
+ * with its reply does. A write the service refused is taken back before its
+ * caller hears so, on the service's word where it gave one, and the caller
+ * says so, as a toast does.
+ *
+ * A read that keeps rows of another shape stands beside the pool
+ * (`PoolRead.beside`): it holds none of the kind's rows, draws the writes
+ * standing over its own, and is waited on, drawn again, and handed the
+ * service's word as a read of the pool is.
  */
 
 import { Deferred, Effect, Equal, Exit, FiberSet, Scope } from "effect";
@@ -87,9 +95,9 @@ export function fieldKind<Row extends object>(
 export type Confirmation = (txid: string) => Effect.Effect<void>;
 
 /** A read as it stands on a kind. */
-export interface PoolRead<Row> {
-  /** Draws the read again as it now stands, as a row it shows moves. */
-  readonly redraw: Effect.Effect<void>;
+export interface PoolRead<Row, Change = unknown> {
+  /** Draws the read again as it now stands, as rows it shows move: the keys that moved, which may name some it does not show. */
+  readonly redraw: (keys: readonly string[]) => Effect.Effect<void>;
   /** The read's wait for a write's transaction; none while its follow hands none. */
   readonly confirmation: () => Confirmation | undefined;
   /**
@@ -98,17 +106,30 @@ export interface PoolRead<Row> {
    * none shows only the rows it answered.
    */
   readonly adopts?: (row: Row) => boolean;
+  /**
+   * For a read that keeps rows of its own shape outside the pool, as main's
+   * account inbox keeps its entries: whether it shows `key`, and how it takes
+   * a write's change in its place where it hands no wait. It draws the writes
+   * standing (`HeldRows.standing`) over its own rows.
+   */
+  readonly beside?: {
+    readonly shows: (key: string) => boolean;
+    readonly take: (change: Change) => void;
+  };
 }
 
 /** The rows one read holds of a kind, for as long as it stands on it. */
-export interface HeldRows<Row extends object> {
+export interface HeldRows<Row extends object, Change = unknown> {
   /**
-   * Takes the rows the read answered, whole, in one commit: each upserted,
-   * the keys the read holds now theirs, and any key no read holds any longer
-   * gone. Every other read holding a row that moved is drawn again; the
-   * read draws itself.
+   * Takes the rows the read answered, in one commit: each upserted, the keys
+   * the read holds now theirs, or those `held` names where the read answers
+   * only what moved, and any key no read holds any longer gone; answering
+   * the keys whose row moved for the read or that it took up or let go.
+   * Every other read holding a row that moved is drawn again; the read draws
+   * itself. A row answered `at` a sync id never replaces one taken at a
+   * newer id, as from a read whose answer was computed before another's.
    */
-  readonly answer: (rows: readonly Row[]) => Effect.Effect<void>;
+  readonly answer: (rows: readonly Row[], answered?: Answered) => Effect.Effect<readonly string[]>;
   /**
    * Takes a row the service answered made in the read's place, where the
    * read can confirm no write yet: held from now as if the read had answered
@@ -120,8 +141,18 @@ export interface HeldRows<Row extends object> {
   readonly holds: (key: string) => boolean;
   /** The rows the read shows, in the order it answered them and then those it adopted, each as the writes standing draw it. */
   readonly rows: () => readonly Row[];
+  /** The row `key` names as the read shows it, the very row the read answered where no write changes it; none where it shows none. */
+  readonly row: (key: string) => Row | undefined;
   /** The keys of the rows the read shows that a write stands over. */
   readonly pending: () => readonly string[];
+  /** Every change standing over the kind, oldest first, which a read beside the pool draws over its own rows. */
+  readonly standing: () => readonly Change[];
+}
+
+/** How an answer stands: every key the read holds now, where its rows are only what moved, and the sync id it was read at, where it names one. */
+export interface Answered {
+  readonly held?: readonly string[];
+  readonly at?: bigint;
 }
 
 /** What the service answered of a write it took: the caller's answer, and the transaction it committed in. */
@@ -130,11 +161,15 @@ export interface Written<Change, Answer> {
   readonly txid: string | undefined;
   /** What the service says the write left of its rows, taken in the place of a read that hands no wait; the write's own change where it says nothing. */
   readonly taken?: Change;
+  /** What the write stands as from the service's answer on, drawn in place of its change until its reads carry it, as an inbox item the service answered is. */
+  readonly standsAs?: Change;
 }
 
 /** A write the service refused, which takes back what it drew, and what the caller answers for it. */
-export interface Refused<Answer> {
+export interface Refused<Answer, Change = never> {
   readonly refused: Answer;
+  /** What the service says of the rows instead, taken in every read's place before the write is taken back, so it lands on the service's word. */
+  readonly taken?: Change;
 }
 
 /** One kind of write, as its client declares it: what it changes, from its input, and how it is sent. */
@@ -145,7 +180,7 @@ export interface WriteDeclaration<Row extends object, Change, Input, Answer> {
   /** The change drawn over each of them. */
   readonly change: (input: Input) => Change;
   /** Carries the write to the service, answering what it answered, or that it refused it. */
-  readonly send: (input: Input) => Effect.Effect<Written<Change, Answer> | Refused<Answer>>;
+  readonly send: (input: Input) => Effect.Effect<Written<Change, Answer> | Refused<Answer, Change>>;
 }
 
 /** Every row the reads hold, and the writes drawn over them. */
@@ -153,8 +188,8 @@ export interface EntityPool {
   /** Stands `read` on `kind`'s rows for the caller's scope, holding none until it answers. */
   readonly stand: <Row extends object, Change>(
     kind: EntityKind<Row, Change>,
-    read: PoolRead<Row>,
-  ) => Effect.Effect<HeldRows<Row>, never, Scope.Scope>;
+    read: PoolRead<Row, Change>,
+  ) => Effect.Effect<HeldRows<Row, Change>, never, Scope.Scope>;
   /**
    * `declaration` written with `input`: drawn at once over every read that
    * holds its keys, sent in turn, and answered as soon as the service
@@ -168,17 +203,17 @@ export interface EntityPool {
 }
 
 /** One read standing on a kind: the keys it holds, in the order it answered them, and the keys of rows a standing write made that it shows meanwhile. */
-interface Holding<Row> {
-  readonly read: PoolRead<Row>;
+interface Holding<Row, Change = unknown> {
+  readonly read: PoolRead<Row, Change>;
   order: readonly string[];
   held: ReadonlySet<string>;
   adopted: ReadonlySet<string>;
 }
 
-/** One write standing: the keys it changes and its change. */
+/** One write standing: the keys it changes and its change, the service's word in its place once it answered one. */
 interface Standing<Change> {
   readonly keys: readonly string[];
-  readonly change: Change;
+  change: Change;
 }
 
 /** Where one write stands: answered once the service answered it, and dropped once nothing of it stands drawn. */
@@ -191,11 +226,13 @@ interface Turn {
 interface KindRows<Row extends object, Change> {
   readonly kind: EntityKind<Row, Change>;
   readonly synced: SyncedCollection<Row, string>;
-  readonly reads: Set<Holding<Row>>;
+  readonly reads: Set<Holding<Row, Change>>;
   /** The writes drawn now, oldest first, each one entry so a change written twice stands twice. */
   standing: readonly Standing<Change>[];
   /** Each key's newest write, which the next write to it is sent after and stands down after. */
   readonly lastWrites: Map<string, Turn>;
+  /** The sync id each key's row was taken at, where an answer named one. */
+  readonly takenAt: Map<string, bigint>;
 }
 
 /** The row `key` names as the reads show it: the synced one with every write standing on it drawn over it, in order; none where none shows. */
@@ -214,35 +251,41 @@ function drawnRow<Row extends object, Change>(
   return row;
 }
 
-/** Whether the read shows `key`'s row: one it answered, or one it adopted. */
-function shows<Row>(holding: Holding<Row>, key: string): boolean {
-  return holding.held.has(key) || holding.adopted.has(key);
+/** Whether the read shows `key`'s row: one it answered, one it adopted, or one it keeps beside the pool. */
+function shows<Row, Change>(holding: Holding<Row, Change>, key: string): boolean {
+  return (
+    holding.held.has(key) || holding.adopted.has(key) || holding.read.beside?.shows(key) === true
+  );
 }
 
-/** The keys of the rows the read shows: those it answered, in order, then those it adopted. */
-function shown<Row>(holding: Holding<Row>): readonly string[] {
+/** The keys of the rows the read shows of the pool: those it answered, in order, then those it adopted. */
+function shown<Row, Change>(holding: Holding<Row, Change>): readonly string[] {
   return [...holding.order, ...[...holding.adopted].filter((key) => !holding.held.has(key))];
 }
 
 /** Whether any read standing holds `key`, as one it answered. */
-function heldByAny<Row>(reads: ReadonlySet<Holding<Row>>, key: string): boolean {
+function heldByAny<Row, Change>(reads: ReadonlySet<Holding<Row, Change>>, key: string): boolean {
   return [...reads].some((holding) => holding.held.has(key));
 }
 
 /** The reads standing that show any of `keys`, but `except`. */
-function holdersOf<Row>(
-  reads: ReadonlySet<Holding<Row>>,
+function holdersOf<Row, Change>(
+  reads: ReadonlySet<Holding<Row, Change>>,
   keys: readonly string[],
-  except?: Holding<Row>,
-): readonly Holding<Row>[] {
+  except?: Holding<Row, Change>,
+): readonly Holding<Row, Change>[] {
   return [...reads].filter(
     (holding) => holding !== except && keys.some((key) => shows(holding, key)),
   );
 }
 
-/** Draws each read again. */
-function redrawn<Row>(holdings: readonly Holding<Row>[]): Effect.Effect<void> {
-  return Effect.forEach(holdings, (holding) => holding.read.redraw, { discard: true });
+/** Draws each read again over the keys that moved. */
+function redrawn<Row, Change>(
+  holdings: readonly Holding<Row, Change>[],
+  keys: readonly string[],
+): Effect.Effect<void> {
+  if (keys.length === 0) return Effect.void;
+  return Effect.forEach(holdings, (holding) => holding.read.redraw(keys), { discard: true });
 }
 
 /** Whether a write stands over `key`. */
@@ -254,24 +297,24 @@ function standingOver<Row extends object, Change>(
 }
 
 /**
- * Runs `step` over the pool, answering the reads that showed or show any of
- * `keys` whose row it moved, or that a write began or ceased to stand over.
- * Note that every read showing a key shows the one row, so a key whose
- * drawn row moved moves every read showing it.
+ * Runs `step` over the pool at once, answering the draw again of the reads
+ * that showed or show any of `keys` whose row it moved, or that a write
+ * began or ceased to stand over. Note that every read showing a key shows
+ * the one row, so a key whose drawn row moved moves every read showing it.
  */
 function movedBy<Row extends object, Change>(
   rows: KindRows<Row, Change>,
   keys: readonly string[],
   step: () => void,
-): readonly Holding<Row>[] {
+): Effect.Effect<void> {
   const before = keys.map((key) => [drawnRow(rows, key), standingOver(rows, key)] as const);
   const showing = holdersOf(rows.reads, keys);
   step();
   const moved = keys.filter(
     (key, at) => !Equal.equals(before[at], [drawnRow(rows, key), standingOver(rows, key)] as const),
   );
-  if (moved.length === 0) return [];
-  return [...new Set([...showing, ...holdersOf(rows.reads, moved)])];
+  if (moved.length === 0) return Effect.void;
+  return redrawn([...new Set([...showing, ...holdersOf(rows.reads, moved)])], moved);
 }
 
 /** Each read that adopts a row made of `keys`, and does not show it yet, shown it while a write stands over it. */
@@ -298,13 +341,16 @@ function unadopted<Row extends object, Change>(
   }
 }
 
-/** The rows `next` holds taken as the synced ones, and every read holding one that moved, but `except`, drawn again. */
+/** The rows `next` holds taken as the synced ones, answering the keys it wrote, and every read showing one, but `except`, drawn again. */
 function takenAndDrawn<Row extends object, Change>(
   rows: KindRows<Row, Change>,
   next: ReadonlyMap<string, Row>,
-  except?: Holding<Row>,
-): Effect.Effect<void> {
-  return Effect.suspend(() => redrawn(holdersOf(rows.reads, rows.synced.take(next), except)));
+  except?: Holding<Row, Change>,
+): Effect.Effect<readonly string[]> {
+  return Effect.suspend(() => {
+    const written = rows.synced.take(next);
+    return Effect.as(redrawn(holdersOf(rows.reads, written, except), written), written);
+  });
 }
 
 /** Waits for each turn given to reach the point `of` names. */
@@ -318,34 +364,60 @@ function awaitEach(
 /** `read` stood on `rows` for the caller's scope, its keys let go as the scope closes and any row no other read holds with them. */
 function stood<Row extends object, Change>(
   rows: KindRows<Row, Change>,
-  read: PoolRead<Row>,
-): Effect.Effect<HeldRows<Row>, never, Scope.Scope> {
-  const release = (holding: Holding<Row>) =>
+  read: PoolRead<Row, Change>,
+): Effect.Effect<HeldRows<Row, Change>, never, Scope.Scope> {
+  const release = (holding: Holding<Row, Change>) =>
     Effect.sync(() => {
       rows.reads.delete(holding);
       const next = new Map(rows.synced.held());
-      for (const key of holding.order) if (!heldByAny(rows.reads, key)) next.delete(key);
+      for (const key of holding.order) {
+        if (heldByAny(rows.reads, key)) continue;
+        next.delete(key);
+        rows.takenAt.delete(key);
+      }
       rows.synced.take(next);
     });
   return Effect.map(
     Effect.acquireRelease(
       Effect.sync(() => {
-        const holding: Holding<Row> = { read, order: [], held: new Set(), adopted: new Set() };
+        const holding: Holding<Row, Change> = {
+          read,
+          order: [],
+          held: new Set(),
+          adopted: new Set(),
+        };
         rows.reads.add(holding);
         return holding;
       }),
       release,
     ),
-    (holding): HeldRows<Row> => ({
-      answer: (answered) =>
+    (holding): HeldRows<Row, Change> => ({
+      answer: (answered, { held, at } = {}) =>
         Effect.suspend(() => {
           const keyed = new Map(answered.map((row) => [rows.kind.key(row), row]));
-          const was = holding.order;
-          holding.order = [...keyed.keys()];
-          holding.held = new Set(keyed.keys());
-          const next = new Map([...rows.synced.held(), ...keyed]);
-          for (const key of was) if (!heldByAny(rows.reads, key)) next.delete(key);
-          return takenAndDrawn(rows, next, holding);
+          const keys = new Set(held ?? keyed.keys());
+          const was = holding.held;
+          holding.order = [...keys];
+          holding.held = keys;
+          const next = new Map(rows.synced.held());
+          for (const [key, row] of keyed) {
+            const taken = rows.takenAt.get(key);
+            if (at !== undefined && taken !== undefined && taken > at) continue;
+            next.set(key, row);
+            if (at !== undefined) rows.takenAt.set(key, at);
+          }
+          for (const key of was) {
+            if (heldByAny(rows.reads, key)) continue;
+            next.delete(key);
+            rows.takenAt.delete(key);
+          }
+          const placed = [
+            ...[...keys].filter((key) => !was.has(key)),
+            ...[...was].filter((key) => !keys.has(key)),
+          ];
+          return Effect.map(takenAndDrawn(rows, next, holding), (written) => [
+            ...new Set([...written, ...placed]),
+          ]);
         }),
       confirmNew: (row) =>
         Effect.sync(() => {
@@ -358,39 +430,62 @@ function stood<Row extends object, Change>(
         }),
       holds: (key) => shows(holding, key),
       rows: () => shown(holding).flatMap((key) => drawnRow(rows, key) ?? []),
+      row: (key) =>
+        holding.held.has(key) || holding.adopted.has(key) ? drawnRow(rows, key) : undefined,
       pending: () => shown(holding).filter((key) => standingOver(rows, key)),
+      standing: () => rows.standing.map((write) => write.change),
     }),
   );
 }
 
 /**
+ * `taken` laid over `keys` in the place of each of `holdings`: over the
+ * pool's rows they show, and the rows a read keeps beside the pool, every
+ * read showing one that moved drawn again. A row a read adopted is held
+ * from then as if it had answered it.
+ */
+function takenInPlace<Row extends object, Change>(
+  rows: KindRows<Row, Change>,
+  holdings: readonly Holding<Row, Change>[],
+  keys: readonly string[],
+  taken: Change,
+): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    const next = new Map(rows.synced.held());
+    const beside: Holding<Row, Change>[] = [];
+    for (const holding of holdings) {
+      if (keys.some((key) => holding.read.beside?.shows(key) === true)) beside.push(holding);
+      for (const key of keys) {
+        if (!holding.held.has(key) && !holding.adopted.has(key)) continue;
+        const drawn = rows.kind.drawn(taken, next.get(key));
+        if (drawn === ROW_GONE) {
+          next.delete(key);
+          rows.takenAt.delete(key);
+        } else if (drawn !== undefined) next.set(key, drawn);
+        if (holding.held.has(key) || !next.has(key)) continue;
+        holding.order = [...holding.order, key];
+        holding.held = new Set([...holding.held, key]);
+      }
+    }
+    for (const holding of beside) holding.read.beside?.take(taken);
+    return Effect.andThen(redrawn(beside, keys), takenAndDrawn(rows, next));
+  });
+}
+
+/**
  * A kept write confirmed on one read showing its keys by the read's own
- * wait, or, where it hands none, what the service answered taken in its
- * place over the rows it shows, every read showing one that moved drawn
- * again. A row it adopted is held from then as if it had answered it.
+ * wait, or, where it hands none or the write committed no transaction, what
+ * the service answered taken in its place.
  */
 function confirmedOn<Row extends object, Change, Answer>(
   rows: KindRows<Row, Change>,
-  holding: Holding<Row>,
+  holding: Holding<Row, Change>,
   write: Standing<Change>,
   written: Written<Change, Answer>,
 ): Effect.Effect<void> {
   const wait = holding.read.confirmation();
   if (wait !== undefined && written.txid !== undefined) return wait(written.txid);
-  return Effect.suspend(() => {
-    const taken = written.taken ?? write.change;
-    const next = new Map(rows.synced.held());
-    for (const key of write.keys) {
-      if (!shows(holding, key)) continue;
-      const drawn = rows.kind.drawn(taken, next.get(key));
-      if (drawn === ROW_GONE) next.delete(key);
-      else if (drawn !== undefined) next.set(key, drawn);
-      if (holding.held.has(key) || !next.has(key)) continue;
-      holding.order = [...holding.order, key];
-      holding.held = new Set([...holding.held, key]);
-    }
-    return takenAndDrawn(rows, next);
-  });
+  return takenInPlace(rows, [holding], write.keys, written.taken ?? write.change);
 }
 
 /** `declaration` written over `rows` with `input`, its confirmation standing on in `confirming` once the service took it. */
@@ -415,21 +510,25 @@ function written<Row extends object, Change, Input, Answer>(
     });
     const drop = Effect.suspend(() => {
       for (const key of keys) if (rows.lastWrites.get(key) === turn) rows.lastWrites.delete(key);
-      return redrawn(
-        movedBy(rows, keys, () => {
-          rows.standing = rows.standing.filter((each) => each !== write);
-          unadopted(rows, keys);
-        }),
-      );
+      return movedBy(rows, keys, () => {
+        rows.standing = rows.standing.filter((each) => each !== write);
+        unadopted(rows, keys);
+      });
     }).pipe(Effect.ensuring(Deferred.succeed(turn.dropped, undefined)));
     const sent = Effect.gen(function* () {
-      yield* redrawn(drawnOn);
+      yield* drawnOn;
       yield* awaitEach(before, (each) => each.answered);
       return yield* declaration.send(input);
     }).pipe(Effect.ensuring(Deferred.succeed(turn.answered, undefined)));
-    // Note that every read holding the keys is waited on at once, so the write stands until the slowest carries it.
+    // Note that every read showing the keys is waited on at once, so the write stands until the slowest carries it.
     const settled = (kept: Written<Change, Answer>) =>
       Effect.gen(function* () {
+        const { standsAs } = kept;
+        if (standsAs !== undefined) {
+          yield* movedBy(rows, keys, () => {
+            write.change = standsAs;
+          });
+        }
         yield* Effect.forEach(
           holdersOf(rows.reads, keys),
           (holding) => confirmedOn(rows, holding, write, kept),
@@ -437,13 +536,17 @@ function written<Row extends object, Change, Input, Answer>(
         );
         yield* awaitEach(before, (each) => each.dropped);
       }).pipe(Effect.ensuring(drop));
-    // Note that a kept write answers before its reads carry it, standing on in a fiber of the pool's; a refused one answers once it is taken back.
+    // Note that a kept write answers before its reads carry it, standing on in a fiber of the pool's; a refused one answers once it is taken back, on the service's word where it gave one.
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const answered = yield* Effect.onExit(restore(sent), (exit) =>
           Exit.isSuccess(exit) ? Effect.void : drop,
         );
         if ("refused" in answered) {
+          const { taken } = answered;
+          if (taken !== undefined) {
+            yield* takenInPlace(rows, holdersOf(rows.reads, keys), keys, taken);
+          }
           yield* drop;
           return answered.refused;
         }
@@ -479,6 +582,7 @@ export function entityPool(): Effect.Effect<EntityPool, never, Scope.Scope> {
             reads: new Set(),
             standing: [],
             lastWrites: new Map(),
+            takenAt: new Map(),
           };
           kinds.set(kind, fresh);
           return fresh;

@@ -23,6 +23,7 @@ import { installedSkillsContract } from "./installed-skills.js";
 import { integrationsContract } from "./integrations.js";
 import { liveContract } from "./live.js";
 import { macCommandsContract } from "./mac-commands.js";
+import { mcpClientsContract } from "./mcp-clients.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 import { planCommentsContract } from "./plan-comments.js";
@@ -65,6 +66,7 @@ export const hostedContract = {
   live: liveContract,
   deviceAgents: deviceAgentsContract,
   macCommands: macCommandsContract,
+  mcpClients: mcpClientsContract,
   messages: messagesContract,
   models: modelsContract,
   planComments: planCommentsContract,

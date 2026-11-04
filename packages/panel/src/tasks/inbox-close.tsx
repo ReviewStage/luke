@@ -78,23 +78,12 @@ interface Attempt {
   readonly revision: number;
 }
 
-/**
- * The Inbox's closes, sent through `act`; `onHeard` is told once a close
- * the agent hears was taken, since it may open the agent's turn.
- */
-export function useInboxCloser({
-  act,
-  onHeard,
-}: {
-  act: ActHandle["act"];
-  onHeard?: (() => void) | undefined;
-}): InboxCloser {
+/** The Inbox's closes, sent through `act`. */
+export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser {
   const writer = useDraftWriter();
   const toast = useToast();
   const attempts = useRef(new Map<string, Attempt>());
   const out = useRef(new Set<string>());
-  const heard = useRef(onHeard);
-  heard.current = onHeard;
   return useCallback(
     (item: InboxItem, saying?: CloseSaying) => {
       if (out.current.has(item.id)) return Promise.resolve(KEPT);
@@ -145,7 +134,6 @@ export function useInboxCloser({
                 : withoutPicks(now),
             );
           }
-          if (item.needsReply) heard.current?.();
           return KEPT;
         });
     },

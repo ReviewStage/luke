@@ -1,13 +1,9 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  agentBrowserTabAnswerSchema,
-  agentBrowserTabsAnswerSchema,
-  browserTabsPlaceSchema,
-} from "./agent-browser-tab-wire.js";
+import { agentBrowserTabAnswerSchema, browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
-  type AgentSummary,
-  agentSummarySchema,
+  type ListedAgent,
+  listedAgentSchema,
   localAgentRefusalSchema,
   type TasklessAgent,
   tasklessAgentSchema,
@@ -190,12 +186,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
   /**
    * Every agent on a plan, the archived ones among them, each as its plan's
-   * own list names it, the first started first: present only while the list
+   * own list names it, with the workspace and repository its own row names,
+   * the first started first: present only while the list
    * is followed live over Neon Realtime, when it is what the open plan's
-   * tabs draw, and what the notices' ledger reads, the archived left out, in
+   * tabs draw, and an agent's page, and what the notices' ledger reads, the archived left out, in
    * place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
@@ -249,8 +246,8 @@ export const IDLE_TASKS_VIEW: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
-export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+/** An agent with no plan as a plan's agents are named, with its workspace and repository, which names an automation only where one started it. */
+export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): ListedAgent {
   return automationId === null ? agent : { ...agent, automationId };
 }
 
@@ -662,19 +659,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/** Browser tabs, as a side panel asks the host for them: one coding agent's, as its page names it, or a task's agents' together. */
-export const tasksBrowserTabsParamsSchema = browserTabsPlaceSchema;
-
-export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
-
-/** An agent's or a task's Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
-export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
-  agentBrowserTabsAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
-
 /**
  * Why a Browser tab a member asked for did not open in a coding agent's
  * browser, as the side panel says it: the service did not answer, the task
@@ -713,22 +697,10 @@ export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
 
 export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
-/** An agent's or a task's Browser tabs, followed by a window while its side panel lists them. */
+/** An agent's or a task's Browser tabs, held by a window while its side panel lists them. */
 export const taskBrowserTabsFollowSchema = browserTabsPlaceSchema;
 
 export type TaskBrowserTabsFollow = typeof taskBrowserTabsFollowSchema.Type;
-
-/**
- * A followed agent's or task's Browser tabs as they now stand, the agent's
- * pointer on each among them, told each time one moves or a takeover lapses
- * while followed, or why there are none.
- */
-export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
-  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
-]);
-
-export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
 
 /** A task a link names by its number, as the window asks the host to find it: the link's workspace, by the slug or the id it spells, and the number. */
 export const tasksFindParamsSchema = EffectSchema.Struct({

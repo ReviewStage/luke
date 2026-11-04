@@ -72,7 +72,7 @@ export type AttachmentChipState =
  * where it holds a wait or a failure, and its picture's where it holds one.
  */
 const CHIP =
-  "ui-attachment-chip group/attachment-chip relative flex h-attachment-chip max-w-attachment-chip-max rounded-ui-8 border border-border bg-surface transition-[border-color] duration-(--ui-duration-hover) ease-motion-exit has-[button.ui-attachment-chip-face:hover]:border-border-strong data-[image=true]:not-data-[picture=true]:w-attachment-chip-thumb";
+  "ui-attachment-chip group/attachment-chip relative flex h-attachment-chip max-w-attachment-chip-max rounded-ui-8 border border-border bg-surface transition-[border-color] duration-(--ui-duration-hover) ease-motion-exit [@media(hover:hover)]:has-[button.ui-attachment-chip-face:hover]:border-border-strong data-[image=true]:not-data-[picture=true]:w-attachment-chip-thumb";
 
 /**
  * The face, the press that opens the file where it is one, washed under the
@@ -83,7 +83,7 @@ const FACE =
   "ui-attachment-chip-face m-0 flex min-w-0 flex-[1_1_auto] items-center gap-ui-8 rounded-attachment-chip-face border-0 bg-transparent py-0 pr-ui-12 pl-attachment-chip-lead text-left text-muted-foreground [font-family:inherit] [font-style:inherit] [font-weight:inherit] leading-[inherit] text-caption-inline transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit [&>svg]:size-icon-16 [&>svg]:flex-none group-data-[image=true]/attachment-chip:justify-center group-data-[image=true]/attachment-chip:p-0";
 
 /** The face as a press: the pointer's hand, and the strong fill under it, a picture brightening with it. */
-const FACE_PRESS = "group/attachment-face cursor-press [&:hover]:bg-fill-strong";
+const FACE_PRESS = "group/attachment-face cursor-press hover:bg-fill-strong";
 
 /**
  * The way off. Note that the disc is 18px but the button is 24px, because a
@@ -93,7 +93,7 @@ const FACE_PRESS = "group/attachment-face cursor-press [&:hover]:bg-fill-strong"
  * ring; it stands inside the target, close round the disc.
  */
 const REMOVE =
-  "ui-attachment-chip-remove absolute -top-attachment-chip-remove-out -right-attachment-chip-remove-out m-0 flex size-attachment-chip-remove items-center justify-center rounded-ui-full border-3 border-transparent bg-background bg-clip-padding p-0 text-muted-foreground shadow-attachment-chip-disc transition-[color] duration-(--ui-duration-hover) ease-motion-exit focus-visible:outline-offset-[calc(-1*var(--ui-focus-ring-width))] [&:hover:not(:disabled)]:text-foreground disabled:opacity-disabled [&_svg]:size-ui-8";
+  "ui-attachment-chip-remove absolute -top-attachment-chip-remove-out -right-attachment-chip-remove-out m-0 flex size-attachment-chip-remove items-center justify-center rounded-ui-full border-3 border-transparent bg-background bg-clip-padding p-0 text-muted-foreground shadow-attachment-chip-disc transition-[color] duration-(--ui-duration-hover) ease-motion-exit focus-visible:outline-offset-[calc(-1*var(--ui-focus-ring-width))] hover:not-disabled:text-foreground disabled:opacity-disabled [&_svg]:size-ui-8";
 
 /**
  * An upload's meter, a hairline along the chip's foot inside its edge in the
