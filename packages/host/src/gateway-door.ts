@@ -256,9 +256,6 @@ const UNDECLARED_ROW_WRITES = [
   // The sidebar's writes, declared by W3's second PR.
   GATEWAY_METHOD.TASKS_PIN_REPOSITORY,
   GATEWAY_METHOD.TASKS_WRITE_SECTION,
-  // Plan comment writes, declared by W4.
-  GATEWAY_METHOD.TASKS_COMMENT_START,
-  GATEWAY_METHOD.TASKS_COMMENT_ACT,
   // Workspace, member, and invitation writes, declared by W5.
   GATEWAY_METHOD.WORKSPACES_RENAME,
   GATEWAY_METHOD.WORKSPACES_SLUG_SET,
