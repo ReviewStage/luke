@@ -6,6 +6,8 @@
  * worth asserting without one.
  */
 
+import type { CimdOptions } from "@better-auth/cimd";
+import type { ClientMetadataResourceFetch, OAuthOptions, Scope } from "@better-auth/oauth-provider";
 import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
 import { MEMBER_MCP_SCOPE } from "../member-mcp/resource.js";
@@ -38,6 +40,90 @@ export const OAUTH_PROVIDER_SCOPES = [
   MEMBER_MCP_SCOPE.OFFLINE_ACCESS,
   MEMBER_MCP_SCOPE.MCP,
 ] as const;
+
+/**
+ * How an outside MCP client comes to hold a client row, by either door the
+ * provider opens: Dynamic Client Registration (RFC 7591) at
+ * `/oauth2/register`, open to anyone since a client registers before a
+ * member signs in, and a Client ID Metadata Document (`memberMcpClientDiscovery`
+ * below), fetched from the URL the client names itself by. Both doors persist
+ * the same capability set (the plugin's one registration seam): the member
+ * MCP server's scopes alone, with no step-up beyond them, so no such client
+ * is ever granted `openid` and its token names no member to the account
+ * routes, which resolve through userinfo. A registration or a document that
+ * asks for a scope outside the set is refused `invalid_scope`.
+ *
+ * No link to the resource is written (`enforcePerClientResources: false`):
+ * the plugin's default of linking at registration
+ * (`clientRegistrationDefaultResources`) is refused at init unless the
+ * resource is also declared through its `resources` option, whose seed
+ * queries the store as this module loads, which `auth-database.ts` says no
+ * import may. With one resource a deployment, the member MCP server, whose
+ * row allows only these scopes, the link would hold nothing the scopes do
+ * not: the desktop's client holds no `vespin:mcp`, so a token it minted for
+ * the resource is refused there for its scope.
+ */
+export function oauthClientRegistration(): Pick<
+  OAuthOptions<Scope[]>,
+  | "allowDynamicClientRegistration"
+  | "allowUnauthenticatedClientRegistration"
+  | "clientRegistrationDefaultScopes"
+  | "clientRegistrationAllowedScopes"
+  | "enforcePerClientResources"
+> {
+  return {
+    allowDynamicClientRegistration: true,
+    allowUnauthenticatedClientRegistration: true,
+    clientRegistrationDefaultScopes: [MEMBER_MCP_SCOPE.MCP, MEMBER_MCP_SCOPE.OFFLINE_ACCESS],
+    clientRegistrationAllowedScopes: [],
+    enforcePerClientResources: false,
+  };
+}
+
+/**
+ * The protocol profile a Client ID Metadata Document is held to: the MCP
+ * 2026-07-28 revision's, which the member MCP server serves and which
+ * requires a document to name the client (`client_name`, what the consent
+ * page shows) and its redirects.
+ */
+const MCP_METADATA_PROFILE = "mcp-2026-07-28" as const satisfies CimdOptions["metadataProfile"];
+
+/**
+ * How a client named by the URL of its Client ID Metadata Document is
+ * discovered (`@better-auth/cimd`): its document fetched through the
+ * transport given, on a deployment the package's own Node fetch, which
+ * resolves the host once, refuses every special-use address, pins the
+ * answer for the connection, and follows no redirect; in a test, a double.
+ * The plugin's own gates stand and no host allowlist is set
+ * (`isMetadataDocumentUrlAllowed`): an allowlist would shut out every client
+ * nobody named, and what a document claims is weighed on the consent page,
+ * which shows the client's registered name and where its answer goes.
+ */
+export function memberMcpClientDiscovery(
+  fetchClientMetadataResource: ClientMetadataResourceFetch,
+): CimdOptions {
+  return { fetchClientMetadataResource, metadataProfile: MCP_METADATA_PROFILE };
+}
+
+/**
+ * Better Auth's rate limiter, on its database storage (`rate_limit` in the
+ * auth schema), so a count holds across the deployment's function instances
+ * rather than each instance keeping its own: the provider's own rules are
+ * what is counted, among them five registrations a minute per address at
+ * `/oauth2/register`, the one door open to anyone. It is on in every
+ * environment rather than only where `NODE_ENV` says production, so a
+ * Preview is held to the same limits.
+ */
+export const AUTH_RATE_LIMIT = { enabled: true, storage: "database" } as const;
+
+/**
+ * The headers the platform names a request's address in, read in this order:
+ * Vercel sets both and overwrites any a caller sent
+ * (`agents/device-agents-procedures.ts` reads the same two), and the first
+ * holds one address where the second may list a chain, which the limiter
+ * would not key on.
+ */
+export const CLIENT_ADDRESS_HEADERS = ["x-real-ip", "x-forwarded-for"] as const;
 
 /**
  * What a GitHub sign-in asks for. It is our GitHub App's user

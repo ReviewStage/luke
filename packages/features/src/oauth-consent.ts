@@ -10,12 +10,19 @@ import { PRODUCT_NAME } from "./product-name.js";
  * allow more than the page shows.
  */
 
-/** The scopes our authorization server grants, by name. */
-const OAUTH_SCOPE = {
+/**
+ * The scopes our authorization server grants, by name: OpenID's own, which
+ * the desktop asks for, and the member MCP server's, which an outside MCP
+ * client asks for and which the service's resource names back
+ * (`@repo/service/member-mcp/resource`). Declared here, below the service,
+ * so the consent page's words and the server's scope are one spelling.
+ */
+export const OAUTH_SCOPE = {
   OPENID: "openid",
   PROFILE: "profile",
   EMAIL: "email",
   OFFLINE_ACCESS: "offline_access",
+  MCP: "vespin:mcp",
 } as const;
 
 type OAuthScope = (typeof OAUTH_SCOPE)[keyof typeof OAUTH_SCOPE];
@@ -26,6 +33,7 @@ const OAUTH_SCOPE_WORDS = {
   [OAUTH_SCOPE.PROFILE]: "See your name and profile picture",
   [OAUTH_SCOPE.EMAIL]: "See your email address",
   [OAUTH_SCOPE.OFFLINE_ACCESS]: "Keep this access after you close the window",
+  [OAUTH_SCOPE.MCP]: `See and change your tasks, agents, and inbox in ${PRODUCT_NAME}, as you`,
 } as const satisfies Record<OAuthScope, string>;
 
 /** Where a client's answer goes when its redirect is on the member's own machine. */

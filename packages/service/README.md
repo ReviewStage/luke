@@ -1588,12 +1588,13 @@ configured. Its identifier is
 `${baseURL}/api/mcp`, its allowed scopes `vespin:mcp` (`MEMBER_MCP_SCOPE`)
 and `offline_access`, never `openid`, its access token lives fifteen minutes,
 since a token verified against the key set alone does not see its
-revocation, and its refresh token lapses after thirty days unused. A client
-reaches it only once linked to it in `oauth_client_resource`
-(`enforcePerClientResources`, the plugin's default), which no client is yet:
-the sign-in of outside clients is a later change, so in production every
-call answers the 401 challenge until then. Every address is the
-deployment's base URL's, so a Preview is its own resource and issuer.
+revocation, and its refresh token lapses after thirty days unused. Any
+client may name it (`enforcePerClientResources: false`, below under "Outside
+MCP clients"): its row allows only the two scopes an outside client holds,
+and the desktop's client holds neither, so a token the desktop minted for
+it carries `offline_access` alone and is refused for its scope. Every
+address is the deployment's base URL's, so a Preview is its own resource
+and issuer.
 
 **The metadata** (RFC 9728) is the resource client's own
 `getProtectedResourceMetadata` document, served at
@@ -1602,7 +1603,7 @@ from the resource's address, and at the well-known root, both rewritten by
 `apps/web/server/function-rewrites.ts` onto `/api/mcp/resource-metadata`: it
 names the resource, the auth service as its one authorization server, the
 scopes, and that a token travels in the header. The authorization server's
-own metadata is the later change's.
+own metadata is the next section's.
 
 **The tools** (`src/member-mcp/tools.ts`) are declared once each, name,
 description, wire input, and effect, and registered with the SDK by
@@ -1619,6 +1620,100 @@ in the `member-mcp` function (`function-durations.ts`);
 `src/member-mcp/app.test.ts` mints the tokens through a seeded client linked
 to the resource and drives the server with the SDK's own client at both
 revisions.
+
+## Outside MCP clients
+
+An MCP client, an agent harness such as Claude Code, Codex, Claude.ai,
+ChatGPT, or Cursor, signs a member in to the member MCP server through the
+auth service's OAuth provider, end to end as follows. The policy is
+`src/auth/auth-policy.ts` (`oauthClientRegistration`,
+`memberMcpClientDiscovery`, `AUTH_RATE_LIMIT`), the wiring `src/auth/auth.ts`,
+and `src/auth/auth-mcp-clients.test.ts` drives the whole of it over a test's
+own PGlite, through the harness in `src/testing/member-mcp-auth.ts`, by both
+doors below.
+
+**Discovery.** A call on `/api/mcp` without a token answers the 401 challenge
+naming the protected resource metadata (above), which names the auth
+service, `${baseURL}/api/auth`, as the one authorization server. The client
+then reads that server's metadata (RFC 8414, OpenID Connect Discovery) at
+`/.well-known/oauth-authorization-server/api/auth`,
+`/.well-known/openid-configuration/api/auth`, or
+`/api/auth/.well-known/openid-configuration`. The provider plugin answers the
+issuer-path forms itself, on any request that reaches Better Auth's handler
+ahead of its endpoints (`onRequest`, which better-call runs before its base
+path check), so the root forms are rewrites in
+`apps/web/server/function-rewrites.ts` onto the auth function, each
+carrying the issuer-path form in `route-path` (`AUTH_SERVER_METADATA_PATHS`
+in `src/auth/auth-app.ts`), which the dispatcher restores; nothing is mounted
+by hand. The document names the endpoints, `registration_endpoint` among
+them, `client_id_metadata_document_supported: true`, and `none` among the
+token endpoint's auth methods, both of which the plugin advertises itself
+once a client discovery or open registration is on, and which Claude.ai reads
+before it names itself by a document.
+
+**Naming itself, by either door.** A client of the 2026 revisions names
+itself by the HTTPS URL of its Client ID Metadata Document, which
+`@better-auth/cimd` (pinned at the provider's own version) fetches the first
+time the URL is seen as a `client_id` and again once its cache lapses (an
+hour, or what the document's own cache headers say), through the package's
+Node transport (`@better-auth/cimd/node`): the host resolved once, every
+special-use address refused, the answer pinned for the connection, no
+redirect followed, and a bounded fetch budget per origin. The document is
+held to the MCP 2026-07-28 profile, which requires the client's name and its
+redirects, and a row is written for it in `oauth_client` under
+`client_discovery_id = "cimd"`, replaced on each refresh. No host allowlist is
+set (`isMetadataDocumentUrlAllowed`): one would shut out every client nobody
+named, and what a document claims is weighed on the consent page, which
+shows the client's registered name and where its answer goes. An older
+client registers itself by Dynamic Client Registration (RFC 7591) at
+`/oauth2/register`, open to anyone since a client registers before a member
+signs in (`allowUnauthenticatedClientRegistration`), under the plugin's own
+redirect rules: a `web` client (the default) redirects to HTTPS on a public
+host, a `native` one to a loopback address or a reverse-domain private-use
+scheme. Registration is rate limited by the provider's own rule, five a
+minute per address, on Better Auth's limiter over its database storage
+(`rate_limit`, `AUTH_RATE_LIMIT`), so the count holds across the deployment's
+function instances; every other rule the limiter holds, sign-in among them,
+is counted the same way from this change on. The address is read from
+`x-real-ip` ahead of `x-forwarded-for` (`CLIENT_ADDRESS_HEADERS`), which
+Vercel sets and overwrites.
+
+**What either door grants.** Both doors persist a client through the
+plugin's one registration seam, under the capability set
+`clientRegistrationDefaultScopes` names and no step-up
+(`clientRegistrationAllowedScopes` is empty): `vespin:mcp` and
+`offline_access`, the member MCP server's scopes and no other. A
+registration or a document asking any other scope, `openid` among them, is
+refused `invalid_scope`, as is a client of either door asking it at
+authorization. No link to the resource is written: the plugin's
+`clientRegistrationDefaultResources` is refused at init unless the resource
+is also declared through its `resources` option, whose seed queries the
+store as `auth.ts` loads, which no import may (`auth-database.ts`), so the
+provider runs with `enforcePerClientResources: false`, and the separation
+is held by scopes alone, as the resource section above says.
+
+**Authorization and consent.** The client authorizes with PKCE (S256,
+required of every such client) and `resource=${baseURL}/api/mcp` (RFC
+8707). A signed-out browser goes to the sign-in page and resumes; a
+signed-in one, since no such client skips consent, stops on the consent page
+(`apps/web/src/consent.tsx`), which names the client, the scopes in the
+member's words (`@repo/features/oauth-consent`, where the server's scope is
+declared), and where the answer goes: the redirect's host, or "an app on
+this computer" for a loopback or a private-use scheme. Allow writes the
+consent and lands the client on its redirect with a code; Deny lands it
+there with `access_denied`. The exchange at `/oauth2/token` mints the access
+token with `aud` the resource, `vespin:mcp` among its scopes, and the
+resource's lives (fifteen minutes; a refresh token for thirty days unused),
+and the server admits it as the member (above). The same token names nobody
+at an account route: `bearer.ts` resolves a bearer through the provider's
+userinfo, which refuses a token without `openid`, so `resolveHostedUserId`
+answers none and the route refuses the call.
+
+**What a later change reads.** A client the member allowed is an
+`oauth_client` row (its name, redirects, and `client_discovery_id` for a
+document-named one, `user_id` empty for both), its grant the member's
+`oauth_consent` row and the `oauth_refresh_token` rows under it, which is
+what Settings will list and revoke.
 
 ## The agent routes
 

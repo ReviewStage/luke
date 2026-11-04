@@ -19,15 +19,16 @@
  */
 
 import type { OAuthResourceInput } from "@better-auth/oauth-provider";
+import { OAUTH_SCOPE } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 
 /** The path the server answers under the deployment's base URL, which is also the resource's identifier there. */
 export const MEMBER_MCP_PATH = "/api/mcp";
 
-/** The scopes a token for the server may carry: ours, which every call needs, and OAuth's own for a refresh token; never `openid`, which only the auth service answers. */
+/** The scopes a token for the server may carry: ours, which every call needs, and OAuth's own for a refresh token; never `openid`, which only the auth service answers. The spellings are the consent page's (`@repo/features/oauth-consent`), which says each in the member's words. */
 export const MEMBER_MCP_SCOPE = {
-  MCP: "vespin:mcp",
-  OFFLINE_ACCESS: "offline_access",
+  MCP: OAUTH_SCOPE.MCP,
+  OFFLINE_ACCESS: OAUTH_SCOPE.OFFLINE_ACCESS,
 } as const;
 
 /** How long a token for the server lives, in seconds. */
