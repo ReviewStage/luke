@@ -463,7 +463,14 @@ Vercel Sandbox of its own: an isolated machine our service opens for the
 agent's session, on Vercel's infrastructure, never on your Mac (see "Who we
 send it to"). The tokens its checkout is made and pushed with are set at the
 sandbox's network firewall and never enter the sandbox, a command, its
-output, or the agent's transcript. Each command the agent runs, the few
+output, or the agent's transcript. So that a change to that firewall keeps
+what else stands there, our service keeps what the sandbox's firewall
+carries in our database, encrypted with AES-256-GCM under the same keys as
+your own API keys and bound to that sandbox's session, for as long as it
+stands: an entry is deleted the moment it is taken off, and all of them as
+our service stops the sandbox. A sandbox that stops otherwise, on its own
+timeout, leaves its record behind, which is deleted a day and an hour after
+it was last written. Each command the agent runs, the few
 words it gives to describe it, and what it printed are stored with the
 agent's transcript, under its terms. The checkout stays in the sandbox
 between turns and, once the sandbox is stopped, in a snapshot Vercel keeps

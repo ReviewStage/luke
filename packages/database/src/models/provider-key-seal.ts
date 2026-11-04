@@ -38,6 +38,15 @@ import { Redacted, Result, Schema } from "effect";
  * bound beside them, so the seal opens for no other agent's line. The
  * rewrap does not visit those rows, which the Mac's claim clears.
  *
+ * What stands at a cloud agent's sandbox firewall, every credential its
+ * session set there, is sealed the same way for as long as the session
+ * runs (`sandbox_firewall`), with purposes of their own
+ * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
+ * beside them, so the seal opens for no other session's row. The rewrap
+ * does not visit those rows either: the sweep drops each a day and an hour
+ * after it was last written, so a version stays in the ring that long past
+ * the rewrap that moved every other row off it.
+ *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
  * standing row onto it by unwrapping and rewrapping its data key, never
@@ -67,6 +76,10 @@ const SEAL_PURPOSE = {
   PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
   GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
   MAC_LAUNCH: { DATA_KEY: "luke/mac-launch/data-key", SECRET: "luke/mac-launch/secrets" },
+  SANDBOX_FIREWALL: {
+    DATA_KEY: "luke/sandbox-firewall/data-key",
+    SECRET: "luke/sandbox-firewall/entries",
+  },
 } as const;
 
 /** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
@@ -108,23 +121,27 @@ export interface SealedGitHubToken {
   readonly sealedToken: string;
 }
 
-/** What a launch line holds of its secrets, as one text column: the version, the wrapped data key, and the seal. */
-const SealedMacLaunchSchema = Schema.Struct({
+/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's entries are: the version, the wrapped data key, and the seal. */
+const SealedColumnSchema = Schema.Struct({
   keyVersion: Schema.Number,
   sealedDataKey: Schema.String,
   sealed: Schema.String,
 });
 
-const encodeSealedMacLaunch = Schema.encodeSync(Schema.fromJsonString(SealedMacLaunchSchema));
+const encodeSealedColumn = Schema.encodeSync(Schema.fromJsonString(SealedColumnSchema));
 
-const decodeSealedMacLaunch = Schema.decodeUnknownResult(
-  Schema.fromJsonString(SealedMacLaunchSchema),
-);
+const decodeSealedColumn = Schema.decodeUnknownResult(Schema.fromJsonString(SealedColumnSchema));
 
 /** Whose a local agent's launch is: its starter and the agent, which its seal binds. */
 export interface MacLaunchOwner {
   readonly userId: string;
   readonly agentId: string;
+}
+
+/** Whose sandbox firewall a seal is: the account whose agent's session it stands on, and the session, which its seal binds. */
+export interface FirewallOwner {
+  readonly userId: string;
+  readonly sandboxSessionId: string;
 }
 
 /** Whose key a seal is, and what kind of credential, which both seals bind. */
@@ -372,7 +389,7 @@ export function sealMacLaunchSecrets(
   secrets: Redacted.Redacted<string>,
 ): string {
   const sealed = sealSecret(ring, SEAL_PURPOSE.MAC_LAUNCH, [owner.userId, owner.agentId], secrets);
-  return encodeSealedMacLaunch(sealed);
+  return encodeSealedColumn(sealed);
 }
 
 /** The launch secrets a launch line seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
@@ -381,7 +398,7 @@ export function openMacLaunchSecrets(
   owner: MacLaunchOwner,
   column: string,
 ): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
-  const read = decodeSealedMacLaunch(column);
+  const read = decodeSealedColumn(column);
   if (Result.isFailure(read)) return Result.fail(PROVIDER_KEY_UNREADABLE);
   const secrets = openSecret(
     ring,
@@ -391,4 +408,32 @@ export function openMacLaunchSecrets(
     read.success.sealed,
   );
   return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
+}
+
+/** A sandbox session's standing firewall entries sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
+export function sealFirewallEntries(
+  ring: KeyRing,
+  owner: FirewallOwner,
+  entries: Redacted.Redacted<string>,
+): string {
+  const names = [owner.userId, owner.sandboxSessionId];
+  return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.SANDBOX_FIREWALL, names, entries));
+}
+
+/** The entries a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+export function openFirewallEntries(
+  ring: KeyRing,
+  owner: FirewallOwner,
+  column: string,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const read = decodeSealedColumn(column);
+  if (Result.isFailure(read)) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const entries = openSecret(
+    ring,
+    SEAL_PURPOSE.SANDBOX_FIREWALL,
+    [owner.userId, owner.sandboxSessionId],
+    read.success,
+    read.success.sealed,
+  );
+  return entries === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(entries);
 }

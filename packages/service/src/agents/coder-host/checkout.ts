@@ -35,7 +35,7 @@ import {
   SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-sandbox.js";
+import { FIREWALL_SLOT, githubEntry, type RepositoryCredential } from "../sandbox-firewall.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -56,8 +56,8 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the fetch of the rest of the history alone, since a branch and a pull
  * request are cut from it; the commit identity is set; and the token is
  * handed back for the authored file to set at the firewall for the
- * session's own commands, in the shape `credentialPolicy` gives it
- * (`terminal/agent-sandbox.ts`), which is where `gh` and `git push` reach
+ * session's own commands, in the shape `githubEntry` gives it
+ * (`../sandbox-firewall.ts`), which is where `gh` and `git push` reach
  * GitHub; it never enters the sandbox's filesystem or environment. An installation token is good for an hour, so
  * the host mints another on the same terms when the session's step hook
  * finds the one standing old. No developer's sign-in token ever stands at
@@ -492,15 +492,16 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
   sandbox: RepositorySandbox,
   plan: AgentDeepenPlan,
 ): Effect.fn.Return<void, CheckoutRefused> {
-  const setNetworkPolicy = sandbox.setNetworkPolicy;
-  if (setNetworkPolicy === undefined) {
+  const firewall = sandbox.firewall;
+  if (firewall === undefined) {
     return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
   }
   // The token is revealed only into the firewall rules set for GitHub.
-  yield* Effect.tryPromise({
-    try: () => setNetworkPolicy(credentialPolicy(plan.credential)),
-    catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
-  });
+  yield* firewall
+    .set(FIREWALL_SLOT.GITHUB, githubEntry(plan.credential))
+    .pipe(
+      Effect.mapError(() => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED })),
+    );
   yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, plan.identity).pipe(Effect.mapError(refusedWith));
 });

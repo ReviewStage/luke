@@ -4,12 +4,18 @@ import {
   checkoutIdentityEnv,
 } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Data, Duration, Effect, Redacted } from "effect";
+import { Data, Duration, Effect, type Redacted } from "effect";
 import type { SandboxSession } from "eve/sandbox";
-import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
+import {
+  cloneEntry,
+  FIREWALL_SLOT,
+  type FirewallEntry,
+  type FirewallSlot,
+} from "./sandbox-firewall.js";
 import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "./sandbox-state-folder.js";
+import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 /**
  * repository-shell.ts -- an agent's checkout of the task's GitHub repository in its session's sandbox: the clone, its deepening, and the commit identity set in it.
@@ -51,9 +57,6 @@ const REPOSITORY_SHELL_BOUNDS = {
 const { PATH: SANDBOX_PATH, VARIABLE: SANDBOX_VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
 
 const GITHUB_HOST = "github.com";
-
-/** The firewall with nothing injected: eve's default open internet, which is what every command but the clone runs under. */
-const OPEN_INTERNET = "allow-all";
 
 /** The environment the checkout and every git run in it see: no pager, git taking no lock and asking nothing. */
 const COMMAND_ENVIRONMENT = {
@@ -148,14 +151,27 @@ const DEEPEN_SCRIPT = [
 ].join("\n");
 
 /**
+ * The firewall of the sandbox session a checkout runs in, bound to the
+ * session and its account: an entry set in its slot, or withdrawn, the
+ * whole policy composed from what stands (`sandbox-firewall.ts`).
+ */
+export interface RepositoryFirewall {
+  readonly set: (
+    slot: FirewallSlot,
+    entry: FirewallEntry,
+  ) => Effect.Effect<void, SandboxUnavailable>;
+  readonly withdraw: (slot: FirewallSlot) => Effect.Effect<void, SandboxUnavailable>;
+}
+
+/**
  * The sandbox as the shell reaches it: one command run, and, where the
- * provider has a firewall, its policy. eve's common handle declares no
- * firewall, and a Vercel Sandbox's answers one at runtime; a sandbox that
- * answers none cannot carry the checkout's credential and checks nothing out.
+ * provider has a firewall, that firewall. eve's common handle declares no
+ * firewall, and a Vercel Sandbox's has one; a sandbox with none cannot
+ * carry the checkout's credential and checks nothing out.
  */
 export interface RepositorySandbox {
   readonly run: SandboxSession["run"];
-  readonly setNetworkPolicy?: VercelSandboxSession["setNetworkPolicy"];
+  readonly firewall?: RepositoryFirewall;
 }
 
 /** What a command answered: its exit code and its two outputs, each cut to the bound. */
@@ -196,42 +212,6 @@ function cloneUrl(repository: string): string {
   return `https://${GITHUB_HOST}/${repository}.git`;
 }
 
-/**
- * The username git over HTTPS takes beside the token: `x-access-token` for
- * an installation token
- * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation#about-authentication-as-a-github-app-installation),
- * the member's own login for their personal access token
- * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls).
- */
-function gitUsername(access: GitHubTokenAccess): string {
-  return access.kind === GITHUB_ACCESS.TOKEN ? access.githubLogin : "x-access-token";
-}
-
-/**
- * The firewall for the clone: open internet, and the token as GitHub's
- * header on requests under the one repository's git endpoint alone, so a
- * request for a neighboring repository, or for the repository's pages
- * outside git, carries nothing.
- */
-function cloneNetworkPolicy(
-  repository: string,
-  token: Redacted.Redacted,
-  access: GitHubTokenAccess,
-) {
-  const basic = Buffer.from(`${gitUsername(access)}:${Redacted.value(token)}`).toString("base64");
-  return {
-    allow: {
-      "*": [],
-      [GITHUB_HOST]: [
-        {
-          match: { path: { startsWith: `/${repository}.git/` } },
-          transform: [{ headers: { authorization: `Basic ${basic}` } }],
-        },
-      ],
-    },
-  };
-}
-
 /** A git run in the checkout that failed, refused with as much of git's own word as the model is told. */
 function gitRefusal(failed: CommandResult): RepositoryRefusal {
   const detail = failed.stderr.trim().slice(0, REPOSITORY_SHELL_BOUNDS.CHECKOUT_ERROR_MAX_CHARS);
@@ -261,12 +241,13 @@ export function runInSandbox(
 
 /**
  * A run of git's against GitHub with the token at the firewall, for the
- * repository's own git endpoint alone, and the refusal for a git that
- * failed. The token stands for the run alone: the policy is set back to
- * open internet as the run ends, however it ended, and in a finalizer, so
- * an interrupted run leaves no credential standing either, no later command
- * runs under it, and a caller that wants the token standing for its own
- * commands sets it again afterwards.
+ * repository's own git endpoint alone (`cloneEntry`), in a slot of its own,
+ * and the refusal for a git that failed. The token stands for the run
+ * alone: its slot is withdrawn as the run ends, however it ended, an
+ * interrupted run's as it is interrupted, so no later command runs under
+ * it, while what else stands at the firewall stays. A withdrawal that
+ * failed refuses the checkout, because the session's record would
+ * otherwise carry the read token into every later write.
  */
 const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential")(function* (
   sandbox: RepositorySandbox,
@@ -275,22 +256,27 @@ const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential
   access: GitHubTokenAccess,
   run: Effect.Effect<CommandResult, RepositoryRefusal>,
 ): Effect.fn.Return<void, RepositoryRefusal> {
-  const setNetworkPolicy = sandbox.setNetworkPolicy;
-  if (setNetworkPolicy === undefined)
+  const firewall = sandbox.firewall;
+  if (firewall === undefined)
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
-  const policy = (next: Parameters<typeof setNetworkPolicy>[0]) =>
-    Effect.tryPromise({
-      try: () => setNetworkPolicy(next),
-      catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
-    });
+  const refused = () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED });
   const timed = run.pipe(
     Effect.timeoutOrElse({
       duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
       orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
-  yield* policy(cloneNetworkPolicy(fullName, token, access));
-  const ran = yield* Effect.ensuring(timed, Effect.ignore(policy(OPEN_INTERNET)));
+  const withdrawn = firewall.withdraw(FIREWALL_SLOT.GITHUB_CLONE).pipe(Effect.mapError(refused));
+  const ended = yield* firewall
+    .set(FIREWALL_SLOT.GITHUB_CLONE, cloneEntry(fullName, token, access))
+    .pipe(
+      Effect.mapError(refused),
+      Effect.andThen(timed),
+      Effect.onInterrupt(() => Effect.ignore(withdrawn)),
+      Effect.exit,
+    );
+  yield* withdrawn;
+  const ran = yield* ended;
   if (ran.exitCode !== 0) return yield* gitRefusal(ran);
 });
 

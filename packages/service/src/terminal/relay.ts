@@ -62,10 +62,8 @@ import {
   Stream,
 } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import type {
-  AgentSandboxService,
-  RepositoryCredential,
-} from "../agents/terminal/agent-sandbox.js";
+import type { RepositoryCredential } from "../agents/sandbox-firewall.js";
+import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import { jsonOf } from "../http/http-effect.js";
@@ -105,8 +103,10 @@ export interface RelayAsk {
   readonly rows: number;
 }
 
-/** The agent a connection reached: its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
+/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
 export interface RelayAgent {
+  /** The account whose agent it is, under which its sandbox's firewall record is kept. */
+  readonly userId: string;
   readonly conversationId: string;
   readonly sessionId: string | undefined;
   /** A fresh credential for the agent's repository: a token minted under the deployment's GitHub App, or its starter's own. */
@@ -179,7 +179,7 @@ function setCredential(
   sandboxSessionId: string,
 ): Effect.Effect<void, unknown> {
   return Effect.flatMap(agent.repositoryCredential, (credential) =>
-    deps.sandbox.setCredential(sandboxSessionId, credential),
+    deps.sandbox.setCredential({ userId: agent.userId, sandboxSessionId }, credential),
   );
 }
 
@@ -191,7 +191,7 @@ function withdrawCredential(
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     if (yield* agent.turnUnderWay) return;
-    yield* deps.sandbox.withdrawCredential(sandboxSessionId);
+    yield* deps.sandbox.withdrawCredential({ userId: agent.userId, sandboxSessionId });
   }).pipe(
     Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not taken off")),
   );

@@ -41,8 +41,9 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
  * is moved on and the templates of older images deleted, the hosts' pairings
- * whose code lapsed are deleted with the address each kept, and the sync log's
- * rows older than its keep are pruned. Each is bounded on its own, and the
+ * whose code lapsed are deleted with the address each kept, the sync log's
+ * rows older than its keep are pruned, and the firewall records of sandbox
+ * sessions that ended long since are dropped. Each is bounded on its own, and the
  * sweep runs them in turn, each kept from the others, so one that fails is
  * logged and the rest still run.
  */
@@ -50,7 +51,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The nineteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The twenty sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -90,10 +91,12 @@ interface MaintenanceSweeps {
   sweepHostPairings: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
+  /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
+  purgeStaleFirewalls: (now: number) => SweepRead<number>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the nineteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the twenty sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -148,6 +151,8 @@ interface MaintenanceSweepAnswer {
   hostPairings: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
+  /** Firewall records of sandbox sessions long ended, dropped. */
+  staleFirewalls: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -176,7 +181,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The nineteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The twenty sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -210,6 +215,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
+    staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
   };
 });
 

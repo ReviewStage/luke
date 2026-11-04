@@ -63,6 +63,7 @@
     "./models/run-tasks": "./src/models/run-tasks.js",
     "./models/agent-owners": "./src/models/agent-owners.js",
     "./models/runs-on-pick": "./src/models/runs-on-pick.js",
+    "./models/sandbox-firewall-store": "./src/models/sandbox-firewall-store.js",
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/token-pull-request-poll": "./src/models/token-pull-request-poll.js",
     "./models/agent-runner-lease": "./src/models/agent-runner-lease.js",

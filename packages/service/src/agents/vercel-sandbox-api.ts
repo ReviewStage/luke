@@ -220,27 +220,33 @@ export interface InteractiveShell {
   readonly token: Redacted.Redacted;
 }
 
+/** A request header a rule matches: its name, and its value exactly (`@vercel/sandbox` 3.8.0's `NetworkPolicyKeyValueMatcher`). */
+interface HeaderMatch {
+  readonly key: { readonly exact: string };
+  readonly value: { readonly exact: string };
+}
+
+/**
+ * One rule on a host: the headers the firewall sets on the way out, on every
+ * request, or on those that match every condition its `match` names: the
+ * path, and each header named at its value.
+ */
+export interface NetworkRule {
+  readonly match?: {
+    readonly path?: { readonly startsWith: string } | { readonly exact: string };
+    readonly headers?: readonly HeaderMatch[];
+  };
+  readonly transform: readonly { readonly headers: Readonly<Record<string, string>> }[];
+}
+
 /**
  * A sandbox session's network policy as the API takes it: the open internet
- * with nothing set, or every host open and, on the hosts named, headers the
- * firewall sets on the way out, on every request or on those whose path
- * matches.
+ * with nothing set, or every host open and, on the hosts named, the rules
+ * that set headers on the way out.
  */
 export type NetworkPolicy =
   | { readonly mode: "allow-all" }
-  | {
-      readonly allow: Readonly<
-        Record<
-          string,
-          readonly {
-            readonly match?: {
-              readonly path: { readonly startsWith: string } | { readonly exact: string };
-            };
-            readonly transform: readonly { readonly headers: Readonly<Record<string, string>> }[];
-          }[]
-        >
-      >;
-    };
+  | { readonly allow: Readonly<Record<string, readonly NetworkRule[]>> };
 
 /** The argv of a command we wrote, where it runs, and the variables it is handed beside the sandbox's own. */
 export interface CommandAsk {
@@ -365,7 +371,7 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     durationMs: number,
   ) => Effect.Effect<SessionLifetime, SandboxUnavailable>;
-  /** Sets the running sandbox session's network policy whole. */
+  /** Sets the running sandbox session's network policy whole; every writer of ours goes through `sandbox-firewall.ts`, which composes it from what stands. */
   readonly updateNetworkPolicy: (
     sandboxSessionId: string,
     policy: NetworkPolicy,

@@ -98,6 +98,7 @@ const DECLARED_TABLES = [
   "rate_limit",
   "repository_pin",
   "runner_line",
+  "sandbox_firewall",
   "sandbox_terminal_lease",
   "session",
   "session_sandbox_cleanup",

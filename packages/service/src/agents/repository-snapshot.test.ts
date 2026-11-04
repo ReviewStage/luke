@@ -20,6 +20,7 @@ import {
   repositorySnapshotName,
   sweepRepositorySnapshots,
 } from "./repository-snapshot.js";
+import { composePolicy, type FirewallEntry, type FirewallSlot } from "./sandbox-firewall.js";
 import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
 const IMAGE = "snap_fixture_image";
@@ -39,29 +40,36 @@ const fixture = Effect.gen(function* () {
   return { fake, api };
 });
 
-/** The build's sandbox as the clone reaches it: each run and policy straight to the API. */
+/** The build's sandbox as the clone reaches it: each run straight to the API, and each policy composed from what stands at its firewall. */
 function opener(api: VercelSandboxApi) {
-  return (running: string): RepositorySandbox => ({
-    run: (ask) =>
-      Effect.runPromise(
-        api.run(running, {
-          command: "bash",
-          args: ["-c", ask.command],
-          ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
-          ...(ask.env === undefined ? undefined : { env: ask.env }),
-        }),
-      ),
-    setNetworkPolicy: (policy) =>
-      Effect.runPromise(
-        api.updateNetworkPolicy(
-          running,
-          policy === "allow-all"
-            ? { mode: "allow-all" }
-            : // SAFETY: the clone sets an allow-list of headers per host, the API's own shape.
-              (policy as Parameters<VercelSandboxApi["updateNetworkPolicy"]>[1]),
+  return (running: string): RepositorySandbox => {
+    const standing = new Map<FirewallSlot, FirewallEntry>();
+    const composed = () =>
+      Effect.suspend(() => api.updateNetworkPolicy(running, composePolicy(standing)));
+    return {
+      run: (ask) =>
+        Effect.runPromise(
+          api.run(running, {
+            command: "bash",
+            args: ["-c", ask.command],
+            ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
+            ...(ask.env === undefined ? undefined : { env: ask.env }),
+          }),
         ),
-      ),
-  });
+      firewall: {
+        set: (slot, entry) =>
+          Effect.andThen(
+            Effect.sync(() => standing.set(slot, entry)),
+            composed(),
+          ),
+        withdraw: (slot) =>
+          Effect.andThen(
+            Effect.sync(() => standing.delete(slot)),
+            composed(),
+          ),
+      },
+    };
+  };
 }
 
 /** The snapshot built for the repository given. */

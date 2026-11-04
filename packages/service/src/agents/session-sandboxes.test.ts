@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@repo/database/testing";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -63,8 +64,11 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
   return { layer, asked, updates };
 }
 
+/** The session's sandboxes stopped, the firewall's record kept in a database of the call's own. */
 const stopFor = (sessionId: string, snapshotExpiry?: Duration.Duration) =>
-  Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.stopFor(sessionId, snapshotExpiry));
+  Effect.flatMap(SessionSandboxes, (sandboxes) =>
+    sandboxes.stopFor(sessionId, snapshotExpiry),
+  ).pipe(Effect.provide(getTestDB()));
 
 afterEach(() => {
   vi.unstubAllEnvs();

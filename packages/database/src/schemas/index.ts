@@ -38,6 +38,7 @@ export * from "./preferences.js";
 export * from "./pull-request-chapters.js";
 export * from "./repository-pin.js";
 export * from "./runner-line.js";
+export * from "./sandbox-firewall.js";
 export * from "./sandbox-terminal-lease.js";
 export * from "./session-sandbox.js";
 export * from "./slack-installation.js";

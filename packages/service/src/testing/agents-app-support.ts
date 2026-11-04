@@ -86,7 +86,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
-import { connectAgentApiKeys } from "../testing/agent-credentials.js";
+import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -336,7 +336,7 @@ export function fakeEve(
   return { eve, opened, sent, canceled, canceledAs, reset, resetAs, resetSaw };
 }
 
-/** The deployment's environment with no key of its own, which a test gives the one it reads. */
+/** The deployment's environment with no key of its own, which a test gives the one it reads, and the suite's key ring, which a sandbox's firewall record is sealed under. */
 const NO_KEYS: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -345,7 +345,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogIngestHost: undefined,
   cronSecret: undefined,
   githubWebhookSecret: undefined,
-  providerKeyEncryptionKeys: undefined,
+  providerKeyEncryptionKeys: AGENT_KEY_RING,
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */

@@ -51,6 +51,7 @@ function accounts() {
 
 /** Ada's agent as the store reads it for her: it has not opened its sandbox yet. */
 const ADA_AGENT_READ: RelayAgent = {
+  userId: "user-ada",
   conversationId: "conversation-of-ada",
   sessionId: undefined,
   repositoryCredential: Effect.die("no credential is minted before a sandbox stands"),

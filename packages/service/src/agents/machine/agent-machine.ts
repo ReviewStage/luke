@@ -11,7 +11,7 @@
  * The interface is pitched at intent and holds only what the launch and the
  * door use: where the agent's things stand on the machine (`layout`), open
  * the agent's place with its checkout, find it again and record the runner
- * it runs, set the repository's credential at its firewall, resume, stop,
+ * it runs, set and take off what stands at its firewall, resume, stop,
  * and discard it, write files into it, launch the runner there and write
  * its stdin, read whether it ended, end it, and read one file. A runner on a
  * machine whose layout says it reads its lines takes them from our store
@@ -35,6 +35,7 @@
  * machine that did not answer.
  */
 
+import type { DatabaseServices } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
@@ -43,7 +44,7 @@ import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
 import type { RunnerBundle } from "../coder-host/runner-bundle.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
-import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
+import type { FirewallEntry, FirewallSlot } from "../sandbox-firewall.js";
 import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
@@ -142,8 +143,29 @@ export interface FoundPlace {
 /** A found place's resume: where it runs now, or gone where it can never run again, its disk lost. */
 export const PLACE_RESUME = { GONE: "gone" } as const;
 
-/** What a place's firewall lets through: the repository's credential, or the open internet. */
-export type MachineCredential = RepositoryCredential | undefined;
+/**
+ * A running place's firewall, the account whose agent it is named beside
+ * it: an entry set or renewed in its slot, one withdrawn, or every one
+ * cleared ahead of a stop, its record kept in the store
+ * (`../sandbox-firewall.ts`). A machine with no firewall of ours does
+ * nothing.
+ */
+interface MachineFirewall {
+  readonly set: (
+    place: MachinePlace,
+    userId: string,
+    slot: FirewallSlot,
+    entry: FirewallEntry,
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  readonly withdraw: (
+    place: MachinePlace,
+    userId: string,
+    slot: FirewallSlot,
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  readonly clear: (
+    place: MachinePlace,
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+}
 
 /** A runner launched in a place: the place, and the machine's own id for the runner's process. */
 export interface RunnerHandle extends MachinePlace {
@@ -264,11 +286,8 @@ export interface AgentMachineService {
     },
     record: RunnerRecord,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** The credential the running place's firewall lets through, in place of the last; the open internet for none. */
-  readonly setCredential: (
-    place: MachinePlace,
-    credential: MachineCredential,
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  /** The running place's firewall, every write to it composing what stands whole. */
+  readonly firewall: MachineFirewall;
   /** The found place run again, where it is not, and where it runs now; gone where its disk is lost for good. */
   readonly resume: (
     found: FoundPlace,

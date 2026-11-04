@@ -60,6 +60,7 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             const target = { userId: agent.userId, conversationId: agent.conversationId };
             const [session] = yield* standingSessionsOf(agent.userId, [agent.conversationId]);
             return Option.some({
+              userId: agent.userId,
               conversationId: agent.conversationId,
               sessionId: session?.sessionId,
               repositoryCredential: run(agentRepositoryToken(target, agent)),
