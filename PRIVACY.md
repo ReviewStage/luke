@@ -64,7 +64,14 @@ workspaces' lists as our service last sent them, so the app opens on them
 before it reaches us: your tasks and their agents as the task list shows
 them, your sidebar's sections and the tasks and agents you keep in them,
 your pinned repositories, and your workspaces with their GitHub
-installations; and the changes you made to them while our service could
+installations. For each workspace whose people, invitations, or
+automations you opened, it also keeps its members' names, emails, roles,
+and profile pictures' addresses, and its former members' names and profile
+pictures' addresses; its pending invitations,
+each with the address, role, and expiry; and its automations as their list
+shows them, each with its name, trigger, the prompt it hands its agent, and
+its latest run, never a webhook's body or secret. A workspace you leave
+leaves the copy. Beside these it keeps the changes you made while our service could
 not be reached (a task's name, standing, or pin, a pinned repository, a
 section, or an agent's name or pin), each with a random key it is sent
 again under, until our service takes it. Our service keeps that key for 30

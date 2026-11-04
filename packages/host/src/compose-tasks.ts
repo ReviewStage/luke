@@ -1487,6 +1487,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
     pool: dependencies.pool,
+    entities: dependencies.entities,
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
   const memberHolds = yield* FiberMap.make<string>();
@@ -1661,6 +1662,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
     pool: dependencies.pool,
+    entities: dependencies.entities,
   });
   /** The windows' hold on each workspace's invitations, one fiber standing until let go. */
   const invitationHolds = yield* FiberMap.make<string>();

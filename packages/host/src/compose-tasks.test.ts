@@ -3112,6 +3112,28 @@ function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]
 }
 
 it.effect(
+  "a workspace's people kept on disk are drawn as a window holds them, before the service answers them",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("tasks-people-");
+      const opened = openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" });
+      const earlier = yield* Scope.make();
+      const kept = yield* Scope.provide(earlier)(opened);
+      yield* kept.keepIn(KEPT_READ.MEMBERS, ACME.id, { members: [memberRow(DANA)], former: [] });
+      yield* Scope.close(earlier, Exit.void);
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [];
+      const { call, pushed, settled } = yield* subject(service, { entities: yield* opened });
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+
+      assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: { rows: { members: [DANA] } } });
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
   "a role change, a removal, and a handover stand until the held read carries them, through a poll answered before them",
   () =>
     Effect.gen(function* () {
