@@ -13,7 +13,7 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { appPlatform } from "../app-platform.js";
 import { useHostRead } from "../use-host-read.js";
 import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
-import { usePageTheme } from "./page-theme.js";
+import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 
 /**
  * shown-page.tsx -- a page an agent showed, drawn where it is told of: under the transcript row of the call that showed it, and under an Inbox thread's line naming it.
@@ -72,7 +72,7 @@ export function ShownPage({
 }): React.JSX.Element {
   const frame = useRef<HTMLIFrameElement>(null);
   useFrameLinks(frame);
-  usePageTheme(frame);
+  usePageTheme(frame, PAGE_ROOM.WORDS);
   const fit = useFrameFit(frame);
   return (
     <div className="my-block-gap">

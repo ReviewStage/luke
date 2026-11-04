@@ -17,7 +17,12 @@ import { Schema as EffectSchema } from "effect";
  * page that sets either itself keeps its own. A page that paints no ground of
  * its own reads on the ground it is drawn over, the transcript's or the tab's,
  * in the scheme the window draws in, rather than on the browser's light
- * canvas. What the window sends is the window's word and carries no
+ * canvas. Drawn in words, a transcript's or a thread's, the page stands at
+the words' own edges, so it is told to keep no side room of its own; drawn
+in a room of its own, its tab or full screen, the window hands it an inset
+as well, which the script keeps around the page as its root's padding, so
+its words stand off the room's edges as the window's own pages do. What the
+window sends is the window's word and carries no
  * credential, only colors, fonts, and sizes; the script takes it only from
  * the window that framed the page and only in the shape below.
  */
@@ -67,10 +72,12 @@ export const PAGE_THEME_VARIABLE = {
 
 export type PageThemeVariable = (typeof PAGE_THEME_VARIABLE)[keyof typeof PAGE_THEME_VARIABLE];
 
-/** The theme the window hands a page: the scheme it draws in and each variable's value. */
+/** The theme the window hands a page: the scheme it draws in, each variable's value, and the room kept around it. */
 export interface PageTheme {
   readonly scheme: PageThemeScheme;
   readonly variables: Readonly<Record<PageThemeVariable, string>>;
+  /** The padding kept around the page's root, a CSS length; empty where the page stands at its room's edges. */
+  readonly inset: string;
 }
 
 /** A message the frame posts to the window: the page asking for the theme. */
@@ -83,8 +90,14 @@ export function pageThemeMessage(theme: PageTheme): {
   readonly type: typeof PAGE_THEME_TYPE;
   readonly scheme: PageThemeScheme;
   readonly variables: Readonly<Record<string, string>>;
+  readonly inset: string;
 } {
-  return { type: PAGE_THEME_TYPE, scheme: theme.scheme, variables: theme.variables };
+  return {
+    type: PAGE_THEME_TYPE,
+    scheme: theme.scheme,
+    variables: theme.variables,
+    inset: theme.inset,
+  };
 }
 
 /**
@@ -93,7 +106,9 @@ export function pageThemeMessage(theme: PageTheme): {
  * It asks the window for the theme as the page is read and wears each answer
  * from the window alone, taking only `--vespin-*` names and values that
  * cannot close the rule they stand in, in a sheet it places first in the
- * page's head, so the page's own rules come after it and win.
+ * page's head, so the page's own rules come after it and win. The inset is
+ * the root's padding by the `html` element's name, which a page's own `*`
+ * reset does not outweigh and its own `html` rule does.
  */
 export const PAGE_THEME_SCRIPT = `(() => {
   "use strict";
@@ -103,7 +118,7 @@ export const PAGE_THEME_SCRIPT = `(() => {
   const VALUE = /^[^;{}<>\\\\]*$/;
   let sheet = null;
 
-  const wear = (scheme, variables) => {
+  const wear = (scheme, variables, inset) => {
     let rules = "color-scheme:" + (scheme === "dark" ? "dark" : "light") + ";";
     for (const name of Object.keys(variables)) {
       const value = variables[name];
@@ -114,7 +129,8 @@ export const PAGE_THEME_SCRIPT = `(() => {
       const head = document.head || document.documentElement;
       head.insertBefore(sheet, head.firstChild);
     }
-    sheet.textContent = ":root{" + rules + "}";
+    const room = typeof inset === "string" && inset !== "" && VALUE.test(inset) ? "html{padding:" + inset + "}" : "";
+    sheet.textContent = ":root{" + rules + "}" + room;
   };
 
   addEventListener("message", (event) => {
@@ -122,7 +138,7 @@ export const PAGE_THEME_SCRIPT = `(() => {
     const data = event.data;
     if (data === null || typeof data !== "object" || data.type !== TYPE) return;
     if (data.variables === null || typeof data.variables !== "object") return;
-    wear(data.scheme, data.variables);
+    wear(data.scheme, data.variables, data.inset);
   });
   parent.postMessage({ type: ASK }, "*");
 })();`;
