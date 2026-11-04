@@ -26,71 +26,24 @@
    panel's and the markdown renderer's are `@repo/panel/sources.css`'s. */
 @source "./";
 
-/* The shell's frame app.html draws before the panel stands, of the shell's
-   own classes, so its columns are the shell's; only what makes it a frame is
-   here. Its sidebar stands where the shell's would stand pinned: where this
-   browser last read someone signed in and drew the sidebar pinned
-   (`data-ui-boot-sidebar`, at the width it kept, all of which
-   `public/app-theme.js` reads), on a stage as wide as `@repo/panel`'s
-   `sidebar-collapse.ts` pins one at (`SIDEBAR_COMPACT.ENTER`). The stage is
-   the container measured, as the panel measures it (`stage-room.ts`), so a
-   screen's side insets, which the stage keeps off, count here as they do
-   there. Its places are rows with nothing in them yet. Where no sidebar
-   stands, a phone's, a signed-out browser's, or a first visit's, the frame
-   is the work column alone, and the product's
-   mark comes up in its middle once the wait has run long enough to notice
-   (`--ui-hint-delay`), so a quick load never flashes it. */
+/* The loading frame app.html draws before the panel stands: the product's
+   mark alone, in the middle of the whole screen rather than of any column,
+   so it stands centered on a phone, whose notch and home indicator the
+   screen counts, as on a desktop, and at the one size on both. It comes up
+   once the wait has run long enough to notice (`--ui-hint-delay`), so a
+   quick load never flashes it. */
 .boot-frame {
-  container-type: inline-size;
-  --sidebar-width: var(--ui-boot-sidebar-width, var(--sidebar-width-default));
-}
-
-.boot-frame .desktop-shell {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.boot-frame .desktop-sidebar {
-  display: none;
-}
-
-@container (width >= 1120px) {
-  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-shell {
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  }
-
-  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-sidebar {
-    display: flex;
-  }
-
-  :root[data-ui-boot-sidebar="pinned"] .boot-frame-mark {
-    display: none;
-  }
-}
-
-.boot-frame-row::before,
-.boot-frame-row::after {
-  height: var(--ui-space-8);
-  border-radius: var(--ui-radius-full);
-  background: var(--ui-color-fill-strong);
-  content: "";
-}
-
-.boot-frame-row::before {
-  border-radius: var(--ui-radius-6);
-  width: var(--ui-menu-glyph);
-  height: var(--ui-menu-glyph);
-}
-
-.boot-frame-row::after {
-  width: 40%;
-}
-
-.boot-frame-row:nth-child(even)::after {
-  width: 28%;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ui-color-ground);
 }
 
 .boot-frame-mark {
-  margin: auto;
+  width: var(--ui-space-64);
+  height: var(--ui-space-64);
   animation: boot-frame-mark-arrive var(--ui-duration-fast) var(--ui-motion-pane)
     var(--ui-hint-delay) both;
 }
