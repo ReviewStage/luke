@@ -449,10 +449,10 @@ const CHANGED_CLASS =
 const BODY_CLASS = "plan-body";
 
 /**
- * The key the page's head stands under among the column's parts. Note that
- * the head has a place of its own, because a key its page puts on it would
- * otherwise stand beside the title's, both the task's id, and two siblings
- * under one key leave the old task's title drawn once another opens.
+ * The key the page's head stands under among the column's children. Note
+ * that the head is wrapped in a fragment of its own, because the page keys
+ * the head by the task's id, as the title is keyed, and React leaves the old
+ * task's title drawn once another opens where two siblings share one key.
  */
 const HEAD_KEY = "head";
 
