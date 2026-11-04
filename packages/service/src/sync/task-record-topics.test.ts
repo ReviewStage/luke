@@ -12,6 +12,7 @@ import {
 import { createAgent, renameAgent } from "@repo/database/models/agent-store";
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
+import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -27,6 +28,7 @@ import {
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { saveNotes } from "../tasks/plan-notes.js";
@@ -35,6 +37,7 @@ import { added } from "../testing/task-contents.js";
 import {
   agentPagesLive,
   taskBrowserTabsLive,
+  taskCommentsLive,
   taskHistoryLive,
   taskPagesLive,
   taskRecordLive,
@@ -42,11 +45,12 @@ import {
 
 /**
  * An open task's live reads on the migrated capture: its record, pages,
- * history, and Browser tabs (`taskRecordLive` and its neighbors), and an
+ * history, comments, and Browser tabs (`taskRecordLive` and its neighbors), and an
  * agent's own pages on no task (`agentPagesLive`). Each write that moves
  * one, through its real writer, notifies a topic the read is woken on, so a
  * window holding it hears it within a coalesce window rather than at the
- * hold's end: the plan saved and a page shown on the task, a page an agent
+ * hold's end: the plan saved, a page shown on the task and a comment left
+ * on it, a page an agent
  * on no task shows, an agent's tab opened, pointed at, taken over, handed
  * back, and closed, an agent renamed, and what admits the reader to the
  * task. Note that an editor renamed wakes no history, which reads the name
@@ -81,7 +85,7 @@ const wakes = <A, E, R>(
 
 it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
   it.effect(
-    "the plan's notes saved and a page shown on the task notify the task, which wakes its record, pages, and history",
+    "the plan's notes saved, a page shown on the task, and a comment left on it notify the task, which wakes its record, pages, history, and comments",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -98,7 +102,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           [...onTask, [TOPIC.WORKSPACE, task.workspaceId]],
           [taskRecordLive.topics(params), taskHistoryLive.topics(params)],
         );
-        yield* wakes(
+        const shown = yield* wakes(
           writePage(
             owner,
             taskPageOwner(task.id),
@@ -107,6 +111,16 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           ),
           onTask,
           [taskRecordLive.topics(params), taskPagesLive.topics(params)],
+        );
+        const pageId = Option.getOrThrow(shown.value).id;
+        yield* wakes(
+          startPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner }, task.id, {
+            clientKey: randomUUID(),
+            page: { id: pageId, version: 1 },
+            words: "Add a chart.",
+          }),
+          onTask,
+          [taskCommentsLive.topics({ ...params, pageId })],
         );
       }),
   );

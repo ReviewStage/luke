@@ -45,6 +45,8 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
+  planCommentSync,
+  planCommentThreadSync,
   planPageVersionSync,
   planRevisionSync,
   pullRequestChaptersSync,
@@ -77,6 +79,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -528,6 +531,39 @@ export const taskHistoryLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/** The page a comments read's param names where it names none: the plan's own threads (`taskCommentsLive`). */
+export const PLAN_THREADS = "";
+
+/**
+ * One subject of a task's comments, its plan's own threads where it names
+ * no page (`PLAN_THREADS`) or one page's on every version, woken by a
+ * thread or an entry written, a file kept on a comment, and the task
+ * itself, all of which name the task. Note that a writer's own name, read
+ * beside each entry, wakes no comments, as the history's editor's wakes no
+ * history: one shows at the hold's end.
+ */
+export const taskCommentsLive = defineLiveQuery({
+  name: LIVE_READ.PLAN_COMMENTS,
+  params: ["userId", "taskId", "pageId"],
+  reads: [
+    planCommentThreadSync,
+    planCommentSync,
+    attachmentSync,
+    userSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId, pageId }) =>
+    taskCommentsLiveStatements(userId, pageId === PLAN_THREADS ? { taskId } : { taskId, pageId }),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 /**
  * One task's Browser tabs, every one of its agents', the agent's pointer on
  * each among them, woken by a tab opened, moved, pointed at, taken over, or
@@ -719,6 +755,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskPagesLive,
   agentPagesLive,
   taskHistoryLive,
+  taskCommentsLive,
   taskBrowserTabsLive,
   agentBrowserTabsLive,
   pullRequestChaptersLive,

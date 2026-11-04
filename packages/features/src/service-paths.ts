@@ -93,6 +93,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_PAGES: "/api/live/agent-pages",
   /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
+  /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `plan-comment-live.ts` declares the answer. */
+  LIVE_TASK_COMMENTS: "/api/live/task-comments",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
   /** One coding agent's Browser tabs under `?id=`, on a task or on none, on the terms a task's are. */

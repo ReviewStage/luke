@@ -6,7 +6,9 @@
  * answer; every inbox item the account reaches, as where each stands and
  * those changed since `?since=` whole; the task list, as its tasks and every agent of them and with no
  * task; and one task's record, pages, and calls, named by `?id=`, as the
- * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them; and one
+ * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them, and its
+ * comments, its plan's own threads or with `&page=` one page's, as their
+ * threads, entries, and files; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
  * statements its pages are read from; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
@@ -52,6 +54,7 @@ import {
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
+import { taskCommentsLiveAnswerSchema } from "../plan-comment-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
@@ -108,6 +111,15 @@ const liveAccountInboxItemsSchema = EffectSchema.Struct({
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The task whose comments a live read follows, and the page whose threads it follows, its plan's own where it names none; each read as text, one that is no UUID answered as not found. */
+const liveTaskCommentsSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  page: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -192,6 +204,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
+  taskComments: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_COMMENTS }))
+    .input(liveTaskCommentsSchema)
+    .output(EffectSchema.flip(taskCommentsLiveAnswerSchema)),
   taskBrowserTabs: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
     .input(liveTaskSchema)

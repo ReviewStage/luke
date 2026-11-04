@@ -851,6 +851,8 @@ export const LIVE_READ = {
   PAGES: "pages",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
+  /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
+  PLAN_COMMENTS: "taskComments",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
