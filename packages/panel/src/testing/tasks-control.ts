@@ -116,18 +116,23 @@ export function pushedTranscripts(
   pagesOf: (transcript: AgentTranscriptKey) => readonly ToldPage[],
   held?: { readonly page: number; readonly release: Promise<void> },
 ): TranscriptsHeld {
+  /** Whether the release has landed, after which a hold is laid every page. */
+  let released = held === undefined;
+  void held?.release.then(() => {
+    released = true;
+  });
   const told: TranscriptsHeld = holdTranscripts(
     handHostReads({}).deliverTranscripts,
     (transcript) => {
       const pages = pagesOf(transcript);
-      if (held !== undefined) {
+      if (!released) {
         // Note that a transcript let go reads nothing more, so the rest lands only while a window holds it.
-        void held.release.then(() => {
+        void held?.release.then(() => {
           if (heldNow(told, transcript)) told.lay(transcript, transcriptTold(pages));
         });
       }
-      const first = pages.slice(0, held?.page ?? pages.length);
-      return first.length === 0 ? undefined : transcriptTold(first);
+      const laid = released ? pages : pages.slice(0, held?.page ?? pages.length);
+      return laid.length === 0 ? undefined : transcriptTold(laid);
     },
   );
   return told;
