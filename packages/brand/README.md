@@ -63,11 +63,14 @@ for g in dark light copper; do
   rsvg-convert -w 1800 -h 400 banner/banner-$g-9x2.svg -o banner/banner-$g-9x2.png
   rsvg-convert -w 3840 -h 2160 banner/banner-$g-16x9.svg -o banner/banner-$g-16x9.png
 done
-for c in night ember chrome graphite rust paper ink sand copper kiln mono; do
-  rsvg-convert -w 3168 -h 792 banner/dots/banner-dots-$c-4x1.svg -o banner/dots/banner-dots-$c-4x1.png
-  rsvg-convert -w 3000 -h 1000 banner/dots/banner-dots-$c-3x1.svg -o banner/dots/banner-dots-$c-3x1.png
-  rsvg-convert -w 4200 -h 700 banner/dots/banner-dots-$c-6x1.svg -o banner/dots/banner-dots-$c-6x1.png
-  rsvg-convert -w 3840 -h 2160 banner/dots/banner-dots-$c-16x9.svg -o banner/dots/banner-dots-$c-16x9.png
+for d in hero keel terrain bloom; do
+  for c in night ember chrome graphite rust paper ink sand copper kiln mono; do
+    b=banner/dots/banner-dots-$d-$c
+    rsvg-convert -w 3168 -h 792 $b-4x1.svg -o $b-4x1.png
+    rsvg-convert -w 3000 -h 1000 $b-3x1.svg -o $b-3x1.png
+    rsvg-convert -w 4200 -h 700 $b-6x1.svg -o $b-6x1.png
+    rsvg-convert -w 3840 -h 2160 $b-16x9.svg -o $b-16x9.png
+  done
 done
 rsvg-convert -w 660 -h 400 dmg/dmg-background.svg -o dmg/dmg-background.png
 rsvg-convert -w 1320 -h 800 dmg/dmg-background.svg -o dmg/dmg-background@2x.png
@@ -113,7 +116,7 @@ The mark is static: it carries no motion.
 | `mark/mark-color-{light,dark}.svg` + `-{256,1024}.png` | The mark alone in each mode's copper on transparency, as the color logos draw it |
 | `avatar/avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The mark on a square tile: the icon's tile per mode, or white on flat black, with the disc at 78% of it, as in the app icons. For a profile photo, so the circle GitHub, X, Slack, and LinkedIn cut from it still leaves a ring round the rim, and for a surface that rounds a square's corners itself, GitHub's organization avatar among them. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
 | `banner/banner-{dark,light,copper}-{4x1,3x1,6x1,9x2,16x9}.svg` + `.png` | The lockup centered on a flat ground, for a cover, a background, or a logo slot: 4:1 for LinkedIn's profile background (1584×396, cut at 3168×792), 3:1 for X's header (1500×500, cut at 3000×1000), 6:1 for LinkedIn's company page cover (cut at 4200×700, the size LinkedIn asks for), 9:2 for a sidebar's logo slot such as Bookface's company card (cut at 1800×400, the lockup all but filling it), and 16:9 for a slide or a video call (cut at 3840×2160). Three grounds: each mode's, and the light icon's copper under white |
-| `banner/dots/banner-dots-{colorway}-{4x1,3x1,6x1,16x9}.svg` + `.png` | The same covers, cut at the same sizes, with the landing's field of dithered square dots behind the lockup, clear in an ellipse round the name: for a profile's or a page's cover where the flat one reads too quiet. Eleven colorways, each in the brand table's inks or a mix of two of them: on the dark ground, `night` (copper dots, the landing's own), `ember` (three coppers in rings from the mark), `chrome` (the theme's grays in waves), `graphite` (grays on the sidebar's near-black), and `rust` (copper on a copper-tinted dark); on the light grounds, `paper` (copper dots), `ink` (grays in waves), and `sand` (two coppers in rings on the sidebar's light); on copper, `copper` (bright copper in waves) and `kiln` (copper to cream in rings); and `mono`, white on black. No 9:2: its lockup leaves no room for a field |
+| `banner/dots/banner-dots-{design}-{colorway}-{4x1,3x1,6x1,16x9}.svg` + `.png` | The same covers, cut at the same sizes, drawn in the landing's dithered square dots. Four designs: `hero`, the mark as the landing's copper ball, lit from the upper left in dots packed close, beside a name set to the left; `keel`, that ball huge and running off the right edge; `terrain`, patches of noise round a centered name, clear in an ellipse round it; and `bloom`, dots blooming in from the top right and the bottom left. On the LinkedIn covers (4:1 and 6:1) the left-set name stands past the photo LinkedIn lays over the lower left. Eleven colorways, each in the brand table's inks or a mix of two of them: on the dark ground, `night` (one copper, the landing's own), `ember` (four coppers up to cream), `chrome` (the theme's grays), `graphite` (grays on the sidebar's near-black), and `rust` (coppers on a copper-tinted dark); on the light grounds, `paper` (coppers), `ink` (grays), and `sand` (two coppers on the sidebar's light), where the ball is drawn in its shadow; on copper, `copper` (one bright copper) and `kiln` (copper up to cream); and `mono`, white on black. No 9:2: its lockup leaves no room for the art |
 | `icon/web-icon.svg` | The web app icon: the dark tile, full bleed, the disc 78% of it. The site's 180-pixel `apple-touch-icon.png` is cut from it, as are the manifest's `app-icon-{192,512}.png`, for Android's home screen as is and as maskable: the disc sits inside the 80% circle a mask keeps |
 | `icon/favicon.svg` | The site's favicon: the dark tile with no Dock margin under the copper small cut, the disc 78% of the tile, so it reads at 16 pixels in a light tab and a dark one. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico` |
 | `social/og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the lockup on the dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is cut into `apps/web/public/og-card.png`, which scrapers fetch from the site's root |

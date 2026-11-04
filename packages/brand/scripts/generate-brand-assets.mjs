@@ -112,11 +112,14 @@ function stackedLockup(ink, markInk = ink) {
   return { body, box: { left: INK.LEFT, right: INK.RIGHT, top, bottom: INK.BOTTOM } };
 }
 
-// Where a lockup's ink box lands scaled to `fill` of a width-by-height canvas
-// and centered on it: its scale and offset, and the box in the canvas's units.
-function placement(box, width, height, fill) {
+// Where a lockup's ink box lands scaled to `fill` of a width-by-height canvas,
+// centered on it, or with its left edge at `edge` of the width where given
+// and centered down it: its scale and offset, and the box in the canvas's
+// units.
+function placement(box, width, height, fill, edge) {
   const k = (width * fill) / (box.right - box.left);
-  const tx = width / 2 - (k * (box.left + box.right)) / 2;
+  const tx =
+    edge === undefined ? width / 2 - (k * (box.left + box.right)) / 2 : width * edge - k * box.left;
   const ty = height / 2 - (k * (box.top + box.bottom)) / 2;
   const at = (x, y) => [tx + k * x, ty + k * y];
   const [left, top] = at(box.left, box.top);
@@ -344,14 +347,18 @@ for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
   }
 }
 
-// Dotted banners: the same covers with the landing's field behind the
-// lockup (`@repo/ui`'s landing-field.tsx): a grid of small square dots, each
-// cell lit or not by an 8×8 ordered dither over a slowly varying value, so
-// the field reads as flat inks on the ground and never as a gradient. A
-// colorway with more than one ink dithers between them as the landing's ball
-// does, darkest to brightest, so a brighter stretch of the field steps up
-// through its inks rather than blending. The field stands clear inside an
-// ellipse round the lockup and grows in past it, so it frames the name
+// Dotted banners: the same covers drawn in the landing's dots
+// (`@repo/ui`'s landing-field.tsx and mark-orb.tsx): small square dots on a
+// grid, each lit or not by an 8×8 ordered dither, so a cover reads as flat
+// inks on its ground and never as a gradient. A colorway with more than one
+// ink dithers between them as the landing's ball does, darkest to brightest,
+// so a brighter stretch steps up through its inks rather than blending.
+//
+// Four designs: `hero` and `keel` draw the mark as the landing's ball, a
+// disc lit from the upper left, in dots packed close, beside a name set to
+// the left (`keel` huge and running off the right edge); `terrain` and
+// `bloom` lay a field of noise round a centered name, kept clear inside an
+// ellipse round the lockup and growing in past it, so it frames the name
 // rather than boxing it. 9:2 is left out: its lockup all but fills it.
 //
 // Note that the map is the landing's own (landing-paint.ts), so a banner and
@@ -363,22 +370,13 @@ const BAYER_8 = [
 ].map((rank) => (rank + 0.5) / 64);
 const bayerAt = (i, j) => BAYER_8[(j % 8) * 8 + (i % 8)];
 
-// The fields, each a cell's value between 0 and 1 at a point, in the
-// landing's CSS pixels (seven to a cell, so a banner's pattern is as many
-// dots across as the site's), at one moment of the landing's loop. Flow and
-// waves are the landing's own; rings go out from the mark rather than from
-// below, so the disc reads as their source.
-const DOT_FIELDS = {
-  // Note that flow's bands are a product of two waves, which seldom crest
-  // together, so it is stretched to reach the others' range.
-  flow: (x, y) => {
-    const band =
-      Math.sin(x * 0.011 + 2.1 + Math.sin(y * 0.012 - 1.4) * 2.2) * Math.cos(y * 0.008 + 1.54);
-    return 0.5 + 0.5 * Math.max(-1, Math.min(1, band * 1.8));
-  },
-  waves: (x, y) => 0.5 + 0.5 * Math.sin(y * 0.03 + Math.sin(x * 0.006 + 1.05) * 3),
-  rings: (x, y, mark) => 0.5 + 0.5 * Math.sin(Math.hypot(x - mark.x, y - mark.y) * 0.04 - 1.4),
-};
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+// A smooth step from 0 at `from` to 1 at `to`.
+function smooth(from, to, v) {
+  const t = clamp01((v - from) / (to - from));
+  return t * t * (3 - 2 * t);
+}
 
 // A color between two #rrggbb colors, `share` of the way from `from`.
 function mix(from, to, share) {
@@ -388,11 +386,175 @@ function mix(from, to, share) {
   return `#${blend.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
+// Value noise on a lattice hashed from its corners and a seed, between 0
+// and 1, and its fractal sum over `octaves`, each finer and fainter. Seeded
+// and pure, so the covers are the same on every run.
+function lattice(i, j, seed) {
+  let h = (i * 374761393 + j * 668265263 + seed * 982451653) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function noise(x, y, seed) {
+  const [i, j] = [Math.floor(x), Math.floor(y)];
+  const [u, v] = [smooth(0, 1, x - i), smooth(0, 1, y - j)];
+  const [a, b] = [lattice(i, j, seed), lattice(i + 1, j, seed)];
+  const [c, d] = [lattice(i, j + 1, seed), lattice(i + 1, j + 1, seed)];
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fractal(x, y, seed, octaves) {
+  let [sum, weight, total, scale] = [0, 0.5, 0, 1];
+  for (let octave = 0; octave < octaves; octave++) {
+    sum += weight * noise(x * scale, y * scale, seed + octave * 17);
+    total += weight;
+    scale *= 2.03;
+    weight *= 0.5;
+  }
+  return sum / total;
+}
+
+// The mark's outline flattened to rings of points on its 100-unit disc, and
+// whether a point falls inside it (even-odd, as the island is a hole's
+// hole). Its path is moves, lines, and cubics, absolute or relative.
+function markRings(path) {
+  const tokens = path.match(/[a-zA-Z]|-?\d*\.?\d+/g);
+  const rings = [];
+  let [ring, x, y, command, at] = [[], 0, 0, "", 0];
+  const take = (count) => {
+    const values = tokens.slice(at, at + count).map(Number);
+    at += count;
+    return values;
+  };
+  while (at < tokens.length) {
+    if (/[a-zA-Z]/.test(tokens[at])) command = tokens[at++];
+    const relative = command === command.toLowerCase();
+    const [ox, oy] = relative ? [x, y] : [0, 0];
+    const kind = command.toUpperCase();
+    if (kind === "Z") {
+      rings.push(ring);
+      ring = [];
+    } else if (kind === "M" || kind === "L") {
+      const [nx, ny] = take(2);
+      [x, y] = [ox + nx, oy + ny];
+      ring.push([x, y]);
+    } else if (kind === "C") {
+      const [x1, y1, x2, y2, x3, y3] = take(6).map((v, n) => v + (n % 2 ? oy : ox));
+      for (let step = 1; step <= 12; step++) {
+        const t = step / 12;
+        const s = 1 - t;
+        const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+        ring.push([
+          w[0] * x + w[1] * x1 + w[2] * x2 + w[3] * x3,
+          w[0] * y + w[1] * y1 + w[2] * y2 + w[3] * y3,
+        ]);
+      }
+      [x, y] = [x3, y3];
+    } else {
+      throw new Error(`The mark's path has a ${command}, which markRings does not draw`);
+    }
+  }
+  return rings;
+}
+const MARK_RINGS = markRings(MARK.PATH);
+function inMark(x, y) {
+  let inside = false;
+  for (const ring of MARK_RINGS) {
+    for (let a = 0, b = ring.length - 1; a < ring.length; b = a++) {
+      const [[xa, ya], [xb, yb]] = [ring[a], ring[b]];
+      if (ya > y !== yb > y && x < ((xb - xa) * (y - ya)) / (yb - ya) + xa) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// The light on the ball at a point of the 100-unit disc, lit from the upper
+// left as the landing's is: diffuse, a highlight, and a rim on the lit side.
+const BALL_LIGHT = (() => {
+  const light = [-0.5, -0.62, 0.6];
+  const length = Math.hypot(...light);
+  return light.map((v) => v / length);
+})();
+function ballLight(mx, my) {
+  const [dx, dy] = [(mx - 50) / 50, (my - 50) / 50];
+  const nz = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy));
+  const diffuse = Math.max(0, dx * BALL_LIGHT[0] + dy * BALL_LIGHT[1] + nz * BALL_LIGHT[2]);
+  const rim = (1 - nz) ** 4 * 0.5 * smooth(-0.2, 0.8, dx + dy);
+  return clamp01(0.06 + 0.82 * diffuse ** 1.4 + 0.6 * diffuse ** 24 + rim);
+}
+
+// The mark as the ball, `side` across with its corner at (left, top): its
+// light at (x, y), or nothing outside it.
+function markBall(x, y, { left, top, side }) {
+  const [mx, my] = [((x - left) / side) * 100, ((y - top) / side) * 100];
+  if (mx < 0 || mx > 100 || my < 0 || my > 100 || !inMark(mx, my)) return 0;
+  return ballLight(mx, my);
+}
+
+// How far into the field (x, y) stands from the lockup's box: 0 inside
+// CLEAR of the ellipse the box spans, 1 past CLEAR + RAMP of it.
+const FIELD_CLEAR = { CLEAR: 1.15, RAMP: 1.1 };
+function clearOf(box, x, y) {
+  const away = Math.hypot(
+    (x - (box.left + box.right) / 2) / ((box.right - box.left) / 2),
+    (y - (box.top + box.bottom) / 2) / ((box.bottom - box.top) / 2),
+  );
+  return smooth(FIELD_CLEAR.CLEAR, FIELD_CLEAR.CLEAR + FIELD_CLEAR.RAMP, away);
+}
+
+// The designs. A design names where its lockup stands (`ALIGN`), whether it
+// draws a lit body rather than a field (`BODY`, packed close in its own
+// cell), and its value between 0 and 1 at a point of the cut, given the
+// cover, the lockup's placed box, and `landing`, the cut's pixels in the
+// landing's CSS pixels, so a field has as many dots across as the site's.
+const DOT_DESIGNS = {
+  hero: {
+    ALIGN: "left",
+    BODY: true,
+    value: (x, y, { WIDTH, HEIGHT }, box) => {
+      const side = Math.min(HEIGHT * 0.78, WIDTH * 0.36);
+      const center = Math.max(WIDTH * 0.79, box.right + WIDTH * 0.04 + side / 2);
+      return markBall(x, y, { left: center - side / 2, top: (HEIGHT - side) / 2, side });
+    },
+  },
+  keel: {
+    ALIGN: "left",
+    BODY: true,
+    value: (x, y, { WIDTH, HEIGHT }, box) => {
+      const side = Math.min(HEIGHT * 1.6, WIDTH * 0.6);
+      const left = Math.max(WIDTH - side * 0.8, box.right + WIDTH * 0.04);
+      return markBall(x, y, { left, top: HEIGHT / 2 - side * 0.46, side });
+    },
+  },
+  // Patches of noise whose lattice is itself bent by noise, so its edges
+  // wander as weather on a map does, and nothing repeats.
+  terrain: {
+    ALIGN: "center",
+    value: (x, y, _cover, box, landing) => {
+      const [u, v] = [(x * landing) / 280, (y * landing) / 280];
+      const bendX = fractal(u + 3.1, v + 1.7, 7, 3);
+      const bendY = fractal(u - 2.3, v + 4.1, 9, 3);
+      const height = fractal(u + bendX * 1.8, v + bendY * 1.8, 3, 5);
+      return clearOf(box, x, y) * smooth(0.34, 0.74, height);
+    },
+  },
+  // Dots blooming in from the top right and the bottom left, their edges
+  // broken by noise.
+  bloom: {
+    ALIGN: "center",
+    value: (x, y, { WIDTH, HEIGHT }, box, landing) => {
+      const grain = fractal((x * landing) / 150, (y * landing) / 150, 11, 4);
+      const right = Math.hypot((x - WIDTH) / (WIDTH * 0.45), y / (HEIGHT * 1.1));
+      const left = Math.hypot(x / (WIDTH * 0.38), (y - HEIGHT) / HEIGHT);
+      const reach = Math.max(1 - right, 0.85 * (1 - left)) + (grain - 0.5) * 0.55;
+      return clearOf(box, x, y) * smooth(0, 0.8, reach);
+    },
+  },
+};
+
 // The colorways: a ground, the inks its dots step through from darkest to
-// brightest, the name's ink and the mark's, the field each draws, and how
-// strongly the field lights (`GAIN`) over what is lit everywhere past the
-// lockup (`FLOOR`). Every ink is the brand table's, or a mix of two of its
-// values as the landing's ball mixes its deep copper.
+// brightest, and the name's ink and the mark's. Every ink is the brand
+// table's, or a mix of two of its values as the landing's ball mixes its
+// deep copper. On a light ground (`LIGHT`) the ball is drawn in its shadow,
+// so its light reads as the ground.
 const DEEP_COPPER = mix(BRAND.DARK.GROUND, BRAND.DARK.ACCENT, 0.45);
 const DOT_COLORWAYS = {
   night: {
@@ -400,165 +562,136 @@ const DOT_COLORWAYS = {
     DOTS: [BRAND.DARK.ACCENT],
     WORD: INKS.dark,
     MARK: INKS.dark,
-    FIELD: "flow",
-    GAIN: 0.85,
-    FLOOR: 0.04,
   },
   ember: {
     GROUND: BRAND.DARK.GROUND,
-    DOTS: [DEEP_COPPER, BRAND.DARK.ACCENT, BRAND.DARK.ACCENT_TEXT],
+    DOTS: [
+      DEEP_COPPER,
+      BRAND.DARK.ACCENT,
+      BRAND.DARK.ACCENT_TEXT,
+      mix(BRAND.DARK.ACCENT_TEXT, BRAND.DARK.INK, 0.6),
+    ],
     WORD: INKS.dark,
     MARK: BRAND.DARK.ACCENT_TEXT,
-    FIELD: "rings",
-    GAIN: 0.9,
-    FLOOR: 0.05,
   },
   chrome: {
     GROUND: BRAND.DARK.GROUND,
     DOTS: [BRAND.DARK.CHIP_EDGE_STRONG, BRAND.DARK.TEXT_MUTED, BRAND.DARK.TEXT_BODY],
     WORD: INKS.dark,
     MARK: BRAND.DARK.ACCENT,
-    FIELD: "waves",
-    GAIN: 0.85,
-    FLOOR: 0.04,
   },
   graphite: {
     GROUND: BRAND.DARK.SIDEBAR,
     DOTS: [BRAND.DARK.CHIP_EDGE_STRONG, BRAND.DARK.TEXT_MUTED],
     WORD: INKS.dark,
     MARK: BRAND.DARK.ACCENT,
-    FIELD: "flow",
-    GAIN: 0.9,
-    FLOOR: 0.06,
   },
   rust: {
     GROUND: mix(BRAND.DARK.GROUND, BRAND.DARK.ACCENT, 0.16),
-    DOTS: [DEEP_COPPER, BRAND.DARK.ACCENT],
+    DOTS: [DEEP_COPPER, BRAND.DARK.ACCENT, BRAND.DARK.ACCENT_TEXT],
     WORD: INKS.dark,
     MARK: BRAND.DARK.ACCENT_TEXT,
-    FIELD: "waves",
-    GAIN: 0.85,
-    FLOOR: 0.05,
   },
   paper: {
     GROUND: BRAND.LIGHT.GROUND,
-    DOTS: [BRAND.LIGHT.ACCENT],
+    DOTS: [
+      mix(BRAND.LIGHT.GROUND, BRAND.LIGHT.ACCENT, 0.4),
+      BRAND.LIGHT.ACCENT,
+      mix(BRAND.LIGHT.ACCENT, BRAND.LIGHT.INK, 0.45),
+    ],
     WORD: INKS.light,
-    MARK: INKS.light,
-    FIELD: "flow",
-    GAIN: 0.75,
-    FLOOR: 0.04,
+    MARK: BRAND.LIGHT.ACCENT,
+    LIGHT: true,
   },
   ink: {
     GROUND: BRAND.LIGHT.GROUND,
-    DOTS: [BRAND.LIGHT.CHIP_EDGE_STRONG, BRAND.LIGHT.TEXT_MUTED],
+    DOTS: [BRAND.LIGHT.CHIP_EDGE_STRONG, BRAND.LIGHT.TEXT_MUTED, BRAND.LIGHT.TEXT_BODY],
     WORD: INKS.light,
     MARK: BRAND.LIGHT.ACCENT,
-    FIELD: "waves",
-    GAIN: 0.8,
-    FLOOR: 0.04,
+    LIGHT: true,
   },
   sand: {
     GROUND: BRAND.LIGHT.SIDEBAR,
     DOTS: [mix(BRAND.LIGHT.SIDEBAR, BRAND.LIGHT.ACCENT, 0.4), BRAND.LIGHT.ACCENT],
     WORD: INKS.light,
     MARK: BRAND.LIGHT.ACCENT,
-    FIELD: "rings",
-    GAIN: 0.85,
-    FLOOR: 0.04,
+    LIGHT: true,
   },
   copper: {
     GROUND: BRAND.LIGHT.ACCENT,
     DOTS: [BRAND.DARK.ACCENT_TEXT],
     WORD: BRAND.LIGHT.ON_ACCENT,
     MARK: BRAND.LIGHT.ON_ACCENT,
-    FIELD: "waves",
-    GAIN: 0.85,
-    FLOOR: 0.05,
   },
   kiln: {
     GROUND: BRAND.LIGHT.ACCENT,
     DOTS: [BRAND.DARK.ACCENT, BRAND.DARK.ACCENT_TEXT, BRAND.LIGHT.GROUND],
     WORD: BRAND.LIGHT.ON_ACCENT,
     MARK: BRAND.LIGHT.ON_ACCENT,
-    FIELD: "rings",
-    GAIN: 0.85,
-    FLOOR: 0.05,
   },
   mono: {
     GROUND: "#000000",
     DOTS: ["#ffffff"],
     WORD: "#ffffff",
     MARK: "#ffffff",
-    FIELD: "flow",
-    GAIN: 0.6,
-    FLOOR: 0.03,
   },
 };
 
-// Each dotted cover's cut and the lockup's share of its width, as the flat
-// covers', and its cell in the cut's pixels, sized so the dots stand about
-// the landing's seven CSS pixels apart where the platform draws the cover.
+// Each dotted cover's cut and the lockup's share of its width when
+// centered, as the flat covers'; where a left-set lockup's edge stands, as a
+// share of the width (past the photo LinkedIn sets over a cover's lower
+// left); and its cells in the cut's pixels: a field's, sized so its dots
+// stand about the landing's seven CSS pixels apart where the platform draws
+// the cover, and a body's, finer.
 const DOT_BANNERS = {
-  "4x1": { ...BANNERS["4x1"], CELL: 14 },
-  "3x1": { ...BANNERS["3x1"], CELL: 14 },
-  "6x1": { ...BANNERS["6x1"], CELL: 24 },
-  "16x9": { ...BANNERS["16x9"], CELL: 16 },
+  "4x1": { ...BANNERS["4x1"], LEFT: 0.28, CELL: 14, BODY_CELL: 9 },
+  "3x1": { ...BANNERS["3x1"], LEFT: 0.075, CELL: 14, BODY_CELL: 9 },
+  "6x1": { ...BANNERS["6x1"], LEFT: 0.3, CELL: 24, BODY_CELL: 12 },
+  "16x9": { ...BANNERS["16x9"], LEFT: 0.075, CELL: 16, BODY_CELL: 10 },
 };
-// How much of its cell a dot fills, and where the field comes in round the
-// lockup: clear inside CLEAR of the ellipse its box spans, and full past
-// CLEAR + RAMP of it.
-const DOT = { SHARE: 0.46, CLEAR: 1.15, RAMP: 1.1, LANDING_CELL: 7 };
+// A left-set lockup's share of the width; how much of its cell a field's dot
+// fills, and a body's; and the landing's cell in its CSS pixels.
+const DOT = { LEFT_FILL: 0.4, SHARE: 0.46, BODY_SHARE: 0.86, LANDING_CELL: 7 };
 
-// A smooth step from 0 at `from` to 1 at `to`.
-function smooth(from, to, v) {
-  const t = Math.min(1, Math.max(0, (v - from) / (to - from)));
-  return t * t * (3 - 2 * t);
-}
-
-// The dots of a cover in a colorway, one path per ink, round the lockup's
-// placed box, with the mark's center for the field that reads it.
-function dotField(colorway, { WIDTH, HEIGHT, CELL }, box, mark) {
-  const { DOTS, FIELD, GAIN, FLOOR } = colorway;
-  const field = DOT_FIELDS[FIELD];
-  const scale = DOT.LANDING_CELL / CELL;
-  const side = fmt(CELL * DOT.SHARE);
-  const center = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
-  const reach = { x: (box.right - box.left) / 2, y: (box.bottom - box.top) / 2 };
-  const source = { x: mark.x * scale, y: mark.y * scale };
-  const paths = DOTS.map(() => []);
-  for (let j = 0, y = CELL / 2; y < HEIGHT; y += CELL, j++) {
-    for (let i = 0, x = CELL / 2; x < WIDTH; x += CELL, i++) {
-      const away = Math.hypot((x - center.x) / reach.x, (y - center.y) / reach.y);
-      const clear = smooth(DOT.CLEAR, DOT.CLEAR + DOT.RAMP, away);
-      if (clear <= 0) continue;
-      const crest = smooth(0.2, 1, field(x * scale, y * scale, source));
+// The dots of a cover in a design and a colorway round the lockup's placed
+// box, one path per ink. Each dot is a relative move from the last, so a
+// path of thousands stays small.
+function dotCover(design, colorway, cover, box) {
+  const { DOTS, LIGHT } = colorway;
+  const cell = design.BODY ? cover.BODY_CELL : cover.CELL;
+  const side = Math.round(cell * (design.BODY ? DOT.BODY_SHARE : DOT.SHARE));
+  const landing = DOT.LANDING_CELL / cover.CELL;
+  const paths = DOTS.map(() => ({ d: "", x: 0, y: 0 }));
+  for (let j = 0, y = cell / 2; y < cover.HEIGHT; y += cell, j++) {
+    for (let i = 0, x = cell / 2; x < cover.WIDTH; x += cell, i++) {
+      const lit = design.value(x, y, cover, box, landing);
+      if (lit <= 0) continue;
+      const value = design.BODY && LIGHT ? clamp01(1.1 - lit) : lit;
       // Note that the ink is picked by the same threshold that lights the
       // cell, so a value between two inks dithers between them, flatly.
-      const value = clear * (FLOOR + GAIN * crest);
       const ink = Math.min(DOTS.length, Math.floor(value * DOTS.length + bayerAt(i, j)));
       if (ink === 0) continue;
-      paths[ink - 1].push(`M${fmt(x - side / 2)} ${fmt(y - side / 2)}h${side}v${side}h-${side}z`);
+      const path = paths[ink - 1];
+      const [at, to] = [Math.round(x - side / 2), Math.round(y - side / 2)];
+      path.d += `${path.d ? "m" : "M"}${at - path.x} ${to - path.y}h${side}v${side}h-${side}z`;
+      [path.x, path.y] = [at, to];
     }
   }
-  return paths
-    .map((cells, n) =>
-      cells.length === 0 ? "" : `<path d="${cells.join("")}" fill="${DOTS[n]}"/>`,
-    )
-    .join("");
+  return paths.map(({ d }, n) => (d ? `<path d="${d}" fill="${DOTS[n]}"/>` : "")).join("");
 }
 
-{
-  const disc = WORDMARK.CAP_HEIGHT * LOCKUP.DISC;
-  for (const [shape, banner] of Object.entries(DOT_BANNERS)) {
-    const { WIDTH, HEIGHT, FILL } = banner;
+for (const [shape, cover] of Object.entries(DOT_BANNERS)) {
+  const { WIDTH, HEIGHT } = cover;
+  for (const [designName, design] of Object.entries(DOT_DESIGNS)) {
     for (const [name, colorway] of Object.entries(DOT_COLORWAYS)) {
       const cut = lockup(colorway.WORD, colorway.MARK);
-      const { k, tx, ty, box } = placement(cut.box, WIDTH, HEIGHT, FILL);
-      const mark = { x: tx + (k * disc) / 2, y: ty - (k * WORDMARK.CAP_HEIGHT) / 2 };
+      const { k, tx, ty, box } =
+        design.ALIGN === "left"
+          ? placement(cut.box, WIDTH, HEIGHT, DOT.LEFT_FILL, cover.LEFT)
+          : placement(cut.box, WIDTH, HEIGHT, cover.FILL);
       emit(
-        `banner/dots/banner-dots-${name}-${shape}.svg`,
-        `${svgOpen(WIDTH, HEIGHT)}<rect width="${WIDTH}" height="${HEIGHT}" fill="${colorway.GROUND}"/>${dotField(colorway, banner, box, mark)}${centered(cut, WIDTH, HEIGHT, FILL)}</svg>`,
+        `banner/dots/banner-dots-${designName}-${name}-${shape}.svg`,
+        `${svgOpen(WIDTH, HEIGHT)}<rect width="${WIDTH}" height="${HEIGHT}" fill="${colorway.GROUND}"/>${dotCover(design, colorway, cover, box)}<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(k)})">${cut.body}</g></svg>`,
         PRODUCT_NAME,
       );
     }
