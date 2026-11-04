@@ -84,11 +84,13 @@
   <body>
     <!-- The loading frame, drawn the moment the page and its stylesheet land,
          while the host stands in the tab and reads the session, which only
-         then draws the panel: React's first render replaces it, and a tab
-         that can draw nothing takes it down (`src/app/web-root.tsx`). It is
-         the product's mark alone, in the middle of the screen at one size on
-         a phone and a desktop alike, and it comes up only should the wait
-         run on (`src/app/app.css`). -->
+         then draws the panel (`src/app/web-root.tsx`). It is the product's
+         mark alone, in the middle of the screen at one size on a phone and a
+         desktop alike, and it comes up only should the wait run on
+         (`src/app/app.css`). The script after it draws the mark as copper
+         dots that rise into it, a light moving through them, and sink away
+         as the panel draws (`public/boot-mark.js`); where it cannot, this
+         SVG stands still, and React's first render replaces it. -->
     <div id="root">
       <div class="boot-frame" aria-hidden="true">
         <span class="boot-frame-mark">
@@ -98,6 +100,7 @@
         </span>
       </div>
     </div>
+    <script src="/boot-mark.js"></script>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
 </html>

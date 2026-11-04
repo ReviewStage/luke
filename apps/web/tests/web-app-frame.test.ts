@@ -16,7 +16,9 @@ import { fakeService, LISTED_TASK } from "./support/fake-service";
  * session, and the panel signed in takes its place once the session answers;
  * a tab whose host cannot stand takes the frame down rather than leave it
  * looking as though the panel were still coming, and says so with Reload
- * rather than stand blank. The second mount stands
+ * rather than stand blank. A frame drawing its mark as moving dots
+ * (`public/boot-mark.js`) is lifted over the panel and sent away instead, so
+ * its dots can leave as the panel appears. The second mount stands
  * after the first, whose host never stood and so read no state, because the
  * panel's state read is the tab's once.
  */
@@ -67,10 +69,18 @@ test("a tab whose host cannot stand takes the frame down and says so with Reload
   );
 });
 
-test("the shell's frame stands while the session is read, and the signed-in panel replaces it", async () => {
+test("the shell's frame stands while the session is read, and leaves over the signed-in panel", async () => {
   const session = Promise.withResolvers<void>();
   const service = fakeService({ signedIn: true, sessionHeld: session.promise });
   const root = servedRoot();
+  // The frame as the boot script leaves it once its dots are drawing.
+  const frame = root.querySelector<HTMLElement>(".boot-frame");
+  assert.ok(frame !== null, "app.html serves the frame");
+  frame.dataset.bootMark = "live";
+  let sentAway = false;
+  frame.addEventListener("boot-frame-leave", () => {
+    sentAway = true;
+  });
 
   const mounting = mountWebApp(root, { httpClient: service.layer });
 
@@ -90,6 +100,8 @@ test("the shell's frame stands while the session is read, and the signed-in pane
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() => {
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
-    assert.equal(root.querySelector(".boot-frame"), null, "the frame is gone");
+    assert.equal(root.querySelector(".boot-frame"), null, "the frame is out of the root");
   }, 5_000);
+  assert.equal(frame.parentElement, document.body, "the frame stands over the panel");
+  assert.ok(sentAway, "the frame is sent away");
 });

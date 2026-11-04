@@ -12,12 +12,14 @@
  * and reports through it a tab that could draw nothing, as the desktop's
  * window root does.
  *
- * Until the panel draws, the tab shows the shell's frame app.html stands in
- * the root element, which the root's first render replaces; a tab that can
- * draw nothing takes the frame down and says so with Reload in its place, so
- * it is never left looking as though the panel were still coming, nor
- * blank. The panel stands in an error boundary that does the same for a
- * render that throws.
+ * Until the panel draws, the tab shows the loading frame app.html stands in
+ * the root element, which the root's first render replaces; where the frame
+ * draws its mark as moving dots (`public/boot-mark.js`), it is lifted out of
+ * the root over the panel instead and told to leave, so its dots sink away as
+ * the panel appears. A tab that can draw nothing takes the frame down and
+ * says so with Reload in its place, so it is never left looking as though the
+ * panel were still coming, nor blank. The panel stands in an error boundary
+ * that does the same for a render that throws.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -59,6 +61,9 @@ export interface WebAppOptions {
 /** What a tab whose panel could not be drawn says over its Reload. */
 const TAB_FAILED = "This page could not be shown.";
 
+/** The loading frame as app.html and `public/boot-mark.js` name it: the frame, the mark it says is drawing, and the event that sends it away. */
+const BOOT_FRAME = { SELECTOR: ".boot-frame", LIVE: "live", LEAVE: "boot-frame-leave" } as const;
+
 /** Reload's press for the tab: the page read again from the start, its host, its first read, and every chunk among it. */
 function reloadTab(): void {
   location.reload();
@@ -71,6 +76,19 @@ function reloadTab(): void {
 function reportCaught(thrown: unknown): void {
   console.error("The tab's panel failed to render.", thrown);
   reportError(thrown);
+}
+
+/**
+ * Lifts the loading frame out of `rootElement`, over the panel about to draw
+ * there, and sends it away, where its mark is drawing as moving dots; a frame
+ * with no such mark is left for the root's first render to replace. Note that
+ * the frame takes itself down once its dots have left.
+ */
+function liftLoadingFrame(rootElement: HTMLElement): void {
+  const frame = rootElement.querySelector<HTMLElement>(BOOT_FRAME.SELECTOR);
+  if (frame?.dataset.bootMark !== BOOT_FRAME.LIVE) return;
+  document.body.append(frame);
+  frame.dispatchEvent(new Event(BOOT_FRAME.LEAVE));
 }
 
 /** The app as drawn: closing it takes the panel down and drains the host. */
@@ -147,6 +165,7 @@ export async function mountWebApp(
     createRoot(rootElement).render(<ReloadState failure={TAB_FAILED} onReload={reloadTab} />);
     return undefined;
   }
+  liftLoadingFrame(rootElement);
   const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>

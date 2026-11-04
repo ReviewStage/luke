@@ -53,3 +53,27 @@
     opacity: 0;
   }
 }
+
+/* Where `public/boot-mark.js` draws the mark as dots, the canvas takes the
+   SVG's place, and the frame stands over the panel as it leaves: its ground
+   clears to the panel drawing beneath while the dots sink away. */
+.boot-frame[data-boot-mark="live"] {
+  z-index: var(--ui-z-tooltip);
+  transition: background-color var(--ui-duration-shape) var(--ui-motion-pane);
+}
+
+.boot-frame[data-boot-mark="live"] .boot-frame-mark {
+  visibility: hidden;
+}
+
+.boot-frame[data-leaving="true"] {
+  background-color: transparent;
+  pointer-events: none;
+}
+
+.boot-frame-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
