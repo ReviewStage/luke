@@ -25,12 +25,16 @@ export const ACCOUNT_ACT_KIND = {
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
-   * Settings › API keys: the account's own provider keys read as hints and
+   * Settings › API keys: the account's own provider keys held as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
    * key crosses from the renderer, once, on its way to the service; no
-   * answer carries one back, and nothing on the way keeps it.
+   * answer carries one back, and nothing on the way keeps it. The hold's
+   * stream carries nothing: what it holds reaches the panel on app state
+   * (`LIVE_READ.PROVIDER_KEYS`), and each write's own answer is laid there too.
    */
-  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_FOLLOW: "providerKeys.follow",
+  /** The account's held provider keys, which the panel reads on app state, asked again at once, as Try again asks. */
+  PROVIDER_KEYS_RETRY: "providerKeys.retry",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
@@ -283,8 +287,16 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
-  INTEGRATIONS_TOOLS: "integrations.tools",
+  /**
+   * The tools one account's server offers the account's agents, held for the
+   * window while it holds the stream open and a while after among those let
+   * go lately, asked again as a window comes forward: what it holds reaches
+   * the panel on app state (`LIVE_READ.INTEGRATION_TOOLS`), so the stream
+   * carries nothing.
+   */
+  INTEGRATIONS_TOOLS_FOLLOW: "integrations.toolsFollow",
+  /** One server's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
+  INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
 } as const;
@@ -646,7 +658,8 @@ export const PORT_ACT_USE = {
   ACCOUNT_SIGN_OUT: ACT_USE.WRITE,
   ACCOUNT_DELETE: ACT_USE.WRITE,
 
-  PROVIDER_KEYS_READ: ACT_USE.READ,
+  PROVIDER_KEYS_FOLLOW: ACT_USE.READ,
+  PROVIDER_KEYS_RETRY: ACT_USE.READ,
   PROVIDER_KEYS_SAVE: ACT_USE.WRITE,
   PROVIDER_KEYS_REMOVE: ACT_USE.WRITE,
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
@@ -748,7 +761,8 @@ export const PORT_ACT_USE = {
   INTEGRATIONS_CONNECT: ACT_USE.WRITE,
   INTEGRATIONS_CANCEL: ACT_USE.WRITE,
   INTEGRATIONS_DISCONNECT: ACT_USE.WRITE,
-  INTEGRATIONS_TOOLS: ACT_USE.READ,
+  INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
+  INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,

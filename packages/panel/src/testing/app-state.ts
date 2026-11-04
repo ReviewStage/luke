@@ -4,6 +4,8 @@
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { IntegrationToolsView } from "@repo/features/integration-view";
+import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -15,8 +17,10 @@ import {
   type AppHolderPages,
   type AppHostRead,
   type AppInboxItems,
+  type AppIntegrationTools,
   type AppPages,
   type AppPlanComments,
+  type AppProviderKeyList,
   type AppStateDelivery,
   type AppStateSnapshot,
   NO_AGENT_ORIGINS,
@@ -27,7 +31,12 @@ import {
   NO_PLAN_COMMENTS,
   UNREAD,
 } from "@repo/host/app-state";
-import { AUTOMATION_ACT_KIND, SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
+import {
+  AUTOMATION_ACT_KIND,
+  INTEGRATION_ACT_KIND,
+  SETTINGS_ACT_KIND,
+  TASKS_ACT_KIND,
+} from "@repo/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
@@ -35,6 +44,7 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import type { IntegrationServer } from "../use-host-read.js";
 import {
   fakeActPort,
   fakeActPortCalls,
@@ -82,7 +92,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AGENT_ORIGINS]: NO_AGENT_ORIGINS,
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.PAGES]: NO_PAGES,
+    [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
@@ -183,34 +195,62 @@ export interface HostReadsHanded {
   readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
   readonly deliverComments: (next: AppPlanComments) => void;
+  readonly deliverTools: (next: AppIntegrationTools) => void;
+  /** The signed-in account's keys, held under its id. */
+  readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
+}
+
+/** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
+const HELD_ACCOUNT_ID = "user-held";
+
+/** The document with its signed-in account given an id where it names none. */
+function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
+  const { account } = snapshot;
+  if (account.status !== ACCOUNT_STATUS.SIGNED_IN || account.id !== undefined) return snapshot;
+  return { ...snapshot, account: { ...account, id: HELD_ACCOUNT_ID } };
 }
 
 /**
  * Lays the host's reads as given, the account's feed of every item, the
- * holders' own inboxes, and the pull requests' chapters, over whatever
- * document the window was handed, its experiments and the reads handed
- * before among it, and answers with how each is delivered again as it
- * moves, as the host tells it.
+ * holders' own inboxes, the pull requests' chapters, the servers' tools, and
+ * the signed-in account's keys, over whatever document the window was
+ * handed, its experiments and the reads handed before among it, and answers
+ * with how each is delivered again as it moves, as the host tells it. The
+ * account is given an id where the document names none, since the host
+ * holds its keys by it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
   readonly chapters?: AppChapters;
+  readonly tools?: AppIntegrationTools;
+  readonly keys?: AppHostRead<AppProviderKeyList>;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
   let version = 1;
+  let account = HELD_ACCOUNT_ID;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    requestAppState: async () => ({
-      ...(handed === undefined ? snapshotWith({}) : await handed()),
-      version,
-      ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
-      ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
-      ...(first.chapters === undefined
-        ? undefined
-        : { [LIVE_READ.PULL_REQUEST_CHAPTERS]: first.chapters }),
-    }),
+    requestAppState: async () => {
+      const snapshot = withAccountId(handed === undefined ? snapshotWith({}) : await handed());
+      if (snapshot.account.status === ACCOUNT_STATUS.SIGNED_IN && snapshot.account.id) {
+        account = snapshot.account.id;
+      }
+      return {
+        ...snapshot,
+        version,
+        ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
+        ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
+        ...(first.chapters === undefined
+          ? undefined
+          : { [LIVE_READ.PULL_REQUEST_CHAPTERS]: first.chapters }),
+        ...(first.tools === undefined ? undefined : { [LIVE_READ.INTEGRATION_TOOLS]: first.tools }),
+        ...(first.keys === undefined
+          ? undefined
+          : { [LIVE_READ.PROVIDER_KEYS]: { [account]: first.keys } }),
+      };
+    },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -227,6 +267,8 @@ export function handHostReads(first: {
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverAutomations: (next) => deliver(next),
     deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
+    deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
+    deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
   };
 }
 
@@ -314,6 +356,60 @@ export function holdAutomations(
       delivered();
     },
   };
+}
+
+/** What a test's service answers a server's tools read with, as the act it replaces did; nothing for a read that never answers. */
+type ToolsAnswer = (
+  server: IntegrationServer,
+) => IntegrationToolsView | Promise<IntegrationToolsView> | undefined;
+
+/**
+ * Answers the window's holds on each server's tools, and its Try again on
+ * one, as the host does, beside whatever acts the test answers by now: each
+ * server asked of `toolsOf` as it is first held and again on Try again, and
+ * laid on the document through `deliver`; an answer that is no list keeps
+ * what the server held, and fails one that never answered. Answers with
+ * every server asked, by its name, in order.
+ */
+export function holdIntegrationTools(
+  deliver: HostReadsHanded["deliverTools"],
+  toolsOf: ToolsAnswer,
+): readonly string[] {
+  const asked: string[] = [];
+  let held: AppIntegrationTools = NO_KEYS_HELD;
+  const ask = async (server: IntegrationServer) => {
+    const name = server.connection ?? server.provider;
+    asked.push(name);
+    const answering = toolsOf(server);
+    if (answering === undefined) return;
+    const answer = await Promise.resolve(answering).catch(() => undefined);
+    const was = held[name];
+    const read: AppHostRead<IntegrationToolsAnswer> =
+      answer !== undefined && !("failure" in answer)
+        ? { rows: answer }
+        : was?.rows !== undefined
+          ? was
+          : { failed: true };
+    held = { ...held, [name]: read };
+    deliver(held);
+  };
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW]: (server) => {
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      void Promise.resolve().then(() => ask(server));
+      return quietHold();
+    },
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]: async (server) => {
+      const name = server.connection ?? server.provider;
+      if (held[name]?.failed === true) {
+        held = { ...held, [name]: UNREAD };
+        deliver(held);
+      }
+      await ask(server);
+    },
+  });
+  return asked;
 }
 
 /**

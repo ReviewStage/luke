@@ -10,12 +10,13 @@ import { useLayoutEffect, useRef } from "react";
  * the place it was first drawn in, as the caller reads a place
  * (`placesOf`), so an update that would sort it elsewhere moves nothing.
  * Hidden, or drawn under another view, it is drawn again where each row
- * stands now. A row the list no longer draws lets its place go, so once it
- * is drawn again it stands where it is then, and a row it never drew stands
- * where it is now. The caller draws from the places it is handed (`draw`),
- * each row with none where it stands now; a row the reader's own press
- * moved is one whose place the caller takes anew (`placesOf`), so it moves
- * at once.
+ * stands now; a list kept drawn while hidden (React's `Activity`) lets its
+ * places go as its effects are taken down, as one unmounted would. A row
+ * the list no longer draws lets its place go, so once it is drawn again it
+ * stands where it is then, and a row it never drew stands where it is now.
+ * The caller draws from the places it is handed (`draw`), each row with
+ * none where it stands now; a row the reader's own press moved is one whose
+ * place the caller takes anew (`placesOf`), so it moves at once.
  */
 
 /** No row's place held: every row stands where it is now. */
@@ -46,6 +47,9 @@ export function useHeldOrder<V, P, L>(view: V, shown: boolean, order: HeldOrder<
   // Note that what was drawn is held once it is on screen, so a render React drops holds nothing.
   useLayoutEffect(() => {
     held.current = shown ? { view, places: order.placesOf(drawn, places) } : undefined;
+    return () => {
+      held.current = undefined;
+    };
   });
   return drawn;
 }

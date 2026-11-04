@@ -23,8 +23,8 @@ import type { HostKernel } from "./host-kernel.js";
  * OpenAI's open-source sign-in through the developer's browser and a
  * loopback on this Mac (`@repo/credentials`' `chatGptSignIn`), and posts what
  * it validated to the service, which keeps and renews it from then on. The
- * window hears the keys as the service then holds them, or why nothing was
- * kept: the tokens go from the exchange to the service and are held nowhere
+ * window hears the keys as the service then holds them, laid where the
+ * windows hold them too, or why nothing was kept: the tokens go from the exchange to the service and are held nowhere
  * here, so no answer, event, or log line carries one. Only a host on the
  * machine the browser runs on can take the loopback's callback, so a host
  * that is handed no consent leaves this concern out.
@@ -41,6 +41,8 @@ export interface ChatGptSignInDependencies {
   client: ChatGptSignInClient;
   /** The loopback consent the desktop stands up. */
   openConsent: OpenConsent;
+  /** The account's keys as a sign-in's answer leaves them, laid where the windows hold them (`AgentsComposer.keysAnswered`). */
+  keysAnswered: (answer: ChatGptSignInAnswerView) => Effect.Effect<void>;
 }
 
 export interface ChatGptSignInComposer extends Composer {
@@ -131,9 +133,11 @@ function composed(
 
   const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN> = {
     [GATEWAY_METHOD.CHATGPT_SIGN_IN]: () =>
-      Effect.map(gate() ? run : Effect.succeed<ChatGptSignInAnswerView>(UNANSWERED), (answer) =>
-        carried<ChatGptSignInAnswerView>(answer),
-      ),
+      Effect.gen(function* () {
+        const answer = gate() ? yield* run : UNANSWERED;
+        yield* dependencies.keysAnswered(answer);
+        return carried<ChatGptSignInAnswerView>(answer);
+      }),
     [GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL]: () =>
       Effect.sync(() => {
         withdraw();

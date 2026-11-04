@@ -41,6 +41,15 @@ import { cn } from "../cn.js";
 const DIALOG_ROOM =
   "fixed inset-x-0 top-viewport-top bottom-keyboard-inset z-dialog [-webkit-app-region:no-drag] [&[hidden]]:hidden";
 
+/**
+ * The room's margin round its card: a card's margin, or a phone's notch and home indicator where its page is drawn
+ * under them (`viewport-fit=cover`), as the stage keeps off them (the panel's `desktop.css`). Note that the foot's
+ * inset is taken less the keyboard's, because the room already ends where the keyboard begins, which covers the home
+ * indicator. Where there are no insets, as on a desktop, the margin is the card's alone.
+ */
+const DIALOG_ROOM_MARGIN =
+  "pt-[max(--spacing(6),env(safe-area-inset-top,0px))] pr-[max(--spacing(6),env(safe-area-inset-right,0px))] pb-[max(--spacing(6),env(safe-area-inset-bottom,0px)_-_var(--ui-keyboard-inset))] pl-[max(--spacing(6),env(safe-area-inset-left,0px))]";
+
 /** The card: a column at a question's measure, never taller than the window less its margins, on the motion tokens, fading out as it closes. */
 const DIALOG_CARD =
   "box-border flex w-dialog-confirm max-h-dialog-room flex-col gap-2 rounded-dialog border border-border-strong bg-popover p-dialog-inset text-body leading-[inherit] text-popover-foreground shadow-dialog animate-dialog-in transition-shadow duration-(--ui-duration-hover) ease-motion-exit data-ending-style:pointer-events-none data-ending-style:animate-leave";
@@ -83,7 +92,8 @@ function DialogContent({
         data-slot="dialog-viewport"
         className={cn(
           DIALOG_ROOM,
-          "@container/ui-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
+          DIALOG_ROOM_MARGIN,
+          "@container/ui-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
           viewportClassName,
         )}
         {...room}

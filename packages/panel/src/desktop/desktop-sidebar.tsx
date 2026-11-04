@@ -149,6 +149,7 @@ import {
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess } from "../use-app-state.js";
+import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { useFailedRunsMark } from "./failed-runs.js";
@@ -157,7 +158,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
-import { ADMIN_PLACE } from "./pages-on-demand.js";
+import { ADMIN_PLACE, TASKS_ROUTE } from "./pages-on-demand.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { ProductIdentity } from "./product-identity.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -1493,6 +1494,8 @@ function SidebarHomeRow({
  * The Tasks page's row, under the Inbox's. A press opens the listed
  * workspace's tasks as a List or a Board (`tasks-page.tsx`), as its chord
  * does, and the row is the place shown while it stands. It is always offered.
+ * The page's chunk is read once the signed-in window is idle, or as the
+ * pointer comes onto the row, so the first press finds it landed.
  */
 function SidebarTasksRow({
   current,
@@ -1503,6 +1506,9 @@ function SidebarTasksRow({
   disabled: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
+  useWhenIdle(() => {
+    if (!disabled) TASKS_ROUTE.prefetch();
+  }, IDLE_TIMEOUT_MS.PREFETCH);
   return (
     <NavItem
       icon={<ListTodoIcon />}
@@ -1510,6 +1516,7 @@ function SidebarTasksRow({
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.TASKS)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.TASKS].chord} />}
       disabled={disabled}
+      onPointerEnter={TASKS_ROUTE.prefetch}
       onClick={onOpen}
     >
       Tasks

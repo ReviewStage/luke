@@ -874,6 +874,37 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
   assert.equal(focusedKey(page), "ACME-36", "⌘↑ walks nowhere");
 });
 
+test("End reaches the last task of a List longer than the window, though its row is not drawn until then", async () => {
+  // Note that jsdom lays nothing out, so each row is taken at its estimate and the view at the window's
+  // 768px: a run of forty rows draws its first two dozen, the latest moved first.
+  const chores = Array.from({ length: 40 }, (_, at) =>
+    task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
+  );
+  const page = await mountPage(chores);
+  const box = scroller(page);
+  let top = 0;
+  // The scroller shows the window's height of rows, and a write to it is heard as a scroll, as the browser hears one.
+  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 768 });
+  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 40 * 36 });
+  Object.defineProperty(box, "scrollTop", {
+    configurable: true,
+    get: () => top,
+    set: (to: number) => {
+      top = to;
+      box.dispatchEvent(new Event("scroll"));
+    },
+  });
+  box.scrollTo = ((options: ScrollToOptions) => {
+    box.scrollTop = options.top ?? top;
+  }) as typeof box.scrollTo;
+  const drawn = () => groups(page).flatMap(([, keys]) => keys);
+  assert.ok(!drawn().includes("ACME-40"), "the last task's row is not drawn");
+
+  act(() => pressOf(page, "ACME-1").focus());
+  pressHere("End");
+  assert.equal(focusedKey(page), "ACME-40");
+});
+
 /** The page's one scroller, which holds the List's rows or the Board's columns. */
 function scroller(page: HTMLElement): HTMLElement {
   const found = page.querySelector<HTMLElement>(".ui-collection-page-scroll");

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { ORPCError } from "@orpc/client";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import {
   ACCOUNT_ASK_ACT_KIND,
@@ -40,7 +40,6 @@ const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Couldn't read your API keys on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Couldn't save your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Couldn't remove your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]:
@@ -55,7 +54,6 @@ const REFUSAL = {
 
 /** Every kind, each with a payload its schema admits and the host ask it reaches. */
 const ACTS = [
-  { kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ, payload: undefined, ask: "providerKeysRead" },
   {
     kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE,
     payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: PROVIDER_KEY },
@@ -232,10 +230,10 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE] },
   );
   assert.deepEqual(
-    await settled(client, ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ, {
+    await settled(client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, {
       provider: PROVIDER_KEY_PROVIDER.OPENAI,
     }),
-    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ] },
+    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
   );
   assert.deepEqual(asked, []);
 });

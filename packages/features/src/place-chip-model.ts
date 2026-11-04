@@ -9,10 +9,12 @@ import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
  * or a page's address say, is drawn as a chip (the desktop's `mention-chip.tsx`), and the
  * chip is named from what the window already holds: the task's title, the
  * page's, the agent's, the Inbox item's, the member's, the automation's.
- * Nothing is read for it, so a place the window holds no name for, an agent
+ * Nothing is read for it but an automation's, whose chip reads its
+ * workspace's automations, so a place the window holds no name for, an agent
  * past the few a task's row names say, is called by its kind until it does.
- * A plan, a page, an agent, an Inbox item, or a person is called by the name
- * the window holds for it now even where its link was labeled, since the
+ * A plan, a page, an agent, an Inbox item, an automation, or a person is
+ * called by the name the window holds for it now even where its link was
+ * labeled, since the
  * label is the name it had when it was written and the card beside the chip
  * says the name now; the label stands in only where the window holds none,
  * or holds the plan Untitled. Any other place someone labeled keeps the

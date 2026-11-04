@@ -849,8 +849,12 @@ export const LIVE_READ = {
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
+  /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
+  INTEGRATION_TOOLS: "integrationTools",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
+  /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */
+  PROVIDER_KEYS: "providerKeys",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */

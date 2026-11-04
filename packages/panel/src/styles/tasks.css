@@ -1223,8 +1223,10 @@
   transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
-.pull-request-section-fold > .ui-disclosure-summary:hover::before {
-  background: var(--ui-color-fill-strong);
+@media (hover: hover) {
+  .pull-request-section-fold > .ui-disclosure-summary:hover::before {
+    background: var(--ui-color-fill-strong);
+  }
 }
 
 .pull-request-section-fold > .ui-disclosure-summary > .pull-request-heading {
@@ -1234,8 +1236,10 @@
   transition: color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
-.pull-request-section-fold > .ui-disclosure-summary:hover > .pull-request-heading {
-  color: var(--ui-color-text);
+@media (hover: hover) {
+  .pull-request-section-fold > .ui-disclosure-summary:hover > .pull-request-heading {
+    color: var(--ui-color-text);
+  }
 }
 
 /* The cell beside the heading's row holding what stands at its end, on
@@ -1583,15 +1587,17 @@
 
 /* The head's fill reaches the ⋯ beside it (`DisclosureFrame`), which
    stands at the head's inset. */
-.annotation-card
-.ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
-  border-radius: 0;
-  background: var(--ui-color-fill-hover);
-}
+@media (hover: hover) {
+  .annotation-card
+  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    border-radius: 0;
+    background: var(--ui-color-fill-hover);
+  }
 
-.annotation-card .ui-disclosure-frame:has(> :not(details):hover)::before {
-  border-radius: 0;
-  background: var(--ui-color-fill-hover);
+  .annotation-card .ui-disclosure-frame:has(> :not(details):hover)::before {
+    border-radius: 0;
+    background: var(--ui-color-fill-hover);
+  }
 }
 
 .annotation-card .ui-disclosure-frame > .ui-disclosure-actions {
@@ -1659,12 +1665,24 @@
 /* A chip that opens its agent from a line that folds open: lifted with the
    line's hover as an inert one is, and pressed on its own hover, so it reads
    as the one target inside the line. */
-summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
+summary:focus-visible button[data-tool-agent-ref] {
   background: var(--ui-color-fill-selected);
 }
 
-summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
+@media (hover: hover) {
+  summary:hover button[data-tool-agent-ref] {
+    background: var(--ui-color-fill-selected);
+  }
+}
+
+summary button[data-tool-agent-ref]:focus-visible {
   background: var(--ui-color-fill-pressed);
+}
+
+@media (hover: hover) {
+  summary button[data-tool-agent-ref]:hover {
+    background: var(--ui-color-fill-pressed);
+  }
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
@@ -2028,6 +2046,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--ui-space-16) var(--ui-space-16) var(--ui-row-inset);
   background: transparent;
   color: var(--ui-color-text);
@@ -2482,10 +2501,16 @@ svg.lucide {
   transition: background var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
-.plan-comment-mark:hover,
 .plan-comment-mark[data-active="true"] {
   border-bottom-color: var(--comment-mark-active-edge);
   background: var(--comment-mark-active);
+}
+
+@media (hover: hover) {
+  .plan-comment-mark:hover {
+    border-bottom-color: var(--comment-mark-active-edge);
+    background: var(--comment-mark-active);
+  }
 }
 
 /* Words under two threads in the editor stand in a mark inside another,
@@ -2652,6 +2677,15 @@ svg.lucide {
   }
 }
 
+/* A finger's press on each tool stands a touch target across (button.css),
+   so on a coarse pointer the tools stand apart enough that Resolve's and
+   the ⋯'s never overlap. */
+@media (pointer: coarse) {
+  .comment-tools {
+    gap: var(--ui-space-20);
+  }
+}
+
 /* What happened to a thread, a line drawn as a comment's head: its writer
    level with every name above it, what they did in the quiet ink, and the
    time at the row's end. */
@@ -2706,11 +2740,19 @@ svg.lucide {
 
 /* A field's foot, a reply's `ComposerFoot` and an edit's Cancel and Save,
    holds its tools a size under a page's, at the field's padding; a
-   dictation's strip stands at their height. */
+   dictation's strip stands at their height. A finger keeps the page's size,
+   so on a coarse pointer the tools stand a touch target tall and Dictate's
+   press never reaches Reply. */
 .comment-field-foot,
 .comment-field .ui-composer-foot {
-  --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
   padding: var(--ui-space-2) var(--ui-item-gap) var(--ui-item-gap);
+}
+
+@media not all and (pointer: coarse) {
+  .comment-field-foot,
+  .comment-field .ui-composer-foot {
+    --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  }
 }
 
 /* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */

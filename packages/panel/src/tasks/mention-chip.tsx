@@ -62,7 +62,7 @@ import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
-import { useSectionHeading } from "./chip-cards.js";
+import { LinkAutomations, useSectionHeading } from "./chip-cards.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -953,6 +953,20 @@ export function linkChip(
         label={written}
         doors={placed}
       />
+    );
+  }
+  // An automation's chip reads its workspace's automations as it is drawn, so it is called and marked as its row is.
+  if (read.place.kind === LINK_PLACE.AUTOMATION || read.place.kind === LINK_PLACE.AUTOMATION_RUN) {
+    return (
+      <LinkAutomations workspace={read.workspace}>
+        <PlaceChip
+          href={href}
+          place={read.place}
+          workspace={read.workspace}
+          label={written}
+          doors={placed}
+        />
+      </LinkAutomations>
     );
   }
   return (

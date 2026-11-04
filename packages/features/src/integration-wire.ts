@@ -484,6 +484,8 @@ export const integrationToolsAnswerSchema = EffectSchema.Union([
   }),
 ]);
 
+export type IntegrationToolsAnswer = typeof integrationToolsAnswerSchema.Type;
+
 /** The address a sign-in opens in the browser (POST): https, and nothing else; and the account it signs in, where the service names one. */
 export const integrationConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isPattern(/^https:\/\/\S+$/)),

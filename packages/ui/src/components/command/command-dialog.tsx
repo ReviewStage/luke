@@ -90,9 +90,9 @@ export interface CommandGroup {
 /** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, against its top and sides. Its one column is the window's width and no more, since an auto track would grow to the widest row and push the card past the screen. */
 const ROOM = "grid-cols-[minmax(0,1fr)] items-start pt-dialog-command-top room-narrow:p-0";
 
-/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, a sheet across the screen, edged and rounded only along its foot. */
+/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, a sheet across the screen, edged and rounded only along its foot, its ground under a phone's notch and status bar and what it holds clear of them. */
 const CARD =
-  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0";
+  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0 room-narrow:pt-[env(safe-area-inset-top,0px)] room-narrow:pr-[env(safe-area-inset-right,0px)] room-narrow:pl-[env(safe-area-inset-left,0px)]";
 
 /** cmdk's root: a column that gives way to the card's height, so the list scrolls inside it. */
 const ROOT = "flex min-h-0 flex-1 flex-col outline-none";
@@ -309,6 +309,10 @@ export function CommandDialog({
               }}
               className={FIELD}
               placeholder={placeholder}
+              autoCorrect="off"
+              autoCapitalize="off"
+              enterKeyHint="search"
+              spellCheck={false}
               value={words}
               onValueChange={changeQuery}
             />

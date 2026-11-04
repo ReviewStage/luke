@@ -97,6 +97,13 @@ export const TEXT_FIELD_AUTO_COMPLETE = {
 export type TextFieldAutoComplete =
   (typeof TEXT_FIELD_AUTO_COMPLETE)[keyof typeof TEXT_FIELD_AUTO_COMPLETE];
 
+/** Which keyboard a phone raises for a one-line field: the digit pad, for whole numbers. */
+export const TEXT_FIELD_INPUT_MODE = {
+  NUMERIC: "numeric",
+} as const;
+
+export type TextFieldInputMode = (typeof TEXT_FIELD_INPUT_MODE)[keyof typeof TEXT_FIELD_INPUT_MODE];
+
 /** The key that submits a text area: a plain Return, as every box sends, or ⌘Return (Ctrl+Enter) where Return must start a line, as on a phone's keyboard. */
 export const TEXT_AREA_SUBMIT = {
   MOD_ENTER: "mod-enter",
@@ -288,6 +295,7 @@ function submitting(event: KeyboardEvent, key: TextAreaSubmit): boolean {
 export function TextField({
   autoComplete,
   autoCorrect = true,
+  inputMode,
   selectOnFocus = false,
   onEnter,
   size = TEXT_FIELD_SIZE.CONTROL,
@@ -300,6 +308,8 @@ export function TextField({
     autoComplete?: TextFieldAutoComplete | undefined;
     /** Whether the system may correct and capitalize words as they are typed; off for an address or a name. */
     autoCorrect?: boolean | undefined;
+    /** Which keyboard a phone raises; its own for the type where none is named. */
+    inputMode?: TextFieldInputMode | undefined;
     /** Whether the caret arriving selects every word, so typing replaces them, as an address bar does. */
     selectOnFocus?: boolean | undefined;
     /** What an Enter does, pressed while no input method is composing. */
@@ -323,6 +333,7 @@ export function TextField({
       autoComplete={autoComplete}
       autoCorrect={autoCorrect ? undefined : "off"}
       autoCapitalize={autoCorrect ? undefined : "off"}
+      inputMode={inputMode}
       onFocus={selectOnFocus ? (event) => event.target.select() : undefined}
       data-size={size}
       {...entryAttributes(props)}

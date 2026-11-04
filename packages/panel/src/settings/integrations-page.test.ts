@@ -39,7 +39,12 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { deliveryOf, signedInAs } from "../testing/app-state.js";
+import {
+  deliveryOf,
+  handHostReads,
+  holdIntegrationTools,
+  signedInAs,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { IntegrationsSection } from "./integrations-page.js";
@@ -193,16 +198,6 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: serviceStatuses()[provider] });
     },
-    // A server whose tools the test holds none of is one the service never asked, as before tools were drawn.
-    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) => {
-      sent.push({ kind: ACT_KIND.INTEGRATIONS_TOOLS, payload });
-      const read = toolReads.get(payload.provider);
-      if (read !== undefined) return Promise.resolve(read);
-      const tools = listed.get(payload.provider);
-      return tools === undefined
-        ? Promise.reject(new Error("Not in this test."))
-        : Promise.resolve({ tools });
-    },
     // A rename names the account anew, which the next read of the integrations says.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
@@ -215,6 +210,13 @@ beforeEach(() => {
         accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
       return Promise.resolve({ account: renamed });
     },
+  });
+  // A server whose tools the test holds none of is one the service never answered, as before tools were drawn.
+  holdIntegrationTools(handHostReads({}).deliverTools, (server) => {
+    const read = toolReads.get(server.provider);
+    if (read !== undefined) return read;
+    const tools = listed.get(server.provider);
+    return tools === undefined ? Promise.reject(new Error("Not in this test.")) : { tools };
   });
 });
 

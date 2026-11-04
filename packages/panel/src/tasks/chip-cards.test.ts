@@ -710,21 +710,23 @@ test("a member's chip hangs their card", async () => {
   assert.equal(member.sub, "sam@example.com · Owner");
 });
 
-test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
+test("an automation's chip is called by its name now, its workspace's automations read as it is drawn, and hangs its card, who made it and when at its foot", async () => {
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
-  const before = reads();
+  const [chip] = chipsOf(container);
+  const drawnReads = reads();
+  const called = chip?.textContent;
 
-  const card = await cardOf(chipsOf(container)[0]);
+  const card = await cardOf(chip);
 
-  assert.equal(before, 0, "nothing is read as the chip is drawn");
+  assert.equal(drawnReads, 1, "the automations are read as the chip is drawn");
+  assert.match(called ?? "", /Nightly sweep/u, "the chip says the name the automation has now");
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
   assert.match(card.sub ?? "", / · Acme$/u, "whose it is joins what fires it");
   assert.equal(card.corner, undefined);
   assert.deepEqual(card.detailWords, ["Created by Sam Okafor · 1d ago"]);
-  assert.equal(reads(), 1);
 });
 
 test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {

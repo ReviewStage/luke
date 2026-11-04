@@ -7,15 +7,18 @@
  * answered, then wait for the next cause to ask. So one ask at most is out
  * per key, and a cause that comes while one is out asks once more after it
  * lands, never beside it. An ask refused or unanswered keeps what the key
- * held, and fails a key that never answered. A key let go stays among those
- * let go lately, drawn at once by a window holding it again, which asks it
- * again; nothing else asks a key no window holds.
+ * held, and fails a key that never answered. A write whose own answer is the
+ * whole read lays it at once, and an ask out as it lands, asked before the
+ * write, is dropped. A key let go stays among those let go lately, drawn at
+ * once by a window holding it again, which asks it again; nothing else asks
+ * a key no window holds.
  */
 
 import {
   Deferred,
   type Duration,
   Effect,
+  FiberHandle,
   MutableHashMap,
   Option,
   Queue,
@@ -27,21 +30,25 @@ import type { AppHostReads, AppState, HostReadKeyPath } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice, type SliceKeyed } from "./live-collection.js";
 import type { WindowFocus } from "./window-focus.js";
 
-/** One key's loop as it stands: what it tells of its key, the cause it waits on next, and each Try again waiting for its next ask to land. */
+/** One key's loop as it stands: what it tells of its key, the cause it waits on next, each Try again waiting for its next ask to land, and whether an ask is out and a write's answer overtook it. */
 interface FetchLoop<Rows> {
   readonly answers: HeldAnswers<Rows>;
   readonly again: Queue.Queue<void>;
   waiting: Deferred.Deferred<void>[];
+  asking: boolean;
+  overtaken: boolean;
 }
 
 /** The keys the windows hold of one fetched read, and what the host does for them. */
-export interface HeldFetch<Key> {
+export interface HeldFetch<Key, Rows> {
   /** Holds `key`'s read for the caller's scope, asking it where no window held it. */
   readonly hold: (key: Key) => Effect.Effect<void, never, Scope.Scope>;
   /** Asks `key` again, as Try again or a write's read-back asks, telling it unread meanwhile where it had failed; answers once that ask has landed, or at once where nothing follows it. */
   readonly retry: (key: Key) => Effect.Effect<void>;
   /** Asks again every key a window holds that `named` picks, as a wake naming it asks; answers at once, each ask landing on its own. */
   readonly wake: (named: (key: Key) => boolean) => Effect.Effect<void>;
+  /** Lays `rows` as `key`'s answer where its read is followed, as a write whose own answer is the whole read does; nothing where it is not. */
+  readonly answered: (key: Key, rows: Rows) => Effect.Effect<void>;
   /** Follows every held key anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Lets every key go and tells none held: the session ended. */
@@ -74,7 +81,7 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
   /** How often a key a window holds is asked again besides; never where it is not given. */
   readonly every?: Duration.Input;
   readonly tell: (slice: AppState[Slice]) => void;
-}): Effect.Effect<HeldFetch<Key>, never, Scope.Scope> {
+}): Effect.Effect<HeldFetch<Key, AppHostReads[Slice]>, never, Scope.Scope> {
   return Effect.gen(function* () {
     type Rows = AppHostReads[Slice];
     const loops = MutableHashMap.empty<Key, FetchLoop<Rows>>();
@@ -92,6 +99,8 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
             answers,
             again: yield* Queue.sliding<void>(1),
             waiting: [],
+            asking: false,
+            overtaken: false,
           };
           MutableHashMap.set(loops, key, loop);
           // Note that a Try again waiting on an ask this loop will never make is answered as it ends, so none waits for good.
@@ -106,8 +115,13 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
           const ask = Effect.gen(function* () {
             const landing = loop.waiting;
             loop.waiting = [];
+            loop.asking = true;
+            loop.overtaken = false;
             const rows = yield* options.fetch(key, answers.rows());
-            if (Option.isSome(rows)) answers.answered(rows.value);
+            loop.asking = false;
+            // Note that an answer asked before a write that answered the read whole is older than what that write laid.
+            if (loop.overtaken) loop.overtaken = false;
+            else if (Option.isSome(rows)) answers.answered(rows.value);
             else answers.unanswered();
             yield* landed(landing);
           });
@@ -160,8 +174,58 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
           });
         }),
       wake,
+      answered: (key, rows) =>
+        Effect.sync(() => {
+          const loop = Option.getOrUndefined(MutableHashMap.get(loops, key));
+          if (loop === undefined) return;
+          loop.answers.answered(rows);
+          if (loop.asking) loop.overtaken = true;
+        }),
       open: slice.open,
       end: slice.end,
+    };
+  });
+}
+
+/** A fetched read keyed by the account signed in, as the windows hold it: one hold for all of them. */
+export interface AccountHeld {
+  /** The windows' hold, taken under the account signed in now; none while nobody is. */
+  readonly follow: Effect.Effect<void>;
+  /** The windows' hold let go. */
+  readonly unfollow: Effect.Effect<void>;
+  /** The hold taken anew under the account signed in now, where the windows hold it, as the account gate opening asks. */
+  readonly open: Effect.Effect<void>;
+}
+
+/**
+ * The windows' hold on `read`, keyed by the account `accountId` names, taken
+ * under the account signed in as they take it and taken anew, in place of
+ * the one before, each time the gate opens, so whoever signs in next is the
+ * one read rather than the account it was held for.
+ */
+export function accountHeld<Rows>(
+  read: HeldFetch<string, Rows>,
+  accountId: () => string | undefined,
+): Effect.Effect<AccountHeld, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const hold = yield* FiberHandle.make<void>();
+    let held = false;
+    const take = Effect.suspend(() => {
+      const userId = accountId();
+      return userId === undefined
+        ? FiberHandle.clear(hold)
+        : FiberHandle.run(hold, Effect.scoped(Effect.andThen(read.hold(userId), Effect.never)));
+    });
+    return {
+      follow: Effect.suspend(() => {
+        held = true;
+        return take;
+      }),
+      unfollow: Effect.suspend(() => {
+        held = false;
+        return FiberHandle.clear(hold);
+      }),
+      open: Effect.suspend(() => (held ? take : Effect.void)),
     };
   });
 }

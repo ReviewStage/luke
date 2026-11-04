@@ -48,11 +48,13 @@
 
   /* The pointer lights a row that opens something, never past the open
      row's own stronger fill or a chosen row's. */
-  .ui-list-row:has(> button.ui-list-row-main):hover:not(
-    [data-current="true"],
-    [data-selected="true"]
-  ) {
-    background: var(--ui-color-fill-hover);
+  @media (hover: hover) {
+    .ui-list-row:has(> button.ui-list-row-main):hover:not(
+      [data-current="true"],
+      [data-selected="true"]
+    ) {
+      background: var(--ui-color-fill-hover);
+    }
   }
 
   /* A row whose menu is open is ringed, the way Finder rings the row a
@@ -260,13 +262,19 @@
   }
 
   .ui-list-row[data-ink="sidebar"]:is(
-      :hover,
       [data-current="true"],
       [data-unread="true"],
       [data-menu-open="true"]
     )
     :is(.ui-list-row-title, .ui-list-row-lead[data-at="above"]) {
     color: var(--ui-color-text);
+  }
+
+  @media (hover: hover) {
+    .ui-list-row[data-ink="sidebar"]:hover
+      :is(.ui-list-row-title, .ui-list-row-lead[data-at="above"]) {
+      color: var(--ui-color-text);
+    }
   }
 
   /* Beside its acts, the row's press gives its end inset to the acts,

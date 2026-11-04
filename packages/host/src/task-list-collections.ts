@@ -1,23 +1,23 @@
 /**
- * task-list-collections.ts -- the account's task list held in TanStack DB collections: its plans and its agents, fed by the list's follow, built at the host's own instant, and changed by a write to one row the moment it is asked.
+ * task-list-collections.ts -- the account's task list, its plans and its agents each rows of the sync engine's pool: fed by the list's follow, built at the host's own instant, and changed by a write to one row the moment it is asked.
  *
- * The list's two parts are collections of their own (`live-collection.ts`)
- * of the rows as the service answers them. The list is built from them as
- * the held read built it (`@repo/features/task-list-live`), at the host's
- * own instant, because an agent's status moves with the clock alone and a
- * live query reads no clock. So it is built again each time either moves,
- * and at the nearest instant the clock alone moves it (`taskListGraceEdge`):
- * the one clock left here, armed only while such an agent stands.
+ * A plan and an agent are kinds of the pool (`@repo/sync`), one row however
+ * many reads hold it, and the list stands on the rows its follow answers for
+ * the signed-in session. The list is built from them as the held read built
+ * it (`@repo/features/task-list-live`), at the host's own instant, because
+ * an agent's status moves with the clock alone and a live query reads no
+ * clock. So it is built again each time either moves, and at the nearest
+ * instant the clock alone moves it (`taskListGraceEdge`): the one clock
+ * left here, armed only while such an agent stands.
  *
- * A write to one row, a plan's or an agent's, is drawn over it at once and
- * stands while the service writes it: kept once the followed list carries
- * its transaction, and taken back where the service refused it. Where the
- * list hands no wait yet, the row as the write's own answer leaves it is
- * taken in the read's place. Either lands with the drop of what was drawn,
- * so nothing flickers back between the two. Writes to one row go to the
- * service in the order asked, since each was drawn over the ones before.
- * A task the service started is drawn the same way from its answer, so it
- * stands in the list before the follow carries it.
+ * A write to one row, a plan's or an agent's, is a write the pool draws over
+ * it at once (`compose-tasks.ts` and `compose-agents.ts` declare them),
+ * standing until the list carries its transaction, or taken back where the
+ * service refused it; where the list hands no wait yet, the row as the
+ * write's own answer leaves it is taken in the list's place. A task the
+ * service started is a row made from its answer, which the list shows while
+ * it stands, so it stands in the list before the follow carries it. The
+ * tasks a write stands over are the list's pending ones.
  */
 
 import type { ListedAgent } from "@repo/features/agent-wire";
@@ -36,15 +36,16 @@ import type {
   TaskListAnswer,
   TaskPullRequests,
 } from "@repo/features/task-wire";
-import { Effect, type Scope } from "effect";
 import {
-  answeredCollection,
-  drawnAtEdges,
-  optimistically,
-  type RowWrite,
-  rowsOf,
-  rowWrites,
-} from "./live-collection.js";
+  type Confirmation,
+  type EntityPool,
+  type FieldChange,
+  fieldKind,
+  type HeldRows,
+  type WriteDeclaration,
+} from "@repo/sync";
+import { Effect, type Scope } from "effect";
+import { drawnAtEdges } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** A plan's row as the list's statement answers it. */
@@ -52,6 +53,25 @@ export type PlanRow = TaskListLiveRows["plans"][number];
 
 /** An agent's row as the list's statement answers it. */
 export type AgentRow = TaskListLiveRows["agents"][number];
+
+/** A plan as the pool holds it, by its id. */
+export const PLAN = fieldKind((row: PlanRow) => row.id);
+
+/** An agent as the pool holds it, by its id. */
+export const AGENT = fieldKind((row: AgentRow) => row.id);
+
+/** A plan the service started, drawn as it answered it, while no answer of the list holds it, until the list carries its transaction. */
+const MADE: WriteDeclaration<
+  PlanRow,
+  FieldChange<PlanRow>,
+  { readonly row: PlanRow; readonly txid: string | undefined },
+  void
+> = {
+  kind: PLAN,
+  keys: ({ row }) => [row.id],
+  change: ({ row }) => ({ made: row }),
+  send: ({ txid }) => Effect.succeed({ answer: undefined, txid }),
+};
 
 /** The list as the rows make it at one instant, every agent on a plan beside it, and the plans a write stands over. */
 export interface LiveTaskList {
@@ -64,21 +84,19 @@ export interface LiveTaskList {
 }
 
 export interface TaskListDependencies {
+  /** The pool the list's rows stand in. */
+  readonly pool: EntityPool;
   /** Draws the list as it now stands. */
   readonly draw: (read: LiveTaskList) => void;
   /** The followed list's wait for a write's transaction; none while the follow hands none. */
   readonly txWait: () => TxWait | undefined;
 }
 
-/** The account's task list in collections, for as long as its scope stands. */
+/** The account's task list standing in the pool, for as long as its scope stands. */
 export interface TaskListCollections {
   /** Takes one answer of the list's follow, both its parts, and draws it. */
   readonly answer: (rows: TaskListLiveRows) => Effect.Effect<void>;
-  /** A change to a plan's row: drawn at once, kept or taken back as the service answers it. */
-  readonly writePlan: RowWrite<PlanRow>;
-  /** A change to an agent's row, as a plan's is. */
-  readonly writeAgent: RowWrite<AgentRow>;
-  /** A plan the service started, drawn at once as it answered it and held until the list carries its transaction. */
+  /** A plan the service started, drawn at once as it answered it and held until the list carries its transaction, or taken as answered where the list hands no wait. */
   readonly made: (row: PlanRow, txid: string | undefined) => Effect.Effect<void>;
 }
 
@@ -87,8 +105,7 @@ export function taskListCollections(
   dependencies: TaskListDependencies,
 ): Effect.Effect<TaskListCollections, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const plans = yield* answeredCollection({ getKey: (row: PlanRow) => row.id });
-    const agents = yield* answeredCollection({ getKey: (row: AgentRow) => row.id });
+    const { pool } = dependencies;
     // Note that a write still standing once the scope closed draws nothing, since a sign-out closed it and its rows were the account's that left.
     let open = true;
     yield* Effect.addFinalizer(() =>
@@ -96,49 +113,38 @@ export function taskListCollections(
         open = false;
       }),
     );
+    const confirmation = (): Confirmation | undefined => {
+      const wait = dependencies.txWait();
+      return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
+    };
+    const redraw = Effect.suspend(() => drawn);
+    // Note that every plan made is the list's, since it holds every task the account reaches.
+    const plans: HeldRows<PlanRow> = yield* pool.stand(PLAN, {
+      redraw,
+      confirmation,
+      adopts: () => true,
+    });
+    const agents: HeldRows<AgentRow> = yield* pool.stand(AGENT, { redraw, confirmation });
 
     /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
-    const drawn = yield* drawnAtEdges((at) => {
+    const drawn: Effect.Effect<void> = yield* drawnAtEdges((at) => {
       if (!open) return undefined;
-      const rows = { plans: rowsOf(plans.collection), agents: rowsOf(agents.collection) };
+      const rows = { plans: plans.rows(), agents: agents.rows() };
       dependencies.draw({
         list: taskListOfLiveRows(rows, at),
         taskAgents: taskAgentsOfLiveRows(rows, at),
         taskPullRequests: taskPullRequestsOfLiveRows(rows),
         agentPullRequests: agentPullRequestsOfLiveRows(rows),
         taskAgentPins: taskAgentPinsOfLiveRows(rows),
-        pendingTasks: plans.collection.toArray.flatMap((row) =>
-          row.$hasPendingWrites ? [row.id] : [],
-        ),
+        pendingTasks: plans.pending(),
       });
       return taskListGraceEdge(rows, at);
     });
 
     return {
       answer: (rows) =>
-        Effect.suspend(() => {
-          plans.answer(rows.plans);
-          agents.answer(rows.agents);
-          return drawn;
-        }),
-      writePlan: rowWrites(plans, { drawn, txWait: dependencies.txWait }),
-      writeAgent: rowWrites(agents, { drawn, txWait: dependencies.txWait }),
-      // Note that where the list hands no wait, the answer is taken in its place, as a write's is.
-      made: (row, txid) =>
-        optimistically(
-          () => {
-            if (!plans.collection.has(row.id)) plans.collection.insert(row);
-          },
-          Effect.andThen(
-            drawn,
-            Effect.suspend(() => {
-              const wait = dependencies.txWait();
-              return wait === undefined || txid === undefined
-                ? Effect.sync(() => plans.confirmNew(row))
-                : confirmWrite(wait, txid);
-            }),
-          ),
-        ).pipe(Effect.ensuring(drawn)),
+        Effect.andThen(Effect.andThen(plans.answer(rows.plans), agents.answer(rows.agents)), drawn),
+      made: (row, txid) => pool.write(MADE, { row, txid }),
     };
   });
 }

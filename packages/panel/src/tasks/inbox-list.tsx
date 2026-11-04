@@ -31,9 +31,9 @@ import {
   PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
-  ROVING_REACH,
   RowHint,
   RowHintOptions,
+  reachedKey,
   SCROLL_FADE,
   ScrollArea,
   SearchField,
@@ -1345,16 +1345,7 @@ export function InboxList({
   const roving = useRovingKeys<HTMLDivElement>({
     reach: (from, to) => {
       const ids = drawn.map(({ item }) => item.id);
-      const at = from === undefined ? -1 : ids.indexOf(rows.itemOf(from) ?? "");
-      const index =
-        to === ROVING_REACH.FIRST
-          ? 0
-          : to === ROVING_REACH.LAST
-            ? ids.length - 1
-            : at < 0
-              ? -1
-              : (at + (to === ROVING_REACH.NEXT ? 1 : ids.length - 1)) % ids.length;
-      const id = ids[index];
+      const id = reachedKey(ids, from === undefined ? undefined : rows.itemOf(from), to);
       if (id === undefined) return false;
       const press = rows.find(id);
       if (press !== undefined) {
