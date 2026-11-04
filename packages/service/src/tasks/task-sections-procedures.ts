@@ -18,7 +18,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 
 export interface TaskSectionsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -31,7 +31,7 @@ export function taskSectionsProcedures(seams: TaskSectionsProcedureSeams) {
     list: sections.list.effect(function* ({ context }) {
       return yield* hostedStoreOrUnavailable(listTaskSections(context.userId));
     }),
-    write: sections.write.effect(function* ({ input, context }) {
+    write: sections.write.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const written = yield* hostedStoreOrUnavailable(writeTaskSections(context.userId, input));
       // A section that is not the account's, a task it does not reach there, or one past the bound is a request the service will not keep.
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
