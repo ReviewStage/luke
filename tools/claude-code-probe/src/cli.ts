@@ -9,10 +9,12 @@
  * token, so nothing is pulled into a file. The Claude token is a `claude
  * setup-token` of a Max account; the GitHub token reaches the throwaway
  * repository and stands at the sandbox's firewall alone, on that
- * repository's git path, as a coding agent's does today. Neither is printed,
- * passed in argv, or written anywhere: the Claude token reaches the sandbox
- * as the first line of the driver's stdin and lives in the CLI's environment
- * there. `APP_PROBE_KEEP_SANDBOX=1` keeps the sandbox for a look afterwards;
+ * repository's git path, as a coding agent's does today. The Claude token
+ * stands there too, on Anthropic's API, swapped for a random placeholder the
+ * CLI is handed in its place, as a coding agent's launch has it, so a bump
+ * of the pins proves again that Claude Code runs on a placeholder. Neither
+ * token is printed, passed in argv, or written anywhere, nor enters the
+ * sandbox. `APP_PROBE_KEEP_SANDBOX=1` keeps the sandbox for a look afterwards;
  * `APP_PROBE_MODEL` names another model than the default.
  *
  * What the run saw is sanitized (`sanitize.ts`) and written over the
@@ -41,7 +43,6 @@ import {
   Stream,
 } from "effect";
 import {
-  BUBBLEWRAP_STARTS,
   FIND_SESSION_FILES,
   INSTALL_CLAUDE_CODE,
   ROOT_TOKEN_SCAN,
@@ -50,6 +51,7 @@ import {
 } from "./image.js";
 import { lineSplitter } from "./lines.js";
 import {
+  ANTHROPIC_API,
   AS_AGENT,
   CLAUDE_TOKEN_VARIABLE,
   DEFAULT_MODEL,
@@ -136,15 +138,15 @@ interface Recording {
   sessionFilesAfterResume: readonly string[];
   terminalAsToday: ProbeObservations["terminalAsToday"];
   terminalCapsDropped: ProbeObservations["terminalCapsDropped"];
-  agentUid: ProbeObservations["agentUid"];
-  bubblewrapCapsKept: string | undefined;
-  bubblewrapCapsDropped: string | undefined;
+  placeholderOutside: string | undefined;
   rootFilesWithTokenShape: number | undefined;
   failure: string | undefined;
 }
 
 interface Settings {
   readonly claudeToken: Redacted.Redacted<string>;
+  /** What the CLI is handed in the token's place, minted for the run. */
+  readonly placeholder: Redacted.Redacted<string>;
   readonly githubToken: Redacted.Redacted<string>;
   readonly repository: string;
   readonly keepSandbox: boolean;
@@ -165,17 +167,25 @@ const settingsConfig = Config.all({
   model: Config.String(PROBE_ENV.MODEL).pipe(Config.withDefault(DEFAULT_MODEL)),
 });
 
+/** How many random bytes a placeholder carries, as the service mints one (`sandbox-firewall.ts`). */
+const PLACEHOLDER_BYTES = 32;
+
 /** The shortest login the sanitizer replaces wherever it appears. */
 const MIN_LOGIN_CHARS = 5;
 
 /** Where a command runs that names no directory of its own. */
 const DEFAULT_DIRECTORY = "/tmp";
 
+/** Every value of the run's that no output may carry. */
+function secretsOf(settings: Settings): readonly string[] {
+  return [settings.claudeToken, settings.placeholder, settings.githubToken].map(Redacted.value);
+}
+
 /** A sanitizer for everything the run keeps or prints: the run's secrets by value, and the repository's owner and the developer's home and login by name, which a stack trace carries. */
 function scrubberOf(settings: Settings): Sanitizer {
   const owner = settings.repository.split("/")[0] ?? "";
   return sanitizer({
-    secrets: [Redacted.value(settings.claudeToken), Redacted.value(settings.githubToken)],
+    secrets: secretsOf(settings),
     replacements: [
       [settings.repository, "agent-probe-owner/throwaway"],
       [owner, "agent-probe-owner"],
@@ -207,14 +217,17 @@ function say(line: string) {
 }
 
 /**
- * The firewall a coding agent's sandbox stands behind: open internet, and
- * the GitHub token as git's basic authorization on the one repository's git
- * path alone, which is where `git push` reaches.
+ * The firewall a coding agent's sandbox stands behind: open internet, the
+ * GitHub token as git's basic authorization on the one repository's git
+ * path alone, which is where `git push` reaches, and the Claude token as
+ * the CLI's bearer on Anthropic's API, set only on a request that carries
+ * the placeholder there, as the service's swap does (`placeholderSwap`).
  */
 function networkPolicy(settings: Settings) {
   const basic = Buffer.from(`x-access-token:${Redacted.value(settings.githubToken)}`).toString(
     "base64",
   );
+  const placeholder = { exact: `Bearer ${Redacted.value(settings.placeholder)}` };
   return {
     allow: {
       "*": [],
@@ -224,8 +237,31 @@ function networkPolicy(settings: Settings) {
           transform: [{ headers: { authorization: `Basic ${basic}` } }],
         },
       ],
+      [ANTHROPIC_API.HOST]: [
+        {
+          match: { headers: [{ key: { exact: "authorization" }, value: placeholder }] },
+          transform: [
+            { headers: { authorization: `Bearer ${Redacted.value(settings.claudeToken)}` } },
+          ],
+        },
+      ],
     },
   };
+}
+
+/** What Anthropic answers the placeholder with from the probe's own machine, outside the sandbox and its firewall. */
+function placeholderOutside(scrub: Sanitizer, settings: Settings) {
+  return attempt(scrub, "the placeholder from outside the sandbox", () =>
+    fetch(ANTHROPIC_API.MESSAGES, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${Redacted.value(settings.placeholder)}`,
+        "anthropic-version": ANTHROPIC_API.VERSION,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    }).then((answer) => String(answer.status)),
+  );
 }
 
 /**
@@ -342,7 +378,7 @@ const launchDriver = Effect.fn("probe/launchDriver")(function* (
     Effect.forkDetach,
   );
   const config = {
-    token: Redacted.value(settings.claudeToken),
+    token: Redacted.value(settings.placeholder),
     tokenVariable: CLAUDE_TOKEN_VARIABLE,
     cwd: PROBE_SANDBOX.CHECKOUT,
     model: settings.model,
@@ -419,10 +455,6 @@ const firstLaunch = Effect.fn("probe/firstLaunch")(function* (
     "leak check from a Terminal's shell, capabilities dropped",
     RUN_AS.DEFAULT_CAPS_DROPPED,
   );
-  recording.agentUid = yield* leakCheck(
-    "leak check as the agent user, outside the command sandbox",
-    RUN_AS.AGENT,
-  );
 
   yield* say("· the workflow turn: edit, background command, ScheduleWakeup, push");
   yield* send(scrub, driver, { type: DRIVER_COMMAND.MESSAGE, text: firstTurn(recording.nonce) });
@@ -486,7 +518,7 @@ const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
   yield* run(scrub, recording, sandbox, "today's image (PREPARE_SCRIPT)", {
     script: PREPARE_SCRIPT,
   });
-  yield* run(scrub, recording, sandbox, "Claude Code, bubblewrap and the agent user", {
+  yield* run(scrub, recording, sandbox, "Claude Code and the agent user", {
     script: INSTALL_CLAUDE_CODE,
     args: [defaultUser],
     as: RUN_AS.ROOT,
@@ -528,23 +560,6 @@ const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
     allowFailure: true,
   });
   [recording.launchUser, recording.launchCapEff] = launched.split("\n");
-  recording.bubblewrapCapsKept = yield* run(
-    scrub,
-    recording,
-    sandbox,
-    "bubblewrap in a Terminal's shell as today",
-    {
-      script: BUBBLEWRAP_STARTS,
-      allowFailure: true,
-    },
-  );
-  recording.bubblewrapCapsDropped = yield* run(
-    scrub,
-    recording,
-    sandbox,
-    "bubblewrap as the agent user, capabilities dropped",
-    { script: BUBBLEWRAP_STARTS, as: RUN_AS.AGENT, allowFailure: true },
-  );
 });
 
 /** The session's files on the sandbox disk, by path, as root finds them. */
@@ -576,6 +591,9 @@ const probe = Effect.fn("probe/probe")(function* (
   if (sessionId === undefined) {
     return yield* new ProbeStepFailed({ step: "the first launch", detail: "no session id" });
   }
+  yield* say("· the placeholder from outside the sandbox");
+  const outside = yield* Effect.exit(placeholderOutside(scrub, settings));
+  recording.placeholderOutside = Exit.isSuccess(outside) ? outside.value : undefined;
   const tokenFiles = yield* run(scrub, recording, sandbox, "token-shaped files, as root", {
     script: ROOT_TOKEN_SCAN,
     as: RUN_AS.ROOT,
@@ -618,9 +636,7 @@ function observationsOf(recording: Recording): ProbeObservations {
     resumedLaunch: recording.streams.resumed,
     terminalAsToday: recording.terminalAsToday,
     terminalCapsDropped: recording.terminalCapsDropped,
-    agentUid: recording.agentUid,
-    bubblewrapCapsKept: recording.bubblewrapCapsKept,
-    bubblewrapCapsDropped: recording.bubblewrapCapsDropped,
+    placeholderOutside: recording.placeholderOutside,
     rootFilesWithTokenShape: recording.rootFilesWithTokenShape,
   };
 }
@@ -655,7 +671,7 @@ function writeFixtures(
   const report = scrub(valueFromJsonText(JSON.stringify(raw)));
   const streamText = `${stream.join("\n")}\n`;
   const reportText = `${JSON.stringify(report, null, 2)}\n`;
-  const secrets = [Redacted.value(settings.claudeToken), Redacted.value(settings.githubToken)];
+  const secrets = secretsOf(settings);
   const leaks = [...fixtureLeaks(streamText, secrets), ...fixtureLeaks(reportText, secrets)];
   if (leaks.length > 0) {
     return Effect.fail(
@@ -688,7 +704,10 @@ function printVerdict(conditions: readonly Condition[]) {
 }
 
 const main = Effect.gen(function* () {
-  const settings: Settings = yield* settingsConfig;
+  const settings: Settings = {
+    ...(yield* settingsConfig),
+    placeholder: Redacted.make(randomBytes(PLACEHOLDER_BYTES).toString("base64url")),
+  };
   if (!isRepositoryName(settings.repository)) {
     return yield* new ProbeStepFailed({
       step: "read the settings",
@@ -709,9 +728,7 @@ const main = Effect.gen(function* () {
     sessionFilesAfterResume: [],
     terminalAsToday: undefined,
     terminalCapsDropped: undefined,
-    agentUid: undefined,
-    bubblewrapCapsKept: undefined,
-    bubblewrapCapsDropped: undefined,
+    placeholderOutside: undefined,
     rootFilesWithTokenShape: undefined,
     failure: undefined,
   };

@@ -113,7 +113,6 @@ describe("judge over the hermetic recording", () => {
       CHECK.CI_WAIT,
       CHECK.CODEX_COMMAND,
       CHECK.MCP_SERVER,
-      CHECK.BWRAP,
     ]) {
       expect([id, results.get(id)]).toEqual([id, VERDICT.PASS]);
     }
@@ -172,6 +171,31 @@ describe("judge over the token's seats", () => {
       detail: expect.stringContaining("read ACCESS_TOKEN from 412:codex"),
     });
     expect(passed(results)).toBe(false);
+  });
+
+  it("passes a Codex command that reads app-server's placeholder, and fails one that finds the token itself", () => {
+    const placeholder = { ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 412, comm: "codex" }] };
+    const token = {
+      ...placeholder,
+      jwtSha256: [{ sha256: sha256Hex("the-access-token"), where: "proc:412" }],
+    };
+    // The command's scan goes first, ahead of the recording's own, as the one the check reads.
+    const commandScanning = (scan: WireValue): Verdict | undefined => {
+      const item = {
+        type: "commandExecution",
+        aggregatedOutput: `APP_PROBE_SCAN ${JSON.stringify(scan)}\n`,
+      };
+      const completed: RecordedMessage = {
+        phase: "first",
+        direction: "server",
+        message: { method: "item/completed", params: { item } },
+      };
+      return verdicts(observed({ messages: [completed, ...observed().messages] })).get(
+        CHECK.CODEX_COMMAND,
+      );
+    };
+    expect(commandScanning(placeholder)).toBe(VERDICT.PASS);
+    expect(commandScanning(token)).toBe(VERDICT.FAIL);
   });
 
   it("fails the disk when a file holds the token's hash, and passes on another JWT's", () => {

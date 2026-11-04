@@ -36,10 +36,7 @@ import { deviceAgentLine } from "@repo/database/schemas/device-agent";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
-import {
-  deviceAgentLaunchSecretsSchema,
-  deviceAgentLayout,
-} from "@repo/features/device-agent-wire";
+import { deviceAgentLaunchSecretsSchema } from "@repo/features/device-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -361,14 +358,12 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
             assert.ok(config !== undefined);
             return { stored: JSON.stringify(row), secrets, config };
           });
-        const folder = deviceAgentLayout(DEVICE_LAYOUT.home, "").folder;
 
         const onPlan = yield* localAgent(AGENT_PAYER.CHATGPT_SUBSCRIPTION);
         const plan = yield* launched(onPlan);
         assert.deepEqual(Object.keys(plan.secrets.env), [RUNNER_ENV.BEARER]);
         assert.equal(plan.config.executable, codexExecutable);
         assert.equal(plan.config.tokenUrl, TOKEN_URL);
-        assert.deepEqual(plan.config.writableRoots, [`${folder}${onPlan.id}`]);
         const bearer = plan.secrets.env[RUNNER_ENV.BEARER] ?? "";
         // A Mac has no firewall of ours, so its runner is handed the bearer itself.
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, onPlan.id));

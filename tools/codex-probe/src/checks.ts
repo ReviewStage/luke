@@ -46,7 +46,6 @@ export const CHECK = {
   CI_WAIT: "plan.waits-on-ci",
   CODEX_COMMAND: "token.not-in-codex-commands",
   MCP_SERVER: "token.not-in-mcp-server",
-  BWRAP: "token.codex-command-sandbox-runs",
   TERMINAL: "token.not-from-terminal",
   TERMINAL_NO_CAPS: "token.not-from-terminal-without-capabilities",
   SUDO_DROPPED: "token.terminal-sudo-dropped",
@@ -215,25 +214,43 @@ function skipped(id: CheckId, detail: string): CheckResult {
   return { id, verdict: VERDICT.SKIPPED, detail };
 }
 
-/** Whether a scan saw the token: a process holding `ACCESS_TOKEN`, its own environment, or a hash of it. */
-function scanSawToken(scan: ScanReport, tokenSha256: readonly string[]): string | undefined {
+/**
+ * Whether a scan saw the token: its own environment, a hash of it, or, where
+ * the seat may not read the placeholder, a process holding `ACCESS_TOKEN`.
+ */
+function scanSawToken(
+  scan: ScanReport,
+  tokenSha256: readonly string[],
+  placeholderReadable: boolean,
+): string | undefined {
   if (scan.ownEnvHasAccessToken) return "ACCESS_TOKEN is in its own environment";
-  if (scan.processesWithAccessToken.length > 0) {
+  if (!placeholderReadable && scan.processesWithAccessToken.length > 0) {
     return `read ACCESS_TOKEN from ${scan.processesWithAccessToken.join(", ")}`;
   }
   const hit = scan.jwtSha256.find((one) => tokenSha256.includes(one.sha256));
   return hit === undefined ? undefined : `found the token at ${hit.where}`;
 }
 
-/** A scan judged: passes where the seat could not see the token. */
+/**
+ * A scan judged: passes where the seat could not see the token. Note that a
+ * command Codex runs may read the placeholder (`placeholderReadable`),
+ * because Codex runs no sandbox of its own, so app-server's environment is
+ * open to its commands, which the design accepts: the placeholder is good
+ * only through the sandbox's firewall. Every other seat may read neither.
+ */
 function scanCheck(
   id: CheckId,
   scan: ScanReport | undefined,
   tokenSha256: readonly string[],
+  placeholderReadable = false,
 ): CheckResult {
   if (scan === undefined) return skipped(id, "no scan report from this seat");
-  const saw = scanSawToken(scan, tokenSha256);
-  const seat = `uid ${scan.uid} (${scan.user}), CapEff ${scan.capEff ?? "?"}, ${scan.environsReadable} environments readable, ${scan.environsDenied} denied`;
+  const saw = scanSawToken(scan, tokenSha256, placeholderReadable);
+  const read =
+    scan.processesWithAccessToken.length === 0
+      ? ""
+      : `, ACCESS_TOKEN readable from ${scan.processesWithAccessToken.join(", ")}`;
+  const seat = `uid ${scan.uid} (${scan.user}), CapEff ${scan.capEff ?? "?"}, ${scan.environsReadable} environments readable, ${scan.environsDenied} denied${read}`;
   return check(id, saw === undefined, saw === undefined ? seat : `${saw}; ${seat}`);
 }
 
@@ -331,7 +348,7 @@ function workChecks(seen: Observations): readonly CheckResult[] {
   ];
 }
 
-/** The token checks: each seat's scan, the MCP server, bwrap, sudo, the disk and the launch paths. */
+/** The token checks: each seat's scan, the MCP server, sudo, the disk and the launch paths. */
 function tokenChecks(seen: Observations): readonly CheckResult[] {
   const items = completedItems(seen.messages);
   const commandScans = items
@@ -340,17 +357,13 @@ function tokenChecks(seen: Observations): readonly CheckResult[] {
       const scan = readScan(textOf(item, "aggregatedOutput"));
       return scan === undefined ? [] : [scan];
     });
-  const bwrapFailures = items.filter(
-    (item) =>
-      item.type === "commandExecution" && textOf(item, "aggregatedOutput").startsWith("bwrap:"),
-  );
   const mcpAnswers = items
     .filter((item) => item.type === "mcpToolCall")
     .map(mcpResultText)
     .filter((text) => text.includes("access_token_in_env="));
   const writable = seen.writablePaths;
   return [
-    scanCheck(CHECK.CODEX_COMMAND, commandScans[0], seen.tokenSha256),
+    scanCheck(CHECK.CODEX_COMMAND, commandScans[0], seen.tokenSha256, true),
     mcpAnswers.length === 0
       ? skipped(CHECK.MCP_SERVER, "the MCP server never answered")
       : check(
@@ -358,13 +371,6 @@ function tokenChecks(seen: Observations): readonly CheckResult[] {
           mcpAnswers.every((text) => text.includes("access_token_in_env=false")),
           mcpAnswers[0] ?? "",
         ),
-    check(
-      CHECK.BWRAP,
-      bwrapFailures.length === 0 && commandScans.length > 0,
-      bwrapFailures.length === 0
-        ? "commands ran under workspace-write"
-        : textOf(bwrapFailures[0] ?? {}, "aggregatedOutput").trim(),
-    ),
     scanCheck(CHECK.TERMINAL, seen.scans.terminal, seen.tokenSha256),
     scanCheck(CHECK.TERMINAL_NO_CAPS, seen.scans.terminalNoCaps, seen.tokenSha256),
     seen.defaultUserSudoAfterDrop === undefined

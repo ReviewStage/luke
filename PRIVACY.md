@@ -587,13 +587,15 @@ which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
 stops, and are deleted with the sandbox when the task is deleted, as above.
 Your plan's token, or your API key, never enters the agent's sandbox: Claude
-Code there is handed a random stand-in made for each launch, and the
-sandbox's network firewall puts the real one in its place on Claude Code's
-requests to Anthropic's API alone, kept in our database with what else that
+Code there is handed a random stand-in made for each launch, which every
+command it runs inherits, and the sandbox's network firewall puts the real
+one in its place on requests from that sandbox to Anthropic's API that carry
+the stand-in, and nowhere else, kept in our database with what else that
 firewall carries, as above, until the agent's runner ends. A local agent's
 Claude Code is handed the token or key itself, in its process's environment,
-since your Mac has no firewall of ours. Either way it is never written to that
-disk, a command Claude Code runs, or the conversation's record. What you send such an agent in its sandbox, a
+where every command it runs can read it, since your Mac has no firewall of
+ours. Either way it is never written to that disk or the conversation's
+record. What you send such an agent in its sandbox, a
 message with the files it carries as Claude Code takes them, a Stop, or a change
 of model, waits in our database as a line for the agent's runner, which reads it
 from there; a message the runner never took is handed to the agent's next launch
@@ -621,12 +623,17 @@ repository"), and your sign-in's refresh token never leaves our service.
 Neither is ever written to that disk, a command Codex runs, or the
 conversation's record.
 
-On either, what keeps the token from anyone with a Terminal in that sandbox
-is not a missing `sudo`: Claude Code or Codex runs as a user of its own,
-whose home no other user reads, and every Terminal shell, every command the
-agent runs, and Claude Code or Codex itself start with every Linux capability
-dropped, so none of them can read another process's environment or a file
-kept from it, or become root.
+On either, the firewall is what keeps the token or key from the commands the
+agent runs: neither Claude Code nor Codex runs a sandbox of its own around
+them, so a command can read the stand-ins its agent's launch was handed,
+Codex's too, and the one its runner reaches our service with, each good for
+nothing but requests from that sandbox, but never the real values, which are
+never in the sandbox. What keeps even a stand-in from anyone with a Terminal
+in that sandbox is not a missing `sudo`: Claude Code or Codex runs as a user
+of its own, whose home no other user reads, and every Terminal shell, every
+command the agent runs, and Claude Code or Codex itself start with every
+Linux capability dropped, so none of them can read another user's process
+environment or a file kept from it, or become root.
 
 **Code an agent showed in an earlier version.** Earlier versions let a
 agent show you code: it named a file and lines, and our service read

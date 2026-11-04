@@ -245,7 +245,6 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
-        writableRoots: [folders.folder],
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
       };
