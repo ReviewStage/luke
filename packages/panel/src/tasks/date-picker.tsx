@@ -718,7 +718,10 @@ function DatePickerPanel({
               verb: moment.verb,
               tone: DIALOG_TONE.PRIMARY,
               running: moment.verb,
-              onPress: () => finish(DATE_PICKER_CLOSE.CONFIRM),
+              // Note that words naming no date hold the act back, as Enter in them does, so it never confirms the date they replaced.
+              onPress: () => {
+                if (read()) finish(DATE_PICKER_CLOSE.CONFIRM);
+              },
             }}
           />
         </Inline>
