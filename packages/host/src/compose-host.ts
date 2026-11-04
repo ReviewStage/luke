@@ -62,6 +62,7 @@ import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
+import { windowFocus } from "./window-focus.js";
 
 /**
  * The order the launch has to keep: the account is read before anything
@@ -142,11 +143,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     };
     /** Content read under a key it never changes under, kept in this process for the account signed in until the agents' reset lets it go at a sign-out. */
     const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
+    /** A window coming forward, raised by the workspaces' refresh it already sends and heard by every read the host asks again on focus. */
+    const focus = yield* windowFocus;
     const tasks = yield* composeTasks({
       kernel,
       account,
       accountId,
       kept,
+      focus,
       client: Object.assign(
         new HostedTaskClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -171,6 +175,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       accountId,
       kept,
+      focus,
       reader: () => {
         const signedIn = account.session.snapshot();
         return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined

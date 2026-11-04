@@ -17,7 +17,7 @@ import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
-import { AgentAuthSection } from "../settings/agent-auth-section.js";
+import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
@@ -124,9 +124,6 @@ const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
   { value: SETUP_AUDIENCE.ME, label: "Just me" },
   { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
 ];
-
-/** The Agents rows' API keys, which setup reads no further. */
-const IGNORE_KEYS = () => undefined;
 
 /** Setup, step by step; `onFinish` lets the app in. */
 export function SetupSteps({
@@ -273,7 +270,7 @@ export function SetupSteps({
         description="Run agents on your ChatGPT or Claude plan, or an API key."
         foot={foot(agent, true)}
       >
-        <AgentAuthSection signedIn onKeys={IGNORE_KEYS} onConnected={onConnected} />
+        <AgentConnectSection onConnected={onConnected} />
       </AuthPage>
     );
   }

@@ -10,7 +10,7 @@ import { updateProcedures } from "./update-acts";
 /**
  * The updater's acts on the act port, over an update service that writes
  * down what it was asked: a check answers where the updater then stands,
- * and the install and the two pages are carried; a sender this build does
+ * and the install, the move, and the two pages are carried; a sender this build does
  * not trust and a payload sent to a kind that takes none are refused in the
  * kind's own words.
  */
@@ -47,6 +47,7 @@ function fixture(answer: UpdateSnapshot = SNAPSHOT) {
           return answer;
         },
         install: () => heard.push("install"),
+        moveToApplications: () => heard.push("move"),
         openLatestRelease: () => heard.push("release"),
         openChangelog: () => heard.push("changelog"),
       },
@@ -56,14 +57,15 @@ function fixture(answer: UpdateSnapshot = SNAPSHOT) {
   return { port, heard };
 }
 
-it("a check answers where the updater stands, and the install and both pages are carried", async () => {
+it("a check answers where the updater stands, and the install, the move, and both pages are carried", async () => {
   const { port, heard } = fixture();
 
   assert.deepEqual(await port.call(PANEL, KIND.UPDATE_CHECK), { answer: SNAPSHOT });
   await port.call(PANEL, KIND.UPDATE_INSTALL);
+  await port.call(PANEL, KIND.UPDATE_MOVE_TO_APPLICATIONS);
   await port.call(PANEL, KIND.UPDATE_OPEN_RELEASE);
   await port.call(PANEL, KIND.UPDATE_OPEN_CHANGELOG);
-  assert.deepEqual(heard, ["check", "install", "release", "changelog"]);
+  assert.deepEqual(heard, ["check", "install", "move", "release", "changelog"]);
 });
 
 it("a sender this build does not trust, and a payload a kind takes none of, are refused", async () => {

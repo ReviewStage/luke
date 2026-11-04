@@ -52,6 +52,7 @@ export function sidebarProps(tasks: TasksControl): ComponentProps<typeof Desktop
       build: { packaged: false },
       onCheck: () => Promise.resolve(),
       onInstall: ignore,
+      onMoveToApplications: ignore,
       onOpenLatest: ignore,
     },
     onSignOut: () => Promise.resolve(),

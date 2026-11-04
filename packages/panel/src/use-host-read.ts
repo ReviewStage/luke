@@ -153,14 +153,17 @@ function hostRead<
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
- * inbox; one task's pages, or one agent's on no task, which the open
- * task's page, the panel beside an Inbox item, an agent's page, and a
- * page's card or frame each hold; and one agent's pull request's chapters,
- * by the number its Pull request tab's own read of it found. Pages offer no Try again, because the
- * host reads pages that did not answer again on its own, and pages it was
- * refused, a plan's or an agent's the reader cannot reach, stand failed
- * until every surface lets them go and one holds them anew (`@repo/host`'s
- * `live-push.ts`).
+ * inbox; one task's pages, or one agent's on no task, which the open task's
+ * page, the panel beside an Inbox item, an agent's page, and a page's card
+ * or frame each hold; one agent's pull request's chapters, by the number its
+ * Pull request tab's own read of it found; the account's devices' beats, by
+ * the account, which every surface drawing a device's standing holds; and
+ * one agent's own tools, which its servers popover holds. Pages offer no Try
+ * again, because the host reads pages that did not answer again on its own,
+ * and pages it was refused, a plan's or an agent's the reader cannot reach,
+ * stand failed until every surface lets them go and one holds them anew (`@repo/host`'s
+ * `live-push.ts`); nor do the beats, which the host asks for again every
+ * `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`).
  */
 const HOST_READS = {
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
@@ -191,6 +194,19 @@ const HOST_READS = {
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
     hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
     retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
+  }),
+  [LIVE_READ.DEVICE_PRESENCE]: hostRead(LIVE_READ.DEVICE_PRESENCE, {
+    slice: APP_SLICE.DEVICE_PRESENCE,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the beats of whoever is signed in, so the hold names no account.
+    hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
+    retry: undefined,
+  }),
+  [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
+    slice: APP_SLICE.WORKSPACE_TOOLS,
+    path: (agentId: string) => [agentId],
+    hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
+    retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 

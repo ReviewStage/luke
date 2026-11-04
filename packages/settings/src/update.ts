@@ -21,6 +21,20 @@ export const UPDATE_STATUS = {
 export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
 
 /**
+ * Why an update failed, where the failure is one the row can name a remedy
+ * for rather than only offer the browser.
+ */
+export const UPDATE_FAILURE = {
+  /**
+   * The app runs from a read-only volume, its disk image or a translocated
+   * copy, which Squirrel cannot replace; moving it to Applications mends it.
+   */
+  READ_ONLY_VOLUME: "read-only-volume",
+} as const;
+
+export type UpdateFailure = (typeof UPDATE_FAILURE)[keyof typeof UPDATE_FAILURE];
+
+/**
  * The commit a build was cut from, stamped by the desktop's `scripts/build.mjs` from the
  * checkout it ran in: the short SHA, whether the tree held uncommitted
  * changes, and the branch: the one checked out, or for a detached head the
@@ -104,4 +118,6 @@ export type UpdateSnapshot =
       currentVersion: string;
       installSupported: boolean;
       latestVersion?: string;
+      /** Why it failed, where that is a failure with a remedy of its own. */
+      failure?: UpdateFailure;
     };

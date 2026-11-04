@@ -51,6 +51,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
@@ -58,7 +59,7 @@ import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import { type AppDevicePresences, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
@@ -620,9 +621,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
-  [ACT_KIND.HOSTS_PRESENCE]: () => ({
-    devices: BEATING_HOSTS.map((deviceId) => ({ deviceId, ageMs: 0 })),
-  }),
   [ACT_KIND.HOSTS_LIST]: () => ({
     hosts: [
       {
@@ -788,12 +786,28 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
+/** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
+let stagedBeats: AppDevicePresences | undefined;
+
+function beatsStaged(): AppDevicePresences {
+  if (stagedBeats !== undefined) return stagedBeats;
+  // Note that the beats are aged on the window's own clock, which no staged instant stands still for, so they beat as staging begins.
+  const at = Date.now();
+  stagedBeats = {
+    [ACCOUNT_ID]: {
+      rows: { beats: BEATING_HOSTS.map((deviceId) => ({ deviceId, beatAt: at })), askedAt: at },
+    },
+  };
+  return stagedBeats;
+}
+
 /**
  * Main's document as these profiles draw it: the account signed in, an
- * admin of the service, with the staged pages' experiments on. The same document,
- * the very object, under any other profile. Each slice laid over is one
- * object across deliveries, but the settings, which carry main's own, so a
- * delivery that moves nothing of them draws nothing again.
+ * admin of the service, with the staged pages' experiments on and the
+ * staged hosts beating. The same document, the very object, under any other
+ * profile. Each slice laid over is one object across deliveries, but the
+ * settings, which carry main's own, so a delivery that moves nothing of them
+ * draws nothing again.
  */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
   if (!SIGNED_IN_PROFILES.has(profile)) return state;
@@ -801,6 +815,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     ...state,
     account: ACCOUNT,
     access: ADMIN_ACCESS,
+    [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }

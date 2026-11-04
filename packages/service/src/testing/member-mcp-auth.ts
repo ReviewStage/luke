@@ -10,8 +10,9 @@
  * the resource beside them. The key set the admission verifies against is
  * fetched from the auth service over HTTP, as on a deployment: here the
  * in-process handler, and nothing else answers. GitHub is the layer a test
- * hands in, by default one nobody reaches; no agent's session is reached,
- * and the model catalog offers nothing. Synthetic accounts.
+ * hands in, by default one nobody reaches; an agent's harness is a recording
+ * one that takes every message (`heard`), and the model catalog offers
+ * nothing. Synthetic accounts.
  */
 
 import assert from "node:assert/strict";
@@ -60,6 +61,7 @@ import {
 } from "../member-mcp/resource.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { NO_GITHUB } from "./github-app-fake.js";
+import { recordingHarness } from "./native-harness-fake.js";
 
 /** The deployment the test stands at: its origin, the resource and the auth service under it. */
 export const MEMBER_MCP_TEST = {
@@ -201,12 +203,14 @@ export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
       Effect.promise(() => opened.close()),
     );
     const auth = memberMcpTestAuth(client, options.fetchClientMetadataResource);
+    const harness = recordingHarness();
     const services = Layer.mergeAll(
       Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       options.github ?? NO_GITHUB,
       modelCatalogOf([]),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+      harness.layer,
     );
     yield* seedRows.pipe(Effect.provide(services));
     // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
@@ -227,7 +231,7 @@ export function memberMcpStanding(options: MemberMcpStandingOptions = {}) {
     yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
     const fetch = (input: string | URL | Request, init?: RequestInit) =>
       web.handler(new Request(input, init));
-    return { auth, fetch, services };
+    return { auth, fetch, services, heard: harness.heard };
   });
 }
 

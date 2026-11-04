@@ -853,6 +853,10 @@ export const LIVE_READ = {
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
   PLAN_COMMENTS: "taskComments",
+  /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
+  DEVICE_PRESENCE: "devicePresence",
+  /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
+  WORKSPACE_TOOLS: "workspaceTools",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

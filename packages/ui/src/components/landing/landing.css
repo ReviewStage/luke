@@ -106,7 +106,9 @@
      corners round to half its height, a radius the transition can ease
      toward rather than one it reaches in a frame. The call at its end is a
      pill the control's height, inset from the floating bar's end as far as
-     from its top and bottom, so the two curves are concentric. */
+     from its top and bottom, so the two curves are concentric. Spanning the
+     page, the bar keeps its words to the gutter, so its ends line up with
+     the hero's and every section's words rather than touching the rails. */
   .ui-landing-bar {
     position: sticky;
     top: 0;
@@ -128,7 +130,7 @@
     max-width: 100%;
     height: 64px;
     margin: 0 auto;
-    padding: 0 var(--ui-landing-inset);
+    padding: 0 var(--ui-landing-gutter);
     border: 1px solid transparent;
     border-bottom-color: var(--ui-color-border);
     border-radius: 0;

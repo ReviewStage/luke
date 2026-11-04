@@ -4,6 +4,7 @@ import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
   ARCHIVE_DRAWN,
+  type DevicePresenceAnswerView,
   INBOX_SCOPE_KIND,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
@@ -69,6 +70,7 @@ import { type AgentRow, taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
+import { windowFocus } from "./window-focus.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -268,6 +270,8 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
+  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says. */
+  let presence: DevicePresenceAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
@@ -292,7 +296,11 @@ function fakeService() {
         return { choice };
       }),
     hosts: () => Effect.succeed({ failure: "unanswered" }),
-    devicePresence: () => Effect.succeed({ failure: "unanswered" }),
+    devicePresence: () =>
+      Effect.sync(() => {
+        asked.push("presence");
+        return presence;
+      }),
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
     readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
@@ -715,6 +723,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** How long ago the account's devices beat, as the service answers from now on. */
+    answerPresence: (next: DevicePresenceAnswerView) => {
+      presence = next;
+    },
   };
 }
 
@@ -798,6 +810,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: options.accountId ?? (() => "user-dana"),
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
+      focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
       ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
@@ -823,6 +836,7 @@ function subject(
       askedAsTold,
       asked: service.asked,
       startCommits: service.startCommits,
+      answerPresence: service.answerPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
       holdPages: service.holdPages,
@@ -844,6 +858,11 @@ function subject(
       accountItems: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the beats the host holds for the windows, whole, in order. */
+      beats: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the inboxes the host holds for the windows, whole, in order. */
       told: () =>
@@ -3030,5 +3049,33 @@ it.effect(
       assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
       assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
       assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect(
+  "the account's beats are asked as a window holds them and every twenty seconds while it does, and never once it lets them go",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, answerPresence, beats } = yield* subject();
+      const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
+      answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
+      const presenceAsks = () => asked.filter((ask) => ask === "presence").length;
+
+      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+      yield* settled;
+      assert.equal(presenceAsks(), 1);
+      // Note that the test's clock stands at 0, so a beat five seconds old beat at -5000.
+      assert.deepEqual(beats().at(-1), {
+        "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } },
+      });
+
+      yield* TestClock.adjust(Duration.seconds(20));
+      yield* settled;
+      assert.equal(presenceAsks(), 2);
+
+      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW);
+      yield* TestClock.adjust(Duration.seconds(60));
+      yield* settled;
+      assert.equal(presenceAsks(), 2);
     }),
 );

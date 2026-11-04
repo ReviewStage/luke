@@ -171,6 +171,7 @@ test("the sidebar's plans that could not be read say so, and Retry reads the lis
         build: { packaged: false },
         onCheck: () => Promise.resolve(),
         onInstall: ignore,
+        onMoveToApplications: ignore,
         onOpenLatest: ignore,
       },
       onSignOut: () => Promise.resolve(),

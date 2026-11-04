@@ -186,6 +186,7 @@ import { sidebarCollections } from "./sidebar-collections.js";
 import { type AgentRow, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import { type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
+import type { WindowFocus } from "./window-focus.js";
 import {
   followSidebarRows,
   invitationsMoves,
@@ -423,6 +424,8 @@ export interface TasksDependencies {
   accountId: () => string | undefined;
   /** The content this host keeps under keys it never changes under, which a picture's, a page version's, and a file's read at a commit answer from (`kept-content.ts`). */
   kept: KeptContent;
+  /** The windows coming forward, raised here as the panel's focus reaches the host and heard by every read asked again on it. */
+  focus: WindowFocus;
 }
 
 export interface TasksComposer extends Composer {
@@ -1682,9 +1685,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // The panel coming forward, which may follow GitHub connected in the
     // browser, reads the connection no oftener than the bound allows; the
-    // workspaces are followed and need no read.
+    // workspaces are followed and need no read. It is also the host's one
+    // word that a window came forward, which every read asked again on
+    // focus hears (`window-focus.ts`).
     [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
       Effect.gen(function* () {
+        yield* dependencies.focus.raise;
         if (gate()) yield* readGithubWhenStale;
         return {};
       }),
