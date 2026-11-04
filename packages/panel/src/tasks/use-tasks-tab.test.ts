@@ -1170,22 +1170,26 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   assert.equal(tab.told.length, told, "the late read opens no other task");
 });
 
-test("a Vespin link naming an archived agent's task, opened before the list followed live lands, reads the agent and opens its page", async () => {
+test("a Vespin link to a worker of an archived agent's task, opened before the list followed live lands, reads the agent and opens its page, a side panel gone full screen meanwhile giving way", async () => {
   const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
+  let answer: () => void = () => undefined;
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     {
       [ACT_KIND.AGENTS_PAGE]: () =>
-        Promise.resolve({
-          agent: {
-            ...RUNNING_AGENT,
-            id: ARCHIVED,
-            planId: OTHER_TASK_ID,
-            archivedAt: 3,
-            automationId: null,
-            workspaceId: "acme",
-            repository: null,
-          },
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({
+              agent: {
+                ...RUNNING_AGENT,
+                id: ARCHIVED,
+                planId: OTHER_TASK_ID,
+                archivedAt: 3,
+                automationId: null,
+                workspaceId: "acme",
+                repository: null,
+              },
+            });
         }),
     },
   );
@@ -1194,11 +1198,22 @@ test("a Vespin link naming an archived agent's task, opened before the list foll
   act(() =>
     tab.control().onOpenLink({
       workspace: "acme",
-      place: { kind: LINK_PLACE.AGENT, planId: OTHER_TASK_ID, agentId: ARCHIVED },
+      place: {
+        kind: LINK_PLACE.WORKER,
+        planId: OTHER_TASK_ID,
+        agentId: ARCHIVED,
+        callId: "3c2b1a09-8f7e-4d6c-b5a4-9382716f5e4d",
+      },
     }),
   );
+  // Note that the panel goes full screen while the read is out, and the worker's page keeps its panel shown, so only its answer reading the panel as it stands then has it give way.
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  assert.equal(tab.control().sidePanel.fullScreen, true);
+  answer();
   await settle();
   assert.equal(tab.control().agentView.agentId, ARCHIVED);
+  assert.equal(tab.control().sidePanel.fullScreen, false, "the full-screen panel gives way");
   assert.equal(
     tab.told.slice(told).includes(ACT_KIND.TASKS_SELECT),
     false,
