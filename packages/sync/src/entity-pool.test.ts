@@ -33,9 +33,10 @@ function standing(pool: EntityPool) {
     const drawn = { times: 0 };
     const rows: HeldRows<Row> = yield* Scope.provide(scope)(
       pool.stand(ROW, {
-        redraw: Effect.sync(() => {
-          drawn.times += 1;
-        }),
+        redraw: () =>
+          Effect.sync(() => {
+            drawn.times += 1;
+          }),
         confirmation: () => undefined,
       }),
     );

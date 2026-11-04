@@ -236,12 +236,6 @@ const GATEWAY_ACT = {
 
 /** The row writes still served by hand, by the change that declares each; only ever cut. */
 const UNDECLARED_ROW_WRITES = [
-  // An inbox item's writes, declared by E4's third PR.
-  GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
-  GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
-  GATEWAY_METHOD.AGENTS_INBOX_MESSAGE,
-  GATEWAY_METHOD.AGENTS_INBOX_READ_STATE,
-  GATEWAY_METHOD.AGENTS_INBOX_READ_ALL,
   // New tasks and automations, declared by W2.
   GATEWAY_METHOD.TASKS_START,
   GATEWAY_METHOD.AUTOMATIONS_CREATE,

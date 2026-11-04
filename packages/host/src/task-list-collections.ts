@@ -117,7 +117,7 @@ export function taskListCollections(
       const wait = dependencies.txWait();
       return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
     };
-    const redraw = Effect.suspend(() => drawn);
+    const redraw = () => Effect.suspend(() => drawn);
     // Note that every plan made is the list's, since it holds every task the account reaches.
     const plans: HeldRows<PlanRow> = yield* pool.stand(PLAN, {
       redraw,

@@ -1,4 +1,5 @@
 import type { AccountInboxAnswer } from "@repo/features/account-inbox-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   type AccountInboxLiveAnswer,
   type AccountInboxLiveRows,
@@ -6,16 +7,24 @@ import {
   accountInboxOfLiveRows,
   nextFailedRunExpiry,
 } from "@repo/features/live-wire";
+import type { EntityPool, HeldRows } from "@repo/sync";
 import { Clock, Duration, Effect, Queue, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import {
+  type AccountWideReads,
   changedIds,
   INBOX_CHANGE,
+  INBOX_ITEM,
   type InboxChange,
-  type InboxReads,
   settles,
 } from "./inbox-collections.js";
 import { answeredCollection, rowsOf } from "./live-collection.js";
-import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
+import {
+  confirmWrite,
+  followTakingRows,
+  LIVE_STATE,
+  restarting,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over the service's held poll and told to main each time it moves.
@@ -29,11 +38,14 @@ import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-fo
  * after `LIVE_RESTART`. Only the answer built from the rows leaves.
  *
  * The rows of its open items, those of agents with no task, and the tasks
- * holding them stand in collections among the reads an inbox write reaches
- * (`inbox-collections.ts`), each answer taken as its poll answers. So an
- * item the reader settles leaves what waits, its task counting one question
- * fewer where it asked the reader, and a mark flips its dot, the moment the
- * write is asked, and the answer is built again as each lands.
+ * holding them stand in collections of their own, each answer taken as its
+ * poll answers: brief entries and per-task counts, another shape than the
+ * items the sync engine's pool holds. So the read stands beside the pool
+ * (`inbox-collections.ts`'s `INBOX_ITEM`), drawing every inbox write
+ * standing over its own rows. So an item the reader settles leaves what
+ * waits, its task counting one question fewer where it asked the reader, and
+ * a mark flips its dot, the moment the write is asked, and the answer is
+ * built again as each lands.
  */
 
 /** How long a follow no reader holds is kept, so a reader started again soon finds it standing. */
@@ -71,8 +83,10 @@ export interface AccountInboxDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxLiveAnswer | SealFailure>;
-  /** The reads an inbox write reaches, among which each account's stands while it is followed. */
-  readonly reads: InboxReads;
+  /** The sync engine's pool, beside which each account's read stands while it is followed, drawing the inbox writes standing over its rows. */
+  readonly pool: EntityPool;
+  /** The account's own reads, among which each account's wait stands while it is followed. */
+  readonly accountWide: AccountWideReads;
 }
 
 /** Each account's follow, by its id, held while main reads it and a while after. */
@@ -193,8 +207,8 @@ export function accountInboxes(
             planless: rowsOf(planless.collection) as AccountInboxLiveRows["planless"],
             plans: rowsOf(plans.collection),
           };
-          return dependencies.reads
-            .standingWrites()
+          return writes
+            .standing()
             .reduce((rows, change) => rowsChanged(rows, change, userId) ?? rows, held);
         };
         // The answer built again from the rows as they stand each time they move, and as a failed run they carry ages out.
@@ -202,16 +216,30 @@ export function accountInboxes(
         const drawn = Effect.suspend(() =>
           answered === undefined ? Effect.void : Queue.offer(standing, { ...answered, ...shown() }),
         );
-        yield* dependencies.reads.stand({
-          shown,
-          take: (change) => {
-            const next = answered === undefined ? undefined : rowsChanged(answered, change, userId);
-            if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
+        /** Whether the read lists the item `id` names, open, as one of a task's or of an agent's with no task. */
+        const lists = (id: string) =>
+          answered !== undefined &&
+          (answered.items.some((entry) => entry.id === id) ||
+            answered.planless.some((entry) => entry.id === id));
+        const writes: HeldRows<InboxItem, InboxChange> = yield* dependencies.pool.stand(
+          INBOX_ITEM,
+          {
+            redraw: () => Effect.asVoid(drawn),
+            confirmation: () => {
+              const handed = wait;
+              return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
+            },
+            beside: {
+              shows: lists,
+              take: (change) => {
+                const next =
+                  answered === undefined ? undefined : rowsChanged(answered, change, userId);
+                if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
+              },
+            },
           },
-          txWait: () => wait,
-          drawn: () => drawn,
-          accountWide: true,
-        });
+        );
+        yield* dependencies.accountWide.stand(() => wait);
         const follow = followTakingRows<AnsweredPart, AccountInboxLiveRows>(
           {
             poll: (after) => dependencies.seal(userId, true, after),
