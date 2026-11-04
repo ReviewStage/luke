@@ -755,7 +755,7 @@ test("list_agents narrows by archive, by whose agents, by an automation's runs, 
       ),
     ),
   );
-  const idsOf = async (narrowed: Record<string, unknown>) => {
+  const idsOf = async (narrowed: WireBoundaryInput) => {
     const listed = await call(CODER_TOOL.LIST_AGENTS, narrowed);
     assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
     assert.ok(Array.isArray(listed.agents), JSON.stringify(listed));
