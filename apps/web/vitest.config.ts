@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { DurationSharding } from "../../scripts/lib/test-shards.mjs";
 import { panelResolve } from "./scripts/panel-build";
 import { siteMarkdown } from "./scripts/site-markdown";
@@ -14,6 +14,11 @@ import { siteMarkdown } from "./scripts/site-markdown";
 const INLINE_STYLESHEETS =
   /\/ui\/src\/tokens\/tokens\.css\?inline$|\/web\/src\/styles\.css\?inline$/;
 
+// A `*.browser.test.ts` drives the real app, served by the local stack, in
+// Chromium; it runs where `APP_FIRST_RUN_BROWSER` is set, CI's First run job,
+// which installs Chromium.
+const BROWSER_ONLY = process.env.APP_FIRST_RUN_BROWSER ? [] : ["tests/**/*.browser.test.ts"];
+
 export default defineConfig({
   // The panel's imports answered as the build answers them, so the web app's
   // root draws in a test what it ships. Streamdown is inlined so that its
@@ -24,6 +29,7 @@ export default defineConfig({
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],
+    exclude: [...configDefaults.exclude, ...BROWSER_ONLY],
     // Every file's sockets refused at once, so a signed-in tab's live reads go over its fake service's HTTP and no test dials a port.
     setupFiles: [
       "../../packages/wire/src/testing/file-time-cap.ts",
