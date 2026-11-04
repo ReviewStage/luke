@@ -16,7 +16,7 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
-import { useMentionedReader } from "./mentioned-agent-card.js";
+import { useMentionedReader } from "./mentioned-place.js";
 import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
 

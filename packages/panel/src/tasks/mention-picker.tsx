@@ -28,6 +28,7 @@ import type { PageLine } from "@repo/features/page-wire";
 import { planSections } from "@repo/features/plan-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
+import { thingOfMention } from "@repo/features/thing-kind";
 import {
   countWords,
   INTEGRATION_LABEL,
@@ -77,7 +78,7 @@ import type { NamedServer } from "@repo/ui/agent-servers-model";
 import { GLYPH } from "@repo/ui/icons";
 import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@repo/ui/search-score";
 import { searchTokens } from "@repo/ui/search-tokens";
-import type { SkillOption } from "@repo/ui/skill-mention";
+import { type SkillOption, skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -118,7 +119,6 @@ import {
   dateMentionNode,
   useDatePicker,
 } from "./date-picker.js";
-import { FileCard } from "./file-ref.js";
 import { fileFolder, fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { InboxItemChipCard } from "./inbox-item-chip.js";
@@ -126,7 +126,9 @@ import { inboxItemGlyph } from "./inbox-item-parts.js";
 import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 import { PageCard } from "./page-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";
+import { skillOption } from "./skill-ref.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
+import { thingCard } from "./thing-card.js";
 import { useTaskStatus } from "./use-known-names.js";
 
 /**
@@ -411,9 +413,9 @@ type MentionRow = {
   readonly key?: string | undefined;
   /** A person's picture, which their row wears; none for any other row. */
   readonly actor?: Actor | undefined;
-  /** An agent's row as every agent menu draws it (`agent-menu-row.tsx`): its tab's glyph, its end, and its card; none for any other row. */
+  /** An agent's row as every agent menu draws it (`agent-menu-row.tsx`), or a skill's as the `/` list does (`skill-ref.tsx`): its glyph, its end, and its card; none for any other row. */
   readonly look?: Pick<MenuRow, "icon" | "end" | "card"> | undefined;
-  /** The card a page's or a person's row hangs beside it, a page's tab's and a person's own; none for any other row, a file's being drawn as its row is (`comboboxGroups`). */
+  /** The card a page's, a person's, a thread's, or an automation's row hangs beside it; none for any other row, whose chip's card is drawn as its row is (`comboboxGroups`). */
   readonly card?: React.ReactNode | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
@@ -865,12 +867,17 @@ function dateRows(term: string, narrowed: boolean, now: number, zone: string): M
 
 /** Each of the repository's skills' rows, found by its name and what it says it is for. */
 function skillRows(skills: readonly SkillOption[]): MentionRow[] {
-  return skills.map((skill) => ({
-    skill: skill.name,
-    name: skill.name,
-    detail: SKILL_DETAIL,
-    terms: `${skill.name} ${skill.description}`,
-  }));
+  return skills.map((skill) => {
+    // Note that a skill's row is the `/` list's, so it reads as the `/name` chip a pick writes, and hangs its card.
+    const option = skillOption(skill);
+    return {
+      skill: skill.name,
+      name: skillWord(skill.name),
+      detail: skill.description === "" ? SKILL_DETAIL : skill.description,
+      terms: `${skill.name} ${skill.description}`,
+      look: { icon: option.icon, end: option.hint, card: option.card },
+    };
+  });
 }
 
 /** Whether the words are a row's task's key whole. */
@@ -1211,8 +1218,8 @@ function rowKey(row: MentionRow): string {
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
-/** The card a file's row hangs, drawn for the path as the list draws it; none for a row that is no file. */
-type FileCardOf = (row: MentionRow) => React.ReactNode;
+/** The card a row hangs where it hangs none of its own: the card the chip a pick writes hangs; none for a row that writes no mention. */
+type RowCardOf = (row: MentionRow) => React.ReactNode;
 
 /** A row's name and detail, each marked where the words found it, as ⌘K marks its rows. */
 function markedWords(
@@ -1237,7 +1244,7 @@ function markedWords(
 function comboboxGroups(
   groups: readonly MentionGroup[],
   query: string,
-  fileCard: FileCardOf,
+  rowCard: RowCardOf,
 ): ComboboxGroup[] {
   return groups.map((group) => ({
     label: group.label,
@@ -1247,7 +1254,7 @@ function comboboxGroups(
       words: row.name,
       icon: row.look?.icon ?? <RowGlyph row={row} />,
       hint: row.look?.end,
-      card: row.look?.card ?? row.card ?? fileCard(row),
+      card: row.look?.card ?? row.card ?? rowCard(row),
       opens: "from" in row,
     })),
   }));
@@ -1318,7 +1325,7 @@ function MentionMenu({
   keys,
   reading,
   failures,
-  fileCard,
+  rowCard,
   onHover,
   onChoose,
 }: {
@@ -1333,7 +1340,7 @@ function MentionMenu({
   reading: boolean;
   /** The reads that failed, which the list says could not be read, with Retry, in place of "no match". */
   failures: readonly MentionReadFailure[];
-  fileCard: FileCardOf;
+  rowCard: RowCardOf;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -1345,7 +1352,7 @@ function MentionMenu({
       <ComboboxList
         id={id}
         label={MENU_LABEL}
-        groups={comboboxGroups(groups, query, fileCard)}
+        groups={comboboxGroups(groups, query, rowCard)}
         active={at}
         onActiveChange={onHover}
         onChoose={(index) => {
@@ -2047,10 +2054,18 @@ export function useMentionPicker({
     MENU_KEY.CLOSE,
   ];
 
-  // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
-  const fileCard: FileCardOf = (row) => {
-    if (!("mention" in row) || row.mention.kind !== MENTION_KIND.FILE) return undefined;
-    return <FileCard path={row.mention.path} />;
+  // Note that a row's card is the chip's, made as the row is drawn, because the repository's paths are thousands and only the few listed hang one.
+  const rowCard: RowCardOf = (row) => {
+    if (!("mention" in row)) return undefined;
+    return thingCard(thingOfMention(row.mention), {
+      own: undefined,
+      glyph: <RowGlyph row={row} />,
+      name: row.written ?? row.name,
+      workspace: place.workspace,
+      wordsWorkspaceId: tasksWorkspaceId,
+      repository: repository ?? undefined,
+      gone: undefined,
+    });
   };
   // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does, and it fades as it closes.
   const rowsShown = !shown ? null : (
@@ -2067,7 +2082,7 @@ export function useMentionPicker({
       keys={keys}
       reading={reading}
       failures={failures}
-      fileCard={fileCard}
+      rowCard={rowCard}
       onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
       onChoose={choose}
     />
