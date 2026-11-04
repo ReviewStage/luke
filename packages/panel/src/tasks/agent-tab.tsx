@@ -3212,6 +3212,8 @@ function AgentTabBody({
   const pressed = endLineOffersContinue({
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
+    failure: transcript.failure,
+    ranDirectly: transcript.ranDirectly !== undefined,
     continued: continued.length > 0,
     boxClosed: composer.closed !== undefined,
   });

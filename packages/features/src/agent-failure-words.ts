@@ -36,10 +36,16 @@ const AGENT_FAILURE_WORDS = {
 /** What a failure that only a new agent mends adds after its words. */
 const RESTART_ADVICE = "start a new one";
 
-/** The failures only a new agent mends. */
+/**
+ * The failures only a new agent mends: one that never started or whose
+ * session ended takes no message again, and a conversation too long for the
+ * model only grows with one, where a continue starts on its summary. Every
+ * other failure leaves the agent taking messages, so a message carries it on.
+ */
 const MENDED_BY_NEW_AGENT: ReadonlySet<AgentFailure> = new Set([
   AGENT_FAILURE.NOT_STARTED,
   AGENT_FAILURE.SESSION_ENDED,
+  AGENT_FAILURE.CONTEXT_OVERFLOW,
 ]);
 
 /**
@@ -63,6 +69,11 @@ export function hostLostWords(host: string): string {
   return `${host} went offline during this turn. Send a message to carry on once it's back.`;
 }
 
+/** Whether only a new agent goes on past this failure, rather than a message to the agent that failed. */
+export function mendedByNewAgent(failure: AgentFailure | undefined): boolean {
+  return failure !== undefined && MENDED_BY_NEW_AGENT.has(failure);
+}
+
 /**
  * Why a turn failed, said of the key it ran on: the reader's own where no
  * one is named, else the named holder's, whose Settings the reader has no
@@ -80,6 +91,6 @@ export function agentFailureWords(
     return `Fast isn't available on ${holder}'s own API key; choose the model with Fast off`;
   }
   const words = AGENT_FAILURE_WORDS[failure];
-  const advises = !continuable && MENDED_BY_NEW_AGENT.has(failure);
+  const advises = !continuable && mendedByNewAgent(failure);
   return words === undefined || !advises ? words : `${words}; ${RESTART_ADVICE}`;
 }

@@ -32,7 +32,8 @@ import type { AgentsControl } from "./use-agents.js";
 /**
  * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it.
  *
- * The press ends a failed turn's end line, on its row, and the note of a box
+ * The press ends a failed turn's end line, on its row, where only a new
+ * agent goes on (`endLineOffersContinue`), and the note of a box
  * closed because the agent's session has ended, whose words and files it
  * carries on, so nothing typed is lost. Where the agent's tab opens drafts
  * (`useContinueDoor`), the press opens the task's draft as a continue of

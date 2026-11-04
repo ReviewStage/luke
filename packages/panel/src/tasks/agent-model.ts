@@ -1,6 +1,7 @@
 import {
   agentFailureWords,
   hostLostWords,
+  mendedByNewAgent,
   ranDirectlyWords,
 } from "@repo/features/agent-failure-words";
 import { recordedVideosOf } from "@repo/features/agent-pictures-model";
@@ -592,18 +593,26 @@ function endLineContinues(status: AgentStatus, endReason: FailureReason): boolea
  * Whether the end line's row ends on Continue, after its words: where the
  * line continues the agent (`endLineContinues`), as Continue in new agent,
  * and once another agent continued it as Continue again, in the same place,
- * since the continued note that takes the box offers none. Before then, a
- * box closed on an ended agent offers the press itself, carrying its words,
- * so the line offers none and one Continue stands on screen.
+ * since the continued note that takes the box offers none. Before then, it
+ * offers the press only where a new agent is the one way on: a failure only
+ * one mends (`mendedByNewAgent`), or an agent that ran directly on its Mac,
+ * whose words say to continue it. Every other failure leaves the box open
+ * and the agent taking messages, so a message carries it on, as a coding
+ * CLI's error leaves its session for the next prompt. A box closed on an
+ * ended agent offers the press itself, carrying its words, so the line
+ * offers none and one Continue stands on screen.
  */
 export function endLineOffersContinue(input: {
   readonly status: AgentStatus;
   readonly endReason: FailureReason;
+  readonly failure: AgentFailure | undefined;
+  readonly ranDirectly: boolean;
   readonly continued: boolean;
   readonly boxClosed: boolean;
 }): boolean {
   if (!endLineContinues(input.status, input.endReason)) return false;
-  return input.continued || !input.boxClosed;
+  if (input.continued) return true;
+  return !input.boxClosed && (input.ranDirectly || mendedByNewAgent(input.failure));
 }
 
 /**

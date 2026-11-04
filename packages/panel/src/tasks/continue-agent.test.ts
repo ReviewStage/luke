@@ -380,17 +380,34 @@ test("a failed turn's end line names no price, even from a service that sent the
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });
 
-test("a failed end line's row ends on Continue where the line continues the agent, also once another continued it, and not beside a closed box's own press", () => {
-  const failed = { status: AGENT_STATUS.FAILED, endReason: endLineReason(undefined) };
+test("a failed end line's row ends on Continue where only a new agent goes on, also once another continued it, and not beside a closed box's own press", () => {
+  const failed = {
+    status: AGENT_STATUS.FAILED,
+    endReason: endLineReason(AGENT_FAILURE.SESSION_ENDED),
+    failure: AGENT_FAILURE.SESSION_ENDED,
+    ranDirectly: false,
+  };
   const key = { ...failed, endReason: endLineReason(AGENT_FAILURE.PROVIDER_KEY) };
+  // Note that a model call that failed leaves the agent taking messages, so a message carries it on.
+  const model = {
+    ...failed,
+    endReason: endLineReason(AGENT_FAILURE.MODEL),
+    failure: AGENT_FAILURE.MODEL,
+  };
 
   assert.equal(endLineOffersContinue({ ...failed, continued: false, boxClosed: false }), true);
+  assert.equal(endLineOffersContinue({ ...model, continued: false, boxClosed: false }), false);
+  assert.equal(
+    endLineOffersContinue({ ...model, ranDirectly: true, continued: false, boxClosed: false }),
+    true,
+  );
+  assert.equal(endLineOffersContinue({ ...model, continued: true, boxClosed: false }), true);
   assert.equal(endLineOffersContinue({ ...failed, continued: true, boxClosed: false }), true);
   assert.equal(endLineOffersContinue({ ...failed, continued: false, boxClosed: true }), false);
   assert.equal(endLineOffersContinue({ ...failed, continued: true, boxClosed: true }), true);
   assert.equal(endLineOffersContinue({ ...key, continued: true, boxClosed: false }), false);
   for (const status of [AGENT_STATUS.CANCELED, AGENT_STATUS.COMPLETED]) {
-    const settled = { status, endReason: endLineReason(undefined), boxClosed: false };
+    const settled = { ...failed, status, boxClosed: false };
     assert.equal(endLineOffersContinue({ ...settled, continued: true }), false, status);
   }
 });
@@ -410,7 +427,7 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
   let refuse: (failure: Failure | undefined) => void = () => undefined;
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
-    failure: AGENT_FAILURE.SANDBOX,
+    failure: AGENT_FAILURE.SESSION_ENDED,
     answer: () =>
       new Promise((resolve) => {
         refuse = resolve;
@@ -447,6 +464,7 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
 
   const archived = await drawnTab({
     status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.SESSION_ENDED,
     continues: false,
     onUnarchive: () => undefined,
   });
@@ -530,7 +548,7 @@ test("a failed agent that never wrote a line still offers Continue on the line t
 test("a failed agent whose box closed on its ending offers Continue in the box's note alone, so the words it holds are never left behind", async () => {
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
-    failure: AGENT_FAILURE.SANDBOX,
+    failure: AGENT_FAILURE.SESSION_ENDED,
     message: { failure: AGENT_CALL_FAILURE.AGENT_RETIRED },
     seed: { words: "Finish the tests.", files: [] },
   });
@@ -924,7 +942,7 @@ test("where an archive took the box, the transcript's end names the agents that 
 test("where the tab's place opens drafts, Continue on a closed box opens the continue's draft with the box's words and files and sends nothing, the box letting them go; on a failed end line it opens one empty", async () => {
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
-    failure: AGENT_FAILURE.SANDBOX,
+    failure: AGENT_FAILURE.SESSION_ENDED,
     message: { failure: AGENT_CALL_FAILURE.AGENT_RETIRED },
     seed: { words: "Now add the dark variant.", files: [NOTES] },
     drafts: true,
