@@ -1429,12 +1429,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
           const deviceId = randomUUID();
-          yield* registerDevice(owner, {
-            id: deviceId,
-            name: "Studio",
-            ...DEVICE_LAYOUT,
-            signedIn: {},
-          });
+          yield* registerDevice(owner, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
           const teammate = yield* openGithubUser();
           yield* joinWorkspace(workspaceId, teammate);
           yield* saveApiKey(teammate, PROVIDER_KEY_PROVIDER.ANTHROPIC);

@@ -44,7 +44,7 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
 
 export const HOST_VERSION = {
   /** The lowest daemon version the service takes a call from. Raise it when a daemon below it would break against this service. */
-  FLOOR: "0.1.0",
+  FLOOR: "0.8.0",
 } as const;
 
 /** The bytes of randomness behind a device secret and a poll secret. */

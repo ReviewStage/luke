@@ -15,12 +15,7 @@ import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
-import {
-  DEVICE_ARCH,
-  DEVICE_ISOLATION,
-  DEVICE_PLATFORM,
-  type DeviceIsolation,
-} from "@repo/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -57,7 +52,7 @@ import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-
  * signed out is refused by name; and the token is never logged. A host, on
  * its device secret, is handed an installation token for its own member's
  * agent that runs on it, over a fake GitHub, and nothing for any other
- * agent or caller. Synthetic accounts and tokens throughout.
+ * agent or caller, nor before the host has registered. Synthetic accounts and tokens throughout.
  */
 
 const ORIGIN = "https://app.test";
@@ -405,8 +400,8 @@ const openMember = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** A host enrolled under the member, and registered running its agents straight on the box, as a host does once it starts: its device id and its secret. */
-const enrolledHost = (userId: string) =>
+/** A host enrolled under the member that has not registered yet, as a host stands between its enroll and its first start: its device id and its secret. */
+const enrolledDevice = (userId: string) =>
   Effect.gen(function* () {
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
     const deviceId = randomUUID();
@@ -417,35 +412,24 @@ const enrolledHost = (userId: string) =>
       machine: { name: "rack-1", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
     });
     assert.ok(Option.isSome(enrolled), "the host was not enrolled");
-    yield* registerDevice(userId, {
-      id: deviceId,
-      name: "rack-1",
-      ...DEVICE_LAYOUT,
-      platform: DEVICE_PLATFORM.LINUX,
-      isolation: DEVICE_ISOLATION.DIRECT,
-    });
     return { deviceId, secret: secret.secret };
   });
 
-/** A Mac registered under the member, running its agents as `isolation` says, and enrolled on a secret of its own: its device id and its secret. */
-const enrolledMac = (userId: string, isolation: DeviceIsolation) =>
+/** The host given registered, as a host does once it starts. */
+const registered = (userId: string, deviceId: string) =>
+  registerDevice(userId, {
+    id: deviceId,
+    name: "rack-1",
+    ...DEVICE_LAYOUT,
+    platform: DEVICE_PLATFORM.LINUX,
+  });
+
+/** A host enrolled under the member, and registered: its device id and its secret. */
+const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
-    const deviceId = randomUUID();
-    yield* registerDevice(userId, {
-      id: deviceId,
-      name: "Studio",
-      ...DEVICE_LAYOUT,
-      isolation,
-      signedIn: {},
-    });
-    const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
-    const enrolled = yield* enrollOwnDevice(userId, {
-      id: deviceId,
-      version: HOST_VERSION.FLOOR,
-      secretHash: secret.hash,
-    });
-    assert.ok(Option.isSome(enrolled), "the Mac was not enrolled");
-    return { deviceId, secret: secret.secret };
+    const host = yield* enrolledDevice(userId);
+    yield* registered(userId, host.deviceId);
+    return host;
   });
 
 /** A Claude Code agent of the member's on the repository, run on the device given. */
@@ -533,28 +517,26 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
   );
 });
 
-it.layer(getTestDB())("a Mac's GitHub token", (it) => {
+it.layer(getTestDB())("an unregistered device's GitHub token", (it) => {
   it.effect(
-    "refuses an agent on a Mac whose row never registered running its agents on the box, and mints for one that did",
+    "refuses an agent on a device that enrolled but never registered, and mints for it once it registers",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* hostStanding;
-        const forbidden = {
+        const member = yield* openMember;
+        const host = yield* enrolledDevice(member.userId);
+        const agentId = yield* agentOnDevice(member, host.deviceId);
+
+        const unregistered = yield* ask(host.secret, agentId);
+        yield* registered(member.userId, host.deviceId);
+        const registeredAnswer = yield* ask(host.secret, agentId);
+
+        assert.deepEqual(unregistered, {
           status: HOSTED_HTTP_STATUS.FORBIDDEN,
           cache: null,
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-        };
-        const member = yield* openMember;
-        const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
-        assert.deepEqual(
-          yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
-          forbidden,
-        );
-        const direct = yield* enrolledMac(member.userId, DEVICE_ISOLATION.DIRECT);
-        assert.equal(
-          (yield* ask(direct.secret, yield* agentOnDevice(member, direct.deviceId))).status,
-          HOSTED_HTTP_STATUS.OK,
-        );
+        });
+        assert.equal(registeredAnswer.status, HOSTED_HTTP_STATUS.OK);
       }),
   );
 });

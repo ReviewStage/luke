@@ -72,7 +72,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
         Effect.gen(function* () {
           const kept = yield* warmLocalAgent;
           const updating = yield* warmLocalAgent;
-          yield* beatDevice(updating.userId, updating.deviceId, undefined, {
+          yield* beatDevice(updating.userId, updating.deviceId, {
             update: HOST_UPDATE.WAITING,
           });
 

@@ -4,6 +4,7 @@ import {
   type AgentMachineKind,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { DEVICE_KIND } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { agentName } from "@repo/features/model-label";
@@ -671,7 +672,8 @@ function runsOnOf(
         : {
             device: {
               name: found.name,
-              kind: found.kind,
+              // Note that every device runs the host program, so each is named a host; the device row keeps no kind.
+              kind: DEVICE_KIND.HOST,
               platform: found.platform,
               seenAt: found.lastSeenAt.getTime(),
             },

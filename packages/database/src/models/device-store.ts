@@ -10,26 +10,20 @@
 import {
   DEVICE_ARCH,
   DEVICE_CAPABILITY,
-  DEVICE_ISOLATION,
-  DEVICE_KIND,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceArch,
   type DeviceCapability,
-  type DeviceIsolation,
   type DeviceMachine,
   type DevicePlatform,
   type DeviceSetup,
-  type DeviceSignedIn,
   deviceSetupSchema,
-  deviceSignedInSchema,
   HOST_UPDATE,
   type HostUpdate,
   hostUpdateSchema,
-  knownDeviceCapabilities,
 } from "@repo/features/device-agent-wire";
 import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { device } from "../schemas/device.js";
@@ -38,17 +32,15 @@ type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One device as Start reads it: its id, the account it is, its name, kind, and platform, which machine it runs on and its model, none where its host never said, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
+/** One device as Start reads it: its id, the account it is, its name and platform, which machine it runs on and its model, none where its host never said, when it last beat, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
 const DeviceSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   name: Schema.String,
-  kind: Schema.Literals(Object.values(DEVICE_KIND)),
   platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
   machineId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   lastSeenAt: Schema.Date,
-  signedIn: deviceSignedInSchema,
   codexExecutable: Schema.NullOr(Schema.String),
   setup: Schema.NullOr(deviceSetupSchema),
   setupFailure: Schema.NullOr(Schema.String),
@@ -64,15 +56,9 @@ const DeviceLayoutSchema = Schema.Struct({
   codexExecutable: Schema.NullOr(Schema.String),
 });
 
-/**
- * A Mac's layout, which harnesses it is signed in to, and how it runs its
- * agents, as a local agent's launch reads them. Note that the isolation is
- * read as any text, because a row may name one a later build retired.
- */
+/** A Mac's layout and what its follower takes beyond the first lines, as a local agent's launch reads them. */
 const DeviceStandingSchema = Schema.Struct({
   ...DeviceLayoutSchema.fields,
-  signedIn: deviceSignedInSchema,
-  isolation: Schema.String,
   capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
 });
 
@@ -101,15 +87,13 @@ export function machineColumns(machine: {
   };
 }
 
-/** What a Mac registers with beside its id and name: its platform and architecture, which machine it runs on where its host read it, how it runs its agents, its layout, the folder its agents stand in where its host names one, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
+/** What a Mac registers with beside its id and name: its platform and architecture, which machine it runs on where its host read it, its layout, the folder its agents stand in where its host names one, its Codex where it checked one, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
 export type DeviceRegistration = Omit<DeviceLayout, "agentsFolder" | "codexExecutable"> &
   DeviceMachine & {
     readonly platform: DevicePlatform;
     readonly arch: DeviceArch;
-    readonly isolation?: DeviceIsolation | undefined;
     readonly agentsFolder?: string | undefined;
     readonly codexExecutable?: string | undefined;
-    readonly signedIn?: DeviceSignedIn | undefined;
     readonly capabilities?: readonly DeviceCapability[] | undefined;
     readonly setup?: DeviceSetup | undefined;
     readonly setupFailure?: string | undefined;
@@ -123,8 +107,6 @@ const upsertDevice = SqlSchema.findAll({
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
     ...MachineColumnsSchema.fields,
-    isolation: Schema.Literals(Object.values(DEVICE_ISOLATION)),
-    capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     setup: Schema.NullOr(deviceSetupSchema),
     setupFailure: Schema.NullOr(Schema.String),
     now: Schema.Date,
@@ -138,12 +120,10 @@ const upsertDevice = SqlSchema.findAll({
     arch,
     machineId,
     model,
-    isolation,
     home,
     agentsFolder,
     claudeExecutable,
     codexExecutable,
-    signedIn,
     capabilities,
     setup,
     setupFailure,
@@ -156,17 +136,13 @@ const upsertDevice = SqlSchema.findAll({
           id,
           userId,
           name,
-          // Note that every device runs its agents through the host program, so a row is written as a host; nothing reads the kind.
-          kind: DEVICE_KIND.HOST,
           platform,
           arch,
           ...machineColumns({ machineId, model }),
-          isolation,
           home,
           agentsFolder,
           claudeExecutable,
           codexExecutable,
-          signedIn,
           capabilities: [...capabilities],
           setup,
           setupFailure,
@@ -179,12 +155,10 @@ const upsertDevice = SqlSchema.findAll({
             platform,
             arch,
             ...machineColumns({ machineId, model }),
-            isolation,
             home,
             agentsFolder,
             claudeExecutable,
             codexExecutable,
-            signedIn,
             capabilities: [...capabilities],
             setup,
             setupFailure,
@@ -201,7 +175,6 @@ const touchDevice = SqlSchema.findAll({
   Request: Schema.Struct({
     ...DeviceKeySchema.fields,
     now: Schema.Date,
-    signedIn: Schema.UndefinedOr(deviceSignedInSchema),
     updating: Schema.UndefinedOr(
       Schema.Struct({
         phase: Schema.NullOr(hostUpdateSchema),
@@ -210,13 +183,12 @@ const touchDevice = SqlSchema.findAll({
     ),
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, now, signedIn, updating }) =>
+  execute: ({ userId, id, now, updating }) =>
     Database.use((db) =>
       db
         .update(device)
         .set({
           lastSeenAt: now,
-          ...(signedIn === undefined ? undefined : { signedIn }),
           ...(updating === undefined
             ? undefined
             : { updatePhase: updating.phase, updateFailure: updating.failure }),
@@ -236,12 +208,10 @@ const findSeen = SqlSchema.findAll({
           id: device.id,
           userId: device.userId,
           name: device.name,
-          kind: device.kind,
           platform: device.platform,
           machineId: device.machineId,
           model: device.model,
           lastSeenAt: device.lastSeenAt,
-          signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
           setup: device.setup,
           setupFailure: device.setupFailure,
@@ -270,12 +240,10 @@ const findNamed = SqlSchema.findAll({
           id: device.id,
           userId: device.userId,
           name: device.name,
-          kind: device.kind,
           platform: device.platform,
           machineId: device.machineId,
           model: device.model,
           lastSeenAt: device.lastSeenAt,
-          signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
           setup: device.setup,
           setupFailure: device.setupFailure,
@@ -287,11 +255,7 @@ const findNamed = SqlSchema.findAll({
 
 const findLayout = SqlSchema.findOneOption({
   Request: DeviceKeySchema,
-  // Note that the capabilities are read as any text, because a row may name one a later build retired.
-  Result: Schema.Struct({
-    ...DeviceStandingSchema.fields,
-    capabilities: Schema.Array(Schema.String),
-  }),
+  Result: DeviceStandingSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
@@ -300,8 +264,6 @@ const findLayout = SqlSchema.findOneOption({
           agentsFolder: device.agentsFolder,
           claudeExecutable: device.claudeExecutable,
           codexExecutable: device.codexExecutable,
-          signedIn: device.signedIn,
-          isolation: device.isolation,
           capabilities: device.capabilities,
         })
         .from(device)
@@ -336,9 +298,6 @@ export function registerDevice(
         agentsFolder: registered.agentsFolder ?? null,
         // Note that a register naming no Codex clears the last one, since the Mac checks it on every start.
         codexExecutable: registered.codexExecutable ?? null,
-        // Likewise a register naming no isolation runs its agents bare, as every desktop from before the field does.
-        isolation: registered.isolation ?? DEVICE_ISOLATION.BARE,
-        signedIn: registered.signedIn ?? {},
         // Note that a register naming none clears the last ones, as a desktop moved back to a build without them takes none.
         capabilities: registered.capabilities ?? [],
         // Likewise a register naming no setup is a device ready to take an agent, as every desktop from before the field is.
@@ -352,18 +311,12 @@ export function registerDevice(
   );
 }
 
-/** The account's Mac's home folder, the folder its agents stand in where its host named one, bundled CLI, isolation, and the capabilities of its this build knows, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder, the folder its agents stand in where its host named one, bundled CLI, and capabilities, as it last registered them; nothing where the account holds no such Mac, or one that never registered. */
 export function deviceLayout(
   userId: string,
   id: string,
 ): DeviceEffect<Option.Option<DeviceStanding>> {
-  return Effect.map(
-    findLayout({ userId, id }),
-    Option.map((standing) => ({
-      ...standing,
-      capabilities: knownDeviceCapabilities(standing.capabilities),
-    })),
-  );
+  return findLayout({ userId, id });
 }
 
 /** Where a host's update stands as its own beat says it: its phase, and why it failed where it did; neither while no update is under way. */
@@ -373,15 +326,14 @@ export interface DeviceUpdating {
 }
 
 /**
- * Records that the account's Mac is there now, which harnesses it is signed
- * in to where it says, and where its update stands where its own beat says,
- * cleared where that names none; a touch that says nothing of its update, a
- * held read's, leaves it. False where the account holds no such Mac.
+ * Records that the account's Mac is there now, and where its update stands
+ * where its own beat says, cleared where that names none; a touch that says
+ * nothing of its update, a held read's, leaves it. False where the account
+ * holds no such Mac.
  */
 export function beatDevice(
   userId: string,
   id: string,
-  signedIn?: DeviceSignedIn,
   updating?: DeviceUpdating,
 ): DeviceEffect<boolean> {
   const update = updating?.update ?? null;
@@ -394,10 +346,7 @@ export function beatDevice(
           failure: update === HOST_UPDATE.FAILED ? (updating.updateFailure ?? null) : null,
         };
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      touchDevice({ userId, id, now, signedIn, updating: said }),
-      (rows) => rows.length > 0,
-    ),
+    Effect.map(touchDevice({ userId, id, now, updating: said }), (rows) => rows.length > 0),
   );
 }
 

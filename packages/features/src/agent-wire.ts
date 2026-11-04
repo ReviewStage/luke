@@ -175,7 +175,7 @@ export const AGENT_PAYER = {
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
   APP: "app",
-  /** A local agent's own Mac, by its harness's login there (`deviceSignedInSchema`), with the account's saved credential as the fallback. */
+  /** A local agent's own Mac, by its harness's login there, as an agent started before every host launched on the account's saved credential records it; such an agent now launches on that saved credential. */
   MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
@@ -2485,8 +2485,6 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
   subagents: EffectSchema.optionalKey(EffectSchema.Array(agentSubagentStandingSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
-  /** A folder an older service named beside a failed turn; no service fills it any more, and no panel reads it. */
-  ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
   /**
    * The host a failed agent's run was lost with, by its name, where the
    * host stopped beating while its turn ran and the run was taken from it.

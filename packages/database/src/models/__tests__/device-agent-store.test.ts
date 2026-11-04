@@ -745,7 +745,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         for (const each of [ended, underWay, recent, stopped, replaced, exited]) {
           yield* beatDevice(each.userId, each.deviceId);
         }
-        yield* beatDevice(updating.userId, updating.deviceId, undefined, {
+        yield* beatDevice(updating.userId, updating.deviceId, {
           update: HOST_UPDATE.WAITING,
         });
         const ours = new Set(
@@ -837,13 +837,13 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount();
         const other = yield* openAccount();
-        yield* beatDevice(owner.userId, owner.deviceId, undefined, {
+        yield* beatDevice(owner.userId, owner.deviceId, {
           update: HOST_UPDATE.WAITING,
         });
 
         const waiting = yield* deviceAgentAwaitsUpdate(owner.userId, owner.agentId);
         const readByOther = yield* deviceAgentAwaitsUpdate(other.userId, owner.agentId);
-        yield* beatDevice(owner.userId, owner.deviceId, undefined, {
+        yield* beatDevice(owner.userId, owner.deviceId, {
           update: HOST_UPDATE.UPDATING,
         });
         const switching = yield* deviceAgentAwaitsUpdate(owner.userId, owner.agentId);
