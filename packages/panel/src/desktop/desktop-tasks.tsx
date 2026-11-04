@@ -561,6 +561,11 @@ function PlanDocument({
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
+  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page instead, where it is read and brought back.
+  const openAgentColumn = (agent: string) =>
+    agents.archived?.some((each) => each.id === agent) === true
+      ? tasks.agentView.onOpen(agent)
+      : openColumnTab({ agent });
   // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // A row that opens the comments, which stand in the side panel, shows the
@@ -579,7 +584,7 @@ function PlanDocument({
   const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
-        return openColumnTab({ agent: target.agent });
+        return openAgentColumn(target.agent);
       case TOOL_TARGET.PLAN:
         return openOverview();
       case TOOL_TARGET.INBOX: {
@@ -639,7 +644,7 @@ function PlanDocument({
       models: agents.models,
       pullRequest,
       people: peopleOf(agents.changesPeople.get(agentId), pullRequest),
-      onOpenAgent: () => openColumnTab({ agent: agentId }),
+      onOpenAgent: () => openAgentColumn(agentId),
     });
     return card ?? undefined;
   };
@@ -658,7 +663,7 @@ function PlanDocument({
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
     sidePanel.onPreview({ page }, place),
   );
-  const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
+  const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
   const agentLookDoor = useSteadyDoor(agentLook);
   const pullRequestCardDoor = useSteadyDoor(pullRequestCard);
@@ -875,7 +880,13 @@ function PlanDocument({
           room === SHELL_ROOM.NARROW
             ? {
                 starts: phoneAgentStarts(mainTabs, agents),
-                archived: <ArchivedAgents agents={agents} shown={tasks.shown} />,
+                archived: (
+                  <ArchivedAgents
+                    agents={agents}
+                    shown={tasks.shown}
+                    onOpen={tasks.agentView.onOpen}
+                  />
+                ),
                 waiting: inbox.board.waiting.length,
                 onOpenInbox: () => {
                   if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId });
@@ -1327,7 +1338,7 @@ function PlanDocument({
                             cardId={summaryCard}
                             inbox={inbox.board}
                             held={views.held}
-                            onOpenAgent={(agent) => openColumnTab({ agent })}
+                            onOpenAgent={openAgentColumn}
                           />
                         </TaskBody>
                       </>

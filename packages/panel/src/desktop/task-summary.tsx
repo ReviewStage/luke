@@ -627,12 +627,15 @@ function SummaryList({
   sections,
   agents,
   shown,
+  onOpenAgent,
   onPicked,
 }: {
   sections: readonly SummarySection[];
   agents: AgentsControl;
   /** Whether the summary is on screen, which a row's menu and its question stand on. */
   shown: boolean;
+  /** Opens an agent, an archived one's row among them, which opens on its own page. */
+  onOpenAgent: (agentId: string) => void;
   onPicked?: () => void;
 }): React.JSX.Element {
   const [folded, , changeFolded] = useKept(KEPT.FOLDED, NONE_FOLDED);
@@ -677,7 +680,16 @@ function SummaryList({
                   );
                 })}
               </List>
-              {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
+              {heading === AGENTS_SECTION ? (
+                <ArchivedAgents
+                  agents={agents}
+                  shown={shown}
+                  onOpen={(agentId) => {
+                    onPicked?.();
+                    onOpenAgent(agentId);
+                  }}
+                />
+              ) : null}
             </GroupHeader>
           </div>
         );
@@ -702,6 +714,7 @@ function SummaryCard({
   from,
   sections,
   agents,
+  onOpenAgent,
   onDismiss,
   leaving,
   ref: hold,
@@ -710,6 +723,7 @@ function SummaryCard({
   from: CardFrom;
   sections: readonly SummarySection[];
   agents: AgentsControl;
+  onOpenAgent: (agentId: string) => void;
   onDismiss: () => void;
   leaving: boolean;
   /** Hands the card's element to the hold that draws it through its exit. */
@@ -789,7 +803,13 @@ function SummaryCard({
               />
             </Tooltip>
           </span>
-          <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
+          <SummaryList
+            sections={sections}
+            agents={agents}
+            shown
+            onOpenAgent={onOpenAgent}
+            onPicked={onDismiss}
+          />
         </div>
       </ScrollArea>
     </Card>
@@ -918,7 +938,12 @@ export function TaskSummary({
               )}
             >
               {layout.mode === SUMMARY_MODE.COLUMN ? (
-                <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
+                <SummaryList
+                  sections={sections}
+                  agents={tasks.agents}
+                  shown={tasks.shown}
+                  onOpenAgent={onOpenAgent}
+                />
               ) : kinds.length === 0 ? null : (
                 <Stack
                   as={LAYOUT_ELEMENT.UL}
@@ -941,6 +966,7 @@ export function TaskSummary({
           from={hungFrom}
           sections={sections}
           agents={tasks.agents}
+          onOpenAgent={onOpenAgent}
           onDismiss={layout.onDismiss}
           leaving={card.leaving}
           ref={card.ref}

@@ -6,23 +6,24 @@ import {
   CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
-  GAP,
   GROUP_HEADING,
   GroupHeader,
   IconButton,
-  LAYOUT_ELEMENT,
+  LIST_DENSITY,
+  LIST_ROW_ACTIONS,
+  List,
+  ListRow,
   nextRowOrHead,
-  OneLine,
+  RowHint,
+  RowHintOptions,
   STATUS_TONE,
-  Stack,
   Tooltip,
   useConfirmDialog,
-  useRowMenu,
-  withContextMenu,
 } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { useBusyPress } from "../settings/busy-press.js";
@@ -69,13 +70,14 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, as the sidebar task
  * rows' Pin and Archive do, a ⋯ beside it: at rest they take no room, the name running the
- * row's full width, and shown, the name is cut where it begins and fades
- * out there. A screen with no hover shows them at rest. The ⋯, a right-click, and the menu key open
+ * row's full width. The ⋯, a right-click, a long press, and the menu key open
  * the agent's one menu over the doors a row has (`agent-actions.tsx`): Copy link, Unarchive, and
- * Permanently delete, asked first. The
+ * Permanently delete, asked first; a finger's row draws neither the Unarchive nor the ⋯, its
+ * long press offering both. The
  * row hangs the agent's card beside it as a standing row does, saying it
- * was archived and when (`agent-ref.tsx`), though no press opens it,
- * since its tab is gone. It draws nothing while no agent is archived, and
+ * was archived and when (`agent-ref.tsx`), and a press opens the agent's
+ * own page, since its tab is gone, where its transcript is read and
+ * Unarchive brings it back. It draws nothing while no agent is archived, and
  * starts folded, then stands as the reader left it, kept on this Mac.
  */
 
@@ -201,18 +203,19 @@ export function useAgentArchive(
 /** What an archived agent's row is, naming its ⋯ and menu "Archived agent actions". */
 const ARCHIVED_THING = "Archived agent";
 
-/** One archived agent: its glyph and name, muted, hanging its card, its Unarchive and its ⋯ at its end, and its right-click and the menu key opening the ⋯'s menu. */
+/** One archived agent: its glyph and name, muted, hanging its card, opening its own page on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
 function ArchivedAgentRow({
   agent,
   agents,
   shown,
+  onOpen,
 }: {
   agent: AgentSummary;
   agents: AgentsControl;
   shown: boolean;
+  onOpen: (agentId: string) => void;
 }): React.JSX.Element {
   const press = useArchivePress(agents);
-  const item = useRef<HTMLLIElement>(null);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete.
   const actions = useAgentActions(agent, agents, {
@@ -220,46 +223,43 @@ function ArchivedAgentRow({
     shown,
     terminals: { onOpenTerminal: undefined },
   });
-  const menu = useRowMenu(rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown));
   const unarchiving = useBusyPress(() => press(agent.id, false));
+  const coarse = useCoarsePointer();
   return (
-    <li
-      ref={item}
-      className="task-summary-archived-agent relative"
-      data-menu-open={menu.open ? "true" : undefined}
-      onKeyDown={menu.onKeyDown}
-      {...withContextMenu(menu.doors, {})}
-    >
-      <Tooltip
-        label={subject.name}
-        card={<AgentCard subject={subject} models={agents.models} />}
-        cardBeside
-        cardRegion={item}
-      >
-        <span className="task-summary-row flex h-control w-full items-center gap-icon-gap rounded-control bg-none px-row-inset text-left text-body-size text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit">
-          <span className={SUMMARY_GLYPH}>
-            <AgentGlyph agent={agent} />
-          </span>
-          <OneLine className="task-summary-label min-w-0 flex-1">{subject.name}</OneLine>
-          {agentEndMark(agent, false)}
-        </span>
-      </Tooltip>
-      <span className="task-summary-marks pointer-events-none absolute top-0 right-ui-4 flex h-control items-center opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit">
-        <Tooltip label={UNARCHIVE.label}>
-          <IconButton
-            icon={UNARCHIVE.icon}
-            label={UNARCHIVE.label}
-            size={BUTTON_SIZE.COMPACT}
-            busy={unarchiving.busy}
-            busyLabel={UNARCHIVING}
-            onClick={unarchiving.onPress}
-          />
-        </Tooltip>
-        {menu.button({ size: BUTTON_SIZE.COMPACT })}
-      </span>
-      {menu.popup}
+    <>
+      <RowHintOptions card={<AgentCard subject={subject} models={agents.models} />}>
+        <ListRow
+          leading={
+            <span className={SUMMARY_GLYPH}>
+              <AgentGlyph agent={agent} />
+            </span>
+          }
+          title={subject.name}
+          meta={agentEndMark(agent, false)}
+          muted
+          hint={{ Hint: RowHint, label: subject.name }}
+          onPress={() => onOpen(agent.id)}
+          menu={rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+          more={!coarse}
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          actions={
+            coarse ? null : (
+              <Tooltip label={UNARCHIVE.label}>
+                <IconButton
+                  icon={UNARCHIVE.icon}
+                  label={UNARCHIVE.label}
+                  size={BUTTON_SIZE.COMPACT}
+                  busy={unarchiving.busy}
+                  busyLabel={UNARCHIVING}
+                  onClick={unarchiving.onPress}
+                />
+              </Tooltip>
+            )
+          }
+        />
+      </RowHintOptions>
       {actions.dialog}
-    </li>
+    </>
   );
 }
 
@@ -267,10 +267,13 @@ function ArchivedAgentRow({
 export function ArchivedAgents({
   agents,
   shown,
+  onOpen,
 }: {
   agents: AgentsControl;
   /** Whether the summary is on screen: off it, an archived row's menu stands over nothing. */
   shown: boolean;
+  /** Opens an archived agent's own page, where its transcript is read and it is brought back. */
+  onOpen: (agentId: string) => void;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useKept(KEPT.UNFOLDED, false);
   const archived = agents.archived ?? [];
@@ -284,16 +287,17 @@ export function ArchivedAgents({
         fold={{ open: unfolded, onOpenChange: setUnfolded }}
         count={foldedCount(!unfolded, archived.length, ARCHIVED_NOUN)}
       >
-        <Stack
-          as={LAYOUT_ELEMENT.UL}
-          gap={GAP.ROW}
-          className="task-summary-rows"
-          aria-label="Archived agents"
-        >
+        <List label="Archived agents" density={LIST_DENSITY.DENSE}>
           {archived.map((agent) => (
-            <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
+            <ArchivedAgentRow
+              key={agent.id}
+              agent={agent}
+              agents={agents}
+              shown={shown}
+              onOpen={onOpen}
+            />
           ))}
-        </Stack>
+        </List>
       </GroupHeader>
     </div>
   );

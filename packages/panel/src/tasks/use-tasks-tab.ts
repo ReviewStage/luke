@@ -347,6 +347,17 @@ type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind
 
 type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
 
+/**
+ * The places an agent's transcript draws, which an archived agent's own page
+ * draws in place of its tab, never drawn; its changes and pull request still
+ * stand in its task's side panel.
+ */
+const TRANSCRIPT_PLACES: ReadonlySet<AgentPlaceKind> = new Set([
+  LINK_PLACE.AGENT,
+  LINK_PLACE.MESSAGE,
+  LINK_PLACE.WORKER,
+]);
+
 /** A place of a task's own that its side panel draws as a tab, named under the task. */
 type TaskTabPlace =
   | (AgentPlaceOf<
@@ -2933,6 +2944,11 @@ export function useTasksTab(input: {
   };
 
   // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
+  // Whether the agent is archived, as the open task's list or the list followed live carries it.
+  const archivedAgent = (agentId: string) =>
+    agents.archived?.some((agent) => agent.id === agentId) === true ||
+    liveAgents?.some((agent) => agent.id === agentId && agent.archivedAt !== undefined) === true;
+
   const standInFor = (standing: StandIn) => {
     setHistoryFor(undefined);
     setStandIn(standing);
@@ -2967,6 +2983,11 @@ export function useTasksTab(input: {
    * none; its own rows name its task once they land.
    */
   const openOnTask = (planId: string, place: AgentPlace) => {
+    // Note that an archived agent's tab is never drawn, so a place in its transcript opens on its own page.
+    if (archivedAgent(place.agentId) && TRANSCRIPT_PLACES.has(place.kind)) {
+      openOnAgentPage(place);
+      return;
+    }
     switch (place.kind) {
       case LINK_PLACE.WORKER:
         showColumnTab(planId, { agent: place.agentId });
@@ -3068,6 +3089,8 @@ export function useTasksTab(input: {
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
         else if (agent.planId === null) openOnAgentPage(place);
+        else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
+          openOnAgentPage(place);
         else openOnTask(agent.planId, place);
       });
     }
@@ -3607,7 +3630,9 @@ export function useTasksTab(input: {
       select(taskId);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
-      showColumnTab(taskId, { agent: agentId }),
+      archivedAgent(agentId)
+        ? standInFor({ kind: STAND_IN.AGENT, agentId })
+        : showColumnTab(taskId, { agent: agentId }),
     ),
     onShowColumnTab: guard(showColumnTab),
     onShowPanelTab: guard(showPanelTab),

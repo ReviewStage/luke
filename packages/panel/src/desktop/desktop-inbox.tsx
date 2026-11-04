@@ -974,7 +974,7 @@ function paneDoors(
   if (holder.kind === INBOX_HOLDER.TASK) {
     const { task } = holder;
     // An agent the item or its task's card names reads beside it, as a link to it does.
-    // Note that an archived agent's transcript is drawn on its task alone, so it goes there.
+    // Note that an archived agent's tab is never drawn, so the window opens it on its own page.
     const openAgent = (taskId: string, agentId: string) =>
       seams.openPlace({ kind: LINK_PLACE.AGENT, planId: taskId, agentId }, () =>
         tasks.onShowAgent(taskId, agentId),
