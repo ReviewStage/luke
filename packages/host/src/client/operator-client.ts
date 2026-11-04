@@ -114,6 +114,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
       }),
+      gateway.host.onMcpClientsChanged((held) => {
+        state.update({ [LIVE_READ.MCP_CLIENTS]: held });
+      }),
       gateway.host.onAutomationsChanged((held) => {
         state.update(held);
       }),

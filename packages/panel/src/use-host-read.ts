@@ -195,11 +195,12 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; one workspace's automations, one workspace's
- * runs, or one automation's runs, by its id; one plan's comments, or one
- * page's, which the open task's plan and a page's tab each hold; and the run
- * that started one agent, which its page holds. Pages and
- * Browser tabs offer no Try again, because the host reads those that did
+ * Settings › Agents draws; the outside MCP clients the account allowed, by
+ * the account, which Settings › Integrations holds; one workspace's
+ * automations, one workspace's runs, or one automation's runs, by its id;
+ * one plan's comments, or one page's, which the open task's plan and a
+ * page's tab each hold; and the run that started one agent, which its page
+ * holds. Pages and Browser tabs offer no Try again, because the host reads those that did
  * not answer again on its own, and those it was refused, a plan's or an
  * agent's the reader cannot reach, stand failed until every surface lets
  * them go and one holds them anew (`@repo/host`'s `live-push.ts`). The
@@ -278,6 +279,13 @@ const HOST_READS = {
     path: (agentId: string) => [agentId],
     hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
     retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
+  }),
+  [LIVE_READ.MCP_CLIENTS]: hostRead(LIVE_READ.MCP_CLIENTS, {
+    slice: APP_SLICE.MCP_CLIENTS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the clients of whoever is signed in, so the hold names no account.
+    hold: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.MCP_CLIENTS_RETRY),
   }),
   [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
     slice: APP_SLICE.AUTOMATIONS,
