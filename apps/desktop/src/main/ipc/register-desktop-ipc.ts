@@ -223,7 +223,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
         },
-        thisMacHost: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,

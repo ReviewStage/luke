@@ -2,10 +2,12 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import type { Host } from "@repo/features/host-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { ThisMacHostRead } from "@repo/host/contract";
+import type { AppThisMacHost } from "@repo/host/app-state";
 import { timeRuntime } from "@repo/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -14,7 +16,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -247,17 +249,28 @@ async function press(words: string): Promise<void> {
   await settle();
 }
 
-/** Hosts drawn in the desktop over the hosts given, This Mac read as given, and the beats given. */
+/** Hosts drawn in the desktop over the hosts given, This Mac held as given, and the beats given. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
-  thisMac: ThisMacHostRead,
+  thisMac: AppThisMacHost,
   beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
 ): Promise<void> {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac),
   });
   handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
+  // This Mac is laid as the host holds it, under the account the beats are held for.
+  const handed = fakeAppBridgeCalls().requestAppState;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => {
+      const snapshot = await (handed ?? assert.fail("the beats hand a document"))();
+      const { account } = snapshot;
+      return account.status === ACCOUNT_STATUS.SIGNED_IN && account.id !== undefined
+        ? { ...snapshot, [LIVE_READ.THIS_MAC_HOST]: { [account.id]: { rows: thisMac } } }
+        : snapshot;
+    },
+  });
   drawHosts();
   await settle();
 }

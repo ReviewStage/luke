@@ -404,6 +404,21 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/**
+ * This Mac as its host reads it (`compose-this-mac-host.ts`): the machine's
+ * id in the keyed hash every host reports (`@repo/host/node`'s
+ * `machine-identity.ts`), where it could be read, and the device of the
+ * record of the account install on this Mac, where that install was
+ * enrolled with this app's service.
+ */
+export interface AppThisMacHost {
+  deviceId?: string;
+  machineId?: string;
+}
+
+/** This Mac as the host last read it, by the account signed in: the one key the host holds, none while nobody is signed in. */
+export type AppThisMacHosts = Readonly<Record<string, AppHostRead<AppThisMacHost>>>;
+
 /** One workspace's people, as the host's read of them stands: its members and who its work names but left, once it answered. */
 export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
 
@@ -513,6 +528,7 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
@@ -630,6 +646,8 @@ export interface AppState {
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
+  [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
@@ -796,6 +814,7 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
