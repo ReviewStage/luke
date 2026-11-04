@@ -29,8 +29,8 @@ import {
  * An agent's queue as its tab changes it; the host draws each change over
  * the queue its page carries (`@repo/host`'s `agent-queue-writes.ts`). The
  * message box's part: a message the queue refused comes back into the box,
- * an edit closes as it is saved and comes back into the box where the queue
- * refused it, an edit of a message the queue would not hold closes, an edit
+ * an edit the queue did not save stays open with its new words, an edit of
+ * a message the queue would not hold closes, an edit
  * steered is one change of that message, and an edit takes the message's
  * files into the box, read as its row draws them, which Save sends back with
  * its words. A message queued with files names the ids the window keeps
@@ -142,19 +142,20 @@ test("a message the queue refused comes back into the box it was queued from", a
   assert.equal(now().composer.draft, "Please update the tests");
 });
 
-test("an edit saved closes on the press, the box given back what it held, and its words come back into the box where the queue refused them", async () => {
+test("an edit the queue refused to save stays open with its new words, the box's own still kept aside", async () => {
   act(() => now().page({ messages: [message("m1", "Run tests")], revision: 1 }));
+  act(() => now().composer.setDraft("my own words"));
   act(() => now().editing.edit(message("m1", "Run tests")));
   await answer({ queue: { messages: [message("m1", "Run tests")], revision: 2 } });
   act(() => now().composer.setDraft("Run tests and fix failures"));
   act(() => now().editing.save());
-
-  assert.equal(now().editing.editing, undefined);
-  assert.equal(now().composer.draft, "");
   await answer(refused);
-  assert.equal(now().composer.draft, "Run tests and fix failures");
-});
 
+  assert.equal(now().editing.editing, "m1");
+  assert.equal(now().composer.draft, "Run tests and fix failures");
+  act(() => now().editing.cancel());
+  assert.equal(now().composer.draft, "my own words");
+});
 test("an edit of a message the queue would not hold, already on its way, closes and gives the box back", async () => {
   act(() => now().composer.setDraft("my own words"));
   act(() => now().editing.edit(message("m1", "Run tests")));

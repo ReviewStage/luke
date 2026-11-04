@@ -232,11 +232,9 @@ export interface QueueEditing {
  * The box's part in the queue. An edit moves the queued message's words into
  * the box, keeping what the box held aside, and marks the message as being
  * edited, which stops the hand-off at it; Save writes the words back in its
- * place, drawn there by the host at once, and closes the edit on the press,
- * its words coming back into the box where the queue refused them and the
- * box holds nothing newer; Steer sends them now as that message, which only
- * the service can say it did, so it closes the edit once the queue took it,
- * and a refusal leaves the words where they are. Cancel,
+ * place, which the host draws in the message's row at once, and Steer sends
+ * them now as that message, each closing the edit once the queue took it, so
+ * a refusal leaves the words where they are, the box's own still kept aside. Cancel,
  * Escape, or Save with the box emptied lets it go as it was, and a message
  * the queue would not mark, already on its way, closes the edit. The mark
  * has no time to it: an edit left standing, its window closed, stays until
@@ -283,9 +281,9 @@ export function useQueueEditing(
     composer.setAttachments(() => stash.attachments);
     setStashed(undefined);
   };
-  /** The edit closed once the queue took the steer, where it is still this message's; left open where it was refused. */
-  const steered = (stash: Stashed, steer: AgentQueueChange) => {
-    void change(steer).then((answer) => {
+  /** The edit closed once the queue took `edit`, where it is still this message's; left open where it was refused. */
+  const closing = (stash: Stashed, edit: AgentQueueChange) => {
+    void change(edit).then((answer) => {
       if (!("failure" in answer) && held.current === stash.id) giveBack(stash);
     });
   };
@@ -358,18 +356,11 @@ export function useQueueEditing(
       const text = composer.draft.trim();
       const { attachments } = composer;
       if (!hasWordsOrFiles(text, attachments)) return cancel();
-      giveBack(stashed);
-      void change({
+      closing(stashed, {
         change: QUEUE_CHANGE.EDIT,
         messageId: stashed.id,
         text,
         ...(attachments.length === 0 ? undefined : { attachments }),
-      }).then((answer) => {
-        // An edit the queue did not save comes back into the box, where the box holds nothing newer.
-        if ("failure" in answer && draft.current === "") {
-          composer.setDraft(text);
-          composer.setAttachments(() => attachments);
-        }
       });
     },
     steer: () => {
@@ -377,7 +368,7 @@ export function useQueueEditing(
       const text = composer.draft.trim();
       const { attachments } = composer;
       if (!hasWordsOrFiles(text, attachments)) return cancel();
-      steered(stashed, {
+      closing(stashed, {
         change: QUEUE_CHANGE.STEER,
         messageId: stashed.id,
         text,
