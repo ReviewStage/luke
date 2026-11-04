@@ -9,20 +9,25 @@ import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
 import { createTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { oauthClient, oauthClientResource, oauthResource } from "@repo/database/schemas/auth";
 import {
+  joinWorkspace,
   openMigratedPglite,
   openTaskAgent,
   openWorkspace,
   sqlClientOverPglite,
 } from "@repo/database/testing";
+import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
 import { afterEach, vi } from "vitest";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
@@ -38,9 +43,26 @@ import {
   type OAuthClient,
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
-import { NO_GITHUB } from "../testing/github-app-fake.js";
+import {
+  freshInstallation,
+  type GraphqlCall,
+  graphqlAnswering,
+  mutationOf,
+  PUBLISHED,
+  PULL_REQUEST_NODE_ID,
+  publishedPullRequestDrafted,
+  RELAY_FULL_NAME,
+} from "../testing/agents-app-support.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  NO_GITHUB,
+  signInWithGitHub,
+  standingGithubRow,
+} from "../testing/github-app-fake.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpApp, memberMcpAuth, memberMcpIssuer } from "./app.js";
 import {
   MEMBER_MCP_PATH,
@@ -60,7 +82,9 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * against is fetched from the auth service, as on a deployment, through a
  * `fetch` that reaches the in-process handler alone. The SDK's own client
  * drives the server at both revisions it serves. GitHub is reached by no
- * read here, and the model catalog offers nothing. Synthetic accounts.
+ * read here but a change to a pull request's, which answers from a script
+ * as the Pull request tab's own tests script it, and the model catalog
+ * offers nothing. Synthetic accounts and tokens.
  */
 
 const ORIGIN = "https://app.test";
@@ -87,6 +111,14 @@ const MCP_CLIENT: OAuthClient = {
   responseTypes: ["code"],
   type: "web",
 };
+
+/** What a tool tells a client it does where it changes something: each write by its name; every other tool only reads. */
+const WRITE_ANNOTATIONS: ReadonlyMap<string, object> = new Map([
+  [MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION, { destructiveHint: true }],
+]);
+
+/** The member's own GitHub token, as their sign-in through the App left it. */
+const MEMBER_GITHUB_TOKEN = "ghu_member";
 
 /** The protocol revisions the server serves, as the SDK's client is told to speak each. */
 const REVISION = { MODERN: "2026-07-28", LEGACY: "2025-11-25" } as const;
@@ -128,6 +160,11 @@ function goldenOf(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}-input`;
 }
 
+/** The head commit a changes read answers its pull request at. */
+const decodeHead = Schema.decodeUnknownSync(
+  Schema.Struct({ pullRequest: Schema.Struct({ headSha: Schema.String }) }),
+);
+
 /** A tool's answer as the agent reads it: whether it is the tool's error, and its JSON text read. */
 const decodeAnswer = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -165,36 +202,41 @@ function testAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
 
 type TestAuth = ReturnType<typeof testAuth>;
 
-/** The server's group over the test's database and auth service, as a fetch a client is handed, with the clients seeded and the key set reachable. */
-const standing = Effect.gen(function* () {
-  const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
-    Effect.promise(() => opened.close()),
-  );
-  const auth = testAuth(client);
-  const services = Layer.mergeAll(
-    Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
-    NO_GITHUB,
-    modelCatalogOf([]),
-  );
-  yield* seedRows.pipe(Effect.provide(services));
-  // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const request = new Request(input, init);
-    if (!request.url.startsWith(`${ORIGIN}${AUTH_BASE_PATH}/`)) {
-      return Promise.reject(new Error(`this test reaches no network: ${request.url}`));
-    }
-    return auth.handler(request);
+/** The server's group over the test's database, auth service, clock, and the GitHub given, as a fetch a client is handed, with the clients seeded and the key set reachable. */
+const standingOver = (github: Layer.Layer<GitHubApp | HttpClient.HttpClient>) =>
+  Effect.gen(function* () {
+    const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
+      Effect.promise(() => opened.close()),
+    );
+    const auth = testAuth(client);
+    const services = Layer.mergeAll(
+      Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      github,
+      modelCatalogOf([]),
+    );
+    yield* seedRows.pipe(Effect.provide(services));
+    // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const request = new Request(input, init);
+      if (!request.url.startsWith(`${ORIGIN}${AUTH_BASE_PATH}/`)) {
+        return Promise.reject(new Error(`this test reaches no network: ${request.url}`));
+      }
+      return auth.handler(request);
+    });
+    const resourceClient = oauthProviderResourceClient(auth).getActions();
+    const web = HttpRouter.toWebHandler(
+      memberMcpApp(memberMcpAuth(resourceClient, ORIGIN)).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
+    const fetch = (input: string | URL | Request, init?: RequestInit) =>
+      web.handler(new Request(input, init));
+    return { auth, fetch, services };
   });
-  const resourceClient = oauthProviderResourceClient(auth).getActions();
-  const web = HttpRouter.toWebHandler(
-    memberMcpApp(memberMcpAuth(resourceClient, ORIGIN)).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
-  yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
-  const fetch = (input: string | URL | Request, init?: RequestInit) =>
-    web.handler(new Request(input, init));
-  return { auth, fetch, services };
-});
+
+/** The same, over a GitHub nobody reaches. */
+const standing = standingOver(NO_GITHUB);
 
 /** The rows a deployment's seeder writes, the desktop's client and the server's resource, a second resource beside it, and the MCP client linked to both resources. */
 const seedRows = Effect.gen(function* () {
@@ -374,7 +416,7 @@ it.effect(
 );
 
 it.effect.each(Object.values(REVISION))(
-  "an SDK client at %s lists every tool as its golden shows it, each only reading, and runs list_workspaces as the member",
+  "an SDK client at %s lists every tool as its golden shows it, each only reading but the writes, and runs list_workspaces as the member",
   (revision) =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -402,7 +444,7 @@ it.effect.each(Object.values(REVISION))(
           inputSchema: JSON.parse(
             await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
           ),
-          annotations: { readOnlyHint: true },
+          annotations: WRITE_ANNOTATIONS.get(name) ?? { readOnlyHint: true },
         })),
       );
       assert.deepEqual(
@@ -430,7 +472,7 @@ it.effect.each(Object.values(REVISION))(
 );
 
 it.effect(
-  "a member with several workspaces lists the one a list names, reads their own tasks and agents by id, and reads nothing of a workspace they are not in",
+  "a member with several workspaces lists the one a list names, reads their own tasks and agents by id, and reads nothing of a workspace they are not in nor changes an agent's pull request there",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -466,7 +508,7 @@ it.effect(
         }),
       );
       const { client } = yield* connected(fetch, token, REVISION.MODERN);
-      const call = (name: string, args: Record<string, string>) =>
+      const call = (name: string, args: Record<string, unknown>) =>
         Effect.promise(async () => {
           const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
           return { refused: answer.isError === true, text: answer.content[0].text };
@@ -483,6 +525,13 @@ it.effect(
           [MEMBER_MCP_TOOL.READ_TASK, { taskId: rows.strangerTask }],
           [MEMBER_MCP_TOOL.READ_AGENT, { agentId: rows.strangerAgent }],
           [MEMBER_MCP_TOOL.READ_AGENT_CHANGES, { agentId: rows.strangerAgent }],
+          [
+            MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION,
+            {
+              agentId: rows.strangerAgent,
+              change: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
+            },
+          ],
         ] as const,
         ([name, args]) => call(name, args),
       );
@@ -517,6 +566,119 @@ it.effect(
         );
       }
       for (const read of owns) assert.equal(read.refused, false, read.text);
+    }),
+);
+
+it.effect(
+  "an outside agent marks the member's agent's draft ready and merges it against the head read_agent_changes answered, on the member's own GitHub sign-in as the Pull request tab does, and a teammate with no GitHub sign-in is told to sign in, with nothing made",
+  () =>
+    Effect.gen(function* () {
+      const calls: GraphqlCall[] = [];
+      const drafted = publishedPullRequestDrafted(() => true);
+      const installation = freshInstallation();
+      const github = githubReaching(
+        [installation],
+        undefined,
+        undefined,
+        graphqlAnswering(calls, undefined, (sent) =>
+          new URL(sent.url).pathname === `/repos/${RELAY_FULL_NAME}/pulls/${PUBLISHED.number}/files`
+            ? Response.json([])
+            : drafted(sent),
+        ),
+      );
+      const { auth, fetch, services } = yield* standingOver(github.layer);
+      const member = yield* Effect.promise(() => signUp(auth));
+      const teammate = yield* Effect.promise(() => signUp(auth));
+      const agentId = yield* Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        yield* signInWithGitHub(member.userId, {
+          ...standingGithubRow(now),
+          accessToken: MEMBER_GITHUB_TOKEN,
+        });
+        const workspaceId = yield* openWorkspace(member.userId);
+        yield* joinWorkspace(workspaceId, teammate.userId);
+        yield* connectWorkspaceGitHub(workspaceId, installation);
+        const task = yield* createTask(member.userId, {
+          organizationId: workspaceId,
+          name: "Teammate invitations",
+        });
+        const id = yield* openTaskAgent(member.userId, workspaceId, task.id);
+        // The agent pushed its branch to the repository the installation reaches, from which its draft stands open.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({
+              repository: RELAY_FULL_NAME,
+              repositories: [RELAY_FULL_NAME],
+              branch: PUBLISHED.branch,
+            })
+            .where(eq(agentTable.id, id)),
+        );
+        return id;
+      }).pipe(Effect.provide(services));
+      const clientOf = (cookie: string) =>
+        Effect.flatMap(
+          Effect.promise(() =>
+            mintedToken(auth, cookie, {
+              client: MCP_CLIENT,
+              scope: [MEMBER_MCP_SCOPE.MCP],
+              resource: RESOURCE,
+            }),
+          ),
+          (token) => Effect.map(connected(fetch, token, REVISION.MODERN), ({ client }) => client),
+        );
+      const memberClient = yield* clientOf(member.cookie);
+      const teammateClient = yield* clientOf(teammate.cookie);
+      const act = (client: Client, change: Record<string, string>) =>
+        Effect.promise(async () =>
+          decodeAnswer(
+            await client.callTool({
+              name: MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION,
+              arguments: { agentId, change },
+            }),
+          ),
+        );
+
+      const unsigned = yield* act(teammateClient, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW });
+      const ready = yield* act(memberClient, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW });
+      const changes = yield* Effect.promise(async () =>
+        decodeAnswer(
+          await memberClient.callTool({
+            name: MEMBER_MCP_TOOL.READ_AGENT_CHANGES,
+            arguments: { agentId },
+          }),
+        ),
+      );
+      const { headSha } = decodeHead(JSON.parse(changes.content[0].text)).pullRequest;
+      const merged = yield* act(memberClient, {
+        action: PULL_REQUEST_ACTION.MERGE,
+        method: "squash",
+        headSha,
+      });
+      yield* Effect.promise(() => Promise.all([memberClient.close(), teammateClient.close()]));
+
+      assert.equal(unsigned.isError, true);
+      assert.match(unsigned.content[0].text, /sign in with GitHub/u);
+      for (const answer of [ready, merged]) {
+        assert.notEqual(answer.isError, true, answer.content[0].text);
+        assert.deepEqual(JSON.parse(answer.content[0].text), { status: "accepted" });
+      }
+      assert.equal(headSha, PUBLISHED.headSha);
+      const id = PULL_REQUEST_NODE_ID;
+      assert.deepEqual(
+        calls.flatMap((call) => {
+          const mutation = mutationOf(call);
+          return mutation === undefined ? [] : [[mutation, call.variables, call.authorization]];
+        }),
+        [
+          ["markPullRequestReadyForReview", { id }, `Bearer ${MEMBER_GITHUB_TOKEN}`],
+          [
+            "mergePullRequest",
+            { id, method: "SQUASH", head: PUBLISHED.headSha },
+            `Bearer ${MEMBER_GITHUB_TOKEN}`,
+          ],
+        ],
+      );
     }),
 );
 

@@ -27,6 +27,11 @@
  * they have several and it names none; a read of one task, agent, or page
  * by its id is about the workspace that holds it, as the member reaches it.
  *
+ * The one change, `agent_pull_request_action`, makes what an agent's Pull
+ * request tab makes, through the operation the tab's procedure runs
+ * (`../agents/agent-pull-request-procedures.ts`), on the member's own
+ * GitHub sign-in as the tab does, never the App's.
+ *
  * To add a tool, declare it with `memberMcpTool` and list it in
  * `MEMBER_MCP_TOOLS`; its golden is settled by `app.test.ts`.
  */
@@ -43,7 +48,15 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { githubPullRequestNumberSchema } from "@repo/features/github-repositories-wire";
 import { PAGE_OWNER } from "@repo/features/page-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+  type PullRequestWriteAnswer,
+  pullRequestActionRequestSchema,
+} from "@repo/features/pull-request-write-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_BOUNDS, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { describeWire, type StandardSchemaWithJson, standardSchemaOf } from "@repo/wire/effect";
@@ -54,6 +67,7 @@ import {
   READ_AGENT_CHANGES_INPUT,
   runReadAgentChanges,
 } from "../agents/agent-changes-tool.js";
+import { agentPullRequestAction } from "../agents/agent-pull-request-procedures.js";
 import {
   AGENT_CALLER,
   AGENT_TOOL_BOUNDS,
@@ -62,8 +76,10 @@ import {
   type AgentToolServices,
   agentToolRejected,
   CODER_READ_AGENT_TOOL,
+  callerUserId,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
+  orStoreRefusal,
   READ_PAGE_CHARS,
   READ_PAGE_REFUSAL,
   READ_PAGE_TOOL,
@@ -73,7 +89,9 @@ import {
   runReadAgent,
   runReadPage,
   TASKS_LIST_LIMIT,
+  workspaceAgentOf,
 } from "../agents/agent-tools.js";
+import { instancePublishedCache } from "../agents/coder-host/published.js";
 import {
   PLAN_TEXT_READ_CHARS,
   READ_TASK_REFUSAL,
@@ -81,9 +99,15 @@ import {
   runReadTask,
 } from "../agents/task-tools.js";
 import { WORKSPACE_AGENTS_LIST_LIMIT } from "../agents/workspace-agents.js";
-import { type WireRecord, wireUuidSchema } from "../core.js";
+import {
+  ACTION_RESULT_STATUS,
+  HOSTED_API_ERROR,
+  type WireRecord,
+  wireUuidSchema,
+} from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { agentWorkspace } from "../github/workspace-repository.js";
+import type { HostedRefusal } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
@@ -125,6 +149,7 @@ export const MEMBER_MCP_TOOL = {
   READ_AGENT_CHANGES,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
+  AGENT_PULL_REQUEST_ACTION: "agent_pull_request_action",
 } as const;
 
 /** A read's annotations: it changes nothing of the member's. */
@@ -358,7 +383,8 @@ const READ_AGENT_CHANGES_TOOL = memberMcpTool({
     "Read what a coding agent the member can see published, by its id, as its Pull request and " +
     "Changes tabs show it: the repository it works in, the branch it pushed, and the pull " +
     "request from it as GitHub holds it now, with its number, title, link, state " +
-    `(${Object.values(PULL_REQUEST_STATE).join(", ")}), its checks ` +
+    `(${Object.values(PULL_REQUEST_STATE).join(", ")}), the head commit it stands on (headSha), ` +
+    `which a merge names, its checks ` +
     `(${Object.values(CHECK_SUMMARY).join(", ")}), the lines it adds and removes, who opened it, ` +
     "its reviewers and where each stands, its reviews that said something, and every file it " +
     `changes in the order GitHub lists them, each with what became of it ` +
@@ -414,6 +440,122 @@ const MEMBER_READ_PAGE_TOOL = memberMcpTool({
     ),
 });
 
+/**
+ * The kept published answers of this function's instance, made on its first
+ * change: the server is a function of its own, so a change lets go of what
+ * this instance and the agent's row kept, and the hosted router's instances
+ * let go of theirs within `CODER.PUBLISHED_TTL`, as after a change made on
+ * any other instance (`asked-pull-request.ts`'s `forgetPublished`).
+ */
+const KEPT_PUBLISHED = instancePublishedCache();
+
+/** Why a change was not made, in words the agent can act on: the desktop's own where its tab says one. */
+const AGENT_PULL_REQUEST_ACTION_REFUSAL = {
+  SIGN_IN:
+    "Not made: sign in with GitHub to make this change as the member. They hold no GitHub " +
+    `sign-in GitHub takes, which signing in with GitHub again in ${PRODUCT_NAME} mends.`,
+  REFUSED: (words: string) => `Not made: GitHub refused this change, saying: ${words}`,
+  NO_PULL_REQUEST:
+    "Not made: that agent has opened no pull request yet, or its repository holds none of " +
+    "that number.",
+  NOT_REACHABLE:
+    "Not made: the GitHub installation connected to the workspace no longer reaches that " +
+    "agent's repository.",
+  UNANSWERED: "Not made: GitHub could not be reached just now. The call may be made again.",
+} as const;
+
+/** A change names the agent, at most another pull request of its repository, and the change as the agent's Pull request tab asks for it. */
+const AgentPullRequestActionInputSchema = Schema.Struct({
+  agentId: describeWire(
+    wireUuidSchema,
+    `The agent's id, as ${MEMBER_MCP_TOOL.LIST_AGENTS} answered it.`,
+  ),
+  number: Schema.optionalKey(
+    describeWire(
+      githubPullRequestNumberSchema,
+      "Another pull request of the agent's repository, by its number, such as one stacked on " +
+        "its own; leave it out for the agent's own pull request.",
+    ),
+  ),
+  change: describeWire(
+    pullRequestActionRequestSchema,
+    "The change, named by its action, with the fields that action takes.",
+  ),
+});
+
+/** How GitHub took the change, as the agent reads it: accepted where GitHub made it, else the refusal the desktop shows, as the tool's error. */
+function actionAnswerOf(answer: PullRequestWriteAnswer): WireRecord {
+  switch (answer.outcome) {
+    case PULL_REQUEST_WRITE_OUTCOME.DONE:
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    case PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED:
+      return agentToolRejected(AGENT_PULL_REQUEST_ACTION_REFUSAL.SIGN_IN);
+    case PULL_REQUEST_WRITE_OUTCOME.REFUSED:
+      return agentToolRejected(AGENT_PULL_REQUEST_ACTION_REFUSAL.REFUSED(answer.words));
+  }
+}
+
+/** A change that never reached GitHub, in the agent's words: no pull request, a repository out of reach, or GitHub or the store not answering. */
+function unmadeWords(refusal: HostedRefusal): string {
+  switch (refusal.error) {
+    case HOSTED_API_ERROR.NOT_FOUND:
+      return AGENT_PULL_REQUEST_ACTION_REFUSAL.NO_PULL_REQUEST;
+    case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
+      return AGENT_PULL_REQUEST_ACTION_REFUSAL.NOT_REACHABLE;
+    default:
+      return AGENT_PULL_REQUEST_ACTION_REFUSAL.UNANSWERED;
+  }
+}
+
+/**
+ * `agent_pull_request_action`: the change the agent's Pull request tab
+ * makes, through the operation its procedure runs
+ * (`agentPullRequestAction`), on the member's own GitHub sign-in, the
+ * agent's kept published answers let go after it. A merge is one of its
+ * changes and cannot be taken back, so the tool says it may destroy.
+ */
+const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.AGENT_PULL_REQUEST_ACTION,
+  description:
+    "Make one change to the pull request of a coding agent the member can see, by the agent's " +
+    "id, in whichever of the member's workspaces it stands, as the agent's Pull request tab " +
+    "makes it: on GitHub as the member, on their own GitHub sign-in, so GitHub allows what " +
+    "their own account may and nothing more. Name the change by its action " +
+    `(${Object.values(PULL_REQUEST_ACTION).join(", ")}) with the fields that action takes. A ` +
+    "merge and turning auto-merge on name the head commit you saw, as headSha, which " +
+    `${MEMBER_MCP_TOOL.READ_AGENT_CHANGES} answers, so GitHub refuses one against a head pushed ` +
+    "since; an edit of the description names the words it began from, as expectedBody, and " +
+    "writes nothing where GitHub's changed since; a review thread, a comment, and what a " +
+    "reaction is on are named by GitHub's own node ids. The change is made on the agent's own " +
+    "pull request unless number names another of its repository. Answers `accepted` once " +
+    "GitHub made it, or `rejected` and why not: GitHub's own words where it refused, or that " +
+    "the member must sign in with GitHub again.",
+  input: AgentPullRequestActionInputSchema,
+  annotations: { destructiveHint: true },
+  run: ({ agentId, number, change }) =>
+    readAsMember(
+      (userId) => agentWorkspace(userId, { id: agentId }),
+      AGENT_TOOL_REFUSAL.NO_AGENT,
+      (call) =>
+        orStoreRefusal(
+          Effect.gen(function* () {
+            const found = yield* workspaceAgentOf(call.caller, agentId);
+            if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
+            return yield* agentPullRequestAction(
+              KEPT_PUBLISHED,
+              callerUserId(call.caller),
+              found.value.agent,
+              number,
+              change,
+            ).pipe(
+              Effect.map(actionAnswerOf),
+              Effect.catch((refusal) => Effect.succeed(agentToolRejected(unmadeWords(refusal)))),
+            );
+          }),
+        ),
+    ),
+});
+
 /** Every tool the server offers, listed in the order an agent reads them. */
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
@@ -424,4 +566,5 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   READ_AGENT_CHANGES_TOOL,
   MEMBER_READ_PAGE_TOOL,
   MEMBER_LIST_MODELS_TOOL,
+  AGENT_PULL_REQUEST_ACTION_TOOL,
 ];
