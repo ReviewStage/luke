@@ -183,6 +183,7 @@ export const FAILURE_SURFACE = {
   TASK_RENAME: "task.rename",
   TASK_SETTLE: "task.settle",
   TASK_STANDING: "task.standing",
+  TASK_START: "task.start",
   TERMINAL_CREATE: "terminal.create",
   TERMINAL_SHELLS_READ: "terminal_shells.read",
   TERMINAL_STOP: "terminal.stop",

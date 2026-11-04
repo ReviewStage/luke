@@ -135,12 +135,6 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
   readonly confirmGone: (key: Key) => void;
   /**
-   * Takes a write's own answer of a row it made in the read's place, as
-   * `confirmRow` takes a change. A row the read answered already is left as
-   * it answered it, which is as new.
-   */
-  readonly confirmNew: (row: Row) => void;
-  /**
    * Waits until the rows the read answered first satisfy `until`, at once
    * where they do already: how a write whose service hands no transaction
    * keeps what it drew until the read carries it. It settles too once the
@@ -211,10 +205,6 @@ export function answeredCollection<Row extends object, Key extends string>(optio
         const next = new Map(held());
         next.delete(key);
         take(next);
-      },
-      confirmNew: (row: Row) => {
-        const key = options.getKey(row);
-        if (!held().has(key)) take(new Map(held()).set(key, row));
       },
       carried,
     };

@@ -42,12 +42,17 @@ import {
 } from "@repo/features/page-wire";
 import {
   type PlanRevisionsAnswer,
+  startRelationsOf,
   TASK_BLOCK_CHANGE,
+  TASK_CREATE_RELATION_KIND,
+  TASK_PRIORITY,
   TASK_RELATION_KIND,
   TASK_STATUS,
   type Task,
+  type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSkillsAnswer,
+  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
   HOST_LIVE,
@@ -84,6 +89,7 @@ import {
   type TasksSetStandingParams,
   type TasksSkillsAnswer,
   type TasksStartAnswer,
+  type TasksStartRequest,
   type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
@@ -384,6 +390,26 @@ const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as c
 /** Opening or deleting a task names it and nothing else. */
 const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 
+/** The plan a task starts on, empty, as the service makes it. */
+const EMPTY_PLAN = { body: "", assumptions: [] } as const satisfies Task["document"];
+
+/** A start's request as the service is sent it, under the id the host minted for its task where the window named none. */
+type StartRequest = Omit<TasksStartRequest, "quiet"> & { readonly id: string };
+
+/** A start as the host carries it: its request, whether it opens its task, and the row it draws, none where it draws none. */
+interface Start {
+  readonly request: StartRequest;
+  readonly quiet: boolean;
+  readonly row: PlanRow | undefined;
+}
+
+/** Where a start opened its task: the ask of the screen it was, whether it drew the task open before the service answered, and the task the reader stood on before it. */
+interface StartOpened {
+  readonly asked: number;
+  readonly drawn: boolean;
+  readonly before: string | undefined;
+}
+
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
@@ -467,7 +493,9 @@ export type TasksClient = Pick<
 };
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now" | "createId"> & {
+    runMode: Pick<RunMode, "sendsNetwork">;
+  };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
@@ -1486,6 +1514,121 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return blocker?.status === undefined || !FINISHED.has(blocker.status);
   }
 
+  /** A member's name as the list already knows it, from a task they made or are assigned; none where it names them nowhere. */
+  function listedName(userId: string): string | undefined {
+    for (const row of view.tasks) {
+      if (row.createdBy?.userId === userId) return row.createdBy.name;
+      if (row.assignee?.userId === userId) return row.assignee.name;
+    }
+    return undefined;
+  }
+
+  /**
+   * A started task's row of the list as its request draws it, under the id
+   * minted for it, before the service answers: what the request names, a
+   * new task's defaults as the service sets them where it names none, each
+   * member by the name the list already knows them by, and no number, which
+   * only the service gives. A task joining a tree takes the tree's
+   * repository, as the service gives it, where the list holds the task it
+   * joins by. None where the request names no workspace, since the service
+   * then starts it in the account's first, which only it knows, or where
+   * nobody is signed in.
+   */
+  function startedRow(request: StartRequest): PlanRow | undefined {
+    const ownerId = dependencies.accountId();
+    const { workspaceId } = request;
+    if (workspaceId === undefined || ownerId === undefined) return undefined;
+    const relations = startRelationsOf(request);
+    const related = (kind: TaskCreateRelationKind) =>
+      relations.flatMap((each) => (each.kind === kind ? [each.taskId] : []));
+    const listedTask = (taskId: string | undefined) =>
+      taskId === undefined ? undefined : view.tasks.find((row) => row.id === taskId);
+    const parentTaskId =
+      request.parentTaskId ?? related(TASK_CREATE_RELATION_KIND.SUB_TASK_OF).at(0);
+    const tree =
+      listedTask(parentTaskId) ?? listedTask(related(TASK_CREATE_RELATION_KIND.PARENT_OF).at(0));
+    const status = request.status ?? TASK_STATUS.TODO;
+    const now = kernel.now();
+    const name = request.name ?? "";
+    return {
+      id: request.id,
+      workspaceId,
+      name: name.length > 0 ? name : UNTITLED_TASK_NAME,
+      repository: tree === undefined ? (request.repository ?? null) : tree.repository,
+      ownerId,
+      ownerName: listedName(ownerId) ?? null,
+      assigneeId: request.assigneeId ?? null,
+      assigneeName:
+        request.assigneeId === undefined ? null : (listedName(request.assigneeId) ?? ""),
+      pinnedAt: null,
+      pinPosition: null,
+      completedAt: FINISHED.has(status) ? now : null,
+      createdAt: now,
+      updatedAt: now,
+      status,
+      priority: request.priority ?? TASK_PRIORITY.NONE,
+      parentTaskId: parentTaskId ?? null,
+      ...(request.mode === undefined ? undefined : { mode: request.mode }),
+      ...(related(TASK_CREATE_RELATION_KIND.BLOCKED_BY).some(blocksNow)
+        ? { blocked: true }
+        : undefined),
+    };
+  }
+
+  /**
+   * Opens a starting task at once under the id minted for it, as the list
+   * draws its row, on its empty plan laid as held (`documents.started`), so
+   * the window turns to it in the frame of the press, before the service has
+   * made it. Where the list draws no row of it, as for a start that names no
+   * workspace, it opens once the service answers.
+   */
+  function startOpened(taskId: string): Effect.Effect<StartOpened> {
+    return Effect.gen(function* () {
+      screenAsks += 1;
+      const opened = { asked: screenAsks, before: view.activeTaskId };
+      const listed = view.tasks.find((row) => row.id === taskId);
+      if (listed === undefined) return { ...opened, drawn: false };
+      const { agents: _agents, ...row } = listed;
+      // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
+      yield* documents.started({ ...row, document: EMPTY_PLAN });
+      write({ activeTaskId: taskId });
+      return { ...opened, drawn: true };
+    });
+  }
+
+  /**
+   * Puts the reader back on the task they stood on, or on none, where a
+   * start that opened its task at once was refused and nothing else was
+   * asked of the screen since; the plan it laid is let go either way.
+   */
+  function startedBack(opened: StartOpened, taskId: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (screenAsks === opened.asked && view.activeTaskId === taskId) {
+        const { activeTaskId: _started, ...rest } = view;
+        view = opened.before === undefined ? rest : { ...rest, activeTaskId: opened.before };
+        publish();
+      }
+      return opened.drawn ? documents.unfollow(taskId) : Effect.void;
+    });
+  }
+
+  /**
+   * The task a start opened, or opens now, laid as the service made it,
+   * where the start is still the newest ask of the screen or its task still
+   * stands open. A start the developer went on from, to another task or
+   * another start, opens nothing. Note that a task drawn open before the
+   * service made it has its record followed again, since a seal asked
+   * before then finds no task and ends.
+   */
+  function startedAs(opened: StartOpened, task: Task): Effect.Effect<void> {
+    return Effect.gen(function* () {
+      if (screenAsks !== opened.asked && view.activeTaskId !== task.id) return;
+      yield* documents.started(task);
+      if (opened.drawn) yield* documents.retry(task.id);
+      write({ activeTaskId: task.id });
+    });
+  }
+
   /**
    * Holds what a write's answer says of a task's row, or that it is gone,
    * over the list until the list carries its transaction
@@ -1722,6 +1865,58 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             }),
           )
         : Effect.succeed({ refused: { changed: false } }),
+  };
+
+  /**
+   * A task started, its row drawn the moment it is asked under the id the
+   * host minted for it, which the list adopts while it stands, and taken
+   * back where the service refused it; a start that is not quiet opens its
+   * task at once, and puts the reader back where they were if refused. The
+   * agent a start asks for waits on the service, as remote work does. Where
+   * the list hands no wait, or the service answers a start sent again with
+   * no transaction, the row as the service answered it is taken in the
+   * list's place.
+   */
+  const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
+    kind: PLAN,
+    keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
+    // Note that a start that draws no row names no key, so its change is never drawn.
+    change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
+    send: (start) =>
+      gate()
+        ? Effect.gen(function* () {
+            const opened = start.quiet ? undefined : yield* startOpened(start.request.id);
+            return yield* serial(
+              Effect.gen(function* () {
+                const created = yield* served(client.create(start.request));
+                if (!created.ok) {
+                  const { failure, localAgentRefusal } = created;
+                  if (opened !== undefined) yield* startedBack(opened, start.request.id);
+                  return {
+                    refused: carried<TasksStartAnswer>(
+                      localAgentRefusal === undefined
+                        ? { failure }
+                        : { failure, localAgentRefusal },
+                    ),
+                  };
+                }
+                const { task, agent, txid } = created.answer;
+                if (opened !== undefined) yield* startedAs(opened, task);
+                const row = planRowOf(task);
+                return {
+                  answer: carried<TasksStartAnswer>({
+                    planId: task.id,
+                    ...(agent === undefined ? undefined : { agentStart: agent }),
+                  }),
+                  txid,
+                  ...(row === undefined ? undefined : { taken: { made: row } }),
+                };
+              }),
+            );
+          })
+        : Effect.succeed({
+            refused: carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+          }),
   };
 
   /**
@@ -2440,62 +2635,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* serial(Effect.sync(closeActive));
         return {};
       }),
-    [GATEWAY_METHOD.TASKS_START]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // A start draws its task's row the moment it is asked, under the id minted for it where the
+    // window named none, and stands until the list carries it (`started`). A quiet start, a
+    // group's quick add or New task set to stay, opens nothing, and answers with its agent's
+    // start where it asked for one; any other opens its task at once.
+    [GATEWAY_METHOD.TASKS_START]: declaredMethod(dependencies.pool, started, (params: WireRecord) =>
+      Effect.map(
+        readParams(
           tasksStartRequestSchema,
           params,
           "starting a task names it, and its repository where it has one",
-        );
-        if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { quiet, ...request } = read;
-        // A quiet start, a group's quick add or New task set to stay, opens nothing: its row is
-        // drawn from the service's answer at once and stands until the list carries the task,
-        // and it answers with its agent's start where it asked for one.
-        if (quiet === true) {
-          const started = yield* serial(served(client.create(request)));
-          if (!started.ok) {
-            const { failure, localAgentRefusal } = started;
-            return carried<TasksStartAnswer>(
-              localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
-            );
-          }
-          const { task, agent, txid } = started.answer;
-          const row = planRowOf(task);
-          yield* row === undefined ? listed(txid) : taskList.collections.made(row, txid);
-          return carried<TasksStartAnswer>({
-            planId: task.id,
-            ...(agent === undefined ? undefined : { agentStart: agent }),
-          });
-        }
-        // Note that a start answers once the task is drawn open rather than once the list carries
-        // it, because nothing draws its row from the answer, so a list from before the write only
-        // lacks a row it has not drawn yet, and the window opens the task's agent at once.
-        screenAsks += 1;
-        const asked = screenAsks;
-        return yield* serial(
-          Effect.gen(function* () {
-            const started = yield* served(client.create(request));
-            if (!started.ok) {
-              const { failure, localAgentRefusal } = started;
-              return carried<TasksStartAnswer>(
-                localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
-              );
-            }
-            const { task, agent } = started.answer;
-            const answer = carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
-            // A start the developer went on from, to another task or another start, opens nothing.
-            if (screenAsks !== asked) return answer;
-            // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
-            yield* documents.started(task);
-            write({ activeTaskId: task.id });
-            return answer;
-          }),
-        );
-      }),
+        ),
+        ({ quiet, ...asked }): Start => {
+          const request = { ...asked, id: asked.id ?? kernel.createId() };
+          // Note that a start behind a closed gate draws nothing, since it never reaches the service.
+          return { request, quiet: quiet === true, row: gate() ? startedRow(request) : undefined };
+        },
+      ),
+    ),
     [GATEWAY_METHOD.TASKS_DELETE]: declaredMethod(
       dependencies.pool,
       deleted,

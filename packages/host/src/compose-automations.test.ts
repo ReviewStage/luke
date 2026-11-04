@@ -34,7 +34,7 @@ import { entityPool } from "@repo/sync";
 import { unparsedWire, type WireRecord, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import type { AppAutomationReads } from "./app-state.js";
@@ -202,14 +202,16 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
   // A workspace with no automations, and none of their runs, until a test says otherwise.
   live.list.set({ automations: [] });
   live.workspaceRuns.set({ runs: [] });
-  /** What a change, a create, and a Run now answer, which a test may replace. */
+  /** What a change, a create, and a Run now answer, and what a create waits on before it answers, which a test may replace. */
   const replies: {
     change: Effect.Success<ReturnType<AutomationsClient["change"]>>;
     create: Effect.Success<ReturnType<AutomationsClient["create"]>>;
+    createAnswered: Effect.Effect<void>;
     run: Effect.Success<ReturnType<AutomationsClient["runNow"]>>;
   } = {
     change: { automation: SUMMARY },
     create: { automation: SUMMARY },
+    createAnswered: Effect.void,
     run: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND },
   };
   const answer =
@@ -220,7 +222,11 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
         return value();
       });
   const client: AutomationsClient = {
-    create: answer("create", () => replies.create),
+    create: (params) =>
+      Effect.andThen(
+        Effect.suspend(() => replies.createAnswered),
+        answer("create", () => replies.create)(params),
+      ),
     change: answer("change", () => replies.change),
     remove: answer("remove", () => ({ deleted: true }) as const),
     runNow: answer("run", () => replies.run),
@@ -262,6 +268,8 @@ function subject(
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
+        // Note that the id the host mints for a new automation is the one the service answers it under.
+        createId: () => AUTOMATION_ID,
         hostedServiceBaseUrl: "https://service.example",
         emit: (kind, payload) => emitted.push({ kind, payload }),
       },
@@ -328,7 +336,7 @@ it.effect("behind a closed account gate, or on a run that sends nothing, nothing
 );
 
 it.effect(
-  "a write's params reach the service as the window named them, and the window hears the answer whole",
+  "a write's params reach the service as the window named them, a new automation under the id the host minted, and the window hears the answer whole",
   () =>
     Effect.gen(function* () {
       const { call, asked } = yield* subject();
@@ -348,7 +356,7 @@ it.effect(
       assert.deepEqual(ran, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(deleted, { deleted: true });
       assert.deepEqual(asked.slice(0, 2), [
-        ["create", CREATE],
+        ["create", { ...CREATE, id: AUTOMATION_ID }],
         ["change", change],
       ]);
     }),
@@ -583,16 +591,25 @@ it.effect(
 );
 
 it.effect(
-  "a new automation stands on its held list as its create answers, before Vespin Sync hands the list a wait",
+  "a new automation stands on its held list from the press, before the service answers, and one the service refused is taken back",
   () =>
     Effect.gen(function* () {
-      const { call, listed } = yield* subject();
+      const { call, listed, replies } = yield* subject();
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
+      const answered = yield* Deferred.make<void>();
+      replies.createAnswered = Deferred.await(answered);
+      replies.create = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
 
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE);
+      const create = yield* Effect.forkChild(call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE));
+      yield* settled;
+      const drawn = listed().at(-1);
+      yield* Deferred.succeed(answered, undefined);
+      const refused = yield* Fiber.join(create);
 
-      assert.deepEqual(listed().at(-1), [{ id: AUTOMATION_ID, enabled: true }]);
+      assert.deepEqual(drawn, [{ id: AUTOMATION_ID, enabled: true }], "drawn before it answers");
+      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(listed().at(-1), [], "taken back once refused");
     }),
 );
 
