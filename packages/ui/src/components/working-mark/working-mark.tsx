@@ -1,27 +1,29 @@
+import { useMotionHeld } from "../../use-motion-held.js";
+import { useBeat } from "../time/time-clock.js";
+
 /**
  * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
  *
  * Every place that says an agent is working draws this mark. It stands inside
  * the 16px icon seat: eight 3px cells lapped round a 3×3 grid, 2px apart.
- * Each cell steps to the next on one beat, so the motion is stepped frames of
- * `transform` alone and never lays anything out. Reduced motion and a capture
- * run hold it on `--ui-loop-motion`, on a frame chosen to show the chase
- * mid-lap rather than its first. A capture that drops the animation outright
- * falls back on each pixel's own resting `transform`, the very same frame, so
- * a still mark always lights four cells and reads as working. The mark itself
+ * Each pixel steps to the next cell on the one 200ms beat every mark shares
+ * (`useBeat`), lapping the eight cells in 1.6s, so the motion is stepped
+ * frames of `transform` alone, never lays anything out, and costs the window
+ * a frame only when a pixel moves, where a CSS animation would tick it every
+ * vsync. Reduced motion and a capture run hold it (`useMotionHeld`) on its
+ * resting frame, chosen to show the chase mid-lap rather than its first, so a
+ * still mark always lights four cells and reads as working. The mark itself
  * is decorative; the seat it stands in names it. Its side is 16px unless a
  * container sets `--ui-working-mark-size`.
  *
  * It is drawn in the Tailwind theme's utilities: its size is fixed by the
  * `viewBox` the mark always carries, asked on the mark with that attribute
- * so a glyph's seat around it never stretches the grid; the lap is
- * `working-mark.css`'s.
+ * so a glyph's seat around it never stretches the grid.
  */
 
 /**
  * The pixels that move: each chaser and the fainter tail one cell behind it,
- * with the track cell it rests on when still. `working-mark.css` delays each
- * one to hold the same cell.
+ * with the track cell it rests on when still and steps on from.
  */
 const WORKING_DOTS = [
   { dot: "lead", restsOn: 1, tail: false },
@@ -33,7 +35,7 @@ const WORKING_DOTS = [
 /** One cell's side, in CSS pixels. */
 const CELL = 3;
 
-/** One step from a cell to the next, cell and gap, in CSS pixels; the keyframes in `working-mark.css` step by it. */
+/** One step from a cell to the next, cell and gap, in CSS pixels. */
 const PITCH = 5;
 
 /** The mark's side, in CSS pixels: the 16px icon seat. */
@@ -65,15 +67,41 @@ function cellAt(column: number, row: number): CellCorner {
   return { x: INSET + column * PITCH, y: INSET + row * PITCH };
 }
 
-/** The `transform` that sets a pixel on the track cell at `index`, from the first cell it is drawn on. */
-function restingTransform(index: number): string {
-  const [column, row] = TRACK[index] ?? TRACK[0];
+/** The `transform` that sets a pixel on the track cell at `index`, lapping past the last, from the first cell it is drawn on. */
+function cellTransform(index: number): string {
+  const [column, row] = TRACK[index % TRACK.length] ?? TRACK[0];
   return `translate(${column * PITCH}px, ${row * PITCH}px)`;
+}
+
+/** The moving pixels, `beat` cells on from where they rest. */
+function WorkingDots({ beat }: { readonly beat: number }): React.JSX.Element {
+  return (
+    <>
+      {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
+        <rect
+          key={dot}
+          className={tail ? "ui-working-mark-dot opacity-60" : "ui-working-mark-dot"}
+          data-dot={dot}
+          style={{ transform: cellTransform(restsOn + beat) }}
+          {...cellAt(0, 0)}
+          width={CELL}
+          height={CELL}
+          rx={CELL / 4}
+        />
+      ))}
+    </>
+  );
+}
+
+/** The moving pixels stepping on the shared beat. */
+function LappingDots(): React.JSX.Element {
+  return <WorkingDots beat={useBeat()} />;
 }
 
 /** The mark, hidden from a reader, since the seat it stands in says it. */
 export function WorkingMark(): React.JSX.Element {
-  const start = cellAt(0, 0);
+  // Note that a held mark never reads the beat at all, and one already standing stops as the setting changes.
+  const held = useMotionHeld();
   return (
     <svg
       className="ui-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"
@@ -92,18 +120,7 @@ export function WorkingMark(): React.JSX.Element {
           rx={CELL / 4}
         />
       ))}
-      {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
-        <rect
-          key={dot}
-          className={tail ? "ui-working-mark-dot opacity-60" : "ui-working-mark-dot"}
-          data-dot={dot}
-          style={{ transform: restingTransform(restsOn) }}
-          {...start}
-          width={CELL}
-          height={CELL}
-          rx={CELL / 4}
-        />
-      ))}
+      {held ? <WorkingDots beat={0} /> : <LappingDots />}
     </svg>
   );
 }

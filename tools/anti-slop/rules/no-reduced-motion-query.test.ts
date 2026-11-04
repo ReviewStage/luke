@@ -25,7 +25,7 @@ tester.run("no-reduced-motion-query", noReducedMotionQueryRule, {
     // The hook that reads the tokens again when the setting changes is the one listener.
     {
       code: 'window.matchMedia("(prefers-reduced-motion: reduce)");',
-      filename: path.join(REPOSITORY_ROOT, "packages/panel/src/use-motion-held.ts"),
+      filename: path.join(REPOSITORY_ROOT, "packages/ui/src/use-motion-held.ts"),
     },
     // A test stands the setting as a fixture.
     {

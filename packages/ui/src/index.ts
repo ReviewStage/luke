@@ -192,3 +192,4 @@ export * from "./near-view.js";
 export * from "./picture-expand.js";
 export * from "./status-tone.js";
 export * from "./tokens/surface.js";
+export * from "./use-motion-held.js";

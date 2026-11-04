@@ -27,11 +27,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTabCursor } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { useMotionHeld } from "@repo/ui";
 import { Clock, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type CSSProperties, useMemo } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { useMotionHeld } from "../use-motion-held.js";
 
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
