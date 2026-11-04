@@ -29,7 +29,7 @@ import { CatalogSection } from "../section";
  * its mark alone; a name in the code face; removable filters, each
  * springing in as one is added and scaling out as its × lifts it, and
  * removable pills whose words open what they name; and a
- * branch cut in its middle, its start fading where the cut stands.
+ * branch cut in its middle, an ellipsis where the cut stands.
  */
 
 const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;

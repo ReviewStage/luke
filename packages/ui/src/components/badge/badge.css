@@ -1,6 +1,6 @@
 /* badge.css -- what the badge's utilities cannot say (`badge.tsx`, drawn by
    `../../shadcn/badge.tsx` in the shared Tailwind theme): its words given up
-   under a room's width, a filled label's fade, and its figures. */
+   under a room's width, and its figures. */
 
 @layer components {
   /* A badge often holds a count or a time, which must not shift as it ticks. */
@@ -33,18 +33,5 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
-  }
-
-  /* A filled badge's words cut short fade out over their last few pixels,
-     at their own end: the left, where they read right to left. Note that
-     the fade stays here, because it turns on the writing direction
-     (`:dir()`), and Tailwind's mask utilities compose the gradient through
-     variables rather than drawing it, which the label fade's test reads. */
-  .ui-badge-line[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
-  }
-
-  .ui-badge-line[data-overflow="true"]:dir(rtl) {
-    mask-image: linear-gradient(to right, transparent, #000 var(--ui-label-fade));
   }
 }

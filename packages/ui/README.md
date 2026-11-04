@@ -231,8 +231,8 @@ The content and text components are drawn the same way: `Text` and
 `GlyphSlot`, `SelectionBar`, `SavedTick`, `RollingNumber`, and `WorkingMark`
 are drawn in the theme's utilities with no shadcn base.
 `Shortcut` stands on shadcn's kbd, its chord a `KbdGroup` and each key a
-`Kbd`. Their sheets keep their keyframes and the rules that play them, a cut
-name's fade, and the copy glyph's answer to the chip around it;
+`Kbd`. Their sheets keep their keyframes and the rules that play them, and
+the copy glyph's answer to the chip around it;
 `.ui-visually-hidden` keeps its rule, since other components put the class
 on words of their own. `Prose` and the window's Markdown (`prose.css`) stay a
 sheet, because they style generated HTML element by element, and so does
@@ -407,7 +407,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-color` | A hex, `rgb()`, `hsl()`, `oklch()`, or `color()` color, or a palette utility | Read the palette role (`--ui-color-*`, `bg-primary`); a color the palette lacks is added to `palettes.css`. A provider mark's brand ink (`.integration-mark-*`), a mask's alpha, and a terminal's or code theme's ink (`--terminal-*`, `--code-*`, `--integration-ink-*`) pass |
 | `literal-type` | A literal `font-size`, `font-weight`, or `font`, or `text-sm`, `font-medium`, `text-[13px]` | Draw the words with `Text`, or read a type role (`--ui-type-*-size`, `--ui-weight-*`, `text-body`) |
 | `literal-radius` | A literal corner, `50%` among them, or `rounded`, `rounded-md` | Read a radius role (`--ui-control-radius`, `--ui-radius-full`, `rounded-menu`); a factor of a role (`calc(var(--ui-control-height) / 2)`) passes |
-| `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade))`, as `Chip` and `ListRow` do |
+| `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line running to a row's or a tab's edge fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade))`, as `ListRow` does. A name inside a chip, pill, or badge ends in "…" through `Text`'s `truncate`, as `ChipName` and `InlineRef` do |
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--ui-duration-*`, `--ui-*-delay`). An endless loop whose `animation-play-state` answers `--ui-loop-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--ui-spring`, `--ui-spring-fast`, `--ui-motion-exit`, or `--ui-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@repo/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
