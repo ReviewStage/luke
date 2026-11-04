@@ -6,6 +6,7 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
+import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
@@ -24,6 +25,7 @@ import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
+  accountPreferenceSync,
   agentBrowserTabSync,
   agentDelegationSync,
   agentPinSync,
@@ -242,6 +244,24 @@ export const macCommandsLive = defineLiveQuery({
     Option.map(macCommandsLiveStatement(userId, macCommandKindsRead(kinds)), (commands) => ({
       commands,
     })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * The account's preferences row, its default agent, chapters model, and
+ * Slack notifications as stored, woken by a write to any column a view
+ * reads, which names the account. Note that a Start with Runs on, an
+ * enroll, and a register rewrite only the row's runs-on pick and a settings
+ * push its instant beside what stood, which the capture ignores, so neither
+ * wakes it, nor the account's other reads.
+ */
+export const accountPreferencesLive = defineLiveQuery({
+  name: "accountPreferences",
+  params: ["userId"],
+  reads: [accountPreferenceSync],
+  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
+  statements: ({ userId }) =>
+    Option.map(accountPreferencesLiveStatement(userId), (preferences) => ({ preferences })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -868,6 +888,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   tasksLive,
   workspacesLive,
   macCommandsLive,
+  accountPreferencesLive,
   integrationStatusesLive,
   inboxLive,
   inboxItemsLive,

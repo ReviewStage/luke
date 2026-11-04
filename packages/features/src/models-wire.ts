@@ -1,4 +1,4 @@
-import { Schema as EffectSchema } from "effect";
+import { Duration, Schema as EffectSchema } from "effect";
 import { AGENT_BOUNDS, contextWindowSchema } from "./agent-wire.js";
 import {
   DEVICE_KIND,
@@ -43,6 +43,14 @@ export const MODEL_PROVIDER = {
 } as const;
 
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
+
+/**
+ * How long a read of the models is kept before it is asked again: AI
+ * Gateway's catalog by each service instance (`model-catalog.ts`), and the
+ * models the account is offered by the host that holds them for its
+ * windows, so neither sits on a catalog longer than the other.
+ */
+export const MODEL_CATALOG_TTL = Duration.hours(1);
 
 /** What a first-time account starts an agent on until it chooses, by the provider whose credential pays for it (`agentFallbackChoice`). */
 export const AGENT_FALLBACK_CHOICE = {

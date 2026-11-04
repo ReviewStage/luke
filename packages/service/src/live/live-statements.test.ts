@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
@@ -78,6 +79,7 @@ function liveStatements() {
     "account.integrations": Option.getOrThrow(
       integrationStatusesLiveStatement(USER_ID, new Date(0)),
     ),
+    "account.preferences": Option.getOrThrow(accountPreferencesLiveStatement(USER_ID)),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),

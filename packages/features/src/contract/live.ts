@@ -26,7 +26,8 @@
  * several accounts; and one workspace's memories, named by `?workspaceId=`,
  * each with its keeper's name and whether the reader may forget it; and the
  * skills the account sees there, named the same way, each with whether it
- * may manage it. Each
+ * may manage it; and the account's preferences row, its default agent,
+ * chapters model, and Slack notifications as stored. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -41,6 +42,7 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
+import { accountPreferencesLiveAnswerSchema } from "../account-preferences-live.js";
 import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
@@ -314,4 +316,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
+  accountPreferences: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_ACCOUNT_PREFERENCES }))
+    .input(liveReadSchema)
+    .output(EffectSchema.flip(accountPreferencesLiveAnswerSchema)),
 };

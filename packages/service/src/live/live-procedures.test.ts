@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
@@ -25,10 +26,16 @@ import {
   openWorkspace,
   startTask,
 } from "@repo/database/testing";
+import {
+  accountPreferencesLiveAnswerSchema,
+  accountPreferencesLiveRowsSchema,
+  accountPreferencesOfLiveRows,
+} from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
   installedSkillsLiveAnswerSchema,
@@ -263,6 +270,40 @@ it.layer(getTestDB())("the account's live reads", (it) => {
             body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
           },
           "a read naming another account is signed out",
+        );
+      }),
+  );
+
+  it.effect(
+    "the account's preferences are answered polled for the bearer's own account and carry none of another account's row",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        yield* writeAccountPreferences(dana, {
+          agent: { model: "openai/gpt-6.1-sol", effort: "medium" },
+          chaptersModel: CHAPTERS_MODEL.SONNET,
+        });
+        yield* writeAccountPreferences(eli, {
+          agent: { model: "anthropic/claude-opus-5.5", effort: "high" },
+          chaptersModel: CHAPTERS_MODEL.OPUS,
+        });
+
+        const answered = yield* ask({ bearer: dana, path: "/api/live/account-preferences" });
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(accountPreferencesLiveAnswerSchema)(answered.body);
+        assert.deepEqual(
+          accountPreferencesOfLiveRows(
+            Schema.decodeUnknownSync(accountPreferencesLiveRowsSchema)({
+              preferences: answer.queries.preferences.rows,
+            }).preferences,
+          ),
+          {
+            agent: { model: "openai/gpt-6.1-sol", effort: "medium" },
+            chaptersModel: CHAPTERS_MODEL.SONNET,
+            slackNotifications: true,
+          },
+          "dana's own row alone",
         );
       }),
   );
