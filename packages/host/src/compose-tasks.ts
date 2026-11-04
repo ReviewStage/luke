@@ -99,6 +99,8 @@ import {
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceLeaveAnswer,
+  type TasksWorkspaceMemberRemoveParams,
+  type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSlackBotAnswer,
@@ -237,7 +239,11 @@ import {
   slackBotRepository,
 } from "./workspace-integrations-follow.js";
 import { workspaceInvitationsReads } from "./workspace-invitations-read.js";
-import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
+import {
+  type MemberMoved,
+  type MemberWritten,
+  workspaceMembersReads,
+} from "./workspace-members-read.js";
 import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
 
 /**
@@ -1443,10 +1449,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Each workspace's people the windows draw, and the few drawn latest, told
    * on the app state every window draws (`LIVE_READ.WORKSPACE_MEMBERS`):
    * followed from the first window's hold, so a surface drawn again draws
-   * them from where they stand, and drawn over by a member write's answer
-   * until the read carries it (`workspace-members-read.ts`). A workspace the
-   * account no longer reaches is followed no longer, until every window lets
-   * it go and one holds it anew.
+   * them from where they stand, in the sync engine's pool, where a member
+   * write is drawn over them until the read carries it
+   * (`workspace-members-read.ts`). A workspace the account no longer
+   * reaches is followed no longer, until every window lets it go and one
+   * holds it anew.
    */
   const membersReads = yield* workspaceMembersReads({
     gate,
@@ -1455,6 +1462,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         client.workspaces.peopleLive(workspaceId, userId, poll, after),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
+    pool: dependencies.pool,
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
   const memberHolds = yield* FiberMap.make<string>();
@@ -1568,11 +1576,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Each workspace's pending invitations an owner's or an admin's windows
    * draw, and the few drawn latest, told on the app state every window draws
    * (`LIVE_READ.WORKSPACE_INVITATIONS`): followed from the first window's
-   * hold, built again as each expires, and drawn over by an invite's or a
-   * cancel's answer until the read carries it
-   * (`workspace-invitations-read.ts`). A workspace the account no longer
-   * owns or administers is followed no longer, as one it left is, until
-   * every window lets it go and one holds it anew.
+   * hold, built again as each expires, in the sync engine's pool, where a
+   * cancel, and an invite's answer, is drawn over them until the read
+   * carries it (`workspace-invitations-read.ts`). A workspace the account
+   * no longer owns or administers is followed no longer, as one it left is,
+   * until every window lets it go and one holds it anew.
    */
   const invitationsReads = yield* workspaceInvitationsReads({
     gate,
@@ -1581,9 +1589,73 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         client.workspaces.invitationsLive(workspaceId, userId, poll, after),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
+    pool: dependencies.pool,
   });
   /** The windows' hold on each workspace's invitations, one fiber standing until let go. */
   const invitationHolds = yield* FiberMap.make<string>();
+
+  /**
+   * A member write's call carried to the service where the gate stands open:
+   * the members it answers, and what it says of each of `userIds`, or why it
+   * refused.
+   */
+  function memberWritten(
+    call: Effect.Effect<
+      WorkspaceCallResult<readonly WorkspaceMember[]>,
+      never,
+      HttpClient.HttpClient
+    >,
+    userIds: readonly string[],
+  ): Effect.Effect<MemberWritten<WireValue>> {
+    if (!gate()) {
+      return Effect.succeed({
+        refused: carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED),
+      });
+    }
+    return Effect.map(workspaceCall(call), (written) =>
+      written.ok
+        ? {
+            answer: carried<TasksWorkspaceMembersAnswer>({ members: written.answer }),
+            moved: membersMoved(written.answer, userIds),
+          }
+        : { refused: carried<TasksWorkspaceMembersAnswer>({ failure: written.failure }) },
+    );
+  }
+
+  /** A member's role changed, drawn on their row at once, kept until the people's read carries it. */
+  const memberRoleChanged = membersReads.write<TasksWorkspaceMemberRoleParams, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    moves: ({ userId, role }) => [{ userId, role }],
+    send: ({ workspaceId, userId, role }) =>
+      memberWritten(client.workspaces.changeRole(workspaceId, userId, role), [userId]),
+  });
+
+  /** A member removed, drawn gone at once, kept until the people's read no longer carries them. */
+  const memberRemoved = membersReads.write<TasksWorkspaceMemberRemoveParams, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    moves: ({ userId }) => [{ userId, gone: true }],
+    send: ({ workspaceId, userId }) =>
+      memberWritten(client.workspaces.removeMember(workspaceId, userId), [userId]),
+  });
+
+  /**
+   * An invitation canceled, drawn gone at once, kept until the invitations'
+   * read no longer carries it. Note that the list it answers is never laid
+   * whole, since the read alone says what stands.
+   */
+  const invitationCanceled = invitationsReads.cancel<WireValue>(({ workspaceId, invitationId }) =>
+    gate()
+      ? Effect.map(
+          served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
+          (pending) =>
+            pending.ok
+              ? {
+                  answer: carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer }),
+                }
+              : { refused: carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure }) },
+        )
+      : Effect.succeed({ refused: carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED) }),
+  );
 
   /**
    * When whether GitHub is connected was last asked, none since a sign-out;
@@ -3674,39 +3746,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           changed.ok ? { repositories: changed.answer } : { failure: changed.failure },
         );
       }),
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: declaredMethod(
+      dependencies.pool,
+      memberRemoved,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceMemberRemoveParamsSchema,
           params,
           "removing a member names the workspace and the member",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read;
-        const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
-        if (!remaining.ok)
-          return carried<TasksWorkspaceMembersAnswer>({ failure: remaining.failure });
-        yield* membersReads.moved(workspaceId, [{ userId, gone: true }]);
-        return carried<TasksWorkspaceMembersAnswer>({ members: remaining.answer });
-      }),
+        ),
+    ),
     // A role changed moves no task; the people's read carries it, as a
-    // removal's, drawn from its answer until then.
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // removal's, drawn at once until then.
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: declaredMethod(
+      dependencies.pool,
+      memberRoleChanged,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceMemberRoleParamsSchema,
           params,
           "changing a role names the workspace, the member, and the role",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId, role } = read;
-        const changed = yield* workspaceCall(
-          client.workspaces.changeRole(workspaceId, userId, role),
-        );
-        if (!changed.ok) return carried<TasksWorkspaceMembersAnswer>({ failure: changed.failure });
-        yield* membersReads.moved(workspaceId, membersMoved(changed.answer, [userId]));
-        return carried<TasksWorkspaceMembersAnswer>({ members: changed.answer });
-      }),
+        ),
+    ),
     // Note that a handover changes the account's own role in the workspace,
     // which the view's workspaces carry and every owner's and admin's act is
     // drawn from, and which the follow carries; it moves no task. The heir's
@@ -3766,8 +3827,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return carried<TasksWorkspaceLeaveAnswer>({ left: true });
       }),
     // An invitation made or canceled moves no workspace or task, so nothing
-    // else is read with it; the invitations' read carries it, drawn from its
-    // answer until then where a window holds them.
+    // else is read with it; the invitations' read carries it, an invitation
+    // made drawn from its answer until then where a window holds them.
     [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3779,28 +3840,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, email, role } = read;
         const made = yield* served(client.workspaces.invite(workspaceId, email, role));
         if (!made.ok) return carried<TasksWorkspaceInvitationAnswer>({ failure: made.failure });
-        yield* invitationsReads.moved(workspaceId, { made: made.answer });
+        yield* invitationsReads.made(workspaceId, made.answer);
         return carried<TasksWorkspaceInvitationAnswer>({ invitation: made.answer });
       }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: declaredMethod(
+      dependencies.pool,
+      invitationCanceled,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceInvitationCancelParamsSchema,
           params,
           "canceling an invitation names the workspace and the invitation",
-        );
-        if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, invitationId } = read;
-        const pending = yield* served(
-          client.workspaces.cancelInvitation(workspaceId, invitationId),
-        );
-        if (!pending.ok) {
-          return carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure });
-        }
-        // Note that the list it answers is never laid whole, since the read alone says what stands.
-        yield* invitationsReads.moved(workspaceId, { canceled: invitationId });
-        return carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer });
-      }),
+        ),
+    ),
   };
 
   return {

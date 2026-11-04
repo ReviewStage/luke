@@ -266,12 +266,9 @@ const GATEWAY_ACT = {
 
 /** The row writes still served by hand, by the change that declares each; only ever cut. */
 const UNDECLARED_ROW_WRITES = [
-  // Workspace, member, and invitation writes, declared by W5.
+  // Workspace writes, declared by W5; the Slack bot's notifications, an account preference, by P28, and its repository and channel by P14.
   GATEWAY_METHOD.WORKSPACES_RENAME,
   GATEWAY_METHOD.WORKSPACES_SLUG_SET,
-  GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE,
-  GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE,
-  GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL,
   GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET,
   GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS,
   // Settings writes, declared by W6.

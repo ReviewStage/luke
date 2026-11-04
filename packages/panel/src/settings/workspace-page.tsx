@@ -173,11 +173,6 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** The roles an invitation offers, in the order the role's menu lists them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
-/** The writes the invitations list takes, one out at a time. */
-const INVITATION_WRITE = { INVITE: "invite", CANCEL: "cancel" } as const;
-
-type InvitationWrite = (typeof INVITATION_WRITE)[keyof typeof INVITATION_WRITE];
-
 /** What each role may do, as the role menu's second lines say it. */
 const ROLE_DETAIL = {
   [INVITATION_ROLE.MEMBER]: "Works on tasks and agents",
@@ -454,10 +449,12 @@ function useMembersRead(workspace: Workspace) {
  * then in its ⋯ Copy link to their person page, their profile, where the
  * window offers one, and what the reader may do to them (`memberActs`).
  * Make admin and Make member take hold at once, since either is undone by
- * the other; Make owner and Remove from workspace ask first. A role change
- * refused is said under the row. A row with no ⋯ in a list where others
- * have one keeps the ⋯'s room, so every role ends in the same place. The
- * row is `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * the other; Make owner and Remove from workspace ask first, and a removal
+ * confirmed takes the row away at once, as the host draws it on the press.
+ * A role change refused is said under the row, and a removal refused, its
+ * row back, in a toast. A row with no ⋯ in a list where others have one
+ * keeps the ⋯'s room, so every role ends in the same place. The row is
+ * `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -472,16 +469,19 @@ function MemberRow({
   /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
   slotted: boolean;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { act, press } = useAct();
   const workspaceId = workspace.id;
   const { userId } = member;
   const may = memberActs(workspace, member, userId === readerId);
   const [refusal, setRefusal] = useState<string>();
   const answered = () => ACCEPTED;
+  // Note that the dialog lets go at once, since the row it stands in goes with the removal the host draws on the press.
   const remove = useConfirmDialog(
     { subject: may.remove, surfaceOpen: true },
-    () =>
-      act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId }).then(answered, refusedWith),
+    () => {
+      void press(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId });
+      return Promise.resolve(ACCEPTED);
+    },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_MEMBER_REMOVE, { workspaceId }),
   );
   const makeOwner = useConfirmDialog(
@@ -967,10 +967,12 @@ function RoleChip({
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * first in the accent rather than red: inviting the address again undoes it,
- * but the link already sent to the invitee stops working. A refusal is
- * said under the form. The form is `@repo/ui`'s `TextField`, the role's
- * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
- * led by the face, through `MenuRow`, Copy link its outline `Button`.
+ * but the link already sent to the invitee stops working. An invite refused
+ * is said under the form; a cancel is drawn by the host on the press, and
+ * one refused, its invitation back, is said in a toast. The form is
+ * `@repo/ui`'s `TextField`, the role's chip, and Invite its outline
+ * `Button`; each pending one is a `SettingsRow` led by the face, through
+ * `MenuRow`, Copy link its outline `Button`.
  */
 function Invitations({
   workspaceId,
@@ -980,7 +982,7 @@ function Invitations({
   /** Whether the reader owns the workspace, the one role that invites an admin. */
   owner: boolean;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { act, press } = useAct();
   const copy = useCopyToast();
   const {
     rows: pending,
@@ -992,17 +994,16 @@ function Invitations({
   const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
-  const [writing, setWriting] = useState<InvitationWrite>();
-  const busy = writing !== undefined;
+  const [busy, setBusy] = useState(false);
   // Note that the press reads a ref rather than `busy`, because a second
   // press can land before the render that would disable the button.
   const sending = useRef(false);
-  // Note that one write runs at a time, invite or cancel, and what it moves
-  // is drawn by the host from its answer, so nothing here lays it.
-  const write = (which: InvitationWrite, made: () => Promise<unknown>, done?: () => void) => {
+  // Note that one invite runs at a time, and what it moves is drawn by the
+  // host from its answer, so nothing here lays it.
+  const write = (made: () => Promise<unknown>, done?: () => void) => {
     if (sending.current) return;
     sending.current = true;
-    setWriting(which);
+    setBusy(true);
     setNote(undefined);
     made()
       .then(
@@ -1011,7 +1012,7 @@ function Invitations({
       )
       .finally(() => {
         sending.current = false;
-        setWriting(undefined);
+        setBusy(false);
       });
   };
 
@@ -1032,16 +1033,13 @@ function Invitations({
       return;
     }
     write(
-      INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
       () => setEmail(""),
     );
   };
 
   const cancel = (invitationId: string) =>
-    write(INVITATION_WRITE.CANCEL, () =>
-      act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
-    );
+    void press(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId });
 
   // Note that the question goes with its invitation, canceled or accepted meanwhile.
   const [canceling, setCanceling] = useState<WorkspaceInvitation>();
@@ -1086,9 +1084,8 @@ function Invitations({
                   <Button
                     type={BUTTON_TYPE.SUBMIT}
                     variant={BUTTON_VARIANT.PRIMARY}
-                    busy={writing === INVITATION_WRITE.INVITE}
+                    busy={busy}
                     busyLabel="Inviting"
-                    disabled={writing === INVITATION_WRITE.CANCEL}
                   >
                     Invite
                   </Button>
