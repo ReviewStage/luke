@@ -97,6 +97,12 @@ export interface ReloadMenu {
   onReload: (window: BaseWindow) => void;
 }
 
+/** A development build's label, the branch it was cut from, as Developer's item shows it: drawn or not, and the press that turns it the other way. */
+export interface BuildLabelMenu {
+  shown: boolean;
+  onShow: (shown: boolean) => void;
+}
+
 /** The short words a title leaves lower case after its first. */
 const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "or", "the", "to"]);
 
@@ -315,19 +321,24 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
 
 /**
  * View's Developer submenu: the window chosen over's own tools, toggled by
- * the system's role, docked as Chrome docks them.
+ * the system's role, docked as Chrome docks them; and, where `buildLabel` is
+ * given, Show Build Label, which hides the build's sidebar chip and Dock band
+ * for a demo and brings them back, ticked while they are drawn.
  */
-function developerItem(): MenuItemConstructorOptions {
-  return {
-    label: "Developer",
-    submenu: [
-      {
-        role: "toggleDevTools",
-        label: "Developer Tools",
-        accelerator: shortcutAccelerator(DEVELOPER_TOOLS_CHORD),
-      },
-    ],
+function developerItem(buildLabel: BuildLabelMenu | undefined): MenuItemConstructorOptions {
+  const tools: MenuItemConstructorOptions = {
+    role: "toggleDevTools",
+    label: "Developer Tools",
+    accelerator: shortcutAccelerator(DEVELOPER_TOOLS_CHORD),
   };
+  if (buildLabel === undefined) return { label: "Developer", submenu: [tools] };
+  const label: MenuItemConstructorOptions = {
+    type: "checkbox",
+    label: "Show Build Label",
+    checked: buildLabel.shown,
+    click: () => buildLabel.onShow(!buildLabel.shown),
+  };
+  return { label: "Developer", submenu: [tools, SEPARATOR, label] };
 }
 
 /**
@@ -345,7 +356,8 @@ function developerItem(): MenuItemConstructorOptions {
  * the people who make the app are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), a command item is
  * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
- * Developer submenu only where `developerTools` is true. New Task and ⌘0
+ * Developer submenu only where `developerTools` is true, with Show Build
+ * Label in it only where `buildLabel` is given. New Task and ⌘0
  * bring a closed window back, and the Window menu holds an item named for
  * the app that does, only where `panel` is given, and Reload asks before it
  * loses unsaved edits only where `reload` is.
@@ -358,8 +370,13 @@ export function appMenuTemplate(
   panel?: PanelMenu,
   reload?: ReloadMenu,
   named: (command: KeyedCommand) => string = (command) => APP_SHORTCUTS[command].label,
+  buildLabel?: BuildLabelMenu,
 ): MenuItemConstructorOptions[] {
-  return gated(fullMenuTemplate(appName, update, developerTools, panel, reload), shown, named);
+  return gated(
+    fullMenuTemplate(appName, update, developerTools, panel, reload, buildLabel),
+    shown,
+    named,
+  );
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -411,7 +428,7 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, the panel window, and the reload. */
+/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, the panel window, the reload, and the build's label. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
@@ -419,9 +436,10 @@ interface MenuBarState {
   readonly developerTools: boolean;
   readonly panel: PanelMenu | undefined;
   readonly reload: ReloadMenu | undefined;
+  readonly buildLabel: BuildLabelMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the developer tools offered, the panel window, or the reload. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the developer tools offered, the panel window, the reload, or the build's label. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
   | {
@@ -430,7 +448,8 @@ export type MenuBarChange =
     }
   | { readonly developerTools: boolean }
   | { readonly panel: PanelMenu }
-  | { readonly reload: ReloadMenu };
+  | { readonly reload: ReloadMenu }
+  | { readonly buildLabel: BuildLabelMenu };
 
 /**
  * The menu bar's one drawer: it draws the menus from what it was last told,
@@ -454,6 +473,7 @@ export function menuBarDrawer(
     developerTools: false,
     panel: undefined,
     reload: undefined,
+    buildLabel: undefined,
   };
   let drawn = false;
   return (change) => {
@@ -463,6 +483,7 @@ export function menuBarDrawer(
       next.developerTools !== state.developerTools ||
       next.panel !== state.panel ||
       next.reload !== state.reload ||
+      next.buildLabel !== state.buildLabel ||
       JSON.stringify(next.experiments) !== JSON.stringify(state.experiments) ||
       JSON.stringify(next.capabilities) !== JSON.stringify(state.capabilities);
     if (drawn && !moved) return;
@@ -477,6 +498,7 @@ export function menuBarDrawer(
         state.panel,
         state.reload,
         (command) => shortcutLabel(command, state.experiments),
+        state.buildLabel,
       ),
     );
   };
@@ -489,6 +511,7 @@ function fullMenuTemplate(
   developerTools: boolean,
   panel?: PanelMenu,
   reload?: ReloadMenu,
+  buildLabel?: BuildLabelMenu,
 ): MenuItemConstructorOptions[] {
   return [
     {
@@ -584,7 +607,7 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.PREVIOUS_TASK),
         commandItem(APP_COMMAND.NEXT_TASK),
-        ...(developerTools ? [SEPARATOR, developerItem()] : []),
+        ...(developerTools ? [SEPARATOR, developerItem(buildLabel)] : []),
       ],
     },
     {
