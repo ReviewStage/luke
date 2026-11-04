@@ -7,7 +7,7 @@ import {
 import {
   AGENT_MACHINE,
   type AgentAttachment,
-  type AgentSummary,
+  type ListedAgent,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
@@ -120,6 +120,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  type ActedResult,
   type ActHandle,
   askKept,
   firstRefusal,
@@ -886,8 +887,8 @@ export interface TasksControl {
   onPinAgent: (agentId: string, pinned: boolean) => void;
   /** The account's pins of agents on a plan, the archived ones left out, which the sidebar's Pinned section draws beside the pinned plans; none while the list is not followed live. */
   taskAgentPins: readonly TaskAgentPin[];
-  /** Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not. */
-  liveAgents: readonly AgentSummary[] | undefined;
+  /** Every agent the list followed live carries, on a plan or with none, the archived ones among them, each with its own workspace and repository; none while it is not. */
+  liveAgents: readonly ListedAgent[] | undefined;
   /** The pull request of every agent the list followed live carries that opened one, as its row keeps it; none while it is not. */
   listedPullRequests: readonly ListedPullRequest[] | undefined;
   /**
@@ -1929,27 +1930,13 @@ export function useTasksTab(input: {
 
   // A fixture's tasks are deleted nowhere, as they are read from nowhere. A
   // delete that landed says nothing, since the task leaving the list says it;
-  // a refusal is said in the dialog that asked, unless the tab went away while
-  // the delete was out and took the dialog with it.
-  const shownNow = useRef(shown);
-  shownNow.current = shown;
-  const deleteTask = async (taskId: string): Promise<ActionResult> => {
+  // a refusal is said where the question that asked it stands, or in a toast
+  // where the task leaving took it away (`use-refusal-heard.ts`).
+  const deleteTask = async (taskId: string): Promise<ActedResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await askKept(act(ACT_KIND.TASKS_DELETE, { taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    if (!shownNow.current) {
-      toast({
-        words: DELETE_REFUSED_NOTE,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        failure: {
-          surface: FAILURE_SURFACE.TASK_DELETE,
-          cause: deleted.cause,
-          about: { taskId },
-        },
-      });
-    }
-    return DELETE_REFUSED;
+    return { ...DELETE_REFUSED, cause: deleted.cause };
   };
 
   // A fixture's tasks are renamed nowhere, as they are read from nowhere.

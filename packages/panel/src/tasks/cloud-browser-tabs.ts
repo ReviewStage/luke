@@ -1,111 +1,43 @@
 /**
- * cloud-browser-tabs.ts -- the Browser tabs open in coding agents' cloud browsers, as the side panel lists them: one agent's on its page, or a task's agents' on the task's, read from the service while open, then followed live.
+ * cloud-browser-tabs.ts -- the Browser tabs open in coding agents' cloud browsers, as the side panel lists them: one agent's on its page, or a task's agents' on the task's, held by the host while the panel lists them.
  *
  * The service keeps every tab of every agent's browser
  * (`@repo/features/agent-browser-tab-wire`), so the panel lists them on any
  * client and after a relaunch. What the panel lists them for is its holder
  * (`BrowserTabsPlace`): the agent an agent's page shows, on a task or on
  * none, or the task a task's panel stands beside, every one of its agents'
- * tabs together. The tabs are
- * read once, then followed over Neon Realtime through the host
- * (`TASKS_BROWSER_TABS_FOLLOW`), which polls the read where Realtime fails it
- * and tells the tabs again as a takeover lapses, so the agent's pointer on a
- * tab is drawn within a moment of its move. A follow the host refused, or
- * one that ended, is read and followed afresh `CLOUD_BROWSER_TABS_AGAIN`
- * later, so a panel whose follow broke reads the tabs on that beat as it
- * once did. Every reader of one holder shares one read and one follow; a read
- * or a follow the host did not answer keeps the list as it last stood. What a tab says (its address and title) is
- * drawn and held nowhere past the read: no trace, count, or app state (root
- * `AGENTS.md`'s cloud browser line).
+ * tabs together. The host holds the tabs in app state while a panel lists
+ * them (`LIVE_READ.BROWSER_TABS`), followed over Neon Realtime and told
+ * again as a takeover lapses, so the agent's pointer on a tab is drawn
+ * within a moment of its move; and it keeps them among the eight let go
+ * latest, so a panel listing them again draws them at once. Every panel on
+ * one holder shares the host's one follow. A tab's address and title reach
+ * this member's windows alone, and never a trace, a counted event, or a
+ * fixture.
  *
  * A tab the member asks for from the side panel's "+" stands first as a
  * draft in this window alone (`startCloudDraft`), bound to the coding agent
  * whose browser it is to open in, and opens nothing until its bar opens an
  * address (`cloud-browser-pane.tsx`). The tab the service then answers is
- * listed from that moment until the read or the follow first lists it, so
- * the panel lands on it before Realtime has told it.
+ * listed from that moment until the held list first lists it, so the panel
+ * lands on it before Realtime has told it.
  */
 
-import { useAtomValue } from "@effect/atom-react";
 import {
   type AgentBrowserTab,
   type BrowserTabsPlace,
   browserTabsPlaceId,
 } from "@repo/features/agent-browser-tab-wire";
-import { ACT_KIND } from "@repo/host/acts";
-import { Duration, Effect, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { Duration } from "effect";
 import { useEffect, useSyncExternalStore } from "react";
-import { askAct } from "../act.js";
-import { rendererRuntime } from "../renderer-runtime.js";
-
-/** How long after a follow broke or ended the tabs are read and followed again. */
-export const CLOUD_BROWSER_TABS_AGAIN = Duration.seconds(5);
+import { useHostRead } from "../use-host-read.js";
 
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);
 
 /** A holder with no cloud Browser tab, the same array every render. */
 const NO_TABS: readonly AgentBrowserTab[] = [];
-
-/** One read of the holder's tabs; none where the host refused it. */
-function readTabs(place: BrowserTabsPlace): Effect.Effect<readonly AgentBrowserTab[] | undefined> {
-  return Effect.promise(() =>
-    askAct(ACT_KIND.TASKS_BROWSER_TABS, place).then(
-      (answer) => answer.tabs,
-      () => undefined,
-    ),
-  );
-}
-
-/**
- * The holder's tabs as the host's follow tells them, none for a change it
- * could not read; the follow ends quietly where the host refused it, and is
- * let go as the stream is.
- */
-function followedTabs(
-  place: BrowserTabsPlace,
-): Stream.Stream<readonly AgentBrowserTab[] | undefined> {
-  return Stream.unwrap(
-    Effect.map(
-      Effect.tryPromise(() => askAct(ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, place)),
-      (opened) => Stream.fromAsyncIterable(opened, (cause) => cause),
-    ),
-  ).pipe(
-    Stream.map((answer) => ("tabs" in answer ? answer.tabs : undefined)),
-    Stream.ignore,
-  );
-}
-
-/**
- * The holder's tabs as a read answers them, then as each change the follow
- * tells; read and followed again on the beat once the follow ends.
- */
-function tabsOf(place: BrowserTabsPlace) {
-  return rendererRuntime.atom(
-    Stream.concat(Stream.fromEffect(readTabs(place)), followedTabs(place)).pipe(
-      Stream.repeat(Schedule.spaced(CLOUD_BROWSER_TABS_AGAIN)),
-      Stream.filter((tabs): tabs is readonly AgentBrowserTab[] => tabs !== undefined),
-    ),
-  );
-}
-
-/** One read and follow of each holder's tabs, by the agent or the task. */
-const tabsAtom = {
-  task: Atom.family((taskId: string) => tabsOf({ taskId })),
-  agent: Atom.family((agentId: string) => tabsOf({ agentId })),
-};
-
-/** The holder's one read and follow. */
-function tabsAtomOf(place: BrowserTabsPlace) {
-  return "taskId" in place ? tabsAtom.task(place.taskId) : tabsAtom.agent(place.agentId);
-}
-
-/** Reads nothing, for a panel that lists no cloud Browser tab. */
-const unreadAtom = Atom.make<AsyncResult.AsyncResult<readonly AgentBrowserTab[]>>(
-  AsyncResult.initial(),
-);
 
 /**
  * A cloud Browser tab the member asked for from the "+" that opens nothing
@@ -120,7 +52,7 @@ export interface CloudBrowserDraft {
 /** A holder with no draft, the same array every render. */
 const NO_DRAFTS: readonly CloudBrowserDraft[] = [];
 
-/** The tabs this window opened, by the holder's id, that no read has listed yet; a new map at each change. */
+/** The tabs this window opened, by the holder's id, that the held list has not listed yet; a new map at each change. */
 let opened: ReadonlyMap<string, readonly AgentBrowserTab[]> = new Map();
 
 /** The drafts this window holds, by the holder's id, in the order asked for; a new map at each change. */
@@ -142,7 +74,7 @@ function setOpened(next: ReadonlyMap<string, readonly AgentBrowserTab[]>): void 
   told();
 }
 
-/** Notes a tab the member opened in an agent's browser from the holder's panel, listed until a read lists it. */
+/** Notes a tab the member opened in an agent's browser from the holder's panel, listed until the held list lists it. */
 export function noteOpenedCloudTab(place: BrowserTabsPlace, tab: AgentBrowserTab): void {
   const key = browserTabsPlaceId(place);
   const standing = (opened.get(key) ?? NO_TABS).filter((each) => each.id !== tab.id);
@@ -181,7 +113,7 @@ export function useCloudBrowserDrafts(
   return listing ? read : NO_DRAFTS;
 }
 
-/** The listed tabs, then those opened here that no read has listed yet. */
+/** The listed tabs, then those opened here that the held list has not listed yet. */
 function withOpened(
   listed: readonly AgentBrowserTab[],
   mine: readonly AgentBrowserTab[],
@@ -193,19 +125,19 @@ function withOpened(
 /**
  * The holder's cloud Browser tabs, the oldest first: the agent's its page
  * shows, or the open task's agents'; none while unread, and none at all
- * where `listing` is off: no holder, or a panel that draws none. A tab
- * opened here stands from its open, and is let go of once a read lists it,
- * so one its agent closes afterwards goes.
+ * where `listing` is off: no holder, or a panel that draws none. Held by
+ * this panel while it lists them (`useHostRead`). A tab opened here stands
+ * from its open, and is let go of once the held list lists it, so one its
+ * agent closes afterwards goes.
  */
 export function useCloudBrowserTabs(
   place: BrowserTabsPlace | undefined,
   listing: boolean,
 ): readonly AgentBrowserTab[] | undefined {
-  const read = useAtomValue(listing && place !== undefined ? tabsAtomOf(place) : unreadAtom);
+  const listed = useHostRead(LIVE_READ.BROWSER_TABS, listing ? place : undefined).rows;
   const key = place === undefined ? undefined : browserTabsPlaceId(place);
   const openedHere = () => (key === undefined ? NO_TABS : (opened.get(key) ?? NO_TABS));
   const mine = useSyncExternalStore(hear, openedHere, openedHere);
-  const listed = AsyncResult.isSuccess(read) ? read.value : undefined;
   useEffect(() => {
     if (key === undefined || listed === undefined || mine.length === 0) return;
     const left = mine.filter((tab) => !listed.some((each) => each.id === tab.id));

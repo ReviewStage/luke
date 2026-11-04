@@ -30,6 +30,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
+import { layScrollerOut } from "../testing/scroller.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { useInboxWaiting } from "./places-waiting.js";
@@ -881,22 +882,7 @@ test("End reaches the last task of a List longer than the window, though its row
     task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
   );
   const page = await mountPage(chores);
-  const box = scroller(page);
-  let top = 0;
-  // The scroller shows the window's height of rows, and a write to it is heard as a scroll, as the browser hears one.
-  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 768 });
-  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 40 * 36 });
-  Object.defineProperty(box, "scrollTop", {
-    configurable: true,
-    get: () => top,
-    set: (to: number) => {
-      top = to;
-      box.dispatchEvent(new Event("scroll"));
-    },
-  });
-  box.scrollTo = ((options: ScrollToOptions) => {
-    box.scrollTop = options.top ?? top;
-  }) as typeof box.scrollTo;
+  layScrollerOut(scroller(page), 768, 40 * 36);
   const drawn = () => groups(page).flatMap(([, keys]) => keys);
   assert.ok(!drawn().includes("ACME-40"), "the last task's row is not drawn");
 

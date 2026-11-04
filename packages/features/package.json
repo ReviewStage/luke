@@ -40,6 +40,7 @@
     "./installed-skill-wire": "./src/installed-skill-wire.js",
     "./video-signature": "./src/video-signature.js",
     "./media-signature": "./src/media-signature.js",
+    "./agent-origin-live": "./src/agent-origin-live.js",
     "./agent-pictures-model": "./src/agent-pictures-model.js",
     "./agent-replay": "./src/agent-replay.js",
     "./agent-runtime-models": "./src/agent-runtime-models.js",

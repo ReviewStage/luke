@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
-  ARCHIVE_DRAWN,
   type DevicePresenceAnswerView,
   INBOX_SCOPE_KIND,
   TRANSCRIPT_KIND,
@@ -254,6 +253,7 @@ function fakeService() {
     scope: polledLive(SCOPE_PARTS),
     account: polledLive(ACCOUNT_PARTS),
     items: polledLive(ITEMS_PARTS),
+    origin: polledLive(["origin"]),
   };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
@@ -416,7 +416,7 @@ function fakeService() {
         return { agent: AGENT };
       }),
     delete: (agentId) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`delete:${agentId}`);
         return { deleted: true as const, txid: "9102" };
       }),
@@ -446,6 +446,10 @@ function fakeService() {
         return CHANGES;
       }),
     pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    agentOriginLive: (agentId, _userId, poll, after) => {
+      if (poll !== true) asked.push(`agent-origin-live:${agentId}`);
+      return poll === true ? live.origin.poll(after) : Effect.succeed(live.origin.first());
+    },
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -882,26 +886,16 @@ function subject(
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
         ),
+      /** Every telling of the agents' origins the host holds for the windows, whole, in order. */
+      origins: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.AGENT_ORIGINS_CHANGED ? [event.payload] : [],
+        ),
       open: composer.open,
       reset: composer.reset,
     };
   });
 }
-
-it.effect("a delete waits for the task list to carry its transaction before it answers", () =>
-  Effect.gen(function* () {
-    const waited: (string | undefined)[] = [];
-    const { call } = yield* subject({
-      listed: (txid) => Effect.sync(() => void waited.push(txid)),
-    });
-
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
-      deleted: true,
-      txid: "9102",
-    });
-    assert.deepEqual(waited, ["9102"]);
-  }),
-);
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
@@ -2394,6 +2388,39 @@ it.effect(
 );
 
 it.effect(
+  "an agent's origin is read once however many holds stand on it, held again after a let go reads nothing, and a sign-out tells none held",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, live, origins, reset } = yield* subject();
+      const agent = { agentId: AGENT_ID };
+      live.origin.set({
+        origin: [
+          {
+            origin: { firing: { kind: "webhook", bytes: 11 }, prompt: "Triage it.", body: "{}" },
+            runnerName: null,
+          },
+        ],
+      });
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* settled;
+      assert.deepEqual(origins().at(-1), {
+        [AGENT_ID]: { rows: { prompt: "Triage it.", body: "{}" } },
+      });
+
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, agent);
+      yield* settled;
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* settled;
+      assert.deepEqual(asked, [`agent-origin-live:${AGENT_ID}`]);
+
+      yield* reset;
+      yield* settled;
+      assert.deepEqual(origins().at(-1), {});
+    }),
+);
+
+it.effect(
   "a sign-out lets every held inbox go and tells none held, and the gate opening again reads what the windows still hold",
   () =>
     Effect.gen(function* () {
@@ -2985,7 +3012,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and an archive a dialog waits on draws nothing until it is answered",
+  "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and a delete draws the agent gone before the service answers",
   () =>
     Effect.gen(function* () {
       const drawn: (readonly AgentSummary[])[] = [];
@@ -3023,24 +3050,20 @@ it.effect(
 
       const held = yield* Deferred.make<void>();
       holdChanges(Deferred.await(held));
-      const asking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
-          agentId: AGENT_ID,
-          archived: false,
-          drawn: ARCHIVE_DRAWN.ON_ANSWER,
-        }),
+      const deleting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }),
       );
       yield* settled;
-      const dialog = standing()?.archivedAt;
+      const deleted = standing();
       yield* Deferred.succeed(held, undefined);
-      yield* Fiber.join(asking);
+      yield* Fiber.join(deleting);
 
       assert.deepEqual(
         [pressed?.title, pressed?.archivedAt, pressed?.model, pressed?.effort],
         ["Sign-out button", NOW, "openai/gpt-6.1-sol", "low"],
       );
       assert.deepEqual(pressed?.disabledServers, ["linear"]);
-      assert.equal(dialog, NOW, "the dialog's unarchive is not drawn while it is out");
+      assert.equal(deleted, undefined, "the delete is drawn while it is out");
     }),
 );
 

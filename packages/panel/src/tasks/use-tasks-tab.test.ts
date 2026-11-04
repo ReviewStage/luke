@@ -70,6 +70,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handState, holdPages, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
@@ -2622,7 +2623,7 @@ function listed(): TasksView["tasks"][number] {
 
 /** The task listed and open, its agents as the list followed live carries them. */
 function withAgents(agents: readonly AgentSummary[]): TasksView {
-  return { ...OPEN, tasks: [listed()], taskAgents: agents };
+  return { ...OPEN, tasks: [listed()], taskAgents: agents.map((agent) => listedAgent(agent)) };
 }
 
 /** The view once the list is read with nothing open, holding `plans`. */
@@ -2860,7 +2861,7 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
       .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
-  const live = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const live = { ...listRead([listed()]), taskAgents: [listedAgent(RUNNING_AGENT)] };
   const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
   /** A launch over the kept pin, the service answering its pin as `answer` does. */
   const launch = async (
@@ -3305,7 +3306,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
           tasks: {
             ...AGENT_TASK,
             tasks: [{ ...listed(), id: OTHER_TASK_ID }],
-            taskAgents: [started],
+            taskAgents: [listedAgent(started)],
           },
         });
         return Promise.resolve({ agent: started });
@@ -3556,27 +3557,15 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
 
-/** A follow the host holds open and never tells a change on. */
-const heldFollow = {
-  next: () => new Promise<never>(() => undefined),
-  return: async () => ({ done: true, value: undefined }) as const,
-  [Symbol.asyncIterator]() {
-    return heldFollow;
-  },
-  [Symbol.asyncDispose]: async () => undefined,
-};
-
 /**
  * A registry whose atoms count on this clock, as the window's count on its
- * own. Note that the task's cloud Browser tabs are answered as none and
- * followed quietly, because a read refused is tried again on its beat, and a
- * day passed on this clock would run every one of those beats.
+ * own. Note that the host's holds, the task's cloud Browser tabs among them,
+ * are answered quietly with nothing laid, because a hold refused is opened
+ * again on a backoff, and a day passed on this clock would run every one of
+ * those waits.
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
-  fakeActPort({
-    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [] }),
-    [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(heldFollow as never),
-  });
+  fakeActPort({});
   return AtomRegistryModule.make({
     initialValues: [
       [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],

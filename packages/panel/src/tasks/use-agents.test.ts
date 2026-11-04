@@ -50,6 +50,7 @@ interface Standing {
   startsWithoutRepository?: boolean;
   listedAgents?: readonly AgentSummary[];
   listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository">;
+  list?: { readonly read: boolean; readonly failed: boolean; readonly onRetry: () => void };
 }
 
 /** Any kind the hook asks. */
@@ -115,6 +116,7 @@ function mount(
       startsWithoutRepository: held.startsWithoutRepository,
       listedAgents: held.listedAgents,
       listedPage: held.listedPage,
+      list: held.list,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -420,131 +422,54 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
   assert.equal(after.control().draft, undefined);
 });
 
-test("with no plan open, the agent named is read as its page and held as a list of one, which the followed list's row of it stands over once it carries it", async () => {
-  const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.RUNNING };
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  tab.answer(ACT_KIND.AGENTS_PAGE, {
-    agent: {
-      ...taskless,
-      automationId: null,
-      workspaceId: "workspace-1",
-      repository: "acme/relay",
-    },
+test("with no plan open, the agent the list carries is drawn from its row, on a task as with none, reading nothing of it, and a / reads its own repository's skills through the workspace the list names", async () => {
+  handState(experimentsOn(EXPERIMENT.SKILLS));
+  // An agent on a task works in its own repository, which its task's may have moved on from since it started.
+  const place = { id: AGENT, workspaceId: "workspace-1", repository: "acme/relay-legacy" };
+  const tab = mount({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [STARTED],
+    listedPage: place,
+  });
+  tab.answer(ACT_KIND.TASKS_SKILLS, {
+    skills: { repository: "acme/relay-legacy", branch: "main", skills: [] },
   });
   await tab.mount();
 
   assert.deepEqual(
-    tab.asked.filter((each) => each.kind !== ACT_KIND.AGENTS_PULL_REQUEST),
-    [{ kind: ACT_KIND.AGENTS_PAGE, payload: { agentId: AGENT } }],
-    "no plan's list is read, only the agent named",
+    tab.control().agents?.map((agent) => [agent.id, agent.planId]),
+    [[AGENT, TASK]],
   );
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => [agent.id, agent.planId, agent.status]),
-    [[AGENT, null, AGENT_STATUS.RUNNING]],
-  );
-  await tab.stand({ listedAgents: [{ ...taskless, title: "Sweep the flaky tests" }] });
+  const read = tab.control().readSkills ?? assert.fail("the agent's box offers its skills");
+  await read();
+  assert.deepEqual(tab.asked, [
+    {
+      kind: ACT_KIND.TASKS_SKILLS,
+      payload: { workspaceId: "workspace-1", repository: "acme/relay-legacy" },
+    },
+  ]);
+
+  // The list's row of it moving moves the page's agent too.
+  await tab.stand({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [{ ...STARTED, title: "Sweep the flaky tests" }],
+    listedPage: place,
+  });
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
 });
 
-test("with no plan open, a / reads the agent's own repository's skills through the workspace its page names, there being no plan to read them by", async () => {
-  handState(experimentsOn(EXPERIMENT.SKILLS));
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  tab.answer(ACT_KIND.AGENTS_PAGE, {
-    agent: {
-      ...STARTED,
-      planId: null,
-      automationId: null,
-      workspaceId: "workspace-1",
-      repository: "acme/relay",
-    },
-  });
-  const skills = { skills: { repository: "acme/relay", branch: "main", skills: [] } };
-  tab.answer(ACT_KIND.TASKS_SKILLS, skills);
-  await tab.mount();
-
-  const read = tab.control().readSkills;
-  assert.ok(read, "the agent's box offers its repository's skills");
-  const answered = await read();
-
-  assert.deepEqual(answered, { skills: [] });
-  assert.deepEqual(
-    tab.asked.filter((each) => each.kind === ACT_KIND.TASKS_SKILLS),
-    [
-      {
-        kind: ACT_KIND.TASKS_SKILLS,
-        payload: { workspaceId: "workspace-1", repository: "acme/relay" },
-      },
-    ],
-  );
-});
-
-test("with no plan open, an agent the list carries with its workspace is not read as a page, and a / reads its repository's skills through the workspace the list names", async () => {
-  handState(experimentsOn(EXPERIMENT.SKILLS));
-  const taskless = { ...STARTED, planId: null };
+test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
+  const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.COMPLETED };
   const tab = mount({
     taskId: undefined,
     agentId: AGENT,
     repository: null,
     listedAgents: [taskless],
     listedPage: { id: AGENT, workspaceId: "workspace-1", repository: "acme/relay" },
-  });
-  tab.answer(ACT_KIND.TASKS_SKILLS, {
-    skills: { repository: "acme/relay", branch: "main", skills: [] },
-  });
-  await tab.mount();
-
-  const read = tab.control().readSkills ?? assert.fail("the agent's box offers its skills");
-  await read();
-  assert.deepEqual(tab.asked, [
-    {
-      kind: ACT_KIND.TASKS_SKILLS,
-      payload: { workspaceId: "workspace-1", repository: "acme/relay" },
-    },
-  ]);
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => agent.id),
-    [AGENT],
-  );
-});
-
-test("another agent named with no plan open holds nothing of the last, even where its read does not land", async () => {
-  const OTHER = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
-  const page = (id: string) => ({
-    agent: {
-      ...STARTED,
-      id,
-      taskId: null,
-      automationId: null,
-      workspaceId: "workspace-1",
-      repository: "acme/relay",
-    },
-  });
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  tab.answer(ACT_KIND.AGENTS_PAGE, page(AGENT), {
-    failure: AGENT_CALL_FAILURE.UNANSWERED,
-  });
-  await tab.mount();
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => agent.id),
-    [AGENT],
-  );
-
-  await tab.stand({ agentId: OTHER });
-
-  assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
-  assert.equal(tab.control().listFailed, true);
-});
-
-test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
-  const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.COMPLETED };
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  tab.answer(ACT_KIND.AGENTS_PAGE, {
-    agent: {
-      ...taskless,
-      automationId: null,
-      workspaceId: "workspace-1",
-      repository: "acme/relay",
-    },
   });
   const continued = { ...taskless, id: "continued-1", status: AGENT_STATUS.STARTING };
   const forked = { ...taskless, id: "forked-1", status: AGENT_STATUS.STARTING };
@@ -1127,10 +1052,19 @@ test("a task naming no repository offers no Start, which asks nothing when press
   );
 });
 
-test("a delete that landed on an agent's page reads it again as gone, and a read already out that still holds it does not bring it back", async () => {
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  const stale = Promise.withResolvers<WireBoundaryInput>();
-  tab.answer(ACT_KIND.AGENTS_PAGE, stale.promise, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
+test("an agent's page stands on the list's row of it: a delete reads nothing again, and the agent turns to not found as the list drops it; a list that failed with no row of it says so, and its Retry reads the list again", async () => {
+  const taskless = { ...STARTED, planId: null };
+  const place = { id: AGENT, workspaceId: "workspace-1", repository: null };
+  const retried: string[] = [];
+  const list = { read: true, failed: false, onRetry: () => retried.push("list") };
+  const tab = mount({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [taskless],
+    listedPage: place,
+    list,
+  });
   tab.answer(ACT_KIND.AGENTS_DELETE, { deleted: true });
   await tab.mount();
 
@@ -1138,19 +1072,25 @@ test("a delete that landed on an agent's page reads it again as gone, and a read
   await act(async () => {
     result = await tab.control().onDelete(AGENT);
   });
-  await settle();
-  // The read that went out before the delete lands last, still holding the agent.
-  const page = {
-    ...STARTED,
-    planId: null,
-    automationId: null,
-    workspaceId: "workspace-1",
-    repository: null,
-  };
-  await act(async () => stale.resolve({ agent: page }));
-  await settle();
-
   assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(
+    tab.asked.map((each) => each.kind),
+    [ACT_KIND.AGENTS_DELETE],
+  );
+  assert.equal(tab.control().listMissing, false, "the list still carries it");
+
+  await tab.stand({ taskId: undefined, agentId: AGENT, repository: null, listedAgents: [], list });
   assert.equal(tab.control().agents, undefined);
   assert.equal(tab.control().listMissing, true);
+
+  await tab.stand({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [],
+    list: { ...list, read: false, failed: true },
+  });
+  assert.equal(tab.control().listFailed, true);
+  act(() => tab.control().onRetryList());
+  assert.deepEqual(retried, ["list"]);
 });

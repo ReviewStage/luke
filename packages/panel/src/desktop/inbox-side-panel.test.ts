@@ -51,7 +51,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 
 /**
@@ -295,7 +295,7 @@ async function inbox(
         tasks: tasksControl({
           workspace: ACME,
           tasks: [TASK, OTHER],
-          liveAgents: [ARCHIVED, AGENT],
+          liveAgents: [ARCHIVED, AGENT].map((agent) => listedAgent(agent)),
           // Both agents' rows keep the pull request they opened, which the list carries beside them.
           listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
             agentId: agent.id,

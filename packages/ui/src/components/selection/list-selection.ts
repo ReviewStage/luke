@@ -41,10 +41,11 @@ import {
  * Note that the order and who is available are read off the rows as they
  * are drawn, as `useRovingKeys` reads its items, because the rows are
  * drawn by whoever fills the list; a region drawing only the rows near the
- * view (`VirtualRows`) is handed the order of every row it lists instead
- * (`order`), so ⇧-click, ⇧↑↓, and ⌘A reach the rows it leaves undrawn, ⇧↑↓
- * bringing the row they reach into view through its owner (`bringIn`). And
- * note that a key pressed in a field inside the list is the field's.
+ * view (`VirtualRows`) is handed the order of every row it lists instead,
+ * run by run where its rows stand in runs (`order`), so ⇧-click, ⇧↑↓, and
+ * ⌘A reach the rows it leaves undrawn, ⇧↑↓ bringing the row they reach into
+ * view through its owner (`bringIn`). And note that a key pressed in a
+ * field inside the list is the field's.
  */
 
 /** Which rows of a `List` are chosen, kept by its owner: the keys chosen, and what hears the next set. */
@@ -156,6 +157,11 @@ function keysOf(rows: readonly Choosable[]): readonly string[] {
   return rows.map((row) => row.key);
 }
 
+/** The run of `order` that lists `key`, none where no run does. */
+function runListing(order: readonly (readonly string[])[], key: string): readonly string[] {
+  return order.find((run) => run.includes(key)) ?? [];
+}
+
 /** Whether a key landed in a field, whose own it is. */
 function typedIn(target: EventTarget): boolean {
   return (
@@ -184,13 +190,14 @@ export function holdRun(event: MouseEvent<HTMLElement>): void {
  * keys it hears, which answer whether they chose anything so the arrows'
  * walk is not also made. A list asked for none chooses nothing. `order`,
  * where given, is every choosable row's key in order, those not drawn
- * among them, which ⇧-click, ⇧↑↓, and ⌘A read in place of the rows drawn,
- * and `bringIn` draws a row ⇧↑↓ reach that is not drawn and calls `then`
- * once it is.
+ * among them, run by run where the rows stand in runs (`selectionRun`),
+ * which ⇧-click, ⇧↑↓, and ⌘A read in place of the rows drawn, and
+ * `bringIn` draws a row ⇧↑↓ reach that is not drawn and calls `then` once
+ * it is.
  */
 export function useListSelection(
   selection: ListSelection | undefined,
-  order?: readonly string[],
+  order?: readonly (readonly string[])[],
   bringIn?: (key: string, then: () => void) => boolean,
 ): {
   readonly selecting: ListSelecting | undefined;
@@ -238,7 +245,11 @@ export function useListSelection(
         const list = event.currentTarget.closest(ROOT_SELECTOR);
         if (list === null) return false;
         const from = standing(chosen) ?? { key, base: chosen, head: key, left: chosen };
-        const keys = listed.current ?? keysOf(inRunOf(choosableOf(list), event.currentTarget));
+        const runs = listed.current;
+        const keys =
+          runs === undefined
+            ? keysOf(inRunOf(choosableOf(list), event.currentTarget))
+            : runListing(runs, key);
         const next = withRun(keys, from.base, from.key, key);
         hand(next, { ...from, head: key, left: next });
         return true;
@@ -268,7 +279,7 @@ export function useListSelection(
       }
       if (command(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        hand(new Set(listed.current ?? keysOf(choosableOf(list))), undefined);
+        hand(new Set(listed.current?.flat() ?? keysOf(choosableOf(list))), undefined);
         return true;
       }
       const bare = !command(event) && !event.shiftKey && !event.altKey;
@@ -285,8 +296,9 @@ export function useListSelection(
       const inHand = all.find((row) => row.press === event.target);
       if (inHand === undefined) return false;
       const rows = inRunOf(all, inHand.press);
-      // Note that a list handed its order walks every row it lists, the one reached brought into view where it is not drawn.
-      const keys = listed.current ?? keysOf(rows);
+      // Note that a list handed its order walks every row its run lists, the one reached brought into view where it is not drawn.
+      const runs = listed.current;
+      const keys = runs === undefined ? keysOf(rows) : runListing(runs, inHand.key);
       const at = keys.indexOf(inHand.key);
       event.preventDefault();
       const here = inHand.key;

@@ -245,9 +245,12 @@ test("a row held at the foot of the column that scrolls its list runs the column
   assert.deepEqual(moves, [[0, 5]]);
 });
 
-test("a row held at the foot of a column that stands around its drop scope rather than within it runs nothing", () => {
+test.each([
+  ["stands around its drop scope rather than within it", "data-row-drop-scope"],
+  ["is its list's own drop zone", "data-row-drop"],
+])("a row held at the foot of a column that %s runs nothing", (_, attribute) => {
   const list = inColumn(100, []);
-  list.parentElement?.setAttribute("data-row-drop-scope", "");
+  list.parentElement?.setAttribute(attribute, "");
   act(() => {
     grip(list, 0).dispatchEvent(at("pointerdown", 10));
     window.dispatchEvent(at("pointermove", 95));

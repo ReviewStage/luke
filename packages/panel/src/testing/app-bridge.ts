@@ -37,10 +37,12 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the automations' lists and histories, and a plan's or a page's comments. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the automations' lists and histories, a plan's or a page's comments, and the run that started an agent. */
 type HoldKind =
+  | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
+  | typeof TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
@@ -51,8 +53,10 @@ type HoldKind =
 
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
+  AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW,
   AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
   TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
+  TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
   CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW,
   AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW,
   AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW,
@@ -96,8 +100,8 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
  * account's beats or provider keys, an agent's or a server's tools, the
- * automations' lists and histories, or a plan's or a page's comments, is
- * held quietly, and an automations' Try again taken, since what the hold
+ * automations' lists and histories, a plan's or a page's comments, or the
+ * run that started an agent, is held quietly, and an automations' Try again taken, since what the hold
  * reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
