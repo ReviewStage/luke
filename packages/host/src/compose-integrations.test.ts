@@ -20,9 +20,10 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@repo/gateway";
+import { entityPool } from "@repo/sync";
 import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppIntegrations } from "./app-state.js";
 import {
@@ -39,9 +40,9 @@ import { windowFocus } from "./window-focus.js";
  * a closed account gate nothing is asked or opened; a server's tools a
  * window holds are kept from their last read; and where the integrations
  * stand, which a window holds, is followed live, the service asked to
- * settle a sign-in only while a row stands pending, and a disconnect
- * answered only once that read carries it. Synthetic accounts and rows
- * throughout.
+ * settle a sign-in only while a row stands pending, a disconnect
+ * answered only once that read carries it, and a rename drawn over it at
+ * once. Synthetic accounts and rows throughout.
  */
 
 /** The sign-in address the service answers, which must reach the browser and no window. */
@@ -51,6 +52,9 @@ const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
 
 /** The transaction the service deletes a disconnected account in. */
 const DISCONNECT_TXID = "4815";
+
+/** The transaction the service renames an account in. */
+const RENAME_TXID = "1623";
 
 /** The account signed in, which the held integrations are followed under. */
 const USER_ID = "user-dana";
@@ -74,6 +78,10 @@ interface ServiceScript {
   clients?: McpClient[];
   /** Whether a revoke fails before it finishes, as one whose session lapsed does. */
   revokeFails?: boolean;
+  /** Whether a rename is refused, as one the service did not answer is. */
+  renameRefused?: boolean;
+  /** Where given, a rename is answered only once the test opens it. */
+  renameAnswered?: Deferred.Deferred<void>;
 }
 
 /** The member MCP server's address, as the service answers it. */
@@ -132,12 +140,17 @@ function fakeService(script: ServiceScript) {
         return { status: script.status, txid: DISCONNECT_TXID };
       }),
     rename: (provider, connection, label) =>
-      Effect.sync(() => {
-        asked.push(provider);
-        return {
-          account: { provider, connection, label, primary: false, status: script.status },
-        };
-      }),
+      Effect.andThen(
+        script.renameAnswered === undefined ? Effect.void : Deferred.await(script.renameAnswered),
+        Effect.sync(() => {
+          asked.push(provider);
+          if (script.renameRefused) return { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
+          return {
+            account: { provider, connection, label, primary: false, status: script.status },
+            txid: RENAME_TXID,
+          };
+        }),
+      ),
   };
   const mcpClients: McpClientsClient = {
     list: () =>
@@ -180,6 +193,7 @@ function subject(
       client: service.client,
       mcpClients: service.mcpClients,
       focus,
+      pool: yield* entityPool(),
       openExternal: (url) =>
         Effect.sync(() => {
           service.opened.push(url);
@@ -313,6 +327,50 @@ it.effect(
         txid: DISCONNECT_TXID,
       });
       assert.deepEqual(listed(), [], "the answer lands with the account gone from the read");
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+    }),
+);
+
+it.effect(
+  "a rename draws its label over the held read at once and stands until the read carries it, and a refused one puts the label back",
+  () =>
+    Effect.gen(function* () {
+      const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED };
+      const { call, integrations, live } = yield* subject(script);
+      const label = () => integrations.at(-1)?.[USER_ID]?.rows?.accounts?.[0]?.label;
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* after(Duration.millis(500));
+      assert.equal(label(), "linear");
+
+      const rename = { ...LINEAR, connection: "linear", label: "Work" };
+      const answered = yield* Deferred.make<void>();
+      script.renameAnswered = answered;
+      const renaming = yield* Effect.forkChild(call(GATEWAY_METHOD.INTEGRATIONS_RENAME, rename));
+      yield* settled;
+      assert.equal(label(), "Work", "the new label is drawn before the service answers");
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(renaming);
+      // A poll the rename's transaction did not wake answers the old label.
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+      yield* after(Duration.millis(500));
+      assert.equal(
+        label(),
+        "Work",
+        "an answer from before the rename does not put the old one back",
+      );
+
+      const renamed = { ...row("linear", INTEGRATION_PROVIDER.LINEAR, "connected"), label: "Work" };
+      live.set({ connections: [renamed] }, [RENAME_TXID]);
+      yield* after(Duration.millis(500));
+      script.renameRefused = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.INTEGRATIONS_RENAME, { ...rename, label: "Home" }),
+        {
+          failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
+        },
+      );
+      assert.equal(label(), "Work", "a refused rename leaves the label the read carries");
       yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
     }),
 );

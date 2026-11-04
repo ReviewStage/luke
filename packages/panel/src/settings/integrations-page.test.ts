@@ -201,7 +201,7 @@ beforeEach(() => {
       integrations.lay();
       return Promise.resolve({ status: account ?? serviceStatuses()[provider] });
     },
-    // A rename names the account anew, which the host's read says once the test lays it again.
+    // A rename names the account anew, which the host draws over its read on the press.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
       if (refuseRename) return Promise.resolve({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
@@ -209,6 +209,7 @@ beforeEach(() => {
       accounts = accounts.map((account) =>
         account.connection === connection ? { ...account, label } : account,
       );
+      integrations.lay();
       const renamed =
         accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
       return Promise.resolve({ account: renamed });
@@ -1403,7 +1404,7 @@ test("an account alone at its provider is named by its label where it carries on
   assert.ok(!names.some((name) => name?.includes("Account 1")));
 });
 
-test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one, which stands until the host's read carries it", async () => {
+test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one, which the row then says", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   accounts = [
@@ -1452,8 +1453,6 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   await settle();
   assert.equal(field(), null);
   assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
-  assert.ok(rowOf("Work"), "the old name never stands again before the read carries the new one");
-  await readMoves();
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 

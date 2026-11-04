@@ -2,7 +2,6 @@ import type { HostedIntegrationsClient, HostedMcpClientsClient } from "@repo/fea
 import type { IntegrationLiveRow } from "@repo/features/integration-live";
 import {
   INTEGRATION_CALL_FAILURE,
-  type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationProviderParams,
   type IntegrationStatusView,
@@ -28,6 +27,7 @@ import {
   type GatewayMethodTable,
   readParams,
 } from "@repo/gateway";
+import { declaredMethod, type EntityPool } from "@repo/sync";
 import { Effect, FiberHandle, FiberMap, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import {
@@ -41,7 +41,12 @@ import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type HeldIntegrations, heldIntegrations } from "./integrations-follow.js";
+import {
+  type HeldIntegrations,
+  heldIntegrations,
+  type IntegrationRename,
+  integrationRename,
+} from "./integrations-follow.js";
 import type { RunMode } from "./run-mode.js";
 import type { WindowFocus } from "./window-focus.js";
 
@@ -58,10 +63,12 @@ import type { WindowFocus } from "./window-focus.js";
  * a report; the window hears only whether the browser was sent, and the
  * held read draws how the sign-in settled once the service's callback, or
  * the host's own settling while it stands pending, writes it. A Connect, a
- * Cancel, a Disconnect, and a rename each answer the window only once the
- * held read carries the transaction the service wrote it in, where it moves
- * what that read shows, so the window draws the write from the read as the
- * answer lands, with no overlay of its own. Each server's
+ * Cancel, and a Disconnect each answer the window only once the held read
+ * carries the transaction the service wrote it in, where it moves what that
+ * read shows, so the window draws the write from the read as the answer
+ * lands, with no overlay of its own. A rename is a write declared on the
+ * sync engine (`integrationRename`), drawn over the held read the moment it
+ * is asked and answered as the service answers. Each server's
  * tools are fetched for the windows that hold them (`held-fetch.ts`), by the
  * server's name, asked as a window first holds them, again as a window comes
  * forward, which is how the developer comes back from mending a connection
@@ -97,6 +104,8 @@ export interface IntegrationsDependencies {
   openExternal: (url: string) => Effect.Effect<boolean>;
   /** The windows coming forward, on which every server's tools a window holds, GitHub's standing, and the outside MCP clients where a window holds them, are asked again. */
   focus: WindowFocus;
+  /** The sync engine's pool, which the held integrations stand in. */
+  pool: EntityPool;
 }
 
 export interface IntegrationsComposer extends Composer {
@@ -168,6 +177,7 @@ export function composeIntegrations(
       settle: Effect.suspend(() => Effect.asVoid(asked(client.settle()))),
       gate,
       focus,
+      pool: dependencies.pool,
       tell: (held: AppIntegrations) =>
         kernel.emit(GATEWAY_EVENT.INTEGRATIONS_CHANGED, carried(held)),
     });
@@ -217,7 +227,7 @@ function composed(
   asked: Asked,
   { integrations, integrationsHold, tools, toolHolds, clients }: Held,
 ): IntegrationsComposer {
-  const { client, mcpClients, accountId, openExternal } = dependencies;
+  const { client, mcpClients, accountId, openExternal, pool } = dependencies;
 
   type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
 
@@ -280,6 +290,19 @@ function composed(
         ? { opened: true }
         : { opened: true, connection: answer.connection };
     });
+
+  /** A rename drawn over the held read at once, its label kept as the service trims it. */
+  const rename = integrationRename(
+    ({ provider, connection, label }) => asked(client.rename(provider, connection, label)),
+    ({ connection }, label) => {
+      const userId = accountId();
+      const synced = userId === undefined ? undefined : integrations.synced(userId, connection);
+      // Note that an account with no label is answered with none, though its row may carry an empty one.
+      return (
+        synced !== undefined && (synced.label === "" ? null : synced.label) === (label ?? null)
+      );
+    },
+  );
 
   /** One client revoked, and the clients it answered laid for the account signed in, so the windows' list stands without it as the revoke answers. */
   const revoke = (clientId: string): Effect.Effect<McpClientsView> =>
@@ -379,25 +402,18 @@ function composed(
         }
         return carried<IntegrationStatusView>(answer);
       }),
-    [GATEWAY_METHOD.INTEGRATIONS_RENAME]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          integrationRenameParamsSchema,
-          params,
-          "the ask names an account and a label",
-        );
-        const { provider, connection, label } = read;
-        const answer = yield* asked(client.rename(provider, connection, label));
-        // A rename answers once the held read carries the label the service kept.
-        if (!("failure" in answer)) {
-          yield* confirmed(
-            connection,
-            answer.txid,
-            (row) => row !== undefined && row.label !== answer.account.label,
-          );
-        }
-        return carried<IntegrationAccountView>(answer);
-      }),
+    // A rename names the account's row the windows hold, where they hold one, which the pool draws it over.
+    [GATEWAY_METHOD.INTEGRATIONS_RENAME]: declaredMethod(pool, rename, (params) =>
+      Effect.map(
+        readParams(integrationRenameParamsSchema, params, "the ask names an account and a label"),
+        (read): IntegrationRename => {
+          const userId = accountId();
+          const held =
+            userId === undefined ? undefined : integrations.synced(userId, read.connection);
+          return { ...read, id: held?.id };
+        },
+      ),
+    ),
   };
 
   return {
