@@ -341,7 +341,9 @@ it.effect(
       const rename = { ...LINEAR, connection: "linear", label: "Work" };
       yield* call(GATEWAY_METHOD.INTEGRATIONS_RENAME, rename);
       assert.equal(label(), "Work", "the new label is drawn as the rename answers");
-      yield* after(Duration.seconds(1));
+      // A poll the rename's transaction did not wake answers the old label.
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+      yield* after(Duration.millis(500));
       assert.equal(
         label(),
         "Work",
