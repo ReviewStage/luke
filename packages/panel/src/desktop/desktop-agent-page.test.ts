@@ -189,6 +189,8 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 let openedOnGitHub: string[] = [];
 /** The agent as the task list carries it, with the run that started it, which the host holds apart; none where the list carries it not. */
 let listed: AgentPage | undefined;
+/** Whether the task list carries the agent the service holds as `listed`, as it does once it caught up with it. */
+let carried = true;
 /** Where the task list's read stands: read, not read yet, or failed. */
 let listStatus: ListStatus = LIST_STATUS.READ;
 /** Reads the task list again, as its Retry asks. */
@@ -243,6 +245,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   listed = PAGE;
+  carried = true;
   listStatus = LIST_STATUS.READ;
   retryList = () => undefined;
   read = [];
@@ -405,12 +408,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The window's tasks control with the task list carrying `listed` as `listStatus` says. */
+/** The window's tasks control with the task list carrying `listed`, where it carries it, as `listStatus` says. */
 function withList(tasks: TasksControl): TasksControl {
   const read = listStatus === LIST_STATUS.READ;
   return {
     ...tasks,
-    liveAgents: read ? (listed === undefined ? [] : [listedOf(listed)]) : undefined,
+    liveAgents: read ? (listed === undefined || !carried ? [] : [listedOf(listed)]) : undefined,
     listRead: read,
     listFailed: listStatus === LIST_STATUS.FAILED,
     onRetryList: () => retryList(),
@@ -1229,6 +1232,20 @@ test("an agent the task list does not carry, as a link to another workspace's ma
     [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
     false,
   );
+});
+
+test("an agent the task list does not carry yet, as a teammate's just started, is looked up once by its id and reads as Reading, then as the agent once the list carries it", async () => {
+  carried = false;
+  const page = mount();
+  await settle();
+
+  assert.equal(page.querySelector('.agent-page [role="status"]')?.textContent, "Reading the agent");
+  assert.equal(page.querySelector("h1"), null);
+  carried = true;
+  page.relist();
+  await settle();
+  assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+  assert.deepEqual(read, [AGENT_ID], "the agent is looked up once");
 });
 
 test("on a phone an agent that is not found still leads with its way back", async () => {

@@ -601,6 +601,25 @@ beforeEach(() => {
           ? Promise.withResolvers<never>().promise
           : done({ agents: world.listedAgents });
       }
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
+        // An agent the task list does not carry is looked up once by its id, answered as the world holds it.
+        const agent = world.tasklessAgents.get(request.payload.agentId);
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value:
+            agent === undefined
+              ? { failure: AGENT_CALL_FAILURE.NOT_FOUND }
+              : {
+                  agent: {
+                    ...agent,
+                    planId: null,
+                    automationId: null,
+                    workspaceId: ACME.id,
+                    repository: "acme/relay",
+                  },
+                },
+        });
+      }
       if (request.kind === ACT_KIND.TASKS_TREE) {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,

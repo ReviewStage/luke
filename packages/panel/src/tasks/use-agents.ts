@@ -212,11 +212,11 @@ export interface AgentsControl {
   agentIds: readonly string[] | undefined;
   /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the task list carries the task. */
   heldIds: readonly string[] | undefined;
-  /** Whether the task list's read failed and it carries no row of the page's agent. */
+  /** Whether the task list carries no row of the page's agent and its read failed, or the one lookup of the agent by its id did. */
   listFailed: boolean;
-  /** Whether the task list, read, carries no row of the page's agent, which is then not there for the reader: deleted, or of a workspace they are not in. */
+  /** Whether the task list, read, carries no row of the page's agent, and the agent is not there for the reader: dropped from the list since the page opened, or answered not found by its one lookup, deleted or of a workspace they are not in. */
   listMissing: boolean;
-  /** Reads the task list again where its read failed while it carries no row of the page's agent; the list follows itself otherwise, a task's agents among it. */
+  /** Reads the task list again where its read failed while it carries no row of the page's agent, or looks the agent up again where its lookup failed; the list follows itself otherwise, a task's agents among it. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
@@ -595,6 +595,28 @@ export function readAgentById(
   );
 }
 
+/** What one lookup of an agent by its id answered: that the service holds it for the reader, that it does not, or nothing. */
+const AGENT_LOOKUP = {
+  FOUND: "found",
+  MISSING: "missing",
+  FAILED: "failed",
+} as const;
+
+type AgentLookup = (typeof AGENT_LOOKUP)[keyof typeof AGENT_LOOKUP];
+
+/** Whether the service still holds the agent for the reader, read once by its id, as a link to one the task list does not carry yet is opened. */
+function lookUpAgent(act: ActHandle["act"], agentId: string): Promise<AgentLookup> {
+  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+    (answer) => {
+      if (!("failure" in answer)) return AGENT_LOOKUP.FOUND;
+      return answer.failure === AGENT_CALL_FAILURE.NOT_FOUND
+        ? AGENT_LOOKUP.MISSING
+        : AGENT_LOOKUP.FAILED;
+    },
+    () => AGENT_LOOKUP.FAILED,
+  );
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -779,14 +801,41 @@ export function useAgents(input: {
   const modeTask = taskId ?? standing?.[0]?.planId ?? undefined;
   const mode = modeTask === undefined ? undefined : input.modeOf?.(modeTask);
   // Note that the page's agent stands or falls with the task list's row of it, so an agent deleted turns to Not found as the list drops it.
+  // An agent the read list has not carried since the page opened, as a teammate's just started or
+  // one a notification names ahead of the list, is looked up once by its id: one the service holds
+  // reads as Reading until the list carries it, and only one it does not hold is not found. One the
+  // list carried and then dropped, deleted or moved away, is not found at once.
   const { list } = input;
-  const listFailed = onPage && list?.failed === true && listedHere === undefined;
-  const listMissing =
+  const absent =
     onPage && list?.read === true && listedAgents !== undefined && listedHere === undefined;
+  const dropped = agentId !== undefined && carried.current.ids.has(agentId);
+  const [lookedUp, setLookedUp] = useState<
+    { readonly agentId: string; readonly outcome: AgentLookup } | undefined
+  >(undefined);
+  const [lookups, setLookups] = useState(0);
+  const lookUp = absent && !dropped ? agentId : undefined;
+  useEffect(() => {
+    if (lookUp === undefined) return;
+    let live = true;
+    lookUpAgent(latest.current.acts.act, lookUp).then((outcome) => {
+      if (live) setLookedUp({ agentId: lookUp, outcome });
+    });
+    return () => {
+      live = false;
+    };
+  }, [lookUp, lookups]);
+  const looked =
+    lookedUp !== undefined && lookedUp.agentId === agentId ? lookedUp.outcome : undefined;
+  const listMissing = absent && (dropped || looked === AGENT_LOOKUP.MISSING);
+  const lookupFailed = lookUp !== undefined && looked === AGENT_LOOKUP.FAILED;
+  const listFailed = onPage && listedHere === undefined && (list?.failed === true || lookupFailed);
   const retryList = list?.onRetry;
   const onRetryList = useCallback(() => {
-    if (listFailed) retryList?.();
-  }, [listFailed, retryList]);
+    if (list?.failed === true) return retryList?.();
+    if (!lookupFailed) return;
+    setLookedUp(undefined);
+    setLookups((count) => count + 1);
+  }, [list?.failed, lookupFailed, retryList]);
   // The archives asked here and still out.
   const [archivesOut, setArchivesOut] = useState(0);
 
