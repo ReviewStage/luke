@@ -226,8 +226,8 @@ test("as Sub-task of, a task in another repository says why and takes no pick, a
   act(() => row("Ship login").click());
   await settle();
   const repository =
-    [...container.querySelectorAll<HTMLElement>(".ui-chip")].find(
-      (each) => each.getAttribute("aria-label") === "acme/web",
+    [...container.querySelectorAll<HTMLElement>(".ui-chip")].find((each) =>
+      each.textContent?.includes("acme/web"),
     ) ?? assert.fail("the repository chip stands");
   assert.equal(repository.getAttribute("aria-disabled"), "true");
   pressInComposer(container, "Enter", { metaKey: true });

@@ -151,9 +151,6 @@ async function openNewTask(workspaceId: string, preset?: string) {
   const repositoryChip = () =>
     document.querySelector<HTMLButtonElement>(".repository-chip .ui-chip") ??
     assert.fail("the repository chip stands");
-  /** What the chip is called: its repository's whole `owner/name`, or its words where none is named. */
-  const repositoryNamed = () =>
-    repositoryChip().getAttribute("aria-label") ?? repositoryChip().textContent;
   // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   const create = async () => {
     pressInComposer(document, "Enter", { metaKey: true });
@@ -164,7 +161,7 @@ async function openNewTask(workspaceId: string, preset?: string) {
     draw(listed);
     await settle();
   };
-  return { starts, repositoryChip, repositoryNamed, create, rehome };
+  return { starts, repositoryChip, create, rehome };
 }
 
 test("a repository group's + whose repository the workspace's GitHub does not reach opens New task on none", async () => {
@@ -179,14 +176,14 @@ test("a repository group's + whose repository the workspace's GitHub does not re
 
 test("the owner's workspace changing to one with no GitHub connected lets the other workspace's repository go and offers none of its own", async () => {
   const dialog = await openNewTask(ACME.id);
-  const before = dialog.repositoryNamed();
+  const before = dialog.repositoryChip().textContent;
 
   await dialog.rehome(PERSONAL.id);
   act(() => dialog.repositoryChip().click());
   await settle();
   const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
   const note = document.querySelector(".ui-combobox-note p")?.textContent;
-  const after = dialog.repositoryNamed();
+  const after = dialog.repositoryChip().textContent;
   await dialog.create();
 
   assert.deepEqual([before, after], ["acme-corp/relay", "No repository"]);

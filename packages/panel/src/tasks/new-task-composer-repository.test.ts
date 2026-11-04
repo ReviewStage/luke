@@ -144,7 +144,7 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   act(() => row.click());
   await settle();
 
-  assert.equal(chip.getAttribute("aria-label"), "octo/tools");
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });
 
 test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
@@ -177,7 +177,7 @@ test("a preset on a token repository the picker lists stands chosen once the rea
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
-  assert.equal(chip.getAttribute("aria-label"), "octo/tools");
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });
 
 test("a preset the workspace's GitHub does not reach is not started on while the host's read is out", async () => {
@@ -209,7 +209,7 @@ test("a preset a read does not list is let go, so a later read listing it does n
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);
-  assert.notEqual(chip.getAttribute("aria-label"), "octo/tools");
+  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });
 
 test("a preset survives a read made before the workspace resolved and stands once its workspace's read lists it", async () => {
@@ -234,7 +234,7 @@ test("a preset survives a read made before the workspace resolved and stands onc
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
 
-  assert.equal(chip.getAttribute("aria-label"), "octo/tools");
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });
 
 test("a recent default a read does not list is let go, so a later read listing it does not bring it back", async () => {
@@ -262,5 +262,5 @@ test("a recent default a read does not list is let go, so a later read listing i
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);
-  assert.notEqual(chip.getAttribute("aria-label"), "octo/tools");
+  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });

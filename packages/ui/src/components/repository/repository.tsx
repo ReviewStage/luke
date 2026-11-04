@@ -23,10 +23,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * view names shares it, where they are `owner/name` (`repositoryLabel`); the
  * hover names it whole, through the tooltip or the card of whatever holds it.
  * Where one repository is being set, the composer's chip and the task's
- * path, its owner follows the name, muted, as a menu's row draws it
- * (`ChipDetail`, a crumb's `detail`). No repository is one state, a crossed-out
- * folder and "No repository", and a picture that cannot be drawn is the
- * repository's own glyph.
+ * path, the words are its whole `owner/name`, the picture before them. No
+ * repository is one state, a crossed-out folder and "No repository", and a
+ * picture that cannot be drawn is the repository's own glyph.
  *
  * Prose is the exception and keeps `owner/name` as plain words: a sentence,
  * a pull request's key, a file's path, an admin table's cell.

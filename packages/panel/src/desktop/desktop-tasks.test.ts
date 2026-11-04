@@ -527,7 +527,7 @@ test("a plan's document opens on its path, its repository as plain words, then i
 
   assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
   assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
-  assert.match(path?.textContent ?? "", /web, acme/u, "the path names the repository");
+  assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
   assert.equal(
     [...(path?.querySelectorAll("button") ?? [])].some((each) =>
       each.textContent?.includes("acme/web"),

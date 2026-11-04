@@ -4,16 +4,11 @@
  * A line shows its owner's picture, then its name. Where another repository
  * in the view shares the name, the line says `owner/name`. No repository is a
  * crossed-out folder. A glyph slot holds the picture, or that folder, alone.
- * A chip that sets one repository shows its name, then its owner muted. The
- * card shows the owner under the name. The catalog asks nothing of the
+ * The card shows the owner under the name. The catalog asks nothing of the
  * network, so every picture stands as the repository's glyph.
  */
 
 import {
-  CHIP_LOOK,
-  Chip,
-  ChipDetail,
-  ChipName,
   GAP,
   Inline,
   NoRepositoryGlyph,
@@ -60,13 +55,6 @@ function Repositories(): React.JSX.Element {
           <RepositoryPicture repository="acme/relay" pictures={false} />
           <NoRepositoryGlyph />
         </Inline>
-      </CatalogSection>
-      <CatalogSection id="repository-chip" title="The repository a chip sets: name, owner muted">
-        <Chip look={CHIP_LOOK.PILL} aria-label="acme/relay">
-          <RepositoryPicture repository="acme/relay" pictures={false} />
-          <ChipName>relay</ChipName>
-          <ChipDetail>acme</ChipDetail>
-        </Chip>
       </CatalogSection>
       <CatalogSection id="repository-card" title="Card">
         <RepositoryCard repository="acme/relay" pictures={false} />
