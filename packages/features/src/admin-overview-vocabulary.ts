@@ -68,6 +68,20 @@ export const AGENT_ORIGIN = {
 
 export type AgentOrigin = (typeof AGENT_ORIGIN)[keyof typeof AGENT_ORIGIN];
 
+/**
+ * The daily counts the Day page counts per account, one column each: the
+ * chart's features, and the tasks a feature reach row folds in beside them.
+ */
+export const DAY_ACCOUNT_COUNT = {
+  TASKS_CREATED: DAILY_COUNT.TASKS_CREATED,
+  PLAN_REVISIONS: DAILY_COUNT.PLAN_REVISIONS,
+  AGENTS_STARTED: DAILY_COUNT.AGENTS_STARTED,
+  INBOX_ANSWERED: DAILY_COUNT.INBOX_ANSWERED,
+  AUTOMATION_RUNS: DAILY_COUNT.AUTOMATION_RUNS,
+} as const;
+
+export type DayAccountCount = (typeof DAY_ACCOUNT_COUNT)[keyof typeof DAY_ACCOUNT_COUNT];
+
 /** The activation funnel's steps, in the order a new account is expected to take them. */
 export const FUNNEL_STEP = {
   SIGNED_UP: "signedUp",

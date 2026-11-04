@@ -136,6 +136,30 @@ export function DayNote({
   );
 }
 
+/**
+ * What the Day page's live figures count: one UTC day of the Overview's
+ * activity chart, and who was active in it.
+ */
+export function DayActivityNote({
+  truncatedTo,
+  activeDevelopers,
+}: {
+  truncatedTo?: number | undefined;
+  activeDevelopers: number;
+}): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active account created a task, wrote a plan revision, or started an agent on this UTC day.
+      The totals are this day's bar on the Overview's activity chart, so plan revisions count the
+      notes {PRODUCT_NAME}'s retired notetaker took too, and automation runs leave out the ones a
+      guard held back.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. Active developers counts all ${formatCount(activeDevelopers)}.`
+        : ""}
+    </SectionNote>
+  );
+}
+
 /** Why the app's own turns stand under a retired heading on Reliability. */
 export function AppTurnsNote(): React.JSX.Element {
   return (

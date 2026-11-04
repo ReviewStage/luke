@@ -37,7 +37,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { meaningfulActions, utcDay } from "./admin-activity-queries.js";
-import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
+import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDayHostedSource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
   type AdminMetricsSource,
@@ -641,19 +641,20 @@ export function readAdminUserSource(input: {
 }
 
 /**
- * Reads one UTC day's active accounts with the day's totals. The usage table
- * holds one row per account per day, so each bounded row is already the
- * account's whole day and needs no aggregation; the totals ride their own
- * aggregate read because the rows are cut at the bound. Busiest first, with
- * the account id breaking ties so equally busy accounts keep a stable order
- * across refreshes.
+ * Reads one UTC day's hosted-tier accounts with the day's totals, for the
+ * Day page's retired sections; `admin-day-queries.ts` reads its live ones
+ * beside this. The usage table holds one row per account per day, so each
+ * bounded row is already the account's whole day and needs no aggregation;
+ * the totals ride their own aggregate read because the rows are cut at the
+ * bound. Busiest first, with the account id breaking ties so equally busy
+ * accounts keep a stable order across refreshes.
  * Like the account detail, this has no probe and no empty fallback: a
  * database that does not answer throws into the handler's 503.
  */
-export function readAdminDaySource(input: {
+export function readAdminDayHostedSource(input: {
   day: string;
   scope: AdminMetricsScope;
-}): Effect.Effect<AdminDaySource, AdminQueryFailure, DatabaseServices> {
+}): Effect.Effect<AdminDayHostedSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const [accountRows, totals] = yield* Effect.all(
       [findDayAccounts(input), findDayTotals(input)],

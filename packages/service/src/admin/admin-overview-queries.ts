@@ -47,6 +47,7 @@ import {
   gte,
   inArray,
   isNotNull,
+  lt,
   max,
   ne,
   not,
@@ -58,7 +59,7 @@ import { unionAll } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole } from "./admin-access.js";
-import { atOf, meaningfulActions, userIdOf, utcDay } from "./admin-activity-queries.js";
+import { atOf, meaningfulActions, userIdOf, utcDay, within } from "./admin-activity-queries.js";
 import {
   ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,
@@ -97,8 +98,11 @@ function tag(name: string): SQL.Aliased<string> {
   return sql<string>`${name}::text`.as("tag");
 }
 
+/** When an agent's pull request merged, in epoch milliseconds; null where it has not. */
+const MERGED_AT_MS = sql`(${agentTable.published} ->> 'mergedAt')::numeric`;
+
 /** When an agent's pull request merged, as an instant; null where it has not. */
-const MERGED_AT = sql`to_timestamp((${agentTable.published} ->> 'mergedAt')::numeric / 1000)`;
+const MERGED_AT = sql`to_timestamp(${MERGED_AT_MS} / 1000)`;
 
 /** Whether an agent's pull request is merged, by its stamp or its state. */
 const PR_MERGED = or(
@@ -116,13 +120,18 @@ const STARTED_FROM_SLACK = sql<boolean>`coalesce(${agentTable.source} ->> 'kind'
 const STARTED_BY_AGENT = isNotNull(agentTable.startedByAgentId);
 
 /**
- * The agents started since `since` that `filters` keep, tagged `count`: one
- * filtered arm of the same scan per figure. The origins' filters spell
+ * The agents started since `since`, and before `until` where given, that
+ * `filters` keep, tagged `count`: one filtered arm of the same scan per figure. The origins' filters spell
  * `AGENT_ORIGIN`'s precedence, each leaving out the origins before it, so no
  * agent is counted under two; by hand is what they leave of every agent, which
  * the fold takes rather than a fourth arm restating it.
  */
-function agentsStartedRows(count: DailyCount, since: Date, ...filters: SQL[]) {
+function agentsStartedRows(
+  count: DailyCount,
+  since: Date,
+  until: Date | undefined,
+  ...filters: SQL[]
+) {
   return queryBuilder
     .select({
       tag: tag(count),
@@ -130,16 +139,18 @@ function agentsStartedRows(count: DailyCount, since: Date, ...filters: SQL[]) {
       at: atOf(agentTable.createdAt),
     })
     .from(agentTable)
-    .where(and(gte(agentTable.createdAt, since), ...filters));
+    .where(and(within(agentTable.createdAt, since, until), ...filters));
 }
 
 /**
  * Every row a daily count counts since `since`, tagged with the count it
  * belongs to: the account it is attributed to and the instant it is dated by.
  * An inbox answer is the answering member's, and an automation run its
- * owner's; a run a guard held back started nothing and is no run.
+ * owner's; a run a guard held back started nothing and is no run. `until`,
+ * where given, ends the span, so the Day page reads one UTC day of the very
+ * rows a bar of the Overview's chart counts.
  */
-function dailyCountRows(since: Date) {
+export function dailyCountRows(since: Date, until?: Date) {
   return unionAll(
     queryBuilder
       .select({
@@ -148,23 +159,25 @@ function dailyCountRows(since: Date) {
         at: atOf(task.createdAt),
       })
       .from(task)
-      .where(gte(task.createdAt, since)),
-    agentsStartedRows(DAILY_COUNT.AGENTS_STARTED, since),
-    agentsStartedRows(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, since, STARTED_BY_AUTOMATION),
+      .where(within(task.createdAt, since, until)),
+    agentsStartedRows(DAILY_COUNT.AGENTS_STARTED, since, until),
+    agentsStartedRows(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, since, until, STARTED_BY_AUTOMATION),
     agentsStartedRows(
       DAILY_COUNT.AGENTS_FROM_SLACK,
       since,
+      until,
       STARTED_FROM_SLACK,
       not(STARTED_BY_AUTOMATION),
     ),
     agentsStartedRows(
       DAILY_COUNT.AGENTS_FROM_AGENTS,
       since,
+      until,
       STARTED_BY_AGENT,
       not(STARTED_BY_AUTOMATION),
       not(STARTED_FROM_SLACK),
     ),
-    agentsStartedRows(DAILY_COUNT.PILOTS_STARTED, since, eq(agentTable.kind, AGENT_KIND.PILOT)),
+    agentsStartedRows(DAILY_COUNT.PILOTS_STARTED, since, until, eq(agentTable.kind, AGENT_KIND.PILOT)),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PRS_MERGED),
@@ -172,7 +185,12 @@ function dailyCountRows(since: Date) {
         at: atOf(MERGED_AT),
       })
       .from(agentTable)
-      .where(gte(sql`(${agentTable.published} ->> 'mergedAt')::numeric`, since.getTime())),
+      .where(
+        and(
+          gte(MERGED_AT_MS, since.getTime()),
+          until === undefined ? undefined : lt(MERGED_AT_MS, until.getTime()),
+        ),
+      ),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PLAN_REVISIONS),
@@ -184,7 +202,7 @@ function dailyCountRows(since: Date) {
         and(
           inArray(planRevision.actor, [PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER]),
           isNotNull(planRevision.userId),
-          gte(planRevision.at, since),
+          within(planRevision.at, since, until),
         ),
       ),
     queryBuilder
@@ -198,7 +216,7 @@ function dailyCountRows(since: Date) {
         and(
           eq(inboxItem.status, INBOX_STATUS.ANSWERED),
           isNotNull(inboxItem.answeredBy),
-          gte(inboxItem.settledAt, since),
+          within(inboxItem.settledAt, since, until),
         ),
       ),
     queryBuilder
@@ -211,7 +229,7 @@ function dailyCountRows(since: Date) {
       .where(
         and(
           ne(automationRun.status, AUTOMATION_RUN_STATUS.SKIPPED),
-          gte(automationRun.firedAt, since),
+          within(automationRun.firedAt, since, until),
         ),
       ),
   ).as("daily_count_row");
@@ -297,15 +315,23 @@ const findActiveDevelopers = SqlSchema.findOneOption({
   },
 });
 
-const findDailyCounts = SqlSchema.findAll({
-  Request: BoundScopeSchema,
+/**
+ * Each daily count per UTC day since the bound, and before `until` where one
+ * is given: the Overview's chart and trends, and one day of it on the Day page.
+ */
+export const findDailyCounts = SqlSchema.findAll({
+  Request: Schema.Struct({
+    since: Schema.Date,
+    until: Schema.optional(Schema.Date),
+    scope: AdminMetricsScopeSchema,
+  }),
   Result: Schema.Struct({
     tag: DailyCountSchema,
     day: Schema.String,
     value: AggregateColumnSchema,
   }),
   execute: (request) => {
-    const rows = dailyCountRows(request.since);
+    const rows = dailyCountRows(request.since, request.until);
     const day = utcDay(rows.at);
     return Database.use((db) =>
       db
