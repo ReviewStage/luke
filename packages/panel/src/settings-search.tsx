@@ -334,8 +334,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
-    // shows: the invite only where the reader may invite, and the leave
-    // only where the reader may leave.
+    // shows: the invite form, under the members, only where the reader may
+    // invite, and the leave only where the reader may leave.
     input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
@@ -382,13 +382,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Rename workspace", "rename name change workspace photo"],
         }
       : undefined,
-    // The workspace's link, which its owner alone changes on the row under its identity.
+    // The workspace's link, which its owner alone changes from Change slug in the identity row's ⋯.
     input.workspace?.role === WORKSPACE_ROLE.OWNER
       ? {
           id: SETTINGS_SEARCH_ROW.WORKSPACE_SLUG,
           label: "Workspace link",
           page: SETTINGS_VIEW.WORKSPACE,
-          haystack: ["Workspace link", "link slug address url change workspace"],
+          haystack: ["Workspace link", "Change slug link address url workspace"],
         }
       : undefined,
     // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.

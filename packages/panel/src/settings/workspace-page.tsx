@@ -39,6 +39,9 @@ import {
   ChipName,
   CONFIRM_LOSS,
   ConfirmDialog,
+  DIALOG_TONE,
+  Dialog,
+  DialogActions,
   ErrorState,
   FormField,
   GAP,
@@ -97,6 +100,7 @@ import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js
 import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
+import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, failureShown, refusedShown, unreadShown } from "../failure-report.js";
@@ -118,20 +122,20 @@ import {
 } from "./workspace-token-repositories.js";
 
 /**
- * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
+ * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members and invitations, its integrations, and the way out of it.
  *
  * The page shows the workspace the tasks' sidebar lists and no other, so
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. It is drawn in the shape of the
  * other Settings pages, one kind of thing to a group. Its first row is the
  * workspace as Account's first row is the account: its tile, its name, who
- * shares it and the reader's role, and for an owner or an admin Rename and
- * the photo's acts; an account's first workspace is named by its owner's
- * account name, so it offers no Rename. The members follow as the service
+ * shares it, and for an owner or an admin Rename and the photo's acts, and
+ * for the owner Change slug; an account's first workspace is named by its
+ * owner's account name, so it offers no Rename. The members follow as the service
  * holds them now, each with their email and their role in one column; the
  * owner makes a member an admin, an admin a member or the owner, and
- * removes anyone else, and an admin removes members. An owner or an admin
- * then invites people by address and role, an admin as a member alone,
+ * removes anyone else, and an admin removes members. Under them, an owner
+ * or an admin invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link, which the
  * service has emailed to the invitee and which can still be copied and sent
  * by hand, and cancels one. Workspace connections holds what the workspace
@@ -283,27 +287,26 @@ const SLACK_MARK = (
 
 /**
  * What the Slack bot row's line says, by whether it is connected and who is
- * reading it. Note that every line names messages to members, because this
- * row is easily read as the Slack an agent reads through, which is each
- * member's own in Settings › Integrations; this one is the bot that writes
- * to the workspace's members.
+ * reading it. Note that every line asking for it names messages to members,
+ * because this row is easily read as the Slack an agent reads through, which
+ * is each member's own in Settings › Integrations; this one is the bot that
+ * writes to the workspace's members.
  */
 const SLACK_BOT_LINE = {
-  CONNECTED: (team: string) => `Connected to ${team}`,
+  CONNECTED: "Connected",
   MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
   MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
 } as const;
 
 /**
  * What the Sentry row's line says, by whether an installation stands and who
- * is reading it. Note that every line names automations, because this row is
- * easily read as the Sentry an agent reads through, which is each member's
- * own in Settings › Integrations; this one only carries Sentry's alerts and
- * new issues to the workspace's automations.
+ * is reading it. Note that every line asking for it names automations,
+ * because this row is easily read as the Sentry an agent reads through, which
+ * is each member's own in Settings › Integrations; this one only carries
+ * Sentry's alerts and new issues to the workspace's automations.
  */
 const SENTRY_LINE = {
-  INSTALLED: (accounts: string) =>
-    accounts === "" ? "Installed for automations" : `Installed for automations · ${accounts}`,
+  INSTALLED: "Connected",
   MANAGES: "Not installed. Install to start automations from Sentry alerts.",
   MEMBER: "Not installed. Ask an owner or admin to install it for automations.",
 } as const;
@@ -956,8 +959,9 @@ function RoleChip({
 }
 
 /**
- * The workspace's invitations, for an owner or an admin: the form that
- * invites an address as a member or an admin, then those still pending,
+ * The workspace's invitations, for an owner or an admin, under the members:
+ * the form that invites an address as a member or an admin, where a link
+ * or a search result naming the invitations lands, then those still pending,
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * first in the accent rather than red: inviting the address again undoes it,
@@ -1052,7 +1056,10 @@ function Invitations({
   return (
     <>
       <Stack gap={GAP.NONE}>
-        <div className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block">
+        <div
+          className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block"
+          {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}
+        >
           {/* Note that the field's label stands over the whole row and its error under it, so Member and Invite keep the address's line. */}
           <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={invite}>
             <FormField label="Email address" error={inputProblem(emailProblem)}>
@@ -1304,15 +1311,12 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
-/** The Sentry row's line: the organizations it is installed on, or the ask to install it. */
+/** The Sentry row's line: Connected once it is installed, or the ask to install it. */
 function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode {
   if (sentry.installations.length === 0) return manages ? SENTRY_LINE.MANAGES : SENTRY_LINE.MEMBER;
-  const accounts = sentry.installations.flatMap((one) =>
-    one.account === undefined ? [] : [one.account],
-  );
   return (
     <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {SENTRY_LINE.INSTALLED(accounts.join(", "))}
+      {SENTRY_LINE.INSTALLED}
     </SettingsRowStateLine>
   );
 }
@@ -1450,12 +1454,12 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
   );
 }
 
-/** The Slack bot row's line: the team it is connected to, or the ask to connect it. */
+/** The Slack bot row's line: Connected once it is, or the ask to connect it. */
 function slackBotLine(slack: WorkspaceSlack, manages: boolean): React.ReactNode {
   if (slack.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
   return (
     <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {SLACK_BOT_LINE.CONNECTED(slack.team.name)}
+      {SLACK_BOT_LINE.CONNECTED}
     </SettingsRowStateLine>
   );
 }
@@ -1583,7 +1587,6 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
   return (
     <SwitchRow
       label="Slack notifications"
-      detail="Get a Slack message when a thread waits on you."
       checked={on}
       changed={!on}
       onChange={(notifications) =>
@@ -1684,27 +1687,97 @@ export interface WorkspaceSettingsControl {
   onRetryList: () => void;
 }
 
-/** Who the reader is in the workspace, in the identity row's line. */
-const ROLE_SENTENCE = {
-  [WORKSPACE_ROLE.OWNER]: "You're the owner",
-  [WORKSPACE_ROLE.ADMIN]: "You're an admin",
-  [WORKSPACE_ROLE.MEMBER]: "You're a member",
-} as const satisfies Record<Workspace["role"], string>;
+/** What the slug's dialog says: the ⋯ item that opens it, which is its title too, and its act. */
+const SLUG_WORDS = {
+  CHANGE: "Change slug",
+  SAVE: "Save",
+  SAVING: "Saving",
+} as const;
 
-/** The identity row's line: who shares the workspace, as the switcher says it, and the reader's role, which an account's own workspace with nobody else in it leaves unsaid. */
-function identityLine(workspace: Workspace): string {
-  const personal = workspace.personal === true;
-  const shared = sharedWords(workspace.memberCount, personal);
-  if (personal && (workspace.memberCount ?? 1) <= 1 && shared !== undefined) return shared;
-  return shared === undefined
-    ? ROLE_SENTENCE[workspace.role]
-    : `${shared} · ${ROLE_SENTENCE[workspace.role]}`;
+/** The slug's dialog: the press that opens the card, and the card. */
+interface SlugAsk {
+  ask: () => void;
+  dialog: React.JSX.Element;
+}
+
+/**
+ * The workspace's slug, which its owner alone changes, from the identity
+ * row's ⋯: the slug every link to the workspace is written under, typed in
+ * a dialog of its own, the address it makes said under it as it is typed,
+ * and what is wrong with its shape said there too, in the words the service
+ * refuses it with. Each opening starts from the slug as it stands. Save
+ * stands the new slug at once, as the host draws it on the press, and closes
+ * the card; one the service refuses, as one another workspace holds, goes
+ * back, its words in a toast. The slug it leaves stays the workspace's, so
+ * no link written under it stops opening.
+ */
+function useSlugDialog(workspace: Workspace): SlugAsk {
+  const { press } = useAct();
+  const workspaceId = workspace.id;
+  const standing = workspace.slug ?? "";
+  const [slug, setSlug] = useState(standing);
+  const field = useRef<HTMLInputElement | null>(null);
+  const problem = workspaceSlugProblemOf(slug);
+  const shown = problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem];
+  const confirm = useConfirmDialog(
+    { subject: workspace.role === WORKSPACE_ROLE.OWNER, surfaceOpen: true },
+    () => {
+      void press(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId, slug });
+      return Promise.resolve(ACCEPTED);
+    },
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE, { workspaceId }),
+  );
+  const form = useFormDialog(confirm, problem === undefined && slug !== standing);
+  const dialog = (
+    <Dialog
+      open={form.open}
+      title={SLUG_WORDS.CHANGE}
+      busy={form.settling}
+      initialFocus={field}
+      onDismiss={form.dismiss}
+      actions={
+        <DialogActions
+          onCancel={form.dismiss}
+          act={{
+            verb: SLUG_WORDS.SAVE,
+            tone: DIALOG_TONE.PRIMARY,
+            running: SLUG_WORDS.SAVING,
+            ...form.act,
+          }}
+        />
+      }
+    >
+      <FormField label="Slug" description={`${LINK_HOME.HOST}/${slug}`} error={inputProblem(shown)}>
+        {(control) => (
+          <TextField
+            ref={field}
+            field={control}
+            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+            spellCheck={false}
+            autoCorrect={false}
+            value={slug}
+            disabled={form.settling}
+            onEnter={form.submit}
+            onChange={setSlug}
+          />
+        )}
+      </FormField>
+    </Dialog>
+  );
+  return {
+    ask: () => {
+      setSlug(standing);
+      confirm.ask();
+    },
+    dialog,
+  };
 }
 
 /**
  * The page's first row, drawn as Account's account row is: the workspace's
- * tile, its name, who shares it and the reader's role in one line, then for
- * an owner or an admin Rename, and the photo's acts in its ⋯. Rename opens
+ * tile, its name, and who shares it in one line, then for an owner or an
+ * admin Rename, and the photo's acts in its ⋯, beside the owner's Change
+ * slug (`useSlugDialog`). Rename opens
  * the name in place on its own line, as the sidebar renames a task, and
  * Return or a press elsewhere sends what was typed with its ends trimmed,
  * while Escape, an empty name, or the same one renames nothing; an account's
@@ -1770,6 +1843,11 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
       if (picked !== undefined) upload(picked);
     },
   });
+  const slugging = useSlugDialog(workspace);
+  const slugActs =
+    workspace.role === WORKSPACE_ROLE.OWNER
+      ? [{ label: SLUG_WORDS.CHANGE, icon: <GLYPH.LINK />, onSelect: slugging.ask }]
+      : [];
   const actions = manages
     ? [
         [
@@ -1782,6 +1860,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
               picker.open();
             },
           },
+          ...slugActs,
         ],
         // An upload still under way would put a photo back after its removal, so none is asked meanwhile.
         set
@@ -1815,6 +1894,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     <Stack gap={GAP.NONE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_RENAME)}>
       <MenuRow
         thing="Workspace"
+        anchor={SETTINGS_SEARCH_ROW.WORKSPACE_SLUG}
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
@@ -1828,7 +1908,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
               onEnd={end}
             />
           ),
-          description: identityLine(workspace),
+          description: sharedWords(workspace.memberCount, workspace.personal === true),
           error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_WRITE),
           control: (
             <>
@@ -1849,79 +1929,15 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
+      {slugging.dialog}
     </Stack>
   );
 }
 
 /**
- * The workspace's link, which its owner alone changes: the slug every link
- * to the workspace is written under, typed in place, the address it makes
- * said under it as it is typed, and what is wrong with its shape said there
- * too, in the words the service refuses it with. Save stands the new slug
- * at once, as the host draws it on the press; one the service refuses, as
- * one another workspace holds, goes back, its words in a toast. The slug it
- * leaves stays the workspace's, so no link written under it stops opening.
- */
-function WorkspaceLink({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const { press } = useAct();
-  const standing = workspace.slug ?? "";
-  const [slug, setSlug] = useState(standing);
-  const field = useRef<HTMLInputElement | null>(null);
-  const problem = workspaceSlugProblemOf(slug);
-  const shown = problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem];
-  const save = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (problem !== undefined) {
-      field.current?.focus();
-      return;
-    }
-    void press(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId: workspace.id, slug });
-  };
-  return (
-    <div
-      className="workspace-link flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block"
-      {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_SLUG)}
-    >
-      <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={save}>
-        <FormField
-          label="Workspace link"
-          description={`${LINK_HOME.HOST}/${slug}`}
-          error={inputProblem(shown)}
-        >
-          {(control) => (
-            <Inline justify={JUSTIFY.END} growFirst>
-              <TextField
-                ref={field}
-                field={control}
-                autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-                spellCheck={false}
-                autoCorrect={false}
-                value={slug}
-                // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-                onEscape={() => field.current?.blur()}
-                onChange={setSlug}
-              />
-              {/* Note that the host draws the slug on the press, so Save is never busy. */}
-              <Button
-                type={BUTTON_TYPE.SUBMIT}
-                variant={BUTTON_VARIANT.PRIMARY}
-                busy={false}
-                disabled={slug === standing}
-              >
-                Save
-              </Button>
-            </Inline>
-          )}
-        </FormField>
-      </Inline>
-    </div>
-  );
-}
-
-/**
  * The page for the listed workspace, one kind of thing to a group: its
- * identity, its members, its invitations for an owner or an admin, its
- * GitHub, and last the leave for anyone but an owner, the members and
+ * identity, its members and under them its invitations for an owner or an
+ * admin, its GitHub, and last the leave for anyone but an owner, the members and
  * GitHub under the anchors their links have always named; placeholder
  * sections in the page's shape before the workspaces are read, and Retry
  * where that read failed.
@@ -1978,10 +1994,6 @@ function ShownWorkspace({
     <>
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
-        {/* Keyed to the slug, so a slug changed elsewhere stands in the field rather than what was typed over the old one. */}
-        {workspace.role === WORKSPACE_ROLE.OWNER ? (
-          <WorkspaceLink key={workspace.slug} workspace={workspace} />
-        ) : null}
       </SettingsSection>
       <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <TeamMembers
@@ -1990,12 +2002,10 @@ function ShownWorkspace({
           members={members.read}
           onRetry={members.retry}
         />
-      </SettingsSection>
-      {managesWorkspace(workspace) ? (
-        <SettingsSection title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
+        {managesWorkspace(workspace) ? (
           <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
-        </SettingsSection>
-      ) : null}
+        ) : null}
+      </SettingsSection>
       <SettingsSection title={WORKSPACE_CONNECTIONS} anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         {WORKSPACE_INTEGRATIONS.map(({ service, Row }) => (
           <Row key={service} workspace={workspace} />
