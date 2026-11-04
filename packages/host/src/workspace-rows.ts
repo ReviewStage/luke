@@ -56,6 +56,13 @@ export interface WorkspaceWrite<Input, Answer> {
   readonly workspaceId: (input: Input) => string;
   readonly change: (input: Input) => WorkspaceChange;
   readonly send: (input: Input) => Effect.Effect<WorkspaceWritten<Answer>>;
+  /** What the caller hears for a write whose session closed before it was sent, which is never sent. */
+  readonly unsent: Answer;
+}
+
+/** A workspace write's input: the session's workspaces it was asked over, which it is drawn and sent through. */
+export interface AskedOver {
+  readonly rows: WorkspaceRows;
 }
 
 export interface WorkspaceRowsDependencies {
@@ -69,10 +76,11 @@ export interface WorkspaceRowsDependencies {
 export interface WorkspaceRows {
   /** Takes the workspaces the follow, or the entity store, answered, whole, and draws them. */
   readonly answer: (workspaces: readonly Workspace[]) => Effect.Effect<void>;
-  /** A write to `workspaceId` carried to the service by `send`, as the pool takes what it answered (`workspaceWrite`). */
+  /** A write to `workspaceId` carried to the service by `send`, as the pool takes what it answered (`workspaceWrite`); refused as `unsent`, and never sent, once this session has closed. */
   readonly sent: <Answer>(
     workspaceId: string,
     send: Effect.Effect<WorkspaceWritten<Answer>>,
+    unsent: Answer,
   ) => Effect.Effect<Written<WorkspaceChange, Answer> | Refused<Answer>>;
   /** Draws a workspace a write the service answered says over its row, as a photo set does, until the follow next moves it; answers once it is drawn. */
   readonly answered: (workspace: Workspace) => Effect.Effect<void>;
@@ -143,8 +151,13 @@ export function workspaceRows(
           yield* waits.answered;
           yield* drawn;
         }),
-      sent: (workspaceId, send) =>
-        Effect.suspend(() => {
+      sent: <Answer>(
+        workspaceId: string,
+        send: Effect.Effect<WorkspaceWritten<Answer>>,
+        unsent: Answer,
+      ) =>
+        Effect.suspend((): Effect.Effect<Written<WorkspaceChange, Answer> | Refused<Answer>> => {
+          if (!open) return Effect.succeed({ refused: unsent });
           const before = movesOf(workspaceId);
           return Effect.map(send, (sent) =>
             taken(workspaceId, before, sent, (workspace) => () => workspace),
@@ -174,18 +187,20 @@ export function workspaceRows(
 }
 
 /**
- * `declared` as a write the pool draws over its workspace at once, for the
- * session `rows` names as it is asked, sent through the session it names as
- * it is sent, and standing until the follow next moves the workspace.
+ * `declared` as a write the pool draws over its workspace at once, drawn
+ * and sent through the session it was asked over (`AskedOver`), so one sent
+ * after that session closed, behind an earlier write to the workspace, is
+ * refused rather than sent under the next account, and standing until the
+ * follow next moves the workspace.
  */
-export function workspaceWrite<Input, Answer>(
+export function workspaceWrite<Input extends AskedOver, Answer>(
   declared: WorkspaceWrite<Input, Answer>,
-  rows: () => WorkspaceRows,
 ): WriteDeclaration<Workspace, WorkspaceChange, Input, Answer> {
   return {
     kind: WORKSPACE,
     keys: (input) => [declared.workspaceId(input)],
-    change: (input) => rows().owned(declared.change(input)),
-    send: (input) => rows().sent(declared.workspaceId(input), declared.send(input)),
+    change: (input) => input.rows.owned(declared.change(input)),
+    send: (input) =>
+      input.rows.sent(declared.workspaceId(input), declared.send(input), declared.unsent),
   };
 }

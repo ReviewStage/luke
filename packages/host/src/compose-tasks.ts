@@ -247,7 +247,12 @@ import {
   type MemberWritten,
   workspaceMembersReads,
 } from "./workspace-members-read.js";
-import { type WorkspaceWritten, workspaceRows, workspaceWrite } from "./workspace-rows.js";
+import {
+  type AskedOver,
+  type WorkspaceWritten,
+  workspaceRows,
+  workspaceWrite,
+} from "./workspace-rows.js";
 import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
 
 /**
@@ -1559,6 +1564,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         : Effect.succeed({
             refused: carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
           }),
+    carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
   );
 
   /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
@@ -2185,30 +2191,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** A workspace renamed, its name drawn at once and kept until the follow moves it. */
-  const workspaceRenamed = workspaceWrite<TasksWorkspaceRenameParams, WireValue>(
-    {
-      workspaceId: ({ workspaceId }) => workspaceId,
-      change:
-        ({ name }) =>
-        (row) => ({ ...row, name }),
-      send: ({ workspaceId, name }) =>
-        workspaceWritten(client.workspaces.rename(workspaceId, name)),
-    },
-    () => workspaceList.rows,
-  );
+  const workspaceRenamed = workspaceWrite<TasksWorkspaceRenameParams & AskedOver, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    change:
+      ({ name }) =>
+      (row) => ({ ...row, name }),
+    send: ({ workspaceId, name }) => workspaceWritten(client.workspaces.rename(workspaceId, name)),
+    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+  });
 
   /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
-  const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams, WireValue>(
-    {
-      workspaceId: ({ workspaceId }) => workspaceId,
-      change:
-        ({ slug }) =>
-        (row) => ({ ...row, slug }),
-      send: ({ workspaceId, slug }) =>
-        workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
-    },
-    () => workspaceList.rows,
-  );
+  const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams & AskedOver, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    change:
+      ({ slug }) =>
+      (row) => ({ ...row, slug }),
+    send: ({ workspaceId, slug }) => workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
+    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+  });
 
   /**
    * A task renamed, its name drawn on its row at once and kept once the list
@@ -3422,10 +3422,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       dependencies.pool,
       workspaceRenamed,
       (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceRenameParamsSchema,
-          params,
-          "renaming a workspace names it and its new name",
+        Effect.map(
+          readParams(
+            tasksWorkspaceRenameParamsSchema,
+            params,
+            "renaming a workspace names it and its new name",
+          ),
+          (read) => ({ ...read, rows: workspaceList.rows }),
         ),
     ),
     // A slug moves no task either: links resolve by id, or by a former
@@ -3434,10 +3437,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       dependencies.pool,
       workspaceSlugSet,
       (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlugSetParamsSchema,
-          params,
-          "changing a workspace's slug names it and its new slug",
+        Effect.map(
+          readParams(
+            tasksWorkspaceSlugSetParamsSchema,
+            params,
+            "changing a workspace's slug names it and its new slug",
+          ),
+          (read) => ({ ...read, rows: workspaceList.rows }),
         ),
     ),
     // A photo moves no task either, but it uploads, so its workspace is
@@ -3832,6 +3838,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ...read,
             addedBy: dependencies.accountId() ?? "",
             addedAt,
+            session: tokenRepositoryWritten.session(),
           })),
         ),
     ),
@@ -3979,6 +3986,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     pullRequestListings: Effect.map(PubSub.subscribe(listings), Stream.fromSubscription),
     repositoriesMoved: repositoryLists.wake(() => true),
     reset: Effect.gen(function* () {
+      // Note that the session's token repository writes are let go first, so none still out lays its answer while the rest of the reset runs.
+      yield* tokenRepositoryWritten.letGo;
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
@@ -3996,7 +4005,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       photosAsked.clear();
       tellPhotos(NO_KEYS_HELD);
       yield* tokenRepositories.end;
-      yield* tokenRepositoryWritten.letGo;
       yield* integrations.end;
       yield* slackChannels.end;
       yield* FiberMap.clear(editWaits);
