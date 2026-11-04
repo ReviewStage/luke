@@ -3,24 +3,24 @@ import {
   type IntegrationToolsView,
 } from "@repo/features/integration-view";
 import { integrationConnectionOf } from "@repo/features/integration-wire";
-import { ACT_KIND } from "@repo/host/acts";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "./act.js";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { useCallback, useMemo } from "react";
+import { useSteadyDoors } from "./steady-door.js";
+import { HOST_READ_STATUS, type IntegrationServer, useHostReads } from "./use-host-read.js";
 
 /**
- * integration-tools.ts -- what each connected integration's server answered when asked for its tools, read for as long as a surface that draws it is drawn.
+ * integration-tools.ts -- what each connected integration's server answered when asked for its tools, held for as long as a surface that draws it is drawn.
  *
- * A provider's tools are read as soon as it stands connected, and again
- * whenever the window is focused, which is how the developer comes back
+ * The host holds each server's tools while a surface lists it
+ * (`LIVE_READ.INTEGRATION_TOOLS`), asking as it is first held and again
+ * whenever a window comes forward, which is how the developer comes back
  * from mending a connection in the browser; never polled otherwise. The
  * service holds a list it read for a few minutes, so a read again costs a
  * working server nothing, and holds no refusal, so a mended one reads as
  * mended. Each read stands until the next one answers, so a surface does
- * not blink back to checking, and an answer to an older ask never lands over
- * a newer one; a provider that stops standing connected forgets its read. A
- * read that failed is asked again on a press of Retry, which stands it
- * back at checking until the next answer.
- * What a read means for the row is
+ * not blink back to checking, and one held lately draws at once; a read
+ * that never answered is asked again on a press of Retry, which stands it
+ * back at checking until the next answer. What a read means for the row is
  * `integration-health.ts`'s to say.
  */
 
@@ -36,69 +36,50 @@ export interface IntegrationToolReads {
   readonly retry: (server: string) => void;
 }
 
-/** The tools read of every server in `connected` (an account by its connection name, or a provider), asked once per focus of the window while the caller is drawn. */
+/** The server a connection's name stands for, as its read is held; none for a name this build cannot read. */
+function serverOf(name: string): IntegrationServer | undefined {
+  const provider = integrationConnectionOf(name)?.provider;
+  if (provider === undefined) return undefined;
+  return name === provider ? { provider } : { provider, connection: name };
+}
+
+/** The name a server's read stands under, its account's where it names one, else its provider's. */
+function nameOf(server: IntegrationServer): string {
+  return server.connection ?? server.provider;
+}
+
+/** The tools read of every server in `connected` (an account by its connection name, or a provider), held while the caller is drawn. */
 export function useIntegrationTools(connected: readonly string[]): IntegrationToolsReads {
   return useIntegrationToolReads(connected).reads;
 }
 
 /** `useIntegrationTools`, with the Retry a surface that says a read failed offers beside it. */
 export function useIntegrationToolReads(connected: readonly string[]): IntegrationToolReads {
-  const { act } = useAct();
-  const [reads, setReads] = useState<IntegrationToolsReads>({});
-  const [focus, setFocus] = useState(0);
-  // Counts the presses of Retry, so the next render asks the server again.
-  const [, setRetried] = useState(0);
-  // The focus each server was last asked under, so each is asked once per focus.
-  const asked = useRef(new Map<string, number>());
-  // Each server's newest ask, so an answer to an older one never lands over it.
-  const newest = useRef(new Map<string, number>());
-  const asks = useRef(0);
-
-  useEffect(() => {
-    const focused = () => setFocus((count) => count + 1);
-    window.addEventListener("focus", focused);
-    return () => window.removeEventListener("focus", focused);
-  }, []);
-
-  useEffect(() => {
-    // A provider no longer connected forgets its read, so a grant made later is never drawn with the old one's answer.
-    for (const server of asked.current.keys()) {
-      if (connected.includes(server)) continue;
-      asked.current.delete(server);
-      newest.current.delete(server);
-      setReads((read) => {
-        const kept = { ...read };
-        delete kept[server];
-        return kept;
-      });
-    }
-    for (const server of connected) {
-      const provider = integrationConnectionOf(server)?.provider;
-      if (provider === undefined || asked.current.get(server) === focus) continue;
-      asked.current.set(server, focus);
-      asks.current += 1;
-      const ask = asks.current;
-      newest.current.set(server, ask);
-      const land = (answer: IntegrationToolsView) => {
-        if (newest.current.get(server) !== ask) return;
-        setReads((read) => ({ ...read, [server]: answer }));
-      };
-      act(ACT_KIND.INTEGRATIONS_TOOLS, {
-        provider,
-        ...(server === provider ? undefined : { connection: server }),
-      }).then(land, () => land(UNANSWERED));
-    }
-  });
-
-  const retry = useCallback((server: string) => {
-    asked.current.delete(server);
-    setReads((read) => {
-      const kept = { ...read };
-      delete kept[server];
-      return kept;
-    });
-    setRetried((count) => count + 1);
-  }, []);
-
-  return { reads, retry };
+  // Note that the servers are handed on as one array while they name the same accounts, so a draw that changed none holds none anew.
+  const servers = useSteadyDoors(
+    connected.flatMap((name) => {
+      const server = serverOf(name);
+      return server === undefined ? [] : [server];
+    }),
+  );
+  const { readOf, retry } = useHostReads(LIVE_READ.INTEGRATION_TOOLS, servers);
+  const reads = useMemo(
+    () =>
+      Object.fromEntries(
+        servers.flatMap((server): [string, IntegrationToolsView][] => {
+          const { rows, status } = readOf(server);
+          if (rows !== undefined) return [[nameOf(server), rows]];
+          return status === HOST_READ_STATUS.FAILED ? [[nameOf(server), UNANSWERED]] : [];
+        }),
+      ),
+    [servers, readOf],
+  );
+  const retryServer = useCallback(
+    (name: string) => {
+      const server = servers.find((each) => nameOf(each) === name);
+      if (server !== undefined) retry(server);
+    },
+    [servers, retry],
+  );
+  return { reads, retry: retryServer };
 }

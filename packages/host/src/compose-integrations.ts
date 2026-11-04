@@ -6,17 +6,31 @@ import {
   type IntegrationProviderParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
-  type IntegrationToolsView,
   integrationProviderParamsSchema,
   integrationRenameParamsSchema,
 } from "@repo/features/integration-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@repo/gateway";
-import { Effect, type Scope } from "effect";
+import {
+  type IntegrationToolsAnswer,
+  integrationConnectionOf,
+} from "@repo/features/integration-wire";
+import type { LIVE_READ } from "@repo/features/live-wire";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  readParams,
+} from "@repo/gateway";
+import { Effect, FiberMap, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { type AppIntegrationTools, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import { type HeldFetch, heldFetch } from "./held-fetch.js";
+import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
+import type { WindowFocus } from "./window-focus.js";
 
 /**
  * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or canceled, a connection ended, an account named.
@@ -27,8 +41,13 @@ import type { RunMode } from "./run-mode.js";
  * never reaches a window or a report; the window hears only whether the
  * browser was sent. It learns how the sign-in settled by reading where the
  * integrations stand again, which it does when it is shown and when the
- * developer comes back from the browser. Behind a closed account gate, or on
- * a run that sends nothing, every ask answers unanswered.
+ * developer comes back from the browser. Each server's tools are fetched for
+ * the windows that hold them (`held-fetch.ts`), by the server's name, asked
+ * as a window first holds them, again as a window comes forward, which is
+ * how the developer comes back from mending a connection in the browser,
+ * and on Try again, and told as `INTEGRATION_TOOLS_CHANGED` events to the
+ * app state every window draws. Behind a closed account gate, or on a run
+ * that sends nothing, every ask answers unanswered.
  */
 
 /** The service's side of the integrations, as this concern asks it. */
@@ -38,38 +57,84 @@ export type IntegrationsClient = Pick<
 >;
 
 export interface IntegrationsDependencies {
-  kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: IntegrationsClient;
   /** Hands an address to the operating system; answers whether it took it. */
   openExternal: (url: string) => Effect.Effect<boolean>;
+  /** The windows coming forward, on which every server's tools a window holds are asked again. */
+  focus: WindowFocus;
 }
 
-export type IntegrationsComposer = Composer;
+export interface IntegrationsComposer extends Composer {
+  /** Every server's tools a window holds followed anew, as the account gate opening asks. */
+  readonly open: Effect.Effect<void>;
+  /** Every server's tools let go, as a sign-out lets them go. */
+  readonly reset: Effect.Effect<void>;
+}
 
 const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
+
+/** The account a server's name stands for, as the service is asked it: its provider, and the account where the name is not the provider's own; none for a name this build cannot read. */
+function serverOf(
+  server: string,
+): Pick<IntegrationProviderParams, "provider" | "connection"> | undefined {
+  const provider = integrationConnectionOf(server)?.provider;
+  if (provider === undefined) return undefined;
+  return server === provider ? { provider } : { provider, connection: server };
+}
+
+/** The name a server goes by, its account's where it names one, else its provider's. */
+function serverName({ provider, connection }: IntegrationProviderParams): string {
+  return connection ?? provider;
+}
 
 export function composeIntegrations(
   dependencies: IntegrationsDependencies,
 ): Effect.Effect<IntegrationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    return composed(dependencies, yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    const { kernel, account, client } = dependencies;
+    const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+    /** The service asked behind the gate, over the host's own HTTP client. */
+    const asked = <Answer>(
+      call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+    ): Effect.Effect<Answer | typeof UNANSWERED> =>
+      gate()
+        ? Effect.provideService(call, HttpClient.HttpClient, http)
+        : Effect.succeed(UNANSWERED);
+    const tools = yield* heldFetch<typeof LIVE_READ.INTEGRATION_TOOLS, string>({
+      empty: NO_KEYS_HELD,
+      path: (server) => [server],
+      gate,
+      focus: dependencies.focus,
+      fetch: (server) => {
+        const target = serverOf(server);
+        if (target === undefined) return Effect.succeed(Option.none());
+        const read = client.tools(target.provider, { connection: target.connection });
+        return Effect.map(asked(read), (answer) =>
+          "failure" in answer ? Option.none() : Option.some(answer),
+        );
+      },
+      tell: (held: AppIntegrationTools) =>
+        kernel.emit(GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED, carried(held)),
+    });
+    return composed(dependencies, asked, tools, yield* FiberMap.make<string>());
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything. */
+/** The composer's one table, built from its seams; nothing here starts anything but a server's tools, while a window holds them. */
 function composed(
   dependencies: IntegrationsDependencies,
-  http: HttpClient.HttpClient,
-): IntegrationsComposer {
-  const { kernel, account, client, openExternal } = dependencies;
-  const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
-
-  /** The service asked behind the gate, over the host's own HTTP client. */
-  const asked = <Answer>(
+  asked: <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+  ) => Effect.Effect<Answer | typeof UNANSWERED>,
+  /** Each server's tools, by its name. */
+  tools: HeldFetch<string, IntegrationToolsAnswer>,
+  /** The windows' hold on each server's tools, one fiber standing until let go. */
+  toolHolds: FiberMap.FiberMap<string>,
+): IntegrationsComposer {
+  const { client, openExternal } = dependencies;
 
   type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
 
@@ -105,10 +170,27 @@ function composed(
         const target = yield* targetOf(params);
         return carried<IntegrationConnectView>(yield* connect(target));
       }),
-    [GATEWAY_METHOD.INTEGRATIONS_TOOLS]: (params) =>
+    // A server's tools are held for the windows while a surface listing it shows, and told only on the app state (`INTEGRATION_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { provider, connection } = yield* targetOf(params);
-        return carried<IntegrationToolsView>(yield* asked(client.tools(provider, { connection })));
+        const server = serverName(yield* targetOf(params));
+        yield* FiberMap.run(
+          toolHolds,
+          server,
+          Effect.scoped(Effect.andThen(tools.hold(server), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        yield* FiberMap.remove(toolHolds, serverName(yield* targetOf(params)));
+        return {};
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        yield* tools.retry(serverName(yield* targetOf(params)));
+        return {};
       }),
     [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: (params) =>
       Effect.gen(function* () {
@@ -137,5 +219,5 @@ function composed(
       }),
   };
 
-  return { methods, lifetime: Effect.void };
+  return { methods, lifetime: Effect.void, open: tools.open, reset: tools.end };
 }

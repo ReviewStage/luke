@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { IntegrationTool } from "@repo/features/integration-health";
 import { SIGN_IN } from "@repo/features/integration-sign-in";
+import type { IntegrationToolsView } from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -13,14 +14,18 @@ import {
   type IntegrationToolsProblemReason,
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdIntegrationTools } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { playListMotions } from "../testing/pane-motion.js";
+import type { IntegrationServer } from "../use-host-read.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -86,12 +91,20 @@ const TOOLS = new Map<string, readonly IntegrationTool[]>([
 
 const roots: Root[] = [];
 
+/** Each server's tools as the host holds them, its service answering as `toolsOf` says, beside the acts the test answers by now. */
+function holdTools(toolsOf: (server: IntegrationServer) => IntegrationToolsView): void {
+  holdIntegrationTools(handHostReads({}).deliverTools, toolsOf);
+}
+
+/** Each server's tools as `TOOLS` lists them. */
+const listed = (server: IntegrationServer): IntegrationToolsView => ({
+  tools: TOOLS.get(server.connection ?? server.provider) ?? [],
+});
+
 beforeEach(() => {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
-      Promise.resolve({ tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] }),
-  });
+  fakeActPort({});
+  holdTools(listed);
 });
 
 afterEach(() => {
@@ -122,18 +135,23 @@ async function opened(standing: IntegrationStatuses = statuses) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  // Note that each draw stands on a registry of its own, so the document the test hands is read afresh.
+  const registry = AtomRegistry.make();
   const render = (statuses: IntegrationStatuses) =>
     act(() =>
       root.render(
-        createElement(AgentServersButton, {
-          servers: {
-            disabled: [],
-            onSwitch: (next) => switched.push(next),
-            onOpenSettings: () => undefined,
-          },
-          statuses,
-          face: "None",
-        }),
+        onRegistry(
+          registry,
+          createElement(AgentServersButton, {
+            servers: {
+              disabled: [],
+              onSwitch: (next) => switched.push(next),
+              onOpenSettings: () => undefined,
+            },
+            statuses,
+            face: "None",
+          }),
+        ),
       ),
     );
   render(standing);
@@ -142,8 +160,9 @@ async function opened(standing: IntegrationStatuses = statuses) {
       .querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]')
       ?.click(),
   );
+  // Note that the servers' tools land on the document once their holds are taken, a few turns after the draw.
   await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
   });
   const field = () =>
     container.querySelector<HTMLInputElement>('.agent-servers-menu input[type="text"]') ??
@@ -527,13 +546,10 @@ function answerLinear(problem: {
           ]),
         ) as Record<IntegrationProvider, IntegrationStatus>,
       }),
-    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
-      Promise.resolve(
-        (payload.connection ?? payload.provider) === LINEAR
-          ? { problem }
-          : { tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] },
-      ),
   });
+  holdTools((server) =>
+    (server.connection ?? server.provider) === LINEAR ? { problem } : listed(server),
+  );
 }
 
 /** The act port answering as `answerLinear` does, Linear's sign-in refused. */
@@ -636,9 +652,9 @@ function buttonsOf(container: HTMLElement, name: string) {
 test("a Connect shows it is working until the browser has been sent to sign in", async () => {
   const connect = Promise.withResolvers<{ opened: true }>();
   fakeActPort({
-    [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: [] }),
     [ACT_KIND.INTEGRATIONS_CONNECT]: () => connect.promise,
   });
+  holdTools(() => ({ tools: [] }));
   const { container } = await opened();
   assert.deepEqual(buttonsOf(container, "Mercury"), [
     { words: "Connect", busy: false, off: false },
@@ -700,15 +716,10 @@ test("a Cancel shows it is working while Reopen waits, and a sign-in that failed
 });
 
 test("a connected server that lists no tools has no page to open, so a press on its row flips its switch", async () => {
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
-      Promise.resolve({
-        tools:
-          (payload.connection ?? payload.provider) === LINEAR
-            ? []
-            : (TOOLS.get(payload.connection ?? payload.provider) ?? []),
-      }),
-  });
+  fakeActPort({});
+  holdTools((server) =>
+    (server.connection ?? server.provider) === LINEAR ? { tools: [] } : listed(server),
+  );
   const { container, switched } = await opened();
 
   act(() => serverPress(container, "Linear")?.click());

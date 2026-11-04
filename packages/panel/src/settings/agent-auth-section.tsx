@@ -1,6 +1,8 @@
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PROVIDER_KEY_KIND,
@@ -78,11 +80,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
-import { useSettleOpenAiKey } from "../openai-key.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { useCapability } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * agent-auth-section.tsx -- Settings › Agents' harnesses: one row each for Claude and Codex, saying how it is connected, and the dialog that connects it; setup's same rows, connecting in place.
@@ -611,7 +613,6 @@ function usePastedSecret({
   payload,
   failed,
   refused,
-  onAnswer,
 }: {
   held: boolean;
   field: React.RefObject<HTMLInputElement | null>;
@@ -619,7 +620,6 @@ function usePastedSecret({
   /** What a save the service never answered says. */
   failed: string;
   refused: (rejection: ProviderKeyRejection) => string;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): PastedSecret {
   const { act } = useAct();
   const [editing, setEditing] = useState(false);
@@ -650,7 +650,6 @@ function usePastedSecret({
           setRejection(failed);
           return;
         }
-        onAnswer(answer);
         if (answer.rejected !== undefined) {
           setRejection(refused(answer.rejected));
           return;
@@ -771,7 +770,6 @@ const CHATGPT_DISCONNECT: DialogQuestion = {
 function useClaudePlan(
   plan: SubscriptionKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
-  onAnswer: (answer: ProviderKeysAnswer) => void,
 ): { secret: PastedSecret; removal: DialogConfirm } {
   const { act } = useAct();
   const secret = usePastedSecret({
@@ -784,7 +782,6 @@ function useClaudePlan(
     }),
     failed: WORDS.SAVE_TOKEN_FAILED,
     refused: tokenRejectionWords,
-    onAnswer,
   });
   const { cancel } = secret;
   const disconnect = useCallback(
@@ -801,11 +798,10 @@ function useClaudePlan(
               reason: WORDS.CLAUDE_DISCONNECT_FAILED,
             };
           }
-          onAnswer(removed);
           cancel();
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, onAnswer, cancel],
+    [act, cancel],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -819,14 +815,12 @@ function useClaudePlan(
 function ClaudePlanRow({
   plan,
   field,
-  onAnswer,
 }: {
   plan: SubscriptionKeySummary | undefined;
   /** The dialog's way to the field while it stands. */
   field: React.RefObject<HTMLInputElement | null>;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
-  const { secret, removal } = useClaudePlan(plan, field, onAnswer);
+  const { secret, removal } = useClaudePlan(plan, field);
   const ok = plan !== undefined && standing(plan);
   return (
     <>
@@ -878,13 +872,11 @@ function ClaudePlanRow({
 function ClaudePlanInPlace({
   plan,
   field,
-  onAnswer,
 }: {
   plan: SubscriptionKeySummary | undefined;
   field: React.RefObject<HTMLInputElement | null>;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
-  const { secret, removal } = useClaudePlan(plan, field, onAnswer);
+  const { secret, removal } = useClaudePlan(plan, field);
   const ok = plan !== undefined && standing(plan);
   return (
     <>
@@ -963,10 +955,7 @@ interface ChatGptPlan {
  * The ChatGPT plan's sign-in and disconnect. The first sign-in on this Mac
  * raises OpenAI's notice, once; a disconnect OpenAI did not confirm says so.
  */
-function useChatGptPlan(
-  plan: SubscriptionKeySummary | undefined,
-  onAnswer: (answer: ProviderKeysAnswer) => void,
-): ChatGptPlan {
+function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
   const { act } = useAct();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -990,10 +979,9 @@ function useChatGptPlan(
           setError(WORDS.SIGN_IN_FAILED);
           return;
         }
-        onAnswer(outcome);
         if (!noticeSeen()) setNotice(true);
       });
-  }, [act, onAnswer]);
+  }, [act]);
 
   const cancel = useCallback(() => {
     void act(ACT_KIND.CHATGPT_SIGN_IN_CANCEL).catch(() => undefined);
@@ -1013,11 +1001,10 @@ function useChatGptPlan(
               reason: WORDS.CHATGPT_DISCONNECT_FAILED,
             };
           }
-          onAnswer(removed);
           setUnconfirmed(removed.revocationUnconfirmed === true);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, onAnswer],
+    [act],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -1104,16 +1091,14 @@ function ChatGptPlanRow({
   plan,
   offered,
   signInButton,
-  onAnswer,
 }: {
   plan: SubscriptionKeySummary | undefined;
   /** Whether this client can take the sign-in's loopback (the desktop). */
   offered: boolean;
   /** The dialog's way to Continue with ChatGPT while it stands. */
   signInButton: React.RefObject<HTMLButtonElement | null>;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
-  const chatGpt = useChatGptPlan(plan, onAnswer);
+  const chatGpt = useChatGptPlan(plan);
   const { connected, signingIn, error } = chatGpt;
   const continueOffered = offered && !connected;
   const status =
@@ -1247,7 +1232,6 @@ function useApiKey(
   provider: ProviderKeyProvider,
   stored: ProviderKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
-  onAnswer: (answer: ProviderKeysAnswer) => void,
 ): { secret: PastedSecret; removal: DialogConfirm } {
   const { act } = useAct();
   const secret = usePastedSecret({
@@ -1256,7 +1240,6 @@ function useApiKey(
     payload: (key) => ({ provider, key }),
     failed: WORDS.SAVE_KEY_FAILED,
     refused: (rejection) => keyRejectionWords(provider, rejection),
-    onAnswer,
   });
   const remove = useCallback(
     (): Promise<ActionResult> =>
@@ -1266,10 +1249,9 @@ function useApiKey(
           if (answer === undefined || "failure" in answer) {
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: WORDS.REMOVE_KEY_FAILED };
           }
-          onAnswer(answer);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, onAnswer, provider],
+    [act, provider],
   );
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
@@ -1327,15 +1309,13 @@ function ApiKeyRow({
   provider,
   stored,
   field,
-  onAnswer,
 }: {
   provider: ProviderKeyProvider;
   stored: ProviderKeySummary | undefined;
   /** The dialog's way to the field while it stands. */
   field: React.RefObject<HTMLInputElement | null>;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
-  const { secret, removal } = useApiKey(provider, stored, field, onAnswer);
+  const { secret, removal } = useApiKey(provider, stored, field);
   const keyName = `${HARNESS[provider].keyName} ${WORDS.API_KEY}`;
   return (
     <>
@@ -1383,14 +1363,12 @@ function ApiKeyInPlace({
   provider,
   stored,
   field,
-  onAnswer,
 }: {
   provider: ProviderKeyProvider;
   stored: ProviderKeySummary | undefined;
   field: React.RefObject<HTMLInputElement | null>;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
-  const { secret, removal } = useApiKey(provider, stored, field, onAnswer);
+  const { secret, removal } = useApiKey(provider, stored, field);
   const keyName = `${HARNESS[provider].keyName} ${WORDS.API_KEY}`;
   return (
     <>
@@ -1424,11 +1402,9 @@ function ApiKeyInPlace({
 function DefaultRow({
   provider,
   chosen,
-  onAnswer,
 }: {
   provider: ProviderKeyProvider;
   chosen: Credential;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const harness = HARNESS[provider];
@@ -1452,7 +1428,6 @@ function DefaultRow({
           setRefused(WORDS.DEFAULT_FAILED);
           return;
         }
-        onAnswer(turned);
       });
   };
 
@@ -1497,12 +1472,10 @@ function AgentCredentialRows({
   provider,
   answer,
   fields,
-  onAnswer,
 }: {
   provider: ProviderKeyProvider;
   answer: ProviderKeysAnswer;
   fields: CredentialFields;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const plan = planOf(answer, provider);
@@ -1514,21 +1487,16 @@ function AgentCredentialRows({
         {/* With one credential saved, that one is used, so there is nothing to choose. */}
         {plan === undefined || key === undefined || chosen === undefined ? null : (
           <SettingsSection>
-            <DefaultRow provider={provider} chosen={chosen} onAnswer={onAnswer} />
+            <DefaultRow provider={provider} chosen={chosen} />
           </SettingsSection>
         )}
         <SettingsSection>
           {provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? (
-            <ClaudePlanRow plan={plan} field={fields.token} onAnswer={onAnswer} />
+            <ClaudePlanRow plan={plan} field={fields.token} />
           ) : (
-            <ChatGptPlanRow
-              plan={plan}
-              offered={chatGptOffered}
-              signInButton={fields.signIn}
-              onAnswer={onAnswer}
-            />
+            <ChatGptPlanRow plan={plan} offered={chatGptOffered} signInButton={fields.signIn} />
           )}
-          <ApiKeyRow provider={provider} stored={key} field={fields.key} onAnswer={onAnswer} />
+          <ApiKeyRow provider={provider} stored={key} field={fields.key} />
         </SettingsSection>
       </Stack>
     </div>
@@ -1540,7 +1508,6 @@ function AgentAuthDialog({
   open,
   provider,
   answer,
-  onAnswer,
   onClose,
   onExited,
 }: {
@@ -1548,7 +1515,6 @@ function AgentAuthDialog({
   open: boolean;
   provider: ProviderKeyProvider;
   answer: ProviderKeysAnswer;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
   onClose: () => void;
   onExited: () => void;
 }): React.JSX.Element {
@@ -1581,12 +1547,7 @@ function AgentAuthDialog({
       onExited={onExited}
       actions={<DialogActions onDone={onClose} />}
     >
-      <AgentCredentialRows
-        provider={provider}
-        answer={answer}
-        fields={fields}
-        onAnswer={onAnswer}
-      />
+      <AgentCredentialRows provider={provider} answer={answer} fields={fields} />
     </Dialog>
   );
 }
@@ -1598,13 +1559,12 @@ interface Credentials {
   readonly answer: ProviderKeysAnswer | undefined;
   readonly readFailed: boolean;
   readonly retry: () => void;
-  readonly setAnswer: (answer: ProviderKeysAnswer) => void;
 }
 
 /**
- * The account's credentials, read as the list opens and changed in place by
- * each answer, which the Default model row (`onKeys`), setup
- * (`onConnected`), and the window all hear.
+ * The account's credentials as the host holds them (`LIVE_READ.PROVIDER_KEYS`),
+ * each write's own answer laid there, which the Default model row
+ * (`onKeys`) and setup (`onConnected`) hear.
  */
 function useCredentials({
   signedIn,
@@ -1615,33 +1575,11 @@ function useCredentials({
   onKeys?: ((keys: readonly ProviderKeySummary[]) => void) | undefined;
   onConnected?: ((connected: boolean) => void) | undefined;
 }): Credentials {
-  const { act } = useAct();
   const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
-  const [answer, setAnswer] = useState<ProviderKeysAnswer | undefined>(undefined);
-  const [readFailed, setReadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  // The page opening reads the credentials as the service holds them now, which a step may just have marked.
-  useEffect(() => {
-    if (!signedIn) return;
-    let live = true;
-    // Nothing of an earlier read, or an earlier account, stands while this one is out.
-    setAnswer(undefined);
-    setReadFailed(false);
-    act(ACT_KIND.PROVIDER_KEYS_READ).then(
-      (read) => {
-        if (!live) return;
-        if ("failure" in read) setReadFailed(true);
-        else setAnswer(read);
-      },
-      () => {
-        if (live) setReadFailed(true);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, attempt]);
+  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const keys = useHostRead(LIVE_READ.PROVIDER_KEYS, signedIn ? accountId : undefined);
+  const answer = keys.rows;
+  const readFailed = keys.status === HOST_READ_STATUS.FAILED;
 
   // The Default model row hears every answer, so nothing there says what a key used to be.
   useEffect(() => {
@@ -1660,14 +1598,7 @@ function useCredentials({
     );
   }, [answer, onConnected, chatGptOffered]);
 
-  // The window hears every answer too, so Call and Dictate turn as an OpenAI key is saved or removed.
-  const settleOpenAiKey = useSettleOpenAiKey();
-  useEffect(() => {
-    if (answer !== undefined) settleOpenAiKey(answer.keys);
-  }, [answer, settleOpenAiKey]);
-
-  const retry = useCallback(() => setAttempt((count) => count + 1), []);
-  return { answer, readFailed, retry, setAnswer };
+  return { answer, readFailed, retry: keys.retry };
 }
 
 /** The harnesses' section: signed out, a row each over the answer, a read that failed, or the rows' skeleton while it is out. */
@@ -1796,7 +1727,7 @@ export function AgentAuthSection({
 }): React.JSX.Element {
   const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const credentials = useCredentials({ signedIn, onKeys });
-  const { answer, setAnswer } = credentials;
+  const { answer } = credentials;
   const [open, setOpen] = useState<ProviderKeyProvider | undefined>(undefined);
   // Note that the card is drawn for the provider it opened on until its fade has run, so it does not change under its own exit.
   const { held: drawn, onExited } = useHeldThroughExit(open);
@@ -1837,7 +1768,6 @@ export function AgentAuthSection({
           open={open !== undefined}
           provider={drawn}
           answer={answer}
-          onAnswer={setAnswer}
           onClose={() => setOpen(undefined)}
           onExited={onExited}
         />
@@ -1888,7 +1818,6 @@ function ConnectInPlaceRow({
   signInOffered,
   onOpen,
   onClose,
-  onAnswer,
 }: {
   provider: ProviderKeyProvider;
   answer: ProviderKeysAnswer;
@@ -1898,7 +1827,6 @@ function ConnectInPlaceRow({
   signInOffered: boolean;
   onOpen: () => void;
   onClose: () => void;
-  onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const harness = HARNESS[provider];
   const plan = planOf(answer, provider);
@@ -1957,14 +1885,9 @@ function ConnectInPlaceRow({
                   />
                 </Inline>
                 {shown === CREDENTIAL.API_KEY ? (
-                  <ApiKeyInPlace
-                    provider={provider}
-                    stored={key}
-                    field={keyField}
-                    onAnswer={onAnswer}
-                  />
+                  <ApiKeyInPlace provider={provider} stored={key} field={keyField} />
                 ) : provider === PROVIDER_KEY_PROVIDER.ANTHROPIC || chatGpt === undefined ? (
-                  <ClaudePlanInPlace plan={plan} field={token} onAnswer={onAnswer} />
+                  <ClaudePlanInPlace plan={plan} field={token} />
                 ) : (
                   <ChatGptPlanInPlace
                     chatGpt={chatGpt}
@@ -2014,24 +1937,24 @@ export function AgentConnectSection({
 }): React.JSX.Element {
   const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const credentials = useCredentials({ signedIn: true, onConnected });
-  const { answer, setAnswer } = credentials;
+  const { answer } = credentials;
   const [open, setOpen] = useState<ProviderKeyProvider | undefined>(undefined);
-  const onAnswer = useCallback(
-    (next: ProviderKeysAnswer) => {
-      setAnswer(next);
-      if (
-        open !== undefined &&
-        answer !== undefined &&
-        connectedAnew(open, answer, next, chatGptOffered)
-      ) {
-        setOpen(undefined);
-      }
-    },
-    [setAnswer, open, answer, chatGptOffered],
-  );
+  // Note that a row open closes once the keys the host holds say its harness connected anew, as a write's own answer lays them.
+  const before = useRef(answer);
+  useEffect(() => {
+    const was = before.current;
+    before.current = answer;
+    if (
+      open !== undefined &&
+      was !== undefined &&
+      answer !== undefined &&
+      connectedAnew(open, was, answer, chatGptOffered)
+    ) {
+      setOpen(undefined);
+    }
+  }, [answer, open, chatGptOffered]);
   const chatGpt = useChatGptPlan(
     answer === undefined ? undefined : planOf(answer, PROVIDER_KEY_PROVIDER.OPENAI),
-    onAnswer,
   );
   return (
     <div className={NO_CAPTURE}>
@@ -2047,7 +1970,6 @@ export function AgentConnectSection({
               signInOffered={chatGptOffered}
               onOpen={() => setOpen(provider)}
               onClose={() => setOpen(undefined)}
-              onAnswer={onAnswer}
             />
           ))
         }

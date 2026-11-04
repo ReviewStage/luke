@@ -228,6 +228,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       composeIntegrations({
         kernel,
         account,
+        focus,
         client: new HostedIntegrationsClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
@@ -314,6 +315,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             account,
             client: agentClient,
             openConsent: (yield* SignInConsent).open,
+            keysAnswered: agents.keysAnswered,
           }),
         )
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
@@ -330,6 +332,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* tasks.open;
         yield* agents.open;
         yield* automations.open;
+        yield* integrations.open;
       }
       yield* settings.emitSettings();
     });
@@ -339,6 +342,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* account.forgetAccess;
       yield* tasks.reset;
       yield* agents.reset;
+      yield* integrations.reset;
       yield* automations.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
