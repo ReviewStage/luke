@@ -34,6 +34,9 @@ const PAGE_THEME_ASK_TYPE = "app-page-theme-ask";
 /** The mark the window's answer wears. */
 const PAGE_THEME_TYPE = "app-page-theme";
 
+/** The class a page gives an element, or its body, to stand across the frame rather than at reading width. */
+export const PAGE_WIDE_CLASS = "vespin-wide";
+
 /** The scheme a page is drawn in, as the window draws. */
 export const PAGE_THEME_SCHEME = {
   DARK: "dark",
@@ -115,6 +118,15 @@ export function pageThemeMessage(theme: PageTheme): {
  * page's head, so the page's own rules come after it and win. The inset is
  * the root's padding by the `html` element's name, which a page's own `*`
  * reset does not outweigh and its own `html` rule does.
+ *
+ * The page's body stands at reading width, centered, unless the page says
+ * otherwise: its width by `body`, which a page's own `max-width` on its body
+ * outweighs, and its centering by `html>body`, which a page's own
+ * `body { margin: 0 }` reset does not, so the happy path needs nothing of
+ * the page. A body of
+ * the wide class stands across the frame, and an element of it stands across
+ * the frame from within its reading-width parent, measured against the root
+ * as a container, so its width leaves out the scrollbar and the inset.
  */
 export const PAGE_THEME_SCRIPT = `(() => {
   "use strict";
@@ -122,6 +134,12 @@ export const PAGE_THEME_SCRIPT = `(() => {
   const ASK = ${JSON.stringify(PAGE_THEME_ASK_TYPE)};
   const NAME = /^--vespin-[a-z0-9-]+$/;
   const VALUE = /^[^;{}<>\\\\]*$/;
+  const WIDE = ${JSON.stringify(PAGE_WIDE_CLASS)};
+  const READING =
+    "html{container-type:inline-size}" +
+    "body{max-width:var(${PAGE_THEME_VARIABLE.READING_WIDTH})}html>body{margin-inline:auto}" +
+    "body." + WIDE + "{max-width:none}" +
+    "body ." + WIDE + "{box-sizing:border-box;width:100cqw;max-width:none;margin-inline:calc((100% - 100cqw) / 2)}";
   let sheet = null;
 
   const length = (value) => typeof value === "string" && value !== "" && VALUE.test(value);
@@ -138,7 +156,7 @@ export const PAGE_THEME_SCRIPT = `(() => {
     }
     let room = length(inset) ? "html{padding:" + inset + "}" : "";
     if (room !== "" && length(narrowInset)) room += "@media (max-width:479.98px){html{padding:" + narrowInset + "}}";
-    sheet.textContent = ":root{" + rules + "}" + room;
+    sheet.textContent = ":root{" + rules + "}" + room + READING;
   };
 
   addEventListener("message", (event) => {
