@@ -2103,7 +2103,7 @@ function RunsGroup({
       {slackOffered ? (
         <SwitchRow
           label="Send the result to me on Slack"
-          detail="The workspace's Slack bot sends each run's final message, so the run needs no Slack of its own."
+          detail="The workspace's Slack bot sends each run's final message."
           checked={draft.slackDelivery}
           onChange={(slackDelivery) => onDraft({ slackDelivery })}
         />

@@ -423,13 +423,14 @@ function ChoosingCards({
   runs?: boolean;
   /** The places whose cards are unavailable. */
   off?: readonly string[];
-  /** The places the region lists but draws no card for, as a run drawing only the rows near the view leaves them; the region is handed every place's order where any is. */
+  /** The places the region lists but draws no card for, as a run drawing only the rows near the view leaves them; the region is handed every place's order, run by run, where any is. */
   undrawn?: readonly string[];
   /** Hears each place the region asks to be brought into view, which draws nothing here. */
   broughtIn?: string[];
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<string[]>([]);
+  const [first, rest] = [PLACES.slice(0, 2), PLACES.slice(2)];
   const list = (names: readonly string[]) =>
     createElement(
       "ul",
@@ -462,14 +463,14 @@ function ChoosingCards({
     createElement(SelectionRegion, {
       id: "places",
       selection: { selected, onChange: setSelected },
-      order: undrawn.length === 0 ? undefined : PLACES,
+      order: undrawn.length === 0 ? undefined : runs ? [first, rest] : [PLACES],
       bringIn: (key: string) => {
         broughtIn.push(key);
         return true;
       },
       children: [
-        createElement(Fragment, { key: "first" }, list(PLACES.slice(0, 2))),
-        createElement(Fragment, { key: "rest" }, list(PLACES.slice(2))),
+        createElement(Fragment, { key: "first" }, list(first)),
+        createElement(Fragment, { key: "rest" }, list(rest)),
       ],
     }),
     createElement("output", { "data-chosen": "" }, [...selected].join(",")),
@@ -589,20 +590,26 @@ test("an unavailable card offers no box to choose it by, as no other way chooses
   expect(card("Board").querySelector('[role="checkbox"]')).toBeNull();
 });
 
-test("where the lists are runs, a ⇧-click reaches only across the run its card stands in", () => {
-  const page = draw(createElement(ChoosingCards, { runs: true }));
-  const press = (name: string, keys: MouseEventInit) =>
-    act(() => {
-      page
-        .querySelector(`[data-select-key="${name}"]`)
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...keys }));
-    });
-  press("Board", { metaKey: true });
-  press("Settings", { shiftKey: true });
-  expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Automations,Settings");
-  press("Inbox", { shiftKey: true });
-  expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Inbox");
-});
+test.each([
+  ["", []],
+  [", handed its order run by run", ["Automations"]],
+])(
+  "where the lists are runs%s, a ⇧-click reaches only across the run its card stands in",
+  (_, undrawn) => {
+    const page = draw(createElement(ChoosingCards, { runs: true, undrawn }));
+    const press = (name: string, keys: MouseEventInit) =>
+      act(() => {
+        page
+          .querySelector(`[data-select-key="${name}"]`)
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...keys }));
+      });
+    press("Board", { metaKey: true });
+    press("Settings", { shiftKey: true });
+    expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Automations,Settings");
+    press("Inbox", { shiftKey: true });
+    expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Inbox");
+  },
+);
 
 test("Clear in the bar over a region hands the focus to the region's first card rather than the page", () => {
   const page = draw(createElement(ChoosingCards));

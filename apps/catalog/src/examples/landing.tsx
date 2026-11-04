@@ -85,7 +85,7 @@ function Lost(): React.JSX.Element {
       footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
       address="/docs/getting-startd"
       title="No agent could find this page."
-      lead="It searched every branch and came back empty-handed."
+      lead="The link may be mistyped, or the page may have moved."
       actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Back to home</Button>}
     />
   );
