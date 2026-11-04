@@ -61,6 +61,7 @@ import { failureKind } from "@repo/runtime/effect";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import { calledId } from "../agents/called-id.js";
 import { type StartServices, type StartWhere, startAgent } from "../agents/coder-host/start.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
@@ -660,8 +661,11 @@ function runStartWords(automation: Automation, firedAt: Date): string {
  * automation's owner, in its repository, and in progress, its plan blank,
  * since the run's prompt reaches its agent as its first message. Note that the
  * task is made under an id drawn from the run's, because a run acted on
- * again must find the task it made rather than make a second, and that a
- * run whose owner left the workspace meanwhile makes none.
+ * again must find the task it made rather than make a second, that the run
+ * names the task in the transaction that inserts it, because the task list
+ * reads a run's task as such when the task's own row moves
+ * (`run-tasks.ts`), and that a run whose owner left the workspace meanwhile
+ * makes none.
  */
 const runTaskOf = Effect.fnUntraced(function* (
   automation: Automation,
@@ -671,26 +675,29 @@ const runTaskOf = Effect.fnUntraced(function* (
 ) {
   const { userId } = automation;
   const id = calledId(userId, run.id);
-  if (Option.isNone(yield* readTask(userId, id))) {
-    const made = yield* createTaskOnce(userId, {
-      id,
-      organizationId: automation.organizationId,
-      name: standing
-        ? automation.name
-        : `${automation.name} · ${runStartWords(automation, run.firedAt)}`,
-      repository,
-      githubAccess: GITHUB_ACCESS.APP,
-      status: TASK_STATUS.IN_PROGRESS,
-      assigneeId: userId,
-      text: "",
-    }).pipe(
-      Effect.as(true),
-      Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(false)),
-    );
-    if (!made) return Option.none<string>();
-  }
-  yield* attachRunTask(run.id, id);
-  return Option.some(id);
+  const named = Effect.gen(function* () {
+    if (Option.isNone(yield* readTask(userId, id))) {
+      const made = yield* createTaskOnce(userId, {
+        id,
+        organizationId: automation.organizationId,
+        name: standing
+          ? automation.name
+          : `${automation.name} · ${runStartWords(automation, run.firedAt)}`,
+        repository,
+        githubAccess: GITHUB_ACCESS.APP,
+        status: TASK_STATUS.IN_PROGRESS,
+        assigneeId: userId,
+        text: "",
+      }).pipe(
+        Effect.as(true),
+        Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(false)),
+      );
+      if (!made) return Option.none<string>();
+    }
+    yield* attachRunTask(run.id, id);
+    return Option.some(id);
+  });
+  return yield* Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(named));
 });
 
 /**

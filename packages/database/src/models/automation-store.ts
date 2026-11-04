@@ -47,8 +47,10 @@ import { agentTable } from "../schemas/agent.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { conversations } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { noOpenInboxItem, noOpenPullRequest } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
+import { taskMadeByRun } from "./run-tasks.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, roleAmong } from "./workspace-store.js";
 
@@ -1594,23 +1596,17 @@ const findRunMadeTask = SqlSchema.findOneOption({
   execute: ({ taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: automationRun.id })
-        .from(automationRun)
-        .innerJoin(automation, eq(automation.id, automationRun.automationId))
-        .where(
-          and(
-            eq(automationRun.taskId, taskId),
-            eq(automation.targetKind, AUTOMATION_TARGET.NEW_AGENT),
-          ),
-        )
+        .select({ id: task.id })
+        .from(task)
+        .where(and(eq(task.id, taskId), taskMadeByRun(task.id)))
         .limit(1),
     ),
 });
 
 /**
- * Whether the task is one a run made for itself alone, which is a run of an
- * automation that starts a new agent each run; a same-agent automation's
- * standing task is every run's, and no one run's to finish.
+ * Whether the task is one a run made for itself alone (`run-tasks.ts`); a
+ * same-agent automation's standing task is every run's, and no one run's to
+ * finish.
  */
 export function isRunTask(taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(findRunMadeTask({ taskId }), Option.isSome);

@@ -153,7 +153,7 @@ import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { useFailedRunsMark } from "./failed-runs.js";
-import { withoutFinishedRuns } from "./finished-runs.js";
+import { withoutFinishedRunTasks, withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
@@ -2061,8 +2061,12 @@ function SidebarColumn({
   };
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice. The agents with no plan stand among the plans.
-  const unpinnedTasks = listedRows.tasks.filter(
-    (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
+  // A task an automation's run made leaves Tasks too, once its run finished and it holds nothing of the reader's (`finished-runs.ts`).
+  const unpinnedTasks = withoutFinishedRunTasks(
+    listedRows.tasks.filter(
+      (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
+    ),
+    { unread, inbox: tasks.listed.inbox, shown: current },
   );
   // An automation's finished runs leave Tasks once they hold nothing of the reader's (`finished-runs.ts`).
   const unpinnedAgents = withoutFinishedRuns(
