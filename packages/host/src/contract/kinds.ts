@@ -607,7 +607,7 @@ export const WORKSPACE_ACT_KIND = {
  * What a window asks of the system it is drawn on: the microphone asked for
  * and its route read afresh, the microphone's and the notifications' settings
  * opened, a new mail to the people who make the app, the panel focused, words
- * copied, a file saved, and feedback sent.
+ * copied, a file saved, a build's label shown or hidden, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_REQUEST: "microphone.request",
@@ -638,6 +638,12 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * while it does.
    */
   WINDOW_UNSAVED_WORK: "window.unsavedWork",
+  /**
+   * A development build's label, the branch it was cut from, drawn or hidden
+   * for a demo: the sidebar's branch row in every window and the Dock tile's
+   * band, as View > Developer > Show Build Label turns them.
+   */
+  WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -898,6 +904,7 @@ export const PORT_ACT_USE = {
   WINDOW_SAVE_FILE: ACT_USE.WRITE,
   WINDOW_CAPTURE: ACT_USE.FETCH,
   WINDOW_UNSAVED_WORK: ACT_USE.WRITE,
+  WINDOW_SHOW_BUILD_LABEL: ACT_USE.WRITE,
   FEEDBACK_SEND: ACT_USE.WRITE,
 
   WORKSPACE_CREATE: ACT_USE.WRITE,

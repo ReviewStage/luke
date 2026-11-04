@@ -382,6 +382,33 @@ function ListRows(): React.JSX.Element {
           </List>
         </div>
       </CatalogSection>
+      <CatalogSection
+        id="list-row-latent"
+        title="A sidebar row's acts on hover, the long title giving way, and a latent row under it that comes in on hover"
+      >
+        <div className="catalog-narrow">
+          <List label="Build" density={LIST_DENSITY.DENSE}>
+            <ListRow
+              leading={<GLYPH.BRANCH />}
+              title="feat/hide-a-development-builds-label-from-its-chip-for-demos"
+              ink={LIST_ROW_INK.SIDEBAR}
+              actionsAt={LIST_ROW_ACTIONS.HOVER}
+              actions={<IconButton icon={<GLYPH.HIDE />} label="Hide branch" />}
+              more={false}
+              onPress={() => undefined}
+            />
+            <ListRow
+              leading={<GLYPH.SHOW />}
+              title="Show branch"
+              ink={LIST_ROW_INK.SIDEBAR}
+              more={false}
+              muted
+              latent
+              onPress={() => undefined}
+            />
+          </List>
+        </div>
+      </CatalogSection>
       <CatalogSection id="list-row-menu" title="Rows with a menu: ⋯, right-click, and the menu key">
         <div className="catalog-column">
           <TaskRows density={LIST_DENSITY.REGULAR} />

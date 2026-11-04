@@ -2,10 +2,9 @@
 import type { BuildCommit } from "./update.js";
 
 /**
- * The colors a development build is told apart by, on its Dock tile's band
- * and its window's chip alike. They are values rather than `--ui-*` tokens
- * because the Dock's tile is drawn in the main process, which reads no
- * stylesheet, and the chip must wear the very color the tile does. Each
+ * The colors a development build is told apart by, on its Dock tile's band.
+ * They are values rather than `--ui-*` tokens because the Dock's tile is
+ * drawn in the main process, which reads no stylesheet. Each
  * carries white words, and none is near the copper tile's own, against which
  * an orange band would vanish.
  */
@@ -24,12 +23,10 @@ const LABEL_LENGTH = 8;
 /** What a plain development build with no branch to name is labeled. */
 const PLAIN_LABEL = "dev";
 
-/** A development build as its tile and chip draw it. */
+/** A development build as its Dock tile draws it. */
 export interface DevBuildBadge {
   /** A few characters for the Dock tile's band: the instance, or the branch's last words. */
   readonly label: string;
-  /** Where it was cut, for the chip to show and copy: `branch @ sha`. */
-  readonly detail: string;
   /** Its color, the same on every launch of the same build. */
   readonly color: string;
 }
@@ -80,7 +77,6 @@ export function devBuildBadge({
   const name = instance ?? commit?.branch;
   return {
     label: (name === undefined ? "" : shortLabel(name)) || PLAIN_LABEL,
-    detail: devBuildDetail(commit),
     color: colorFor(name ?? PLAIN_LABEL),
   };
 }
