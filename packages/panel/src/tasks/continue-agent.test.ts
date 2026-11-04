@@ -369,6 +369,7 @@ test("a failed agent whose host settled its launch unstarted ends on the step it
     line.textContent ?? "",
     /The host couldn't start this agent: it failed while starting Codex\. Send a message to try again\./,
   );
+  assert.doesNotMatch(line.textContent ?? "", /Failed:/);
 });
 
 test("a failed turn's end line names no price, even from a service that sent the turn's, while the model menu's foot still says the whole run's", async () => {
