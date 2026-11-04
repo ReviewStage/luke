@@ -238,9 +238,9 @@ export function NewTaskRunsOnChip({
 }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
-  // Note that a chip offering Cloud alone reads no beats and no This Mac, because it draws no device.
+  // Note that a chip offering Cloud alone reads no beats, because it draws no device.
   const book = useDevicePresence(devices.length > 0);
-  const thisMac = useThisMac(devices.length > 0);
+  const thisMac = useThisMac();
   return (
     <Picker
       label={RUNS_ON_WORDS.LABEL}
@@ -272,7 +272,7 @@ export function NewTaskRunsOnChip({
  */
 export function RunsOnPlace({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
   const device = runsOn?.device;
-  const thisMac = useThisMac(device !== undefined);
+  const thisMac = useThisMac();
   // Note that the task names its device alone, so This Mac is told by its device and no name is twinned.
   const words =
     runsOn === undefined

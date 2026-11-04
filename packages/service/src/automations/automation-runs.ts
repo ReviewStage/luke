@@ -14,6 +14,7 @@ import {
   type AutomationRunOutcome,
   adoptAutomationAgent,
   attachRunAgent,
+  attachRunTask,
   automationRunsSince,
   claimAutomationRun,
   claimedRunsStarting,
@@ -27,6 +28,7 @@ import {
   withAutomationLocked,
 } from "@repo/database/models/automation-store";
 import { sentLineStands } from "@repo/database/models/message-reads";
+import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { automationLineMetadata, storeWriter } from "@repo/database/models/writer";
 import type { StoredAutomationOrigin } from "@repo/database/schemas/agent";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
@@ -49,6 +51,7 @@ import {
   type GitHubAccess,
 } from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   TRIGGER_CATALOG,
   TRIGGER_PROVIDER,
@@ -58,6 +61,7 @@ import { failureKind } from "@repo/runtime/effect";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { calledId } from "../agents/called-id.js";
 import { type StartServices, type StartWhere, startAgent } from "../agents/coder-host/start.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
@@ -466,6 +470,8 @@ const steerClaimed = Effect.fnUntraced(function* (
     );
   }
   yield* attachRunAgent(run.id, agentId);
+  // The agent's own task is every run's that goes to it.
+  if (found.value.taskId !== null) yield* attachRunTask(run.id, found.value.taskId);
   return Option.some<AutomationRunOutcome>({
     status: AUTOMATION_RUN_STATUS.STARTED,
     agentId: agentId,
@@ -628,12 +634,71 @@ const decide = (automationId: string, run: ActedRun) =>
     }),
   );
 
+/** How a run's task names when the run fired: "Nov 4, 9:00" in its schedule's zone, and in UTC, said so, for any other trigger. */
+function runStartWords(automation: Automation, firedAt: Date): string {
+  const { trigger } = automation;
+  const timeZone = trigger.kind === AUTOMATION_TRIGGER.SCHEDULE ? trigger.timezone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).formatToParts(firedAt);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((one) => one.type === type)?.value ?? "";
+  const words = `${part("month")} ${part("day")}, ${Number(part("hour"))}:${part("minute")}`;
+  return trigger.kind === AUTOMATION_TRIGGER.SCHEDULE ? words : `${words} UTC`;
+}
+
+/**
+ * The task a run's agent starts on, recorded on the run: one made for the
+ * run alone, named for the automation and when the run fired; or, where the
+ * agent it starts takes every later run (`standing`), the automation's
+ * standing task, named for the automation alone. Either is assigned to the
+ * automation's owner, in its repository, and in progress, its plan blank,
+ * since the run's prompt reaches its agent as its first message. Note that the
+ * task is made under an id drawn from the run's, because a run acted on
+ * again must find the task it made rather than make a second, and that a
+ * run whose owner left the workspace meanwhile makes none.
+ */
+const runTaskOf = Effect.fnUntraced(function* (
+  automation: Automation,
+  run: ActedRun,
+  repository: string,
+  standing: boolean,
+) {
+  const { userId } = automation;
+  const id = calledId(userId, run.id);
+  if (Option.isNone(yield* readTask(userId, id))) {
+    const made = yield* createTaskOnce(userId, {
+      id,
+      organizationId: automation.organizationId,
+      name: standing
+        ? automation.name
+        : `${automation.name} · ${runStartWords(automation, run.firedAt)}`,
+      repository,
+      githubAccess: GITHUB_ACCESS.APP,
+      status: TASK_STATUS.IN_PROGRESS,
+      assigneeId: userId,
+      text: "",
+    }).pipe(
+      Effect.as(true),
+      Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(false)),
+    );
+    if (!made) return Option.none<string>();
+  }
+  yield* attachRunTask(run.id, id);
+  return Option.some(id);
+});
+
 /**
  * A claimed run's agent started, the run settled with it, or failed with
- * the start's refusal in one fixed word. The agent starts in the
- * automation's workspace on no task, in the repository a GitHub event named
- * and on the first of its repositories otherwise, or in none where it has
- * none, so the automation's runs group under the automation itself. Where
+ * the start's refusal in one fixed word. The agent starts on the run's
+ * task (`runTaskOf`), in the repository a GitHub event named and the first
+ * of the automation's repositories otherwise; an automation with no
+ * repository starts it in its workspace on no task, in none. Where
  * the run is a same-agent automation's that holds `adopting` (no agent yet,
  * or a gone one), the agent it starts is kept as the automation's from then
  * on, where no other run or edit kept another first, and the run says it
@@ -653,10 +718,16 @@ const startRunAgent = Effect.fnUntraced(function* (
     return yield* failedRun(run, AUTOMATION_RUN_REASON.REPOSITORY_CHANGED);
   // Note that a run that starts an agent reads through the workspace's installation alone (`start.ts`).
   const handed = automationStart(automation, run, GITHUB_ACCESS.APP);
-  const where: StartWhere =
+  const taskId =
     repository === null
-      ? { taskId: null, organizationId, repository: null }
-      : { taskId: null, organizationId, repository };
+      ? Option.none<string>()
+      : yield* runTaskOf(automation, run, repository, Option.isSome(adopting));
+  if (repository !== null && Option.isNone(taskId)) {
+    return yield* failedRun(run, AUTOMATION_RUN_REASON.CREATOR_LEFT);
+  }
+  const where: StartWhere = Option.isSome(taskId)
+    ? { taskId: taskId.value }
+    : { taskId: null, organizationId, repository: null };
   const start = yield* Effect.result(
     startAgent(sessionsFor(automation.userId), automation.userId, {
       ...where,

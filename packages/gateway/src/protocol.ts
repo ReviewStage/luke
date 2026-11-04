@@ -579,8 +579,6 @@ export const GATEWAY_METHOD = {
   SETTINGS_RESET: "settings.reset",
   /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** The device This Mac's host's record names (`@repo/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */
-  THIS_MAC_HOST_READ: "thisMacHost.read",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
@@ -723,6 +721,8 @@ export const GATEWAY_EVENT = {
   INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
+  /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
+  THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
