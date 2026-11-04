@@ -14,10 +14,12 @@ import {
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
+  type GitHubPerson,
   type PendingReviewComment,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
   type PullRequestDeployment,
+  type PullRequestLabel,
   type PullRequestReviewer,
   REVIEW_STATE,
   type ReactionGroup,
@@ -247,6 +249,7 @@ import {
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
+import { type LinkStanding, PULL_REQUEST_MOMENT, usePlaceStanding } from "./use-link-standing.js";
 import {
   linkPressOf,
   type OpenHere,
@@ -1616,15 +1619,53 @@ function PeopleLine({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** Under the title, one line wrapping where it must: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels; a skeleton while its read is out, and its failure with Retry. */
+/** What the line under the title draws of the pull request whichever read it comes from: its branches, who opened it, when it opened and merged, and its labels. */
+interface HeadFacts {
+  readonly base: string;
+  readonly head: string;
+  readonly headOwner?: string | undefined;
+  readonly author: GitHubPerson | undefined;
+  readonly opened: number | undefined;
+  readonly merged: number | undefined;
+  readonly labels: readonly PullRequestLabel[];
+}
+
+/** The line's facts as the pull request's link standing holds them, the same read its chip's card draws; none before it names the branches. */
+function standingFactsOf(standing: LinkStanding | undefined): HeadFacts | undefined {
+  const pullRequest = standing?.pullRequest;
+  const branches = pullRequest?.branches;
+  if (pullRequest === undefined || branches === undefined) return undefined;
+  const { when } = pullRequest;
+  return {
+    base: branches.base,
+    head: branches.head,
+    author: standing?.opener,
+    opened: when?.moment === PULL_REQUEST_MOMENT.OPENED ? when.at : undefined,
+    merged: when?.moment === PULL_REQUEST_MOMENT.MERGED ? when.at : undefined,
+    labels: pullRequest.labels,
+  };
+}
+
+/**
+ * Under the title, one line wrapping where it must: the branches and the
+ * stack it stands in, who opened it and when, its reviewers, the pickers
+ * and its labels. Note that until the pull request's own read lands, the
+ * line draws what its link standing holds, the read its chip's card draws
+ * from, without the reviewers and the pickers, since that read is one ask
+ * the host may already hold while the tab's waits on the merge box's; a
+ * skeleton where neither has landed, and the tab's failure with Retry.
+ */
 function PullRequestHead({
   parts,
+  standing,
   now,
   writes,
   editing,
   lines,
 }: {
   parts: OverviewParts;
+  /** The pull request's link standing, which the line draws until its own read lands. */
+  standing: LinkStanding | undefined;
   /** The lines the pull request changes, after its branches; none until any is held. */
   lines: LinesShown | undefined;
   now: number;
@@ -1637,10 +1678,7 @@ function PullRequestHead({
   };
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
-  if (part.kind === PART.PENDING) {
-    return <HeadSkeleton />;
-  }
-  if (part.kind !== PART.LANDED) {
+  if (part.kind === PART.FAILED || part.kind === PART.NONE) {
     return (
       <PartFailure
         line={PULL_REQUEST_WORDS.FAILED}
@@ -1649,41 +1687,79 @@ function PullRequestHead({
       />
     );
   }
-  const pullRequest = part.value;
-  const { author, mergedAt } = pullRequest;
   const { picks } = editing;
-  const reviewers = reviewersOf(
-    picks.requested,
-    landed(conversation)?.reviewers ?? [],
-    author?.login,
-  );
-  const open =
-    pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
+  const pullRequest = landed(part);
+  const facts: HeadFacts | undefined =
+    pullRequest === undefined
+      ? standingFactsOf(standing)
+      : {
+          base: pullRequest.base,
+          head: pullRequest.head,
+          headOwner: pullRequest.headOwner,
+          author: pullRequest.author,
+          opened: pullRequest.createdAt,
+          merged: pullRequest.mergedAt ?? undefined,
+          labels: picks.labels,
+        };
+  if (facts === undefined) return <HeadSkeleton />;
+  const { author, opened, merged } = facts;
   return (
     <PeopleLine>
       <span className="pull-request-branch-row flex min-w-0 max-w-full items-center gap-control-gap">
-        <PullRequestBranches
-          base={pullRequest.base}
-          head={pullRequest.head}
-          headOwner={pullRequest.headOwner}
-        />
-        <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
+        <PullRequestBranches base={facts.base} head={facts.head} headOwner={facts.headOwner} />
+        {pullRequest === undefined ? null : (
+          <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
+        )}
         {lines === undefined ? null : <HeaderLines lines={lines} />}
       </span>
-      <OpenedLine
-        person={author}
-        opened={<Time at={pullRequest.createdAt} now={now} look={TIME_LOOK.AGO} />}
-        merged={
-          mergedAt === null ? undefined : <Time at={mergedAt} now={now} look={TIME_LOOK.AGO} />
-        }
-      />
-      <span className="pull-request-reviewers inline-flex items-center gap-list-gap">
-        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
-        {open ? <ReviewerPicker author={author?.login} writes={writes} {...editing} /> : null}
-        <LabelPicker writes={writes} {...editing} />
-      </span>
-      <PullRequestLabels labels={picks.labels} />
+      {opened === undefined && merged === undefined ? null : (
+        <OpenedLine
+          person={author}
+          opened={opened === undefined ? null : <Time at={opened} now={now} look={TIME_LOOK.AGO} />}
+          merged={
+            merged === undefined ? undefined : <Time at={merged} now={now} look={TIME_LOOK.AGO} />
+          }
+        />
+      )}
+      {pullRequest === undefined ? null : (
+        <HeadPeople
+          pullRequest={pullRequest}
+          standings={landed(conversation)?.reviewers ?? []}
+          writes={writes}
+          editing={editing}
+        />
+      )}
+      <PullRequestLabels labels={facts.labels} />
     </PeopleLine>
+  );
+}
+
+/** The line's reviewers, where each stands, and the reviewer and label pickers, once the pull request's own read has landed. */
+function HeadPeople({
+  pullRequest,
+  standings,
+  writes,
+  editing,
+}: {
+  pullRequest: AgentOverviewPullRequest;
+  standings: readonly PullRequestReviewer[];
+  writes: PullRequestWrites;
+  editing: {
+    readonly options: ReviewOptions;
+    readonly picks: PullRequestPicks;
+    readonly refreshing: boolean;
+  };
+}): React.JSX.Element {
+  const author = pullRequest.author?.login;
+  const reviewers = reviewersOf(editing.picks.requested, standings, author);
+  const open =
+    pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
+  return (
+    <span className="pull-request-reviewers inline-flex items-center gap-list-gap">
+      {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+      {open ? <ReviewerPicker author={author} writes={writes} {...editing} /> : null}
+      <LabelPicker writes={writes} {...editing} />
+    </span>
   );
 }
 
@@ -3084,6 +3160,11 @@ function PullRequestTabBody({
   // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
   const refreshAllNow = useRef<() => void>(refresh);
   const url = none ? undefined : held?.url;
+  // Until the pull request's own read lands, its link standing, the read its chip's card draws, draws the line under the title.
+  const standing = usePlaceStanding(
+    source.place,
+    shown && parts.pullRequest.kind === PART.PENDING ? url : undefined,
+  );
   // Note that the copy is read through a ref, because `useCopyToast` answers a new function every draw.
   const copy = useCopyToast();
   const copyNow = useRef(copy);
@@ -3263,6 +3344,7 @@ function PullRequestTabBody({
                   </div>
                   <PullRequestHead
                     parts={parts}
+                    standing={standing}
                     now={now}
                     writes={writes}
                     editing={{ options, picks, refreshing: pullRequestRead.out }}
