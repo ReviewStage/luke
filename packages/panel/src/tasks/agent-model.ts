@@ -512,8 +512,8 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
-/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only the cloud or the host added again goes on from here. */
-const HOST_REMOVED = "This host was removed. Continue in the cloud or add it again.";
+/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only a new task in the cloud or the host added again goes on from here. */
+const HOST_REMOVED = "This host was removed. Start a new task in the cloud or add it again.";
 
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
 const MESSAGE_NOT_SENT = "The message could not be sent.";
@@ -712,18 +712,19 @@ export interface RefusingDevice {
 /** What a device refusing a Start is called where its name is not known. */
 const UNNAMED_DEVICE = "Your device";
 
-/** The way out every device refusal ends on, since the cloud takes any agent. */
-const RUN_IN_CLOUD = "or set this task to run in the cloud";
+/** The way out every device refusal ends on, since the cloud takes any agent. Note that a task's runs-on is fixed once it is set, so the way out is a new task, never a change to this one. */
+const RUN_IN_CLOUD = "or start a new task in the cloud";
 
-/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own host started. */
+/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own `vespin-host` checked. */
 const DEVICE_WAKE = {
   [DEVICE_PLATFORM.DARWIN]: "Wake it and log in on it",
-  [DEVICE_PLATFORM.LINUX]: `Start ${PRODUCT_NAME} on that host`,
+  [DEVICE_PLATFORM.LINUX]: "Check that it's on, connected, and running vespin-host",
 } as const satisfies Record<DevicePlatform, string>;
 
-/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own host started again. */
+/** How a device whose setup failed tries it again, by its platform: Bring your own host turned off and on in Settings › Hosts on a Mac, whose desktop app keeps its host running, or a Linux server's own `vespin-host` restarted. */
 const SETUP_RETRY = {
-  [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Hosts on it",
+  [DEVICE_PLATFORM.DARWIN]:
+    "Open Settings › Hosts on that Mac and turn Bring your own host off and on",
   [DEVICE_PLATFORM.LINUX]: "Run systemctl --user restart vespin-host on that host",
 } as const satisfies Record<DevicePlatform, string>;
 
