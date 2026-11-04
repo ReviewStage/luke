@@ -1,7 +1,7 @@
 {
   "packages/panel/src/act-stream.ts": "P22: the hold's door",
   "packages/panel/src/desktop/automations-page.tsx": "P14: Sentry and Slack bot settings",
-  "packages/panel/src/desktop/use-run-choices.ts": "P18, P28: a workspace's agents, the default agent and models",
+  "packages/panel/src/desktop/use-run-choices.ts": "P28: the default agent and models",
   "packages/panel/src/desktop/workspace-tile.tsx": "P18: workspace photo",
   "packages/panel/src/onboarding/setup-github.tsx": "P18: GitHub token set",
   "packages/panel/src/settings/account-section.tsx": "P18: GitHub token set",
@@ -13,7 +13,6 @@
   "packages/panel/src/settings/slack-bot-channels.tsx": "P19: repositories",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
   "packages/panel/src/settings/workspace-token-repositories.tsx": "P18, P19: GitHub token set, token repositories, repositories",
-  "packages/panel/src/tasks/task-mentions.tsx": "P18: agents for mentions",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default",
   "packages/panel/src/tasks/use-link-standing.ts": "P19: a link chip's standing",

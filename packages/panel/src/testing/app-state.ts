@@ -15,7 +15,7 @@ import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
-import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TasksView } from "@repo/features/tasks-view";
 import {
   type AppAutomationReads,
   type AppBrowserTabs,
@@ -223,6 +223,8 @@ export interface HostReadsHanded {
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  /** The account's task list, as the host lays it whole. */
+  readonly deliverTasks: (next: TasksView) => void;
 }
 
 /** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
@@ -302,6 +304,7 @@ export function handHostReads(first: {
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverTasks: (next) => deliver({ tasks: next }),
   };
 }
 

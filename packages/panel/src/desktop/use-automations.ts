@@ -20,10 +20,9 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * after (`useHostRead`), so a schedule's next run, a run's agent, and what
  * changed elsewhere reach it without a press or a clock here, and a page
  * drawn again draws it at once. A write is drawn on the list the host
- * holds (`@repo/host`'s `automation-collections.ts`), a change or a
- * deletion the moment it is asked and a new automation once the service
- * made it, and laid before the write answers, so nothing here holds a
- * write's answer over the list. A read that fails once it has answered
+ * holds (`@repo/host`'s `automation-collections.ts`), a new automation, a
+ * change, or a deletion the moment it is asked, and laid before the write
+ * answers, so nothing here holds a write's answer over the list. A read that fails once it has answered
  * keeps the list it held, as every held read does, so nothing drawn from
  * it is taken down. A failure is kept to be said rather than thrown, since
  * every caller does the same with one: says it, and offers to try again.
