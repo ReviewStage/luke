@@ -1660,7 +1660,7 @@ test("an active account counts the App's repositories whose owner is its login i
   assert.equal(labs.querySelector("button"), null);
 });
 
-test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected under the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
+test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected, named and found by the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
   const shown = Array.from({ length: 8 }, (_, at) => `acme-org/r${at + 1}`);
   githubRepositories = [...shown, "acme-labs-renamed/one", "acme-tools/a", "acme-tools/b"];
   listedInstallations = [
@@ -1683,7 +1683,7 @@ test("an account given every repository says All N and opens on the note that la
 
   assert.deepEqual(integrationRows(page).slice(1), [
     ["acme-org", "Connected · All 8 repositories"],
-    ["acme-labs", "Connected · 1 selected repository"],
+    ["acme-labs-renamed", "Connected · 1 selected repository"],
     ["acme-tools", "Connected · 2 repositories"],
   ]);
   assert.deepEqual(foldLines(org), [], "more than five start folded");

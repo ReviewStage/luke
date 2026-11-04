@@ -52,8 +52,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * for the workspace (`LIVE_READ.REPOSITORY_LISTS`), grouped by owner, which
  * GitHub spells as it pleases, so an account's are those whose owner is its
  * login in any case: the login the listing read from GitHub now
- * (`installations`), since the store keeps an account's old one after a
- * rename, else the stored one. Whether an installation was given all or a
+ * (`installations`), which the row is named by too, since the store keeps
+ * an account's old one after a rename, else the stored one. Whether an installation was given all or a
  * selection is the listing's too, which a service older than it leaves
  * out, and a line then says the count alone. The list is
  * read only while an account stands active. While it is read each active
@@ -276,14 +276,14 @@ function ListedAccountRows({
         if (answer === undefined || byOwner === undefined || !connection.active) {
           return <AccountRow key={key} connection={connection} reading={reading} />;
         }
-        // Note that the login GitHub answers now wins, because the store keeps an account's old one after a rename on GitHub.
+        // Note that the login GitHub answers now names the row and finds its repositories, because the store keeps an account's old one after a rename on GitHub.
         const listed = listedOf(answer, connection);
-        const owner = (listed?.login ?? connection.login).toLowerCase();
+        const login = listed?.login ?? connection.login;
         return (
           <AccountFoldRow
             key={key}
-            connection={connection}
-            repositories={byOwner.get(owner) ?? NONE}
+            connection={{ ...connection, login }}
+            repositories={byOwner.get(login.toLowerCase()) ?? NONE}
             selection={listed?.repositorySelection}
           />
         );
