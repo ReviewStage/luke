@@ -87,9 +87,6 @@ const LAUNCH: DeviceAgentClaimedLine = {
   secrets: { env: SECRET_ENV, stdin: "{}\n" },
 };
 
-/** Every follower a test started, by the files it was handed, so each mints a lease holder of its own. */
-const holders: Map<string, string>[] = [];
-
 /** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
 const until = (holds: () => boolean) =>
   Effect.gen(function* () {
@@ -107,8 +104,6 @@ const until = (holds: () => boolean) =>
 const followingDevice = (
   ready: LocalAgentClis["ready"],
   options: {
-    /** The files of the machine's state, shared with another follower on the same machine where given. */
-    readonly files?: Map<string, string>;
     /** How the service answers each claim of the launch line, by the token it carries; the line with its secrets where not given. */
     readonly claim?: (
       token: string | undefined,
@@ -131,8 +126,7 @@ const followingDevice = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const files = options.files ?? new Map<string, string>();
-    holders.push(files);
+    const files = new Map<string, string>();
     let minted = 0;
     const signal = yield* Deferred.make<void>();
     const runner: Script =
@@ -266,19 +260,6 @@ const followingDevice = (
             if (held !== undefined) files.set(to, held);
           }),
         remove: (path) => Effect.sync(() => void files.delete(path)),
-        link: (from, to) => {
-          const held = files.get(from);
-          return held === undefined || files.has(to)
-            ? Effect.fail(
-                systemError({
-                  _tag: "AlreadyExists",
-                  module: "FileSystem",
-                  method: "link",
-                  pathOrDescriptor: to,
-                }),
-              )
-            : Effect.sync(() => void files.set(to, held));
-        },
       }),
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
@@ -301,8 +282,7 @@ const followingDevice = (
     const composer = yield* composeLocalAgents({
       kernel: {
         stateRoot: STATE_ROOT,
-        // Note that each follower mints its own lease holder first.
-        createId: () => (minted++ === 0 ? `holder-${holders.length}` : `claim-${minted}`),
+        createId: () => `claim-${++minted}`,
       },
       deviceId: "device-1",
       switchedOn: Effect.succeed(true),
@@ -452,41 +432,6 @@ it.effect(
 );
 
 it.effect(
-  "a device whose setup failed tries nothing again, and registers nothing, once another follower has taken the machine's lease",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        let tries = 0;
-        const files = new Map<string, string>();
-        const { registered, reported } = yield* followingDevice(
-          () =>
-            Effect.suspend(() => {
-              tries += 1;
-              return Effect.fail(
-                new LocalAgentClisUnavailable({ detail: "Codex couldn't be downloaded" }),
-              );
-            }),
-          { files },
-        );
-        yield* until(() => tries === 1 && registered.length === 1);
-        // Note that another follower's lease, renewed far ahead, stands for the whole test.
-        const now = yield* Clock.currentTimeMillis;
-        files.set(
-          `${STATE_ROOT}/local-agents.lock`,
-          JSON.stringify({ holder: "another-follower", renewedAt: now + 3_600_000 }),
-        );
-        yield* TestClock.adjust(Duration.seconds(10));
-        yield* until(() =>
-          reported.includes("this follower lost the machine's lease, so it stops"),
-        );
-        yield* TestClock.adjust(Duration.minutes(2));
-
-        assert.deepEqual([tries, registered.length], [1, 1]);
-      }),
-    ),
-);
-
-it.effect(
   "a launch whose claim landed but whose answer was lost is claimed again under the same token and launched once",
   () =>
     Effect.scoped(
@@ -555,27 +500,6 @@ it.effect(
           spawned.some((each) => each.program === RUNNER),
           false,
         );
-      }),
-    ),
-);
-
-it.effect(
-  "a second follower on the same machine follows nothing while the first holds its lease, and says why",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map<string, string>();
-        const first = yield* followingDevice(() => Effect.void, { files });
-        yield* until(() => first.spawned.some((each) => each.program === RUNNER));
-        const second = yield* followingDevice(() => Effect.void, { files });
-        yield* until(() => second.reported.length > 0);
-        yield* TestClock.adjust(Duration.seconds(30));
-
-        assert.deepEqual(second.registered, []);
-        assert.deepEqual(second.spawned, []);
-        assert.deepEqual(second.reported, [
-          "another follower runs this machine's local agents, so this one follows none",
-        ]);
       }),
     ),
 );

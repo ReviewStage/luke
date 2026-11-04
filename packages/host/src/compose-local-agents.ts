@@ -31,7 +31,6 @@ import { GITHUB_TOKEN_REFRESH } from "@repo/features/host-wire";
 import {
   Clock,
   Config,
-  Deferred,
   Duration,
   Effect,
   Exit,
@@ -41,7 +40,6 @@ import {
   Option,
   Path,
   Queue,
-  Ref,
   Result,
   Schedule,
   Schema,
@@ -54,7 +52,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import type { Composer } from "./composer.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   AGENT_GIT_HELPER_SCRIPT,
@@ -1167,64 +1164,21 @@ export function composeLocalAgents(
         yield* Effect.raceFirst(presence(told), Effect.provideContext(reconciling, services));
       });
 
-    /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
-    const holder = kernel.createId();
-    /** Whether this follower last found the machine's lease held by another, so it says so once rather than every turn. */
-    const refusedLock = yield* Ref.make(false);
-
-    /**
-     * The machine's lease, taken for as long as the scope stands and renewed
-     * every `IDLE` while it does; none where another follower holds it,
-     * which is said once, and otherwise what waits until the lease is lost
-     * to another follower, which is said too.
-     */
-    const leased = Effect.gen(function* () {
-      if (!(yield* takeFollowerLock(kernel.stateRoot, holder))) {
-        if (!(yield* Ref.getAndSet(refusedLock, true))) {
-          report("another follower runs this machine's local agents, so this one follows none");
-        }
-        return Option.none<Effect.Effect<void>>();
-      }
-      yield* Ref.set(refusedLock, false);
-      yield* Effect.addFinalizer(() => releaseFollowerLock(kernel.stateRoot, holder));
-      const lost = yield* Deferred.make<void>();
-      yield* Effect.forkScoped(
-        Effect.andThen(Effect.sleep(IDLE), renewFollowerLock(kernel.stateRoot, holder)).pipe(
-          Effect.repeat({ until: (held) => !held }),
-          Effect.andThen(
-            Effect.sync(() => report("this follower lost the machine's lease, so it stops")),
-          ),
-          Effect.andThen(Deferred.succeed(lost, undefined)),
-        ),
-      );
-      return Option.some(Deferred.await(lost));
-    });
-
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * machine's lease taken, the device registered, the turn of every agent
-     * this machine made let go of, and its agents followed until the gate
-     * shuts, when the follow's scope closes, every runner it started is
-     * stopped with its group, and the lease is given back.
+     * device registered, the turn of every agent this machine made let go
+     * of, and its agents followed until the gate shuts, when the follow's
+     * scope closes and every runner it started is stopped with its group.
      */
     const turn = Effect.gen(function* () {
       if (!(yield* gateOpen) || Option.isNone(home)) {
         return yield* Effect.sleep(IDLE);
       }
-      yield* Effect.scoped(openTurn(home.value));
+      yield* openTurn(home.value);
     });
 
-    /** An open gate's turn, from its home folder, under the machine's lease. */
+    /** An open gate's turn, from its home folder: the device readied and registered, the turns the run before left let go of, and its agents followed. */
     const openTurn = (folder: string) =>
-      Effect.gen(function* () {
-        const lost = yield* leased;
-        if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
-        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries among it, so nothing of this follower's registers or settles a launch once another holds the machine, and the follow ends with every runner it started.
-        yield* Effect.race(underLease(folder), lost.value);
-      });
-
-    /** What an open gate's turn does once it holds the machine's lease: the device readied and registered, the turns the run before left let go of, and its agents followed. */
-    const underLease = (folder: string) =>
       Effect.gen(function* () {
         const { tools } = platform;
         const registered = (setup: DeviceSetupRegister) =>
