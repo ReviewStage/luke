@@ -1188,7 +1188,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a run of an automation with no repository starts an agent in its workspace that works in none",
+    "a run of an automation with no repository starts an agent on its task in its workspace that works in none",
     () =>
       Effect.gen(function* () {
         const { owner, automation, workspaceId } = yield* openAutomation({ repository: null });
@@ -1197,9 +1197,10 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const agentId = yield* agentOfRun(eve, yield* runNow(automation));
 
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
+        const made = Option.getOrThrow(yield* readTask(owner, agent.taskId ?? ""));
         assert.deepEqual(
-          [agent.organizationId, agent.taskId, agent.repository],
-          [workspaceId, null, null],
+          [agent.organizationId, agent.repository, made.task.workspaceId, made.task.repository],
+          [workspaceId, null, workspaceId, null],
         );
         assert.equal(eve.opened.length, 1);
       }),

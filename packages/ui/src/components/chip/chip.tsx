@@ -2,8 +2,8 @@ import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
-import { useClipped } from "../../use-clipped.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -57,9 +57,9 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
  * cuts them short rather than letting them push past the row around it,
- * fading out at their end while it does, as a browser's tab does, or, where
- * their end is what tells one from another, in their middle, the end of
- * their start fading where the cut stands (`cut`, a branch's last words), in the code face where
+ * ending in an ellipsis while it does, or, where their end is what tells
+ * one from another, in their middle, the ellipsis standing where the cut
+ * stands (`cut`, a branch's last words), in the code face where
  * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
@@ -71,7 +71,7 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * takes no press, whose every class a chip's control box would override,
  * and a chip's press must stay its own button's. `chip.css` keeps what
  * utilities cannot say: a tone's dot, which turns on what the chip holds
- * (`:has()`), the motions, and the fades.
+ * (`:has()`), the motions, and how a name cut in its middle keeps its end.
  */
 
 /** The looks a chip comes in, by the place it stands. */
@@ -124,7 +124,7 @@ const NAME_JOINS = /[/\-_.:]/u;
 /**
  * The end a name cut in its middle keeps whole: its last few characters,
  * after the first join among them where one stands, so it starts on a word
- * (“and-pill” rather than “u-and-pill”), the fade before it standing
+ * (“and-pill” rather than “u-and-pill”), the ellipsis before it standing
  * for the join; none for a name too short to cut in two.
  */
 function keptEnd(name: string): string {
@@ -202,7 +202,7 @@ const LOOK_FACE = {
   [CHIP_LOOK.FIELD]:
     "border-border bg-transparent text-foreground hover:not-disabled:not-aria-disabled:bg-fill-selected aria-expanded:bg-fill-selected active:not-disabled:not-aria-disabled:bg-fill-pressed",
   [CHIP_LOOK.PILL]:
-    "border-chip-edge bg-chip text-muted-foreground in-data-[ui-profile=web]:text-foreground hover:not-disabled:not-aria-disabled:bg-chip-hover hover:not-disabled:not-aria-disabled:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
+    "border-chip-edge bg-chip text-foreground hover:not-disabled:not-aria-disabled:bg-chip-hover aria-expanded:bg-chip-hover",
   [CHIP_LOOK.FILTER]:
     "border-chip-edge bg-chip text-muted-foreground hover:not-disabled:not-aria-disabled:not-aria-pressed:bg-chip-hover hover:not-disabled:not-aria-disabled:not-aria-pressed:text-foreground aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-ink-foreground",
 } as const satisfies Record<ChipLook, string>;
@@ -454,46 +454,47 @@ type ChipNameProps = {
     }
 );
 
-/** A chip's words on one line, and, drawn as its mark alone, read and drawn nowhere; a field's lead and fill it. */
+/** A chip's words, and, drawn as its mark alone, read and drawn nowhere; a field's lead and fill it. */
 const NAME =
-  "ui-chip-name overflow-hidden whitespace-nowrap group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
+  "ui-chip-name group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
 
-/** A name cut in its middle: the start, which gives way first, fading out where it is measured cut short. */
+/** A name cut in its middle: the start, which gives way first, ending in an ellipsis where it is cut short. */
 function ChipNameStart({ children }: { children: string }): React.JSX.Element {
-  const [measured, clipped] = useClipped(children);
   return (
-    <span
-      ref={measured}
-      className="ui-chip-name-start min-w-0 overflow-hidden whitespace-pre"
-      data-overflow={String(clipped)}
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="ui-chip-name-start whitespace-pre"
     >
       {children}
-    </span>
+    </Text>
   );
 }
 
 /**
  * A chip's words, cut short rather than pushing past the row it stands in:
- * fading out at their end, or cut in their middle, the start fading out
+ * ending in an ellipsis, or cut in their middle, the start ending in one
  * where the cut stands and the kept end whole after it; in the code face
  * where they name code.
  */
 export function ChipName(props: ChipNameProps): React.JSX.Element {
-  const [measured, clipped] = useClipped();
   const kept = props.cut === CHIP_CUT.MIDDLE ? keptEnd(props.children) : "";
+  // Note that a name cut in its middle is a row of its two parts, so only its start ends in the ellipsis.
   return (
-    <span
-      ref={measured}
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      font={props.mono === true ? TEXT_FONT.MONO : TEXT_FONT.SANS}
+      truncate={kept === ""}
       className={[
         NAME,
-        props.mono === true ? "font-mono text-caption leading-[inherit]" : "",
-        kept === "" ? "" : "inline-flex min-w-0",
+        props.mono === true ? "text-caption leading-[inherit]" : "",
+        kept === "" ? "" : "inline-flex min-w-0 overflow-hidden whitespace-nowrap",
       ]
         .filter((part) => part !== "")
         .join(" ")}
-      data-mono={props.mono === true ? "true" : undefined}
       data-cut={kept === "" ? undefined : CHIP_CUT.MIDDLE}
-      data-overflow={String(clipped)}
     >
       {props.cut !== CHIP_CUT.MIDDLE || kept === "" ? (
         props.children
@@ -503,7 +504,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
           <span className="ui-chip-name-end">{kept}</span>
         </>
       )}
-    </span>
+    </Text>
   );
 }
 

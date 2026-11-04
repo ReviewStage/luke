@@ -121,10 +121,9 @@ function versionHistoryControl(
   };
 }
 
-/** A repository chip's list read from nowhere, which answers that the service did not. */
+/** A repository chip's chooser for no workspace in particular, whose list the host holds (`LIVE_READ.REPOSITORY_LISTS`). */
 const NO_REPOSITORIES = {
   recent: [],
-  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
   openGitHub: ignore,
   pictures: true,
   manages: true,
@@ -198,10 +197,7 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     readNumberedPullRequest: () => Promise.resolve(false),
     readChanges: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewPullRequest: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readReviewOptions: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewChecks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewConversation: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readPullRequestViewed: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     answerInbox: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),

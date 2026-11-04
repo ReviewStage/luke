@@ -1119,7 +1119,7 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
   };
 
   it.effect(
-    "a merged pull request is read back whole, its head and merge instant among it, by a member of the agent's workspace, while the list reads only what the wire carries and an outsider reads none",
+    "a merged pull request is read back whole, its head and merge instant among it, by a member of the agent's workspace, while the list reads only what the wire carries, its head but not its merge instant, and an outsider reads none",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -1147,7 +1147,7 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
         const listed = yield* listPublishedAgentsById(teammate, [agentId]);
         assert.deepEqual(
           listed.map(({ published }) => published),
-          [onTheWire],
+          [{ ...onTheWire, headSha: "c0ffee1" }],
         );
         assert.equal(yield* readAgentPublished(outsider, agentId), null);
         assert.equal(yield* readAgentKeptPublished(outsider, agentId), null);

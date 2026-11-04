@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DURATION_MS } from "@repo/brand";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE, PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentChangedFile,
@@ -51,7 +51,7 @@ import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdMembers } from "../testing/app-state.js";
+import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -352,7 +352,7 @@ function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
 
 /** The agent's control, its overview, files, and Generate answering as given, and its chapters laid on the window's document as the host holds them. */
 function controlAnswering(answers: Answers): AgentsControl {
-  const { deliverChapters, deliverMembers } = handHostReads({
+  const { deliverChapters, deliverMembers, deliverParts } = handHostReads({
     chapters: chaptersHeld(
       answers.chapters ?? answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
     ),
@@ -360,6 +360,30 @@ function controlAnswering(answers: Answers): AgentsControl {
   moveChapters = (next) => deliverChapters(chaptersHeld(next));
   // Note that the workspace's people are laid on the document as the tab holds them, as the host lays them.
   holdMembers(deliverMembers, () => ({ rows: { members: [DANA] } }));
+  // The host holds the tab's parts, its pull request read anew for its head on each ask.
+  holdPullRequestParts(deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: () =>
+      Promise.resolve({
+        pullRequest:
+          answers.head === undefined
+            ? PULL_REQUEST
+            : {
+                ...PULL_REQUEST,
+                merging: {
+                  methods: [],
+                  autoMergeAllowed: false,
+                  queue: false,
+                  queued: null,
+                  autoMerge: null,
+                  headSha: answers.head(),
+                  review: null,
+                  checks: CHECK_SUMMARY.PASSING,
+                },
+              },
+      }),
+    [PULL_REQUEST_PART.CONVERSATION]: () => Promise.resolve({ pullRequest: CONVERSATION }),
+    [PULL_REQUEST_PART.CHECKS]: () => Promise.resolve({ pullRequest: { checks: [] } }),
+  });
   return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -379,27 +403,6 @@ function controlAnswering(answers: Answers): AgentsControl {
         },
       ],
     ]),
-    readOverviewPullRequest: () =>
-      Promise.resolve({
-        pullRequest:
-          answers.head === undefined
-            ? PULL_REQUEST
-            : {
-                ...PULL_REQUEST,
-                merging: {
-                  methods: [],
-                  autoMergeAllowed: false,
-                  queue: false,
-                  queued: null,
-                  autoMerge: null,
-                  headSha: answers.head(),
-                  review: null,
-                  checks: CHECK_SUMMARY.PASSING,
-                },
-              },
-      }),
-    readOverviewConversation: () => Promise.resolve({ pullRequest: CONVERSATION }),
-    readOverviewChecks: () => Promise.resolve({ pullRequest: { checks: [] } }),
     readChanges: () => {
       const head = answers.head?.() ?? HEAD;
       // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.

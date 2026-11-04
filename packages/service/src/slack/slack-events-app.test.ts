@@ -129,8 +129,21 @@ const ENVIRONMENT: HostedEnvironmentValues = {
 /** The native harnesses an answer is handed to, writing down each with the account it acted for. */
 const HARNESS = recordingHarness();
 
+/** The decide ask the member is written: one option of two to pick. */
+const PICK_ONE = {
+  type: INBOX_ASK.DECIDE,
+  options: [{ label: "A week" }, { label: "A month" }],
+} as const;
+
 /** A member's agent at work on a task in a workspace whose bot is connected, its decide ask written to them in Slack. */
-const openAskedMember = (bot: Layer.Layer<SlackBot>) =>
+const openAskedMember = (
+  bot: Layer.Layer<SlackBot>,
+  ask: {
+    readonly type: typeof INBOX_ASK.DECIDE;
+    readonly options: readonly { readonly label: string }[];
+    readonly multiple?: boolean;
+  } = PICK_ONE,
+) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     yield* connectAgentApiKeys(owner);
@@ -167,7 +180,7 @@ const openAskedMember = (bot: Layer.Layer<SlackBot>) =>
           key: "invite-expiry",
           title: "How long should an invitation last?",
           body: "Pick how long an invitation stays open.",
-          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "A week" }, { label: "A month" }] },
+          ask,
           needsReply: true,
         },
       ),
@@ -227,11 +240,12 @@ const answer = (
     return { status: response.status, body };
   });
 
-/** Slack's press of the button, form-encoded as interactivity arrives, with Connect's bearer or none. */
+/** Slack's press of the button, form-encoded as interactivity arrives, with Connect's bearer or none, and the message's checkboxes as they stand. */
 function press(
   button: { readonly action_id: string; readonly value: string },
   slackUserId: string,
   bearer: string | undefined,
+  state: Record<string, unknown> = {},
 ): Request {
   const payload = {
     type: "block_actions",
@@ -239,6 +253,7 @@ function press(
     team: { id: "T0001", domain: "team" },
     container: { type: "message", channel_id: "D0001", message_ts: "1700000000.000100" },
     actions: [{ ...button, type: "button", block_id: "b", action_ts: "1700000001.000200" }],
+    state: { values: state },
   };
   return new Request(new URL(EVENTS, ORIGIN), {
     method: "POST",
@@ -449,6 +464,57 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.equal(
           updated[0]?.args.text,
           "How long should an invitation last? · You chose A month",
+        );
+      });
+    },
+  );
+
+  it.effect(
+    "a Submit of an ask taking several options answers it with the options ticked in the DM",
+    () => {
+      const calls: SlackCall[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
+      return Effect.gen(function* () {
+        const { owner, item } = yield* openAskedMember(bot, {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
+          multiple: true,
+        });
+        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const elements = JSON.parse(posted?.args.blocks ?? "[]").flatMap(
+          (block: { type: string; elements?: unknown[] }) =>
+            block.type === "actions" ? (block.elements ?? []) : [],
+        );
+        const checkboxes = elements.find(
+          (element: { type: string }) => element.type === "checkboxes",
+        );
+        const submit = elements.find(
+          (element: { text?: { text: string } }) => element.text?.text === "Submit",
+        );
+        const ticked = checkboxes.options.filter(
+          (option: { text: { text: string } }) => option.text.text !== "Slack",
+        );
+
+        const kept = keptAfterResponse();
+        yield* answer(
+          bot,
+          press(submit, posted?.args.channel ?? "", CONNECT_TOKEN, {
+            picks: {
+              [checkboxes.action_id]: { type: "checkboxes", selected_options: ticked },
+            },
+          }),
+          kept.layer,
+        );
+        yield* kept.run;
+        yield* kept.run;
+
+        const stored = Option.getOrThrow(yield* readInboxItem(owner, item.id));
+        const asked = stored.item.thread?.find((message) => message.ask);
+        assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
+        const updated = calls.filter((call) => call.method === "chat.update");
+        assert.equal(
+          updated[0]?.args.text,
+          "How long should an invitation last? · You chose Email, SMS",
         );
       });
     },

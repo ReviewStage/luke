@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequest,
@@ -20,7 +21,12 @@ import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handHostReads,
+  holdPullRequestParts,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
@@ -136,6 +142,13 @@ async function mountEveryTab(
         disabledServers: [],
       },
     }),
+  });
+  // The host holds the Pull request tab's parts, answered as a service that did not answer.
+  const unanswered = () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED } as const);
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: unanswered,
+    [PULL_REQUEST_PART.CHECKS]: unanswered,
+    [PULL_REQUEST_PART.CONVERSATION]: unanswered,
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

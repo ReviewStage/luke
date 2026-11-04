@@ -19,6 +19,7 @@
  * draws its row from a `PanelCommand` and says what choosing it does there.
  */
 
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   APP_COMMAND,
@@ -26,7 +27,7 @@ import {
   appCommandLabel,
   type KeyedCommand,
 } from "@repo/settings/shortcuts";
-import { TaskStatusMark } from "@repo/ui";
+import { ProviderMark, TaskStatusMark } from "@repo/ui";
 import {
   ClockIcon,
   GLYPH,
@@ -124,6 +125,7 @@ export const PANEL_COMMAND = {
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
   SHOW_BROWSER: unkeyed("Show browser", <GLYPH.WEBSITE />),
   OPEN_IN_TASK: keyed(APP_COMMAND.OPEN_IN_TASK, <GLYPH.TASK />),
+  OPEN_IN_SLACK: unkeyed("Open in Slack", <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />),
   COPY_CONCISE_TRANSCRIPT: keyedAs(
     APP_COMMAND.COPY_CONTENT,
     "Copy concise transcript",

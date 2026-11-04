@@ -13,14 +13,15 @@ import {
   taskLinkStep,
   withTaskId,
 } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type Mention, type NumberedTaskIdOf } from "@repo/features/mention-link";
 import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import type { AppLinkStanding } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
-import { createContext, useContext, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { createContext, useContext, useMemo } from "react";
 import { APP_SLICE, appStateNow, useAppSlice } from "../use-app-state.js";
+import { useHostRead } from "../use-host-read.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
@@ -33,18 +34,17 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
  * Words that name neither, as an Inbox item whose workspace the service did
  * not name, read nothing, since a page read through another workspace's
  * connection would be drawn in the wrong one. A pull request or a GitHub
- * issue is read by its repository and number through the workspace's
- * GitHub App, on the service, once per chip, and only where that workspace
- * has the App, so a chip in a workspace without it asks nothing. Until it
- * first answers, or where it never does, a repository the App does not reach
- * among them, the chip says what the address says, as it always has. The
- * window keeps the last answer for each page by the workspace it was read
- * through, so a chip drawn again, as a plan's text is when a section opens
- * in its editor and when it closes, says it at once while it is read again,
- * rather than its address until the read lands; and a kept answer is drawn
- * only while that workspace still has the App, so a workspace that
- * disconnects stops drawing it. A Linear issue's chip asks nothing and says
- * what its address says.
+ * issue is held by the host while a chip draws it (`LIVE_READ.LINK_STANDINGS`),
+ * by the workspace and the link's own address, read through the workspace's
+ * GitHub App on the service, and only where that workspace has the App, so a
+ * chip in a workspace without it asks nothing. Until it first answers, or
+ * where it never does, a repository the App does not reach among them, the
+ * chip says what the address says, as it always has. A chip drawn again, as a
+ * plan's text is when a section opens in its editor and when it closes, says
+ * the last answer at once while the host asks again, rather than its address
+ * until the read lands; and an answer is drawn only while that workspace
+ * still has the App, so a workspace that disconnects stops drawing it. A
+ * Linear issue's chip asks nothing and says what its address says.
  */
 
 /** Where the words a chip stands in are: the plan's id, none off a plan, and the workspace's slug its mentions are written under. */
@@ -192,92 +192,33 @@ function keyOf(asked: Asked): string {
   return `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
 }
 
-/** A page's last answer as the window keeps it: the order its read was asked in, and what it answered, none where GitHub holds no such page. */
-interface HeldStanding {
-  readonly order: number;
-  readonly standing: LinkStanding | undefined;
-}
-
-/**
- * The last answer this window read for each page, by the workspace it was
- * read through and then by the page's kind, repository, and number, let go
- * as the account signed in changes (`forgetStandings`), since what a page
- * answers may be the account's. Note that each is small and replaced by the
- * next read of the same page, so the window keeps every one it read rather
- * than bound them.
- */
-const heldStandings = new Map<string, Map<GitHubPage, Map<string, Map<number, HeldStanding>>>>();
-
-/** How many reads the window has asked, which orders their answers. */
-let asks = 0;
-
-/** What the window keeps for an ask through a workspace; nothing before any read landed. */
-function heldOf(workspaceId: string, asked: Asked): HeldStanding | undefined {
-  return heldStandings.get(workspaceId)?.get(asked.page)?.get(asked.repository)?.get(asked.number);
-}
-
-/**
- * An answer kept as the last for its ask through a workspace, an answer
- * that the page is gone included, so a chip stops saying a title GitHub no
- * longer answers. Note that an answer to a read asked before the one kept
- * is dropped, so reads landing out of order never put back what a later
- * one replaced.
- */
-function keepStanding(workspaceId: string, asked: Asked, answer: HeldStanding): void {
-  if ((heldOf(workspaceId, asked)?.order ?? -1) > answer.order) return;
-  const pages =
-    heldStandings.get(workspaceId) ?? new Map<GitHubPage, Map<string, Map<number, HeldStanding>>>();
-  heldStandings.set(workspaceId, pages);
-  const repositories = pages.get(asked.page) ?? new Map<string, Map<number, HeldStanding>>();
-  pages.set(asked.page, repositories);
-  const numbers = repositories.get(asked.repository) ?? new Map<number, HeldStanding>();
-  repositories.set(asked.repository, numbers);
-  numbers.set(asked.number, answer);
-}
-
-/** Lets go of every answer the window kept, as the account signed in changes. */
-export function forgetStandings(): void {
-  heldStandings.clear();
-}
-
-/** GitHub's answer for an ask, through the workspace's App: a pull request or an issue by repository and number; none where it holds none. */
-function readStanding(
-  act: ReturnType<typeof useAct>["act"],
-  workspaceId: string,
-  asked: Asked,
-): Promise<LinkStanding | undefined> {
+/** What a chip draws of the page a link names, from what GitHub holds of it as the host last read it; none where GitHub holds no such page. */
+function standingOf(asked: Asked, held: AppLinkStanding): LinkStanding | undefined {
   const key = keyOf(asked);
-  const numbered = { workspaceId, repository: asked.repository, number: asked.number };
-  if (asked.page === GITHUB_PAGE.ISSUE) {
-    return act(ACT_KIND.TASKS_ISSUE, numbered).then((issue) =>
-      issue === null
-        ? undefined
-        : {
-            key,
-            title: issue.title,
-            state: ISSUE_WORDS[issue.state],
-            pullRequest: undefined,
-            issue: { number: issue.number, state: issue.state },
-            opener: openerOf(issue),
-          },
-    );
-  }
-  return act(ACT_KIND.TASKS_PULL_REQUEST, {
-    workspaceId,
-    repository: asked.repository,
-    number: asked.number,
-  }).then((pullRequest) =>
-    pullRequest === null
+  if ("issue" in held) {
+    const { issue } = held;
+    return issue === null
       ? undefined
       : {
           key,
-          title: pullRequest.title,
-          state: queuedOf(pullRequest) ? QUEUED_LABEL : PULL_REQUEST_STATE_LABEL[pullRequest.state],
-          pullRequest: standingPullRequestOf(pullRequest),
-          issue: undefined,
-          opener: openerOf(pullRequest),
-        },
-  );
+          title: issue.title,
+          state: ISSUE_WORDS[issue.state],
+          pullRequest: undefined,
+          issue: { number: issue.number, state: issue.state },
+          opener: openerOf(issue),
+        };
+  }
+  const { pullRequest } = held;
+  return pullRequest === null
+    ? undefined
+    : {
+        key,
+        title: pullRequest.title,
+        state: queuedOf(pullRequest) ? QUEUED_LABEL : PULL_REQUEST_STATE_LABEL[pullRequest.state],
+        pullRequest: standingPullRequestOf(pullRequest),
+        issue: undefined,
+        opener: openerOf(pullRequest),
+      };
 }
 
 /** Whether the workspace has the connection an ask is read through: an active GitHub installation. */
@@ -394,45 +335,34 @@ export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
     ?.id;
 }
 
-/** What the provider answers for the page a link mention names, through the workspace `where` stands in; none for any other mention, while unread, refused, or unconnected. */
+/**
+ * What the provider answers for the page a link mention names, through the
+ * workspace `where` stands in; none for any other mention, while unread or
+ * unconnected, or where GitHub holds no such page. The host holds it while
+ * the chip draws it (`LIVE_READ.LINK_STANDINGS`), by the workspace and the
+ * link's own address, so a chip drawn again draws it at once.
+ */
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
-  const { act } = useAct();
   const asked = askedOf(mention);
   const workspace = wordsWorkspace(
     useAppSlice(workspacePlacesAtom),
     where,
     useContext(WordsWorkspaceContext),
   );
-  const workspaceId = workspace?.id;
-  const connected = asked !== undefined && connectedFor(workspace);
-  // Note that the answer itself is kept by the window, so this only draws the chip again as it lands.
-  const [, setAnswered] = useState<HeldStanding>();
-  // Note that the read stands on what it asks, field by field, so a chip redrawn asks no more.
+  // Note that a standing stands only for the workspace and the connection it was read through, so a disconnect or another workspace holds none.
+  const link =
+    asked !== undefined && workspace !== undefined && connectedFor(workspace) && "url" in mention
+      ? { workspaceId: workspace.id, address: mention.url }
+      : undefined;
+  const { rows } = useHostRead(LIVE_READ.LINK_STANDINGS, link);
   const page = asked?.page;
   const repository = asked?.repository;
   const number = asked?.number;
-  useEffect(() => {
-    const ask: Asked | undefined =
-      page !== undefined && repository !== undefined && number !== undefined
-        ? { page, repository, number }
-        : undefined;
-    if (ask === undefined || workspaceId === undefined || !connected) return;
-    let live = true;
-    asks += 1;
-    const order = asks;
-    readStanding(act, workspaceId, ask).then(
-      (standing) => {
-        const answer = { order, standing };
-        keepStanding(workspaceId, ask, answer);
-        if (live) setAnswered(answer);
-      },
-      // Note that a refused read leaves the chip as the address says it, which is how it always stood.
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, page, repository, number, workspaceId, connected]);
-  // Note that an answer stands only for the workspace and the connection it was read through, so a disconnect or another workspace drops it at once.
-  return connected && workspaceId !== undefined ? heldOf(workspaceId, asked)?.standing : undefined;
+  return useMemo(
+    () =>
+      page === undefined || repository === undefined || number === undefined || rows === undefined
+        ? undefined
+        : standingOf({ page, repository, number }, rows),
+    [page, repository, number, rows],
+  );
 }

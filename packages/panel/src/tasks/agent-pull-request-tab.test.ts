@@ -9,6 +9,7 @@ import {
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
+  PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
@@ -19,7 +20,6 @@ import {
   CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
-  type CheckSummary,
   CONVERSATION_ENTRY,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
@@ -46,11 +46,9 @@ import {
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@repo/features/pull-request-write-wire";
-import type { TaskSummary } from "@repo/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppStateDelivery, AppStateSnapshot, AppWorkspaceMembers } from "@repo/host/app-state";
+import type { AppWorkspaceMembers } from "@repo/host/app-state";
 import { timeRuntime } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -78,9 +76,14 @@ import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { deliveryOf, handHostReads, handSettings, stateWith } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handSettings,
+  holdPullRequestParts,
+  type PullRequestPartAnswers,
+} from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -316,6 +319,7 @@ beforeEach(() => {
   lists = [];
   listReveals = [];
   changeHeld = undefined;
+  drawnParts = {};
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({});
   fakeActPort({
@@ -364,33 +368,59 @@ function published(state: PullRequestState) {
   };
 }
 
-/** The overview's three reads, any of them answering otherwise than the fixtures above. */
+/** The overview's three parts and the pickers' options, any of them answering otherwise than the fixtures above. */
 interface OverviewReads {
-  readonly pullRequest?: AgentsControl["readOverviewPullRequest"];
+  readonly pullRequest?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.PULL_REQUEST];
   readonly reviewOptions?: AgentsControl["readReviewOptions"];
-  readonly checks?: AgentsControl["readOverviewChecks"];
-  readonly conversation?: AgentsControl["readOverviewConversation"];
+  readonly checks?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.CHECKS];
+  readonly conversation?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.CONVERSATION];
 }
 
-/** The plan's agents, the one whose pull request it is among them, its reads answering as given and the fixtures otherwise. */
+/** The plan's agents, the one whose pull request it is among them, its parts held by the host and answering as given and the fixtures otherwise. */
 function controlAnswering(
   reads: OverviewReads = {},
   state: PullRequestState = PULL_REQUEST_STATE.OPEN,
   readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } }),
 ): AgentsControl {
-  return agentsControl({
+  const answers: PullRequestPartAnswers = {
+    [PULL_REQUEST_PART.PULL_REQUEST]:
+      reads.pullRequest ?? (() => Promise.resolve({ pullRequest: PULL_REQUEST })),
+    [PULL_REQUEST_PART.CHECKS]: reads.checks ?? (() => Promise.resolve({ pullRequest: CHECKS })),
+    [PULL_REQUEST_PART.CONVERSATION]:
+      reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
+  };
+  const control = agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
     pullRequests: new Map([[AGENT.id, published(state)]]),
-    readOverviewPullRequest:
-      reads.pullRequest ?? (() => Promise.resolve({ pullRequest: PULL_REQUEST })),
-    readOverviewChecks: reads.checks ?? (() => Promise.resolve({ pullRequest: CHECKS })),
-    readOverviewConversation:
-      reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
     readChanges,
     ...(reads.reviewOptions === undefined ? undefined : { readReviewOptions: reads.reviewOptions }),
+  });
+  partsOf.set(control, answers);
+  drawnParts = answers;
+  return control;
+}
+
+/** How the host answers each control's parts, which a test drawing several controls in turn answers as it draws each. */
+const partsOf = new WeakMap<AgentsControl, PullRequestPartAnswers>();
+
+/** How the host answers the parts of the control made or drawn last. */
+let drawnParts: PullRequestPartAnswers = {};
+
+/** A part the control drawn last does not answer, held unanswered. */
+const unanswering = () => new Promise<never>(() => undefined);
+
+/** The host's holds on the tab's parts, answered as the control made or drawn last says, so a control made anew as a tab draws again answers alike. */
+function holdDrawnParts(): void {
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: (agentId, number) =>
+      (drawnParts[PULL_REQUEST_PART.PULL_REQUEST] ?? unanswering)(agentId, number),
+    [PULL_REQUEST_PART.CHECKS]: (agentId, number) =>
+      (drawnParts[PULL_REQUEST_PART.CHECKS] ?? unanswering)(agentId, number),
+    [PULL_REQUEST_PART.CONVERSATION]: (agentId, number) =>
+      (drawnParts[PULL_REQUEST_PART.CONVERSATION] ?? unanswering)(agentId, number),
   });
 }
 
@@ -520,6 +550,7 @@ async function draw(
   github: GitHubConnectControl = NO_GITHUB,
   openPlace?: (link: ReadLink) => void,
 ) {
+  drawnParts = partsOf.get(control) ?? drawnParts;
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
@@ -530,6 +561,7 @@ async function drawn(
   github: GitHubConnectControl = NO_GITHUB,
   openPlace?: (link: ReadLink) => void,
 ) {
+  holdDrawnParts();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -2727,103 +2759,6 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
   }
 });
 
-/** The agent's task as the task list pushes it, the line of its pull request saying its checks stand as given; none where the list holds no line of it. */
-function tasksPushing(checks: CheckSummary | undefined): AppStateSnapshot["tasks"] {
-  const line = {
-    number: PULL_REQUEST.number,
-    title: PULL_REQUEST.title,
-    state: PULL_REQUEST_STATE.OPEN,
-    additions: 4,
-    deletions: 1,
-    url: PAGE,
-    agentId: AGENT.id,
-  };
-  const task: TaskSummary = {
-    id: AGENT.planId ?? assert.fail("the agent stands on a task"),
-    workspaceId: "workspace-acme",
-    name: "Invitation expiry",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: checks === undefined ? [] : [{ ...line, checks }],
-    },
-  };
-  return { ...IDLE_TASKS_VIEW, tasks: [task] };
-}
-
-test("an open tab reads its checks and merge state again as the task list pushes its pull request's line moved, its checks finishing or the line leaving the list as it merges, and draws them with no press; a push that moves nothing reads nothing", async () => {
-  const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  const push = (checks: CheckSummary | undefined) => {
-    const delivery = deliveryOf(stateWith({}, { tasks: tasksPushing(checks) }));
-    act(() => {
-      for (const listener of listeners) listener(delivery);
-    });
-  };
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () =>
-      Promise.resolve(stateWith({}, { tasks: tasksPushing(CHECK_SUMMARY.PENDING) })),
-    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  const merge = (state: MergeState) => ({
-    pullRequest: { ...PULL_REQUEST, merge: state, merging: MERGING },
-  });
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(
-        merge(MERGE_STATE.UNKNOWN),
-        merge(MERGE_STATE.CLEAN),
-        {
-          pullRequest: {
-            ...PULL_REQUEST,
-            state: PULL_REQUEST_STATE.MERGED,
-            mergedAt: 9_000,
-            merge: MERGE_STATE.CLEAN,
-            merging: MERGING,
-          },
-        },
-      ),
-      checks: inTurn<AgentOverviewChecksAnswerView>(
-        { pullRequest: { checks: [check("build", CHECK_STATE.PENDING)] } },
-        { pullRequest: { checks: [check("build", CHECK_STATE.PASSED)] } },
-      ),
-    }),
-  );
-  await choose(tab, "Checks");
-  const running = words(tab, "li .ui-list-row-title");
-  assert.notDeepEqual(running, ["build, passed"]);
-  assert.equal(mergeShown(tab)?.chip, "Checking");
-
-  push(CHECK_SUMMARY.PENDING);
-  await settle();
-  assert.deepEqual(
-    words(tab, "li .ui-list-row-title"),
-    running,
-    "nothing moved, so nothing is read",
-  );
-  assert.equal(mergeShown(tab)?.chip, "Checking");
-
-  push(CHECK_SUMMARY.PASSING);
-  await settle();
-  assert.deepEqual(words(tab, "li .ui-list-row-title"), ["build, passed"]);
-  assert.equal(mergeShown(tab)?.chip, undefined);
-  assert.equal(mergeShown(tab)?.press, "Squash and merge");
-
-  // The list holds only a few lines, so one merging can fall out of it, which is a move too.
-  push(undefined);
-  await settle();
-  assert.equal(standing(tab), "Merged");
-  assert.equal(mergeShown(tab), undefined, "a merged pull request offers no merge");
-});
-
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
   const chevron =
@@ -4690,38 +4625,6 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
   assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
 
-test("a comment being written outlives a read of the conversation that failed, standing in the box again once Retry reads it", async () => {
-  let reads = 0;
-  const tab = await draw(
-    controlAnswering({
-      conversation: () => {
-        reads += 1;
-        return Promise.resolve(
-          reads === 2 ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { pullRequest: CONVERSATION },
-        );
-      },
-    }),
-  );
-  writeComment(tab, "Half a thought");
-
-  await pressToolbar(tab, "Refresh");
-  await settle();
-  assert.equal(
-    tab.querySelector(".pull-request-comment-box"),
-    null,
-    "the failed read takes it away",
-  );
-
-  const retry =
-    [...tab.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Retry",
-    ) ?? assert.fail("the failed conversation offers Retry");
-  await act(async () => retry.click());
-  await settle();
-
-  assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Half a thought");
-});
-
 /** The head the changes were read at, which a comment on their lines names. */
 const READ_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
 
@@ -5293,16 +5196,17 @@ test("Remove from queue's question goes once a read finds the pull request out o
 
 test("Remove from queue's question goes with its panel: hidden, the question is let go and nothing leaves the queue, and shown again it asks nothing", async () => {
   let show: (shown: boolean) => void = () => undefined;
+  const control = merging(MERGE_STATE.CLEAN, {
+    queue: true,
+    queued: { position: 2 },
+    autoMerge: { method: null },
+  });
   function Hiding() {
     const [shown, setShown] = useState(true);
     show = setShown;
     return createElement(AgentPullRequestTab, {
       agentId: AGENT.id,
-      control: merging(MERGE_STATE.CLEAN, {
-        queue: true,
-        queued: { position: 2 },
-        autoMerge: { method: null },
-      }),
+      control,
       shown,
       repository: "acme/relay",
       tree: { open: false, onToggle: () => undefined },
