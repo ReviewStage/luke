@@ -395,7 +395,7 @@ test("a tile whose read did not land says it could not be read, and its Retry re
   const failed = () => [...container.querySelectorAll(SHOWN_TILES)][1];
   assert.match(failed()?.textContent ?? "", /Screen 2 could not be read\./u);
   const retry = failed()?.querySelector("button");
-  assert.equal(retry?.textContent, "Retry");
+  assert.equal(retry?.getAttribute("aria-label"), "Retry");
 
   refusing = false;
   await act(async () => retry?.click());

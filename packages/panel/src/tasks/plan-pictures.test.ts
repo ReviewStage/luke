@@ -299,7 +299,7 @@ test("a picture whose read went unanswered says it could not be read, with Retry
     failed?.querySelector('[role="alert"]')?.textContent ?? "",
     /^First mock could not be read\./u,
   );
-  assert.equal(failed?.querySelector("button")?.textContent, "Retry");
+  assert.equal(failed?.querySelector("button")?.getAttribute("aria-label"), "Retry");
 
   // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
   holdMotion();
