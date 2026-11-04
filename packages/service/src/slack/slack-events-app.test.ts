@@ -140,11 +140,7 @@ const PICK_ONE = {
 /** A member's agent at work on a task in a workspace whose bot is connected, its decide ask written to them in Slack. */
 const openAskedMember = (
   bot: Layer.Layer<SlackBot>,
-  ask: {
-    readonly type: typeof INBOX_ASK.DECIDE;
-    readonly options: readonly { readonly label: string }[];
-    readonly multiple?: boolean;
-  } = PICK_ONE,
+  ask: Parameters<typeof postInboxThread>[1]["ask"] = PICK_ONE,
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
@@ -521,6 +517,46 @@ it.layer(getTestDB())("our Slack route", (it) => {
           updated[0]?.args.text,
           "How long should an invitation last? · You chose Email, SMS",
         );
+      });
+    },
+  );
+
+  it.effect(
+    "a to-do's DM lists its steps, and its Mark done answers it with every step ticked",
+    () => {
+      const calls: SlackCall[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
+      return Effect.gen(function* () {
+        const { owner, item } = yield* openAskedMember(bot, {
+          type: INBOX_ASK.DO,
+          steps: ["Open the repository's settings.", "Run this:\n```\npnpm install\n```"],
+        });
+        const posted = calls.find((call) => call.method === "chat.postMessage");
+        const blocks = JSON.parse(posted?.args.blocks ?? "[]");
+        const done = blocks
+          .flatMap((block: { type: string; elements?: unknown[] }) =>
+            block.type === "actions" ? (block.elements ?? []) : [],
+          )
+          .find((element: { text?: { text: string } }) => element.text?.text === "Mark done");
+
+        const kept = keptAfterResponse();
+        yield* answer(bot, press(done, posted?.args.channel ?? "", CONNECT_TOKEN), kept.layer);
+        yield* kept.run;
+        yield* kept.run;
+
+        const words =
+          "Pick how long an invitation stays open.\n\n1. Open the repository's settings.\n\n2. Run this:\n   ```\n   pnpm install\n   ```";
+        assert.equal(blocks[1]?.text, words);
+        const stored = Option.getOrThrow(yield* readInboxItem(owner, item.id));
+        const asked = stored.item.thread?.find((message) => message.ask);
+        assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
+        const updated = calls.filter((call) => call.method === "chat.update");
+        assert.equal(
+          updated[0]?.args.text,
+          "How long should an invitation last? · You marked it done",
+        );
+        // The settled DM keeps the steps it asked.
+        assert.equal(JSON.parse(updated[0]?.args.blocks ?? "[]")[1]?.text, words);
       });
     },
   );
