@@ -78,8 +78,8 @@ the next task list. Beside these it
 keeps the changes you made while our service could
 not be reached (a task's name, standing, or pin, a pinned repository, a
 section, an agent's name or pin, or an inbox item marked read or unread,
-snoozed with the time the snooze ends, or acknowledged or closed with the
-revision it was, each by the item's id), each with a random key it is sent
+snoozed until a time or its snooze ended, or acknowledged or closed with
+the revision shown to you, each by the item's id), each with a random key it is sent
 again under, until our service takes it. Our service keeps that key for 30
 days, so a change sent twice lands once. The copy is one file,
 `entities.sealed`, beside the settings, sealed under a key held in the
