@@ -26,6 +26,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdIntegrationTools } from "../testing/app-state.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -102,12 +103,12 @@ beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
-  // The main process answers the panel where the integrations stand and Linear's tools; nothing else here.
+  // The main process answers the panel where the integrations stand, and holds Linear's tools; nothing else here.
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: integrationStatuses() }),
-    [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: TOOLS }),
   });
+  holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: TOOLS }));
 });
 
 afterEach(() => {

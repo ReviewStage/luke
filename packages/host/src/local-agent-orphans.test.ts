@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the folders it shares, a Linux host's by its folders.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, and that work saved, where it is still there, before the folder goes, or the folder kept where it cannot be, and a salvage pruned a month after it was written; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the folders it shares, a Linux host's by its folders.
  *
  * The follower runs on a real temporary folder, against a fake service
  * whose live-agents read answers what each test lists, read by read, and
@@ -11,6 +11,7 @@
  */
 
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -19,6 +20,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { dirname, join } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -37,6 +39,7 @@ import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect"
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import { agentSalvageScript } from "./node/open-on-mac.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -46,6 +49,19 @@ const RUNNER = "/opt/vespin-host/node/bin/node";
 const USER_ID = "user-fixture";
 /** The platform's check of a worktree, named so the scripted spawner answers it, the worktree after it. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
+/** The first line of the platform's salvage of a worktree, the worktree after it, so the scripted spawner knows it and runs the real script for real. */
+const SALVAGE_SCRIPT = "# salvage";
+/** Git as the test runs it, on none of the machine's own config. */
+const GIT_ENVIRONMENT = {
+  PATH: process.env.PATH ?? "/usr/bin:/bin",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_AUTHOR_NAME: "Fixture",
+  GIT_AUTHOR_EMAIL: "fixture@app.test",
+  GIT_COMMITTER_NAME: "Fixture",
+  GIT_COMMITTER_EMAIL: "fixture@app.test",
+};
 /** Half a pass short of a week before the second pass runs, five minutes in, and so half a pass past a week before the third: when a folder was first kept, or an agent last used. */
 const A_WEEK_BY_THE_THIRD_PASS =
   Duration.toMillis(Duration.minutes(7.5)) - Duration.toMillis(Duration.days(7));
@@ -82,6 +98,10 @@ const settled = Effect.gen(function* () {
   }
 });
 
+function git(folder: string, args: readonly string[]): string {
+  return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
+}
+
 /** An id for the `index`th of many agents. */
 const agentNumbered = (index: number) =>
   `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
@@ -96,7 +116,9 @@ const agentNumbered = (index: number) =>
  * Linux host's are; with each folder kept since when `kept` says; each
  * agent last used when `used` says, and each folder from before that record
  * last changed when `changedAt` says; its check of a worktree printing what
- * `unsavedWork` names for its agent, and nothing for any other; and its
+ * `unsavedWork` names for its agent, and nothing for any other; its salvage
+ * of a worktree run for real, but failing for the agents `salvageFails`
+ * names; and its
  * live-agents read answering `reads` one after another, the first dying
  * before them where `firstReadDies` says. `launches` hands launch lines
  * whose runners run until the test ends, and `keptLaunches` are kept from
@@ -113,6 +135,7 @@ const following = (input: {
   readonly changedAt?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: Readonly<Record<string, string>>;
+  readonly salvageFails?: readonly string[];
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
   /** The first read of the live agents dies, as a bug would. */
@@ -162,6 +185,18 @@ const following = (input: {
           stdout: agentId === undefined ? "" : (input.unsavedWork?.[agentId] ?? ""),
           exitCode: 0,
         };
+      }
+      const [first = "", ...rest] = (args[1] ?? "").split("\n");
+      if (program === "/bin/bash" && first.startsWith(`${SALVAGE_SCRIPT} `)) {
+        const failing = (input.salvageFails ?? []).some(
+          (each) => first === `${SALVAGE_SCRIPT} ${deviceAgentLayout(home, each).checkoutPath}`,
+        );
+        if (failing) return { exitCode: 1 };
+        const ran = spawnSync("/bin/bash", ["-c", rest.join("\n")], {
+          env: { PATH: GIT_ENVIRONMENT.PATH, HOME: home, SHELL: "/bin/sh" },
+          encoding: "utf8",
+        });
+        return { stdout: ran.stdout, exitCode: ran.status ?? 1 };
       }
       if (program === "/bin/bash") return { exitCode: 0 };
       // Note that a runner runs until its process group is killed, as the test's scope closes.
@@ -236,6 +271,8 @@ const following = (input: {
         deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: ({ worktree }) => `${UNSAVED_WORK_SCRIPT} ${worktree}`,
+        salvageScript: (salvage) =>
+          `${SALVAGE_SCRIPT} ${salvage.worktree}\n${agentSalvageScript(salvage)}`,
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -389,13 +426,52 @@ it.effect("a pass lets go of five agents at most, and the next pass of the rest"
   Effect.scoped(
     Effect.gen(function* () {
       const agents = Array.from({ length: 7 }, (_, index) => agentNumbered(index + 1));
-      const device = yield* following({ held: agents, reads: [[], [], []] });
+      // Note that as many agents again stay listed, so the reads leave out no more than half.
+      const listed = Array.from({ length: 7 }, (_, index) => agentNumbered(index + 8));
+      const device = yield* following({
+        held: [...agents, ...listed],
+        reads: [listed, listed, listed],
+      });
       yield* device.passed(2);
 
       assert.equal(agents.filter(device.folderStands).length, 2);
       yield* device.passed(3);
 
       assert.equal(agents.filter(device.folderStands).length, 0);
+      assert.equal(listed.filter(device.folderStands).length, listed.length);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "answered reads that leave out most of the agents with a folder here let go of none, and say so once",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
+        const device = yield* following({ held: agents, reads: [[], [], []] });
+        yield* device.passed(3);
+
+        assert.equal(agents.filter(device.folderStands).length, agents.length);
+        assert.deepEqual(device.ownedRecorded(), agents);
+        assert.equal(device.reported.filter((line) => line.includes("leaves out")).length, 1);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect("one agent of many left out of two reads in a row is still removed", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
+      const [orphan, ...listed] = agents;
+      const device = yield* following({ held: agents, reads: [listed, listed] });
+      yield* device.passed(1);
+
+      assert.equal(device.folderStands(orphan ?? ""), true);
+      yield* device.passed(2);
+
+      assert.equal(device.folderStands(orphan ?? ""), false);
+      assert.equal(listed.filter(device.folderStands).length, listed.length);
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
@@ -437,6 +513,80 @@ it.effect(
         assert.deepEqual(device.keptRecorded(), []);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a folder kept a week whose check still finds work has that work saved before it goes, its unpushed commit and untracked file recoverable from the salvage, and one whose work cannot be saved stays kept",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const device = yield* following({
+          held: [AGENT.ORPHAN, AGENT.UNSAVED],
+          kept: {
+            [AGENT.ORPHAN]: A_WEEK_BY_THE_THIRD_PASS,
+            [AGENT.UNSAVED]: A_WEEK_BY_THE_THIRD_PASS,
+          },
+          unsavedWork: {
+            [AGENT.ORPHAN]: "it has commits on no remote branch\n",
+            [AGENT.UNSAVED]: "it has changes not committed\n",
+          },
+          salvageFails: [AGENT.UNSAVED],
+          reads: [[], [], []],
+        });
+        const scratch = dirname(device.home);
+        const origin = join(scratch, "origin");
+        mkdirSync(origin);
+        git(origin, ["init", "--quiet", "--initial-branch=main"]);
+        writeFileSync(join(origin, "README.md"), "main\n");
+        git(origin, ["add", "--all"]);
+        git(origin, ["commit", "--quiet", "-m", "main"]);
+        const worktree = deviceAgentLayout(device.home, AGENT.ORPHAN).checkoutPath;
+        git(worktree, ["clone", "--quiet", origin, "."]);
+        writeFileSync(join(worktree, "fix.md"), "unpushed\n");
+        git(worktree, ["add", "fix.md"]);
+        git(worktree, ["commit", "--quiet", "-m", "fix"]);
+        const head = git(worktree, ["rev-parse", "HEAD"]);
+        writeFileSync(join(worktree, "notes.md"), "untracked\n");
+        yield* device.passed(3);
+
+        assert.equal(device.folderStands(AGENT.ORPHAN), false);
+        assert.equal(device.folderStands(AGENT.UNSAVED), true);
+        assert.deepEqual(device.keptRecorded(), [AGENT.UNSAVED]);
+        assert.equal(existsSync(join(device.stateRoot, "salvage", AGENT.UNSAVED)), false);
+        const [stamp, ...more] = readdirSync(join(device.stateRoot, "salvage", AGENT.ORPHAN));
+        assert.deepEqual(more, []);
+        const salvage = join(device.stateRoot, "salvage", AGENT.ORPHAN, stamp ?? "");
+        assert.ok(device.reported.some((line) => line.includes(salvage)));
+        const note = JSON.parse(readFileSync(join(salvage, "note.json"), "utf8"));
+        assert.equal(note.agentId, AGENT.ORPHAN);
+        assert.equal(note.head, head);
+        const recovered = join(scratch, "recovered");
+        git(scratch, ["clone", "--quiet", origin, recovered]);
+        git(recovered, ["fetch", "--quiet", join(salvage, note.commits), "main:salvaged"]);
+        assert.equal(git(recovered, ["show", "salvaged:fix.md"]), "unpushed");
+        const untracked = join(scratch, "untracked");
+        mkdirSync(untracked);
+        execFileSync("tar", ["-xf", join(salvage, note.untracked), "-C", untracked]);
+        assert.equal(readFileSync(join(untracked, "notes.md"), "utf8"), "untracked\n");
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect("a pass removes a salvage a month after it was written, and not before", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const device = yield* following({ held: [AGENT.LIVE], reads: [[AGENT.LIVE]] });
+      const salvages = join(device.stateRoot, "salvage", AGENT.ORPHAN);
+      const monthOld = join(salvages, String(-Duration.toMillis(Duration.days(30))));
+      const weeksOld = join(salvages, String(-Duration.toMillis(Duration.days(29))));
+      mkdirSync(monthOld, { recursive: true });
+      mkdirSync(weeksOld, { recursive: true });
+      yield* device.passed(1);
+
+      assert.equal(existsSync(monthOld), false);
+      assert.equal(existsSync(weeksOld), true);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
 it.effect("a pass that died is reported, and the passes after it still run", () =>

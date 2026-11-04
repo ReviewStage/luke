@@ -7,10 +7,13 @@ import {
   taskNamesOf,
 } from "@repo/database/models/agent-store";
 import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { type TaskStatus, taskStatusSchema } from "@repo/features/task-wire";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { type UnparsedWireValue, wireUuidSchema } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { assigneeIdOf, memberLinkWrittenSchema } from "./task-assignee.js";
 
 /**
  * workspace-agents.ts -- the coding agents of one workspace as an agent's tools read them: on any task or none, by any member, one task's alone where asked, each with its task's name.
@@ -20,8 +23,10 @@ import type { StoreFailure } from "../http/store-failure.js";
  * agents too, each marked, since an agent may need to know one stands, and
  * names each agent's task by its name, read once
  * for the lot; it is narrowed to one task by the id a listed agent's task
- * answered, or to the caller's own, or searched by words of an agent's
- * title or its task's name. The agents the caller works beside come first,
+ * answered, or to the caller's own, searched by words of an agent's title
+ * or its task's name, and narrowed by whether an agent is archived, who
+ * started it, whether an automation (or which) started it, and where its
+ * task stands, each in the query so a page is never cut short. The agents the caller works beside come first,
  * the agent that started it and the agents it started, then those on its
  * task, as the store orders them (`agent-store.ts`'s `around`), and the
  * rest newest first, a page at a time: a list cut at its bound says so with
@@ -37,11 +42,16 @@ export const WORKSPACE_AGENTS_LIST_LIMIT = 50;
 /** Why a list's filter read as nothing to list by, in words the model can act on. */
 export const AGENT_LIST_FILTER_REFUSAL = {
   UNREADABLE:
-    "Not run: narrow the list by a taskId, by thisTask, or by words of an agent's title or its " +
-    `task's name of at most ${AGENT_BOUNDS.MAX_SEARCH_CHARS} characters, and page it by an offset of 0 or more.`,
+    "Not run: narrow the list by a taskId, by thisTask, by words of an agent's title or its " +
+    `task's name of at most ${AGENT_BOUNDS.MAX_SEARCH_CHARS} characters, by archived, mine, ` +
+    "startedBy, automation, automationId, or a task status, and page it by an offset of 0 or more.",
   BOTH: "Not run: narrow the list by taskId or by thisTask, not both.",
   NO_OWN_TASK:
     "Not run: you work on no task, so thisTask names none; leave it out to list the whole workspace.",
+  BOTH_STARTERS: "Not run: narrow the list by mine or by startedBy, not both.",
+  NO_MEMBER:
+    "Not run: startedBy names no person; name a member by their mention link, " +
+    "`[@Name](…/person/<id>)`, or its address alone.",
 } as const;
 
 /** The filters a list takes: one task by its id, or the caller's own task, words to search by, and the page to read. */
@@ -63,6 +73,45 @@ export const AGENT_LIST_INPUT = Schema.Struct({
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(AGENT_BOUNDS.MAX_SEARCH_CHARS)),
       "Only the agents whose title or task's name holds each of these words, whatever their " +
         "case, to search the workspace by; leave it out for every agent.",
+    ),
+  ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true for only the archived agents, false for only those not archived; leave it out for both.",
+    ),
+  ),
+  mine: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true for only the agents the developer you work for started, by hand or through an agent " +
+        "or automation of theirs; leave it out for every member's.",
+    ),
+  ),
+  startedBy: Schema.optionalKey(
+    describeWire(
+      memberLinkWrittenSchema,
+      "Only the agents this member started, by their mention link, `[@Name](…/person/<id>)`, " +
+        "or its address alone; leave it out for every member's.",
+    ),
+  ),
+  automation: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true for only the agents an automation's run started, false for only those started " +
+        "otherwise; leave it out for both.",
+    ),
+  ),
+  automationId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `Only the agents this automation's runs started, by the id ${AGENT_TOOL.LIST_AUTOMATIONS} answered.`,
+    ),
+  ),
+  taskStatus: Schema.optionalKey(
+    describeWire(
+      taskStatusSchema,
+      "Only the agents on a task that stands here, such as done; an agent on no task matches none.",
     ),
   ),
   offset: Schema.optionalKey(
@@ -89,18 +138,48 @@ export interface WorkspaceAgents {
   readonly nextOffset: number | null;
 }
 
-/** What a list's input narrows it to: one task where it names one, words to search by, and the page to read. */
+/** The ways a list names whose agents it keeps. */
+export const AGENT_LIST_STARTER = {
+  MINE: "mine",
+  MEMBER: "member",
+} as const;
+
+/** Whose agents a list keeps: the caller's developer's own, one member's by their account's id, or every member's. */
+export type AgentListStarter =
+  | { readonly kind: typeof AGENT_LIST_STARTER.MINE }
+  | { readonly kind: typeof AGENT_LIST_STARTER.MEMBER; readonly userId: string }
+  | undefined;
+
+/** What a list's input narrows it to: one task where it names one, words to search by, the agents' archive, starter, automation and task's status where named, and the page to read. */
 export interface AgentListFilter {
   readonly taskId: string | undefined;
   readonly words: string | undefined;
+  readonly archived: boolean | undefined;
+  readonly starter: AgentListStarter;
+  readonly automation: boolean | undefined;
+  readonly automationId: string | undefined;
+  readonly taskStatus: TaskStatus | undefined;
   readonly offset: number;
+}
+
+/** Whose agents the input keeps, or a refusal where it names a starter both ways or a link that names no person. */
+function starterOf(mine: boolean | undefined, startedBy: string | undefined) {
+  if (mine === true && startedBy !== undefined) {
+    return Result.fail(AGENT_LIST_FILTER_REFUSAL.BOTH_STARTERS);
+  }
+  if (mine === true) return Result.succeed<AgentListStarter>({ kind: AGENT_LIST_STARTER.MINE });
+  if (startedBy === undefined) return Result.succeed<AgentListStarter>(undefined);
+  const userId = assigneeIdOf(startedBy);
+  return userId === undefined
+    ? Result.fail(AGENT_LIST_FILTER_REFUSAL.NO_MEMBER)
+    : Result.succeed<AgentListStarter>({ kind: AGENT_LIST_STARTER.MEMBER, userId });
 }
 
 /**
  * What a list's input narrows it to, given the task the caller works on:
  * the whole workspace where it names nothing, or a refusal where the input
- * does not read, names a task both ways, or asks for an own task the caller
- * has not got.
+ * does not read, names a task or a starter both ways, asks for an own task
+ * the caller has not got, or names a starter by a link that is no person's.
  */
 export function listedFilter(
   input: UnparsedWireValue,
@@ -108,23 +187,45 @@ export function listedFilter(
 ): Result.Result<AgentListFilter, string> {
   const read = readFilter(input);
   if (Result.isFailure(read)) return Result.fail(AGENT_LIST_FILTER_REFUSAL.UNREADABLE);
-  const { taskId, thisTask, words, offset } = read.success;
+  const { taskId, thisTask, words, offset, mine, startedBy, ...narrowed } = read.success;
   if (taskId !== undefined && thisTask === true) {
     return Result.fail(AGENT_LIST_FILTER_REFUSAL.BOTH);
   }
   if (thisTask === true && ownTask === null) {
     return Result.fail(AGENT_LIST_FILTER_REFUSAL.NO_OWN_TASK);
   }
+  const starter = starterOf(mine, startedBy);
+  if (Result.isFailure(starter)) return Result.fail(starter.failure);
   return Result.succeed({
     taskId: thisTask === true ? (ownTask ?? undefined) : taskId,
     words,
+    archived: narrowed.archived,
+    starter: starter.success,
+    automation: narrowed.automation,
+    automationId: narrowed.automationId,
+    taskStatus: narrowed.taskStatus,
     offset: offset ?? 0,
   });
 }
 
+/** The store's narrowing for a list's archive, starter, automation and task's status, each left out where the filter names none. */
+function storeNarrowingOf(filter: AgentListFilter) {
+  const { archived, starter, automation, automationId, taskStatus } = filter;
+  return {
+    // An archived agent is listed unless the filter asks for only those not archived.
+    includeArchived: archived !== false,
+    ...(archived === true ? { archivedOnly: true } : undefined),
+    ...(starter?.kind === AGENT_LIST_STARTER.MINE ? { ownOnly: true } : undefined),
+    ...(starter?.kind === AGENT_LIST_STARTER.MEMBER ? { startedBy: starter.userId } : undefined),
+    ...(automation === undefined ? undefined : { automation }),
+    ...(automationId === undefined ? undefined : { automationId }),
+    ...(taskStatus === undefined ? undefined : { taskStatus }),
+  };
+}
+
 /**
- * A page of the workspace's agents, archived ones among them, narrowed as
- * the filter asks, the calling agent left out: its starter and the agents
+ * A page of the workspace's agents, archived ones among them unless the
+ * filter leaves them out, narrowed as the filter asks, the calling agent left out: its starter and the agents
  * it started first, then those on its task, then the rest, each newest
  * first, at most the list's bound from the filter's offset, and the next
  * page's offset where more stand. A caller that is no agent, a member,
@@ -140,7 +241,7 @@ export const workspaceAgentsOf = (
     const listed = yield* listWorkspaceAgents(userId, workspaceId, {
       ...(filter.taskId === undefined ? undefined : { taskId: filter.taskId }),
       ...(filter.words === undefined ? undefined : { words: filter.words }),
-      includeArchived: true,
+      ...storeNarrowingOf(filter),
       ...(caller === undefined
         ? undefined
         : {

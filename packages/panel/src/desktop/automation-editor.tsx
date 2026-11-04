@@ -136,6 +136,7 @@ import {
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_INPUT_MODE,
   TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -823,6 +824,7 @@ function ScheduleRows({
                     describedBy={control["aria-describedby"]}
                     invalid={control["aria-invalid"]}
                     font={TEXT_FIELD_FONT.MONO}
+                    autoCorrect={false}
                     spellCheck={false}
                     value={schedule.cron}
                     onEscape={() => cron.current?.blur()}
@@ -1421,6 +1423,7 @@ function FilterRow({
             label={label}
             describedBy={control["aria-describedby"]}
             invalid={control["aria-invalid"]}
+            autoCorrect={false}
             spellCheck={false}
             placeholder="All"
             value={text}
@@ -1571,6 +1574,7 @@ function SentryRows({
             <TextField
               ref={hours}
               type={TEXT_FIELD_TYPE.NUMBER}
+              inputMode={TEXT_FIELD_INPUT_MODE.NUMERIC}
               label="Hours before the same issue runs again"
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}

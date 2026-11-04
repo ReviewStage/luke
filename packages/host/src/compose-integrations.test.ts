@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_CALL_FAILURE } from "@repo/features/integration-view";
+import {
+  INTEGRATION_CALL_FAILURE,
+  type IntegrationToolsView,
+} from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -14,7 +17,6 @@ import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
 import type { WireRecord, WireValue } from "@repo/wire";
@@ -39,9 +41,14 @@ const UNAVAILABLE = Object.fromEntries(
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** The tools Linear's server lists, as the service answers them unless a test scripts otherwise. */
+const LINEAR_TOOLS = { tools: [{ name: "list_issues", description: "List issues." }] };
+
 interface ServiceScript {
   status: IntegrationStatus;
   connectRefused?: boolean;
+  /** What a read of a server's tools answers; Linear's tools where none is given. */
+  tools?: IntegrationToolsView;
   /** The outside MCP clients the account allowed, as the service holds them. */
   clients?: McpClient[];
   /** Whether a revoke fails before it finishes, as one whose session lapsed does. */
@@ -59,8 +66,6 @@ const CLAUDE: McpClient = {
   allowedAt: 1_000,
   lastRefreshedAt: null,
 };
-
-const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 /** The service as a script over one account's connection, and what it was asked about. */
 function fakeService(script: ServiceScript) {
@@ -81,7 +86,7 @@ function fakeService(script: ServiceScript) {
     tools: (provider) =>
       Effect.sync(() => {
         asked.push(provider);
-        return { tools: [{ name: "list_issues", description: "List issues." }] };
+        return script.tools ?? LINEAR_TOOLS;
       }),
     cancel: (provider) =>
       Effect.sync(() => {
@@ -123,17 +128,24 @@ function subject(
 ) {
   return Effect.gen(function* () {
     const service = fakeService(script);
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    const focus = yield* windowFocus;
+    // Every telling of the servers' tools the host holds for the windows, whole, in order.
+    const told: WireValue[] = [];
+    // Every telling of the outside MCP clients the host holds for the windows, whole, in order.
+    const clients: WireValue[] = [];
     const composer = yield* composeIntegrations({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
-        emit: (kind, payload) => void events.push({ kind, payload }),
+        emit: (kind, payload) => {
+          if (kind === GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED) told.push(payload);
+          if (kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED) clients.push(payload);
+        },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
       mcpClients: service.mcpClients,
       accountId: () => "user-dana",
-      focus: yield* windowFocus,
+      focus,
       openExternal: (url) =>
         Effect.sync(() => {
           service.opened.push(url);
@@ -145,14 +157,12 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** Every telling of the outside MCP clients the host holds for the windows, whole, in order. */
-    const clients = () =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED ? [event.payload] : [],
-      );
-    return { call, clients, opened: service.opened, asked: service.asked };
+    return { call, opened: service.opened, asked: service.asked, told, clients, focus };
   });
 }
+
+/** Every step a held read has to take, taken: it runs on a fiber of its own. */
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 it.effect(
   "behind a closed account gate, or on a run that sends nothing, nothing is asked or opened",
@@ -166,12 +176,13 @@ it.effect(
           GATEWAY_METHOD.INTEGRATIONS_CONNECT,
           GATEWAY_METHOD.INTEGRATIONS_CANCEL,
           GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
-          GATEWAY_METHOD.INTEGRATIONS_TOOLS,
         ]) {
           assert.deepEqual(yield* call(method, LINEAR), {
             failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
           });
         }
+        yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
+        yield* settled;
         assert.deepEqual(opened, []);
         assert.deepEqual(asked, []);
         assert.equal(script.status, INTEGRATION_STATUS.CONNECTED);
@@ -180,7 +191,34 @@ it.effect(
 );
 
 it.effect(
-  "a revoke that lands reads the held clients again before it answers, and one that did not finish answers so and leaves the client held",
+  "a server's tools are held from their last read, asked again as a window comes forward, and kept where an ask fails",
+  () =>
+    Effect.gen(function* () {
+      const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED };
+      const { call, asked, told, focus } = yield* subject(script);
+
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
+      yield* settled;
+      assert.deepEqual(told.at(-1), { linear: { rows: LINEAR_TOOLS } });
+
+      script.tools = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
+      yield* focus.raise;
+      yield* settled;
+      assert.deepEqual(asked, [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.LINEAR]);
+      assert.deepEqual(told.at(-1), { linear: { rows: LINEAR_TOOLS } });
+
+      const mended = {
+        tools: [...LINEAR_TOOLS.tools, { name: "save_issue", description: "Save." }],
+      };
+      script.tools = mended;
+      yield* focus.raise;
+      yield* settled;
+      assert.deepEqual(told.at(-1), { linear: { rows: mended } });
+    }),
+);
+
+it.effect(
+  "a revoke that lands lays the held clients it answered before it answers, and one that did not finish answers so and leaves the client held",
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED, clients: [CLAUDE] };
@@ -190,25 +228,20 @@ it.effect(
       const held = (listed: readonly McpClient[]) => ({
         "user-dana": { rows: { serverUrl: SERVER_URL, clients: listed } },
       });
-      assert.deepEqual(clients().at(-1), held([CLAUDE]));
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
 
       script.revokeFails = true;
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
-        {
-          failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED,
-        },
+        { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED },
       );
-      assert.deepEqual(clients().at(-1), held([CLAUDE]));
+      assert.deepEqual(clients.at(-1), held([CLAUDE]));
 
       script.revokeFails = false;
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
-        {
-          serverUrl: SERVER_URL,
-          clients: [],
-        },
+        { serverUrl: SERVER_URL, clients: [] },
       );
-      assert.deepEqual(clients().at(-1), held([]));
+      assert.deepEqual(clients.at(-1), held([]));
     }),
 );

@@ -62,8 +62,8 @@ const DISCONNECTED = Object.fromEntries(
 const REFUSAL = {
   [INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]: "Could not read your integrations on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT]: "Could not connect that integration on this system.",
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS]:
-    "Could not read that integration's tools on this system.",
+  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]:
+    "Could not read that integration's tools again on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL]:
     "Could not cancel connecting that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT]:
@@ -88,8 +88,8 @@ const ACTS: readonly {
     call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR),
   },
   {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS](LINEAR),
+    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY,
+    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY](LINEAR),
   },
   {
     kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL,
@@ -124,10 +124,17 @@ function windowPort(actor: ActSender, trusted = true) {
         asked.push(`connect ${provider}`);
         return { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED };
       }),
-    integrationsTools: ({ provider }) =>
+    integrationsToolsFollow: ({ provider }) =>
       Effect.sync(() => {
         asked.push(`tools ${provider}`);
-        return { tools: [{ name: "list_issues", description: "List issues." }] };
+      }),
+    integrationsToolsUnfollow: ({ provider }) =>
+      Effect.sync(() => {
+        asked.push(`tools let go ${provider}`);
+      }),
+    integrationsToolsRetry: ({ provider }) =>
+      Effect.sync(() => {
+        asked.push(`tools again ${provider}`);
       }),
     integrationsCancel: ({ provider }) =>
       Effect.sync(() => {

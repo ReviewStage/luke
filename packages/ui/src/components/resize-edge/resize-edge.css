@@ -29,7 +29,13 @@
     right: -3px;
   }
 
-  .ui-resize-edge:is(:hover, :active, :focus-visible) {
+  .ui-resize-edge:is(:active, :focus-visible) {
     background: color-mix(in srgb, var(--ui-color-accent) 55%, transparent);
+  }
+
+  @media (hover: hover) {
+    .ui-resize-edge:hover {
+      background: color-mix(in srgb, var(--ui-color-accent) 55%, transparent);
+    }
   }
 }

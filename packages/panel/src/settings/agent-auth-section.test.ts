@@ -13,6 +13,7 @@ import {
   type SubscriptionKeySummary,
 } from "@repo/features/provider-key-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppProviderKeyList } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
@@ -24,7 +25,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handHostReads, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentConnectSection } from "./agent-auth-section.js";
 import { AgentsPage } from "./agents-page.js";
@@ -81,6 +82,14 @@ let refusal: (typeof PROVIDER_KEY_REJECTION)[keyof typeof PROVIDER_KEY_REJECTION
 let sent: AnyAct[] = [];
 /** The ChatGPT sign-in's answer while it is held open, as a sign-in waits on the browser. */
 let signInOpen: PromiseWithResolvers<FakeActAnswer> | undefined;
+/** How the keys the host holds are delivered to the window again, as each write's own answer lays them. */
+let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
+
+/** A write's answer of the keys, laid where the host holds them before it answers, as the host lays it. */
+function written(value: ProviderKeysAnswer): Promise<FakeActAnswer> {
+  deliverKeys({ rows: value });
+  return Promise.resolve(done(value));
+}
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   status: FAKE_ANSWER.DONE,
@@ -99,8 +108,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.PROVIDER_KEYS_READ:
-      return Promise.resolve(done(held));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
       if (refusal !== undefined) return Promise.resolve(done({ ...held, rejected: refusal }));
       held =
@@ -110,14 +117,14 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
               ...held,
               keys: [...held.keys, { ...ANTHROPIC_KEY, provider: request.payload.provider }],
             };
-      return Promise.resolve(done(held));
+      return written(held);
     case ACT_KIND.PROVIDER_KEYS_REMOVE: {
       const kind = request.payload.kind;
       held =
         kind === undefined || kind === PROVIDER_KEY_KIND.API_KEY
           ? { ...held, keys: held.keys.filter((one) => one.provider !== request.payload.provider) }
           : { ...held, subscriptions: subscriptions.filter((one) => one.kind !== kind) };
-      return Promise.resolve(done(held));
+      return written(held);
     }
     case ACT_KIND.PROVIDER_KEYS_FOR_AGENTS:
       held = {
@@ -128,7 +135,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
             : one,
         ),
       };
-      return Promise.resolve(done(held));
+      return written(held);
     case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
       // Ending a sign-in answers it as canceled, as the host does.
       signInOpen?.resolve(done({ cancelled: true }));
@@ -137,7 +144,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.CHATGPT_SIGN_IN:
       if (signInOpen !== undefined) return signInOpen.promise;
       held = { ...held, subscriptions: [...subscriptions, CHATGPT_PLAN] };
-      return Promise.resolve(done(held));
+      return written(held);
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
@@ -150,6 +157,7 @@ beforeEach(() => {
   refusal = undefined;
   sent = [];
   signInOpen = undefined;
+  deliverKeys = () => undefined;
   window.localStorage.clear();
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeActs({ act: answer });
@@ -173,6 +181,7 @@ async function mount(
 ): Promise<HTMLElement> {
   const base = stateWith({}, {});
   handState({}, { access: { admin: false }, run: { ...base.run, capabilities } });
+  deliverKeys = handHostReads({ keys: { rows: held } }).deliverKeys;
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -190,6 +199,7 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
     {},
     { access: { admin: false }, run: { ...base.run, capabilities: DESKTOP_CAPABILITIES } },
   );
+  deliverKeys = handHostReads({ keys: { rows: held } }).deliverKeys;
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -473,6 +483,18 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
+});
+
+test("a saved key's row draws its hint from the keys the host holds, the window asking for none of its own", async () => {
+  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
+  const page = await mount();
+  assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  const dialog = await open(page, "Claude");
+  assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz"));
+  assert.deepEqual(
+    sent.map((each) => each.kind).filter((kind) => kind.startsWith("providerKeys.")),
+    [ACT_KIND.PROVIDER_KEYS_FOLLOW],
+  );
 });
 
 test("replacing a saved API key opens a New key field showing Saved where the key would be, offers no Show until one is typed, and turns the row's end into Cancel", async () => {

@@ -98,6 +98,18 @@ export function AccountActivityNote(): React.JSX.Element {
   );
 }
 
+/** What the account page's live activity counts: the Overview's and the roster's active day. */
+export function AccountActionsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      agent. Plan revisions count the account's own. The streak, Last active, and the calendar read
+      back a trailing year. A deleted task takes its agents and revisions with it, so past days can
+      empty.
+    </SectionNote>
+  );
+}
+
 export function RosterNote({
   truncatedTo,
   searched,
@@ -131,6 +143,30 @@ export function DayNote({
       Calls count the hosted-tier calls each account made on this UTC day. {HOSTED_TIER_RETIRED}
       {truncatedTo !== undefined
         ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. The totals count all ${formatCount(totalAccounts)}.`
+        : ""}
+    </SectionNote>
+  );
+}
+
+/**
+ * What the Day page's live figures count: one UTC day of the Overview's
+ * activity chart, and who was active in it.
+ */
+export function DayActivityNote({
+  truncatedTo,
+  activeDevelopers,
+}: {
+  truncatedTo?: number | undefined;
+  activeDevelopers: number;
+}): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active account created a task, wrote a plan revision, or started an agent on this UTC day.
+      The totals are this day's bar on the Overview's activity chart, so plan revisions count the
+      notes {PRODUCT_NAME}'s retired notetaker took too, and automation runs leave out the ones a
+      guard held back.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. Active developers counts all ${formatCount(activeDevelopers)}.`
         : ""}
     </SectionNote>
   );

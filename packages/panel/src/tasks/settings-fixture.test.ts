@@ -8,7 +8,7 @@ import {
   ADMIN_READ,
 } from "@repo/features/admin-wire";
 import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
@@ -53,12 +53,10 @@ const ACME = { workspaceId: "workspace-acme" };
 /** The reads the staged pages ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
   read(ACT_KIND.GITHUB_TOKEN_READ, undefined),
-  read(ACT_KIND.PROVIDER_KEYS_READ, undefined),
   read(ACT_KIND.AGENTS_MODELS, undefined),
   read(ACT_KIND.AGENTS_DEFAULT_READ, undefined),
   read(ACT_KIND.CHAPTERS_MODEL_READ, undefined),
   read(ACT_KIND.INTEGRATIONS_STATUS, undefined),
-  read(ACT_KIND.INTEGRATIONS_TOOLS, { provider: INTEGRATION_PROVIDER.NOTION }),
   read(ACT_KIND.WORKSPACE_MEMBERS_READ, ACME),
   read(ACT_KIND.WORKSPACE_INVITATIONS_READ, ACME),
   read(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACME),

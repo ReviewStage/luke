@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import type { AdminDailyUsage } from "@repo/features/admin-answer-wire";
+import type { AdminDailyCount } from "@repo/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ActivityCalendar } from "./charts/activity-calendar.js";
+import { ActivityCalendar, CALENDAR_MEASURE } from "./charts/activity-calendar.js";
 
 /**
  * admin-activity-calendar.test.ts -- the activity calendar describes every day
@@ -15,9 +15,9 @@ import { ActivityCalendar } from "./charts/activity-calendar.js";
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 /** A synthetic three weeks, Sunday 2026-09-27 to Saturday 2026-10-17, read at noon on the last. */
-const DAILY: AdminDailyUsage[] = Array.from({ length: 21 }, (_, index) => ({
+const DAILY: AdminDailyCount[] = Array.from({ length: 21 }, (_, index) => ({
   day: new Date(Date.UTC(2026, 8, 27 + index)).toISOString().slice(0, 10),
-  calls: index % 7 === 0 ? 0 : index,
+  count: index % 7 === 0 ? 0 : index,
 }));
 const GENERATED_AT = Date.UTC(2026, 9, 17, 12);
 
@@ -58,7 +58,13 @@ function render(): HTMLElement {
   document.body.replaceChildren(container);
   root = createRoot(container);
   act(() =>
-    root?.render(createElement(ActivityCalendar, { daily: DAILY, generatedAt: GENERATED_AT })),
+    root?.render(
+      createElement(ActivityCalendar, {
+        daily: DAILY,
+        measure: CALENDAR_MEASURE.ACTIONS,
+        generatedAt: GENERATED_AT,
+      }),
+    ),
   );
   return container;
 }
@@ -75,26 +81,26 @@ function heading(page: HTMLElement): string {
   return page.querySelector("h3")?.textContent ?? "";
 }
 
-test("each day reads its date and its count of hosted calls", () => {
+test("each day reads its date and its count of meaningful actions", () => {
   const page = render();
 
   const descriptions = dayDescriptions(page);
   expect(descriptions).toHaveLength(21);
-  expect(descriptions[0]).toBe("Sep 27 — 0 hosted calls");
-  expect(descriptions[2]).toBe("Sep 29 — 2 hosted calls");
-  expect(descriptions[13]).toBe("Oct 10 — 13 hosted calls");
+  expect(descriptions[0]).toBe("Sep 27 — 0 meaningful actions");
+  expect(descriptions[2]).toBe("Sep 29 — 2 meaningful actions");
+  expect(descriptions[13]).toBe("Oct 10 — 13 meaningful actions");
 });
 
 test("today reads as a day still running", () => {
   const page = render();
 
-  expect(dayDescriptions(page).at(-1)).toBe("Oct 17 (so far today) — 20 hosted calls");
+  expect(dayDescriptions(page).at(-1)).toBe("Oct 17 (so far today) — 20 meaningful actions");
 });
 
 test("a card that holds every week names the trailing year and labels its weekdays and months", () => {
   const page = render();
 
-  expect(heading(page)).toBe("This account's trailing year, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, trailing year, week by week");
   for (const label of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sep", "Oct"]) {
     expect(page.textContent).toContain(label);
   }
@@ -106,15 +112,15 @@ test("a narrower card shows its newest weeks and says how many", () => {
   width = widthFor(2);
   act(() => resize?.());
 
-  expect(heading(page)).toBe("This account's last 2 weeks, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, last 2 weeks, week by week");
   const descriptions = dayDescriptions(page);
   expect(descriptions).toHaveLength(14);
-  expect(descriptions[0]).toBe("Oct 4 — 0 hosted calls");
+  expect(descriptions[0]).toBe("Oct 4 — 0 meaningful actions");
 
   width = widthFor(1);
   act(() => resize?.());
 
-  expect(heading(page)).toBe("This account's last 1 week, week by week");
+  expect(heading(page)).toBe("This account's meaningful actions, last 1 week, week by week");
   expect(dayDescriptions(page)).toHaveLength(7);
 });
 
@@ -126,10 +132,10 @@ test("hovering a day shows its count in the tooltip, and leaving the grid hides 
   act(() => {
     cell.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
   });
-  expect(page.textContent).toContain("Oct 10Hosted calls13");
+  expect(page.textContent).toContain("Oct 10Meaningful actions13");
 
   act(() => {
     cell.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
   });
-  expect(page.textContent).not.toContain("Hosted calls");
+  expect(page.textContent).not.toContain("Meaningful actions");
 });

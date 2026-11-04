@@ -1,3 +1,4 @@
+import { eventIterator, type } from "@orpc/contract";
 import {
   chatGptSignInAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
@@ -25,11 +26,17 @@ import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
  * row's value into what crosses the port, as the agent acts' do.
  */
 export const accountAskActsContract = {
-  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: actProcedure(
-    "Couldn't read your API keys on this system.",
+  // Note that the hold's stream carries nothing: the held keys reach the panel on app state, and the stream is the window's hold on them.
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actProcedure(
+    "Couldn't follow your API keys on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
+    .output(eventIterator(type<never>())),
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_RETRY]: actProcedure(
+    "Couldn't read your API keys again on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: actProcedure(
     "Couldn't save your API key on this system.",
   )

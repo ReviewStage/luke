@@ -21,7 +21,7 @@ import { pulseOnPress } from "../../press-pulse.js";
 
 /** The press: a share of the bar, its glyph over its name in the caption's type, muted until it is the place shown. */
 const BAR_ITEM =
-  "ui-bar-item flex min-h-ui-48 flex-1 basis-0 flex-col items-center justify-center gap-ui-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground [-webkit-tap-highlight-color:transparent] aria-[current=page]:text-accent-ink";
+  "ui-bar-item flex min-h-ui-48 flex-1 basis-0 flex-col items-center justify-center gap-ui-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground aria-[current=page]:text-accent-ink";
 
 /**
  * What waits on the reader, as a badge on the glyph's top corner: a

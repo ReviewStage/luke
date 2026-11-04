@@ -20,6 +20,7 @@ export default defineConfig({
       "apps/web",
       "apps/host",
       "packages/host",
+      "packages/sync",
       "packages/ui",
       "packages/panel",
       "apps/catalog",

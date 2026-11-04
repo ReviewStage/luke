@@ -183,12 +183,10 @@ import {
   type IntegrationRenameParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
-  type IntegrationToolsView,
   integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
-  integrationToolsViewSchema,
 } from "@repo/features/integration-view";
 import {
   MCP_CLIENTS_CALL_FAILURE,
@@ -225,8 +223,7 @@ import {
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
-  type TasksCommentsAnswer,
-  type TasksCommentsParams,
+  type TasksCommentsFollow,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -305,7 +302,6 @@ import {
   tasksBrowserTabsAnswerSchema,
   tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
-  tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksFindAnswerSchema,
@@ -388,8 +384,11 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppIntegrationTools,
   AppMcpClients,
   AppPages,
+  AppPlanComments,
+  AppProviderKeys,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -543,8 +542,14 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's comment threads past a cursor, held by the service while nothing changed; or why there are none. */
-  tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One held plan's or page's comments read again at once, as Try again asks. */
+  tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
+  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
   /** A comment thread started on one task's plan, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
@@ -553,8 +558,14 @@ export interface HostOperator {
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
-  /** The tools one provider's server offers the account's agents; or why there is no answer. */
-  integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
+  /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
+  integrationsToolsFollow(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** One server's tools let go by the windows. */
+  integrationsToolsUnfollow(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** One server's held tools asked again at once, as Try again asks; done once the ask has landed. */
+  integrationsToolsRetry(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** Every server's tools the host holds for the windows, whole, each time any of them moves. */
+  onIntegrationToolsChanged(listener: (held: AppIntegrationTools) => void): () => void;
   /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
   integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
@@ -689,6 +700,8 @@ export interface HostOperator {
   hostsPresenceFollow(): Effect.Effect<void>;
   /** The account's devices' beats let go by the windows. */
   hostsPresenceUnfollow(): Effect.Effect<void>;
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  hostsPresenceRefresh(): Effect.Effect<void>;
   /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
@@ -826,8 +839,14 @@ export interface HostOperator {
   agentOverviewConversation(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewConversationAnswerView>;
-  /** The account's own provider keys as hints and statuses; or why there are none. */
-  providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
+  /** The account's own provider keys as hints and statuses, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onProviderKeysChanged`. */
+  providerKeysFollow(): Effect.Effect<void>;
+  /** The account's provider keys let go by the windows. */
+  providerKeysUnfollow(): Effect.Effect<void>;
+  /** The account's held provider keys asked again at once, as Try again asks; done once the ask has landed. */
+  providerKeysRetry(): Effect.Effect<void>;
+  /** The account's provider keys the host holds for the windows, whole, each time any of them moves. */
+  onProviderKeysChanged(listener: (held: AppProviderKeys) => void): () => void;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
@@ -1024,6 +1043,13 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
+/** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
+function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
+  return scope.pageId === undefined
+    ? { taskId: scope.taskId }
+    : { taskId: scope.taskId, pageId: scope.pageId };
+}
+
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
@@ -1110,10 +1136,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
         answerOf(integrationConnectViewSchema, INTEGRATION_UNANSWERED),
       ),
-    integrationsTools: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, integrationTarget(params)),
-        answerOf(integrationToolsViewSchema, INTEGRATION_UNANSWERED),
+    integrationsToolsFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, integrationTarget(params))),
+    integrationsToolsUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_UNFOLLOW, integrationTarget(params))),
+    integrationsToolsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_RETRY, integrationTarget(params))),
+    onIntegrationToolsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED,
+        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppIntegrationTools>(payload) : undefined),
+        listener,
       ),
     integrationsCancel: (params) =>
       Effect.map(
@@ -1380,14 +1414,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
         answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksComments: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
-          planId: params.planId,
-          ...(params.pageId === undefined ? undefined : { pageId: params.pageId }),
-          after: params.after,
-        }),
-        answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),
+    tasksCommentsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
+    tasksCommentsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
+    tasksCommentsRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
+    onPlanCommentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        listener,
       ),
     tasksCommentStart: (params) =>
       Effect.map(
@@ -1774,6 +1812,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
     hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
+    hostsPresenceRefresh: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH, {})),
     onDevicePresenceChanged: (listener) =>
       on(
         GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
@@ -2109,10 +2148,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
         answerOf(agentOverviewConversationAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    providerKeysRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
+    providerKeysFollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW, {})),
+    providerKeysUnfollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW, {})),
+    providerKeysRetry: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_RETRY, {})),
+    onProviderKeysChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PROVIDER_KEYS_CHANGED,
+        // Note that the held keys are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppProviderKeys>(payload) : undefined),
+        listener,
       ),
     providerKeySave: (params) =>
       Effect.map(

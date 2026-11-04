@@ -16,7 +16,7 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
-import { useMentionedReader } from "./mentioned-agent-card.js";
+import { useMentionedReader } from "./mentioned-place.js";
 import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
 
@@ -290,6 +290,30 @@ function KnownAutomationCard({
   const landed = useAutomationsLanded();
   if (known === undefined) return landed ? fallback : reading;
   return <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />;
+}
+
+/**
+ * The automations of the workspace a link was written under, read around
+ * its chip as it is drawn, so the chip calls the automation by its name now
+ * and wears its tile as its row in the `@` list does; shared with a
+ * directory around it that already reads them. A link of a workspace the
+ * account holds none of reads nothing.
+ */
+export function LinkAutomations({
+  workspace: slug,
+  children,
+}: {
+  /** The slug of the workspace the link was written under. */
+  workspace: string;
+  children: ReactNode;
+}): ReactNode {
+  const workspace = useLinkWorkspace(slug);
+  if (workspace === undefined) return children;
+  return (
+    <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
+      {children}
+    </AutomationDirectory>
+  );
 }
 
 /**

@@ -62,7 +62,9 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
+  type AppIntegrationTools,
   type AppMcpClients,
+  type AppProviderKeys,
   type AppStateSnapshot,
   RUN_PROFILE,
 } from "@repo/host/app-state";
@@ -295,6 +297,13 @@ const MODELS: readonly CatalogModel[] = [
     credentialMissing: true,
   },
 ];
+
+/** Every connected staged server's tools, as the host holds them for the windows. */
+const STAGED_TOOLS: AppIntegrationTools = Object.fromEntries(
+  INTEGRATION_ACCOUNTS.filter((account) => account.status === INTEGRATION_STATUS.CONNECTED).map(
+    (account) => [account.connection, { rows: { tools: TOOLS } }],
+  ),
+);
 
 /* ----- Settings › Skills ----- */
 
@@ -610,29 +619,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       expiresAt: NOW + 60 * DAY,
     },
   }),
-  [ACT_KIND.PROVIDER_KEYS_READ]: () => ({
-    keys: [],
-    subscriptions: [
-      {
-        provider: MODEL_PROVIDER.ANTHROPIC,
-        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
-        hint: "…41d0",
-        addedAt: NOW - 21 * DAY,
-        status: PROVIDER_KEY_STATUS.VERIFIED,
-        statusAt: NOW - HOUR,
-        forAgents: true,
-      },
-      {
-        provider: MODEL_PROVIDER.OPENAI,
-        kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-        hint: "…9b3e",
-        addedAt: NOW - 45 * DAY,
-        status: PROVIDER_KEY_STATUS.INVALID,
-        statusAt: NOW - 3 * DAY,
-        forAgents: true,
-      },
-    ],
-  }),
   [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
   [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
@@ -720,7 +706,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     accounts: INTEGRATION_ACCOUNTS,
     addable: [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.SLACK],
   }),
-  [ACT_KIND.INTEGRATIONS_TOOLS]: () => ({ tools: TOOLS }),
   [ACT_KIND.WORKSPACE_INVITATIONS_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME
       ? [
@@ -828,6 +813,35 @@ const STAGED_MCP_CLIENTS: AppMcpClients = {
   },
 };
 
+/** The account's staged credentials, as the host holds them: no API key, Claude's plan connected, and the ChatGPT sign-in OpenAI no longer honors. */
+const STAGED_KEYS: AppProviderKeys = {
+  [ACCOUNT_ID]: {
+    rows: {
+      keys: [],
+      subscriptions: [
+        {
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          hint: "…41d0",
+          addedAt: NOW - 21 * DAY,
+          status: PROVIDER_KEY_STATUS.VERIFIED,
+          statusAt: NOW - HOUR,
+          forAgents: true,
+        },
+        {
+          provider: MODEL_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          hint: "…9b3e",
+          addedAt: NOW - 45 * DAY,
+          status: PROVIDER_KEY_STATUS.INVALID,
+          statusAt: NOW - 3 * DAY,
+          forAgents: true,
+        },
+      ],
+    },
+  },
+};
+
 /** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
 let stagedBeats: AppDevicePresences | undefined;
 
@@ -845,8 +859,8 @@ function beatsStaged(): AppDevicePresences {
 
 /**
  * Main's document as these profiles draw it: the account signed in, an
- * admin of the service, with the staged pages' experiments on and the
- * staged hosts beating. The same document, the very object, under any other
+ * admin of the service, with the staged pages' experiments on, the staged
+ * hosts beating, and its credentials and servers' tools held. The same document, the very object, under any other
  * profile. Each slice laid over is one object across deliveries, but the
  * settings, which carry main's own, so a delivery that moves nothing of them
  * draws nothing again.
@@ -858,6 +872,8 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
+    [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
     [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };

@@ -13,6 +13,12 @@
      the body. Tailwind's preflight would set this, but the panel takes none. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Note that a press shows only the control's own feedback, because Safari
+     otherwise flashes its gray tap box over it; `manipulation` keeps pinch
+     zoom but drops the double-tap zoom, and a `touch-action: none` area still
+     wins, since a touch's allowed actions are the intersection up the tree. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   background: transparent;
   /* The palette every shared component draws in, the inks, grounds, fills,
      edges, accent, states, and shadows, is `@repo/ui`'s desktop palette
@@ -268,6 +274,13 @@ file-tree-container {
   ):focus-visible {
     outline: none; /* no ring: the caret marks the field */
   }
+}
+
+html,
+body {
+  /* A drag that starts where nothing scrolls must not bounce the app on iOS
+     or pull to refresh on Android. */
+  overscroll-behavior: none;
 }
 
 html,

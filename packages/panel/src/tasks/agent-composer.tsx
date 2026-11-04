@@ -174,7 +174,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * The foot answers the card's own width, not the window's, so the box
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
- * card narrows, the branch's chip draws its mark alone; then a ⋯ takes in, in this order, the
+ * card narrows, the branch's chip draws its mark alone, and so does New
+ * task's Runs on chip, which stands in its place; then a ⋯ takes in, in this order, the
  * context ring and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too, the ⋯
  * offering the + menu's rows in its place. The field
@@ -186,7 +187,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  *
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
- * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`),
+ * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`), handed whether the card is too narrow for its words,
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and hands the
@@ -229,7 +230,8 @@ const BUTTON = {
 
 /**
  * The card widths below which a press draws its mark alone: the branch's
- * chip first, then the owner's presses that carry words (New task's Plan
+ * chip first, and the owner's tools after the "+" with it (New task's Runs
+ * on chip), then the owner's presses that carry words (New task's Plan
  * toggle, at the step the ⋯ stands), then the model
  * chip. Note that they are steps of the same order as the stylesheet's
  * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
@@ -519,8 +521,8 @@ export function AgentComposer({
   wording?: ComposerWords | undefined;
   /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
   maxLength?: number;
-  /** What stands after the "+" at the foot's left: New task's Runs on chip. */
-  tools?: ReactNode;
+  /** What stands after the "+" at the foot's left, handed whether the card is too narrow for its words: New task's Runs on chip. */
+  tools?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
@@ -936,7 +938,7 @@ export function AgentComposer({
                 doors={doors}
                 narrow={folds(FOLD_WIDTH.PUBLISHED)}
               />
-              {tools}
+              {tools?.(folds(FOLD_WIDTH.PUBLISHED))}
             </>
           }
           counter={{ length: composer.draft.length, limit: maxLength }}

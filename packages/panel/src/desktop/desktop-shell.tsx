@@ -45,7 +45,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
-import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
+import { MentionedAgents } from "../tasks/mentioned-place.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
@@ -71,7 +71,7 @@ import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark } from "./offline-mark.js";
-import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
+import { ADMIN_PLACE, PERSON_PAGE, TASKS_ROUTE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneHead, phoneBar } from "./phone-head.js";
@@ -103,9 +103,6 @@ const SETTINGS_ROUTE = lazyRoute(() =>
 const AUTOMATIONS_ROUTE = lazyRoute(() =>
   import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
 );
-
-/** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
-const TASKS_ROUTE = lazyRoute(() => import("./tasks-page.js").then((loaded) => loaded.TasksPage));
 
 /** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
@@ -615,13 +612,14 @@ function automationsPlaceKey(place: AutomationsPlace): string {
 }
 
 /**
- * Whether the window keeps its Inbox drawn while it is away from it: from
- * the Inbox's first visit, for as long as the shell stands (`standing`) on
- * the workspace it was visited in. Settings, a version history, or the
- * sign-in taking the window, or another workspace listed, lets it go, so it
- * is drawn afresh at its next visit rather than kept for nothing.
+ * Whether the window keeps a page drawn while it is away from it, the Inbox
+ * or the Tasks page: from the page's first visit, for as long as the shell
+ * stands (`standing`) on the workspace it was visited in. Settings, a
+ * version history, or the sign-in taking the window, or another workspace
+ * listed, lets it go, so it is drawn afresh at its next visit rather than
+ * kept for nothing.
  */
-function useInboxKept(open: boolean, workspaceId: string | undefined, standing: boolean): boolean {
+function usePageKept(open: boolean, workspaceId: string | undefined, standing: boolean): boolean {
   const keptFor = useRef<string | undefined>(undefined);
   if (!standing) keptFor.current = undefined;
   else if (open) keptFor.current = workspaceId;
@@ -629,42 +627,37 @@ function useInboxKept(open: boolean, workspaceId: string | undefined, standing: 
 }
 
 /**
- * The window's Inbox, kept drawn, hidden, between visits, as ⌘K's dialog
- * is between openings, so a return draws it in its first frame with its
- * rows, scroll, view, and search as they stood; the item chosen in it is
- * still the window's to say (`use-tasks-tab.ts`), none from its row. Note
- * that React's `Activity` hides it (`display: none`, so nothing in it takes
- * focus or is found) and takes down its effects, its keys, commands, and
- * subscriptions to the window's state among them, and that what it is
- * handed is held as it was last shown, so a patch to the window draws
- * nothing in it until it is shown again. Its effects coming back up is its
- * return, which is where `inbox.open` ends (`use-inbox-spans.ts`).
+ * A page of the window kept drawn, hidden, between visits, the Inbox or the
+ * Tasks page, as ⌘K's dialog is between openings, so a return draws it in
+ * its first frame as it stood: the Inbox's rows, scroll, view, and search,
+ * the item chosen in it still the window's to say (`use-tasks-tab.ts`), none
+ * from its row; the Tasks page's view, filter, and scroll. Note that React's
+ * `Activity` hides it (`display: none`, so nothing in it takes focus or is
+ * found) and takes down its effects, its keys, commands, and subscriptions
+ * to the window's state among them, and that the page is held as it was
+ * last shown, its cards' context with it, so a patch to the window draws
+ * nothing in it until it is shown again. The Inbox's effects coming back up
+ * is its return, which is where `inbox.open` ends (`use-inbox-spans.ts`).
  */
-function KeptInbox({
+function KeptPage({
   shown,
-  tasks,
-  room,
   chipCards,
   mentionedAgents,
+  children,
 }: {
   shown: boolean;
-  tasks: TasksControl;
-  room: ShellRoom;
   chipCards: React.ComponentProps<typeof ChipCards>["value"];
   mentionedAgents: React.ComponentProps<typeof MentionedAgents>["value"];
+  children: React.ReactNode;
 }): React.JSX.Element {
-  const held = useRef({ tasks, room, chipCards, mentionedAgents });
-  if (shown) held.current = { tasks, room, chipCards, mentionedAgents };
-  const last = held.current;
-  return (
-    <Activity mode={shown ? "visible" : "hidden"}>
-      <MentionedAgents value={last.mentionedAgents}>
-        <ChipCards value={last.chipCards}>
-          <DesktopInbox tasks={last.tasks} room={last.room} />
-        </ChipCards>
-      </MentionedAgents>
-    </Activity>
+  const page = (
+    <MentionedAgents value={mentionedAgents}>
+      <ChipCards value={chipCards}>{children}</ChipCards>
+    </MentionedAgents>
   );
+  const held = useRef(page);
+  if (shown) held.current = page;
+  return <Activity mode={shown ? "visible" : "hidden"}>{held.current}</Activity>;
 }
 
 /**
@@ -725,11 +718,10 @@ export function DesktopShell({
   const signedInId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
   const [finishedHere, setFinishedHere] = useState<string>();
   const setup = useSetupGate(tasks, signedInId, finishedHere === signedInId);
-  const inboxKept = useInboxKept(
-    tasks.inboxView.open,
-    tasks.workspace?.id,
-    !gated && tasks.signedIn && tab !== PANEL_TAB.SETTINGS && !tasks.history.open,
-  );
+  const keptStanding =
+    !gated && tasks.signedIn && tab !== PANEL_TAB.SETTINGS && !tasks.history.open;
+  const inboxKept = usePageKept(tasks.inboxView.open, tasks.workspace?.id, keptStanding);
+  const boardKept = usePageKept(tasks.boardView.open, tasks.workspace?.id, keptStanding);
   useSettingsFocusReturn(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
@@ -1017,12 +1009,7 @@ export function DesktopShell({
                   />
                 </Suspense>
               </PageFind>
-            ) : boardOpen ? (
-              // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
-              <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-                <TASKS_ROUTE.Route tasks={tasks} room={room} />
-              </Suspense>
-            ) : adminOpen ? (
+            ) : boardOpen ? null : adminOpen ? (
               <Suspense fallback={adminLoading}>
                 {adminAccess ? (
                   <ADMIN_PLACE.Route
@@ -1072,15 +1059,20 @@ export function DesktopShell({
                 staged={sidebar.staged}
               />
             )}
-            {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}
+            {/* Note that a page kept stands after the page shown in its place, so a lookup of the page's first box finds the page's,
+                and the Tasks page before the Inbox, so it is the first box while it is shown. */}
+            {boardOpen || boardKept ? (
+              <KeptPage shown={boardOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+                {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
+                <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
+                  <TASKS_ROUTE.Route tasks={tasks} room={room} />
+                </Suspense>
+              </KeptPage>
+            ) : null}
             {inboxOpen || inboxKept ? (
-              <KeptInbox
-                shown={inboxOpen}
-                tasks={tasks}
-                room={room}
-                chipCards={chipCards}
-                mentionedAgents={mentionedAgents}
-              />
+              <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+                <DesktopInbox tasks={tasks} room={room} />
+              </KeptPage>
             ) : null}
           </ChipCards>
         </MentionedAgents>

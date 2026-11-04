@@ -16,17 +16,13 @@ import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 import { readAdminCost } from "./admin-cost-queries.js";
 import { buildAdminDayDetail } from "./admin-day.js";
+import { readAdminDaySource } from "./admin-day-queries.js";
 import { adminIntegrations } from "./admin-health.js";
 import { buildAdminMetrics } from "./admin-metrics.js";
 import { buildAdminOverview } from "./admin-overview.js";
 import { readAdminDashboardSources } from "./admin-overview-queries.js";
 import type { AdminProcedureSeams } from "./admin-procedures.js";
-import {
-  readAdminDaySource,
-  readAdminUserSource,
-  readAdminUsersSource,
-  writeAdminFavorite,
-} from "./admin-queries.js";
+import { readAdminUserSource, readAdminUsersSource, writeAdminFavorite } from "./admin-queries.js";
 import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
 import { buildAdminUserDetail } from "./admin-user.js";

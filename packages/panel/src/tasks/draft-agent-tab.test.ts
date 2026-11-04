@@ -12,6 +12,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -31,9 +32,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handState, signedInAs } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -648,13 +649,17 @@ function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
   };
 }
 
-/** A draft on the model given, the account's keys read as given; each Start's arguments written down. */
+/** A draft on the model given, the account's keys held as given; each Start's arguments written down. */
 async function plannedTab(options: { keys: ProviderKeysAnswer; model: string }) {
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(options.keys),
-  });
-  handState({}, { access: { admin: false } });
+  const signedIn = signedInAs({ id: "user-dev", email: "dev@example.com", name: "Dev" });
+  handState(
+    {},
+    {
+      account: signedIn.account,
+      access: { admin: false },
+      [LIVE_READ.PROVIDER_KEYS]: { "user-dev": { rows: options.keys } },
+    },
+  );
   const starts: unknown[][] = [];
   const tab = mount(
     [],

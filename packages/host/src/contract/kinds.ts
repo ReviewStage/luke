@@ -25,12 +25,16 @@ export const ACCOUNT_ACT_KIND = {
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
-   * Settings › API keys: the account's own provider keys read as hints and
+   * Settings › API keys: the account's own provider keys held as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
    * key crosses from the renderer, once, on its way to the service; no
-   * answer carries one back, and nothing on the way keeps it.
+   * answer carries one back, and nothing on the way keeps it. The hold's
+   * stream carries nothing: what it holds reaches the panel on app state
+   * (`LIVE_READ.PROVIDER_KEYS`), and each write's own answer is laid there too.
    */
-  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_FOLLOW: "providerKeys.follow",
+  /** The account's held provider keys, which the panel reads on app state, asked again at once, as Try again asks. */
+  PROVIDER_KEYS_RETRY: "providerKeys.retry",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
@@ -119,6 +123,8 @@ export const AGENT_ACT_KIND = {
    * nothing.
    */
   HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
+  /** The beats a window holds asked again now, as the window comes back online. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
@@ -271,8 +277,16 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
-  INTEGRATIONS_TOOLS: "integrations.tools",
+  /**
+   * The tools one account's server offers the account's agents, held for the
+   * window while it holds the stream open and a while after among those let
+   * go lately, asked again as a window comes forward: what it holds reaches
+   * the panel on app state (`LIVE_READ.INTEGRATION_TOOLS`), so the stream
+   * carries nothing.
+   */
+  INTEGRATIONS_TOOLS_FOLLOW: "integrations.toolsFollow",
+  /** One server's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
+  INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
   /**
@@ -406,11 +420,14 @@ export const TASKS_ACT_KIND = {
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * The open plan's comment threads: read past a cursor (held open by the
-   * service while nothing changed), one started on words of the plan, and
-   * one thing done to one thread. The window holds what it draws.
+   * A task's comment threads, its plan's own or one page's: held followed
+   * while a window shows them, what they hold reaching the panel on app
+   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
+   * one started on words of the plan or on a page, and one thing done to
+   * one thread, each answered with the thread as it stands.
    */
-  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
 } as const;
@@ -642,7 +659,8 @@ export const PORT_ACT_USE = {
   ACCOUNT_SIGN_OUT: ACT_USE.WRITE,
   ACCOUNT_DELETE: ACT_USE.WRITE,
 
-  PROVIDER_KEYS_READ: ACT_USE.READ,
+  PROVIDER_KEYS_FOLLOW: ACT_USE.READ,
+  PROVIDER_KEYS_RETRY: ACT_USE.READ,
   PROVIDER_KEYS_SAVE: ACT_USE.WRITE,
   PROVIDER_KEYS_REMOVE: ACT_USE.WRITE,
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
@@ -660,6 +678,7 @@ export const PORT_ACT_USE = {
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
   HOSTS_LIST: ACT_USE.READ,
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
+  HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.READ,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
@@ -741,7 +760,8 @@ export const PORT_ACT_USE = {
   INTEGRATIONS_CONNECT: ACT_USE.WRITE,
   INTEGRATIONS_CANCEL: ACT_USE.WRITE,
   INTEGRATIONS_DISCONNECT: ACT_USE.WRITE,
-  INTEGRATIONS_TOOLS: ACT_USE.READ,
+  INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
+  INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
   MCP_CLIENTS_FOLLOW: ACT_USE.READ,
   MCP_CLIENTS_RETRY: ACT_USE.READ,
@@ -797,7 +817,8 @@ export const PORT_ACT_USE = {
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,
-  TASKS_COMMENTS: ACT_USE.READ,
+  TASKS_COMMENTS_FOLLOW: ACT_USE.READ,
+  TASKS_COMMENTS_RETRY: ACT_USE.READ,
   TASKS_COMMENT_START: ACT_USE.WRITE,
   TASKS_COMMENT_ACT: ACT_USE.WRITE,
 

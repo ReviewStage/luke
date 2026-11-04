@@ -23,7 +23,7 @@ import { agentName } from "./agent-model.js";
 import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { type CardFoot, taskFoot } from "./agent-tab-card.js";
 import type { MentionableAgent } from "./mention-picker.js";
-import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
+import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-place.js";
 import { agentEndMark, TAB_KIND, tabLook } from "./tab-look.js";
 
 /** What a row says of an agent's task: the open one, another by its name or by none, or none at all, and whether it is archived. */

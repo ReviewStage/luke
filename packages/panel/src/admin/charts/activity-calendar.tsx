@@ -1,4 +1,4 @@
-import type { AdminDailyUsage } from "@repo/features/admin-answer-wire";
+import type { AdminDailyCount } from "@repo/features/admin-answer-wire";
 import { formatCount } from "@repo/features/number-format";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@repo/ui/activity-calendar";
@@ -8,6 +8,26 @@ import { partialDayKey } from "@repo/ui/daily-series";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChartFrame, ChartFrameSkeleton } from "./chart-frame.js";
 import { USAGE_CHART } from "./usage-chart.js";
+
+/**
+ * What a calendar counts: its tooltip row's name and hue, and the noun its
+ * cells and legend say. An account's meaningful actions are its live
+ * activity; the retired hosted tier's calls keep a calendar of their own.
+ */
+export const CALENDAR_MEASURE = {
+  ACTIONS: {
+    label: "Meaningful actions",
+    noun: "meaningful actions",
+    color: "var(--ui-color-chart-1)",
+  },
+  HOSTED_CALLS: {
+    label: USAGE_CHART.calls.label,
+    noun: "hosted calls",
+    color: USAGE_CHART.calls.color,
+  },
+} as const;
+
+type CalendarMeasure = (typeof CALENDAR_MEASURE)[keyof typeof CALENDAR_MEASURE];
 
 /**
  * The floor under a day cell's fill, the retention grid's own: a one-call day
@@ -23,9 +43,9 @@ const CALENDAR_FILL_FLOOR_PERCENT = 8;
  */
 const CALENDAR_CELL_RADIUS = "25%";
 
-function calendarCellFill(total: number, maxTotal: number): string {
+function calendarCellFill(total: number, maxTotal: number, color: string): string {
   const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
-  return `color-mix(in oklab, var(--ui-color-chart-1) ${fill}%, transparent)`;
+  return `color-mix(in oklab, ${color} ${fill}%, transparent)`;
 }
 
 /** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
@@ -34,14 +54,16 @@ const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 function CalendarDayCell({
   day,
   maxTotal,
+  measure,
   partialDay,
   onShow,
   onHide,
 }: {
-  day: AdminDailyUsage;
+  day: AdminDailyCount;
   maxTotal: number;
+  measure: CalendarMeasure;
   partialDay: string | undefined;
-  onShow: (day: AdminDailyUsage, cell: HTMLElement) => void;
+  onShow: (day: AdminDailyCount, cell: HTMLElement) => void;
   onHide: () => void;
 }): React.JSX.Element {
   const provisional =
@@ -49,12 +71,13 @@ function CalendarDayCell({
   return (
     <div
       role="img"
-      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatCount(day.calls)} hosted calls`}
+      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatCount(day.count)} ${measure.noun}`}
       data-calendar-day={day.day}
-      className={`outline-offset-2 ${day.calls === 0 ? "bg-(--ui-color-fill-hover)/60" : ""}${provisional}`}
+      className={`outline-offset-2 ${day.count === 0 ? "bg-(--ui-color-fill-hover)/60" : ""}${provisional}`}
       style={{
         borderRadius: CALENDAR_CELL_RADIUS,
-        backgroundColor: day.calls === 0 ? undefined : calendarCellFill(day.calls, maxTotal),
+        backgroundColor:
+          day.count === 0 ? undefined : calendarCellFill(day.count, maxTotal, measure.color),
       }}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
@@ -92,8 +115,9 @@ const CALENDAR_GAP_PX = 3;
 const CALENDAR_GRID_HEIGHT = `calc(var(--ui-type-caption-leading) + ${DAYS_PER_WEEK * (CALENDAR_CELL_PX + CALENDAR_GAP_PX)}px)`;
 
 /** What the calendar's cells say, under the grid. */
-const CALENDAR_LEGEND =
-  "Each cell is one UTC day, whatever the window. A deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling.";
+function calendarLegend(measure: CalendarMeasure): string {
+  return `Each cell is one UTC day, whatever the window. A deeper fill is more ${measure.noun} against the busiest day shown, and the dashed cell is today, still filling.`;
+}
 
 /** The weekday-label column's fixed width, which is what makes the fit exact. */
 const CALENDAR_WEEKDAY_COLUMN_PX = 28;
@@ -109,7 +133,7 @@ function calendarWeeksThatFit(availableWidth: number): number {
 }
 
 interface CalendarTooltipAnchor {
-  day: AdminDailyUsage;
+  day: AdminDailyCount;
   /** The cell's edges in the card's own coordinates, where the tooltip lives. */
   centerX: number;
   top: number;
@@ -132,7 +156,7 @@ interface CalendarTooltipAnchor {
  * labels, and the fill scale all describe the shown span alone: a deeper
  * fill is that day's share of the busiest day visible, not of a busiest day
  * a narrow surface may have cropped away. A day the span does not cover
- * draws nothing, a covered day with no calls keeps the faintest neutral
+ * draws nothing, a covered day with none keeps the faintest neutral
  * fill so absence still reads as an observed day, and today — always in the
  * last column, since the slice keeps the newest weeks — wears the retention
  * grid's dashed border, because a fade here would pose as a quiet day. A
@@ -143,9 +167,11 @@ interface CalendarTooltipAnchor {
  */
 export function ActivityCalendar({
   daily,
+  measure,
   generatedAt,
 }: {
-  daily: readonly AdminDailyUsage[];
+  daily: readonly AdminDailyCount[];
+  measure: CalendarMeasure;
   generatedAt: number;
 }): React.JSX.Element {
   const allWeeks = calendarWeeks(daily);
@@ -171,7 +197,7 @@ export function ActivityCalendar({
   const months = monthLabels(allWeeks).slice(allWeeks.length - weeks.length);
   const partialDay = partialDayKey(daily, generatedAt);
   const shownDays = weeks.flatMap((week) => week.days.filter((day) => day !== undefined));
-  const maxTotal = Math.max(...shownDays.map((day) => day.calls), 0);
+  const maxTotal = Math.max(...shownDays.map((day) => day.count), 0);
   const spanLabel =
     weeks.length === allWeeks.length
       ? "trailing year"
@@ -179,7 +205,7 @@ export function ActivityCalendar({
   const cardRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<CalendarTooltipAnchor | undefined>(undefined);
-  const showTooltip = useCallback((day: AdminDailyUsage, cell: HTMLElement) => {
+  const showTooltip = useCallback((day: AdminDailyCount, cell: HTMLElement) => {
     const card = cardRef.current;
     if (card === null) return;
     const cellRect = cell.getBoundingClientRect();
@@ -210,7 +236,7 @@ export function ActivityCalendar({
   return (
     <ChartFrame
       ref={cardRef}
-      title={`This account's ${spanLabel}, week by week`}
+      title={`This account's ${measure.noun}, ${spanLabel}, week by week`}
       overlay={
         anchor !== undefined ? (
           <div ref={tooltipRef} className="pointer-events-none absolute z-tooltip">
@@ -218,17 +244,17 @@ export function ActivityCalendar({
               label={formatTooltipDay(anchor.day.day, partialDay)}
               rows={[
                 {
-                  key: "calls",
-                  color: USAGE_CHART.calls.color,
-                  name: USAGE_CHART.calls.label,
-                  value: formatCount(anchor.day.calls),
+                  key: measure.noun,
+                  color: measure.color,
+                  name: measure.label,
+                  value: formatCount(anchor.day.count),
                 },
               ]}
             />
           </div>
         ) : null
       }
-      legend={CALENDAR_LEGEND}
+      legend={calendarLegend(measure)}
     >
       <div ref={gridAreaRef}>
         {weeks.length === 0 ? null : (
@@ -264,6 +290,7 @@ export function ActivityCalendar({
                       key={day.day}
                       day={day}
                       maxTotal={maxTotal}
+                      measure={measure}
                       partialDay={partialDay}
                       onShow={showTooltip}
                       onHide={hideTooltip}
@@ -284,6 +311,10 @@ export function ActivityCalendar({
  * the fit decides, over a block as tall as the grid, and its legend as
  * itself, so the card is as tall as the one that replaces it.
  */
-export function ActivityCalendarSkeleton(): React.JSX.Element {
-  return <ChartFrameSkeleton legend={CALENDAR_LEGEND} plot={CALENDAR_GRID_HEIGHT} />;
+export function ActivityCalendarSkeleton({
+  measure,
+}: {
+  measure: CalendarMeasure;
+}): React.JSX.Element {
+  return <ChartFrameSkeleton legend={calendarLegend(measure)} plot={CALENDAR_GRID_HEIGHT} />;
 }

@@ -59,9 +59,8 @@ ORIGIN="@@ORIGIN@@"
 UNIT="vespin-host.service"
 # A Mac's LaunchAgent, by its label.
 MAC_LABEL="dev.vespin.host.standalone"
-# The oldest macOS it installs on: the release's launcher reads its own path
-# with readlink -f, which macOS has had since 12.3.
-MAC_MIN_VERSION="12.3"
+# The oldest macOS it installs on: the release's Node (24) needs macOS 13.5.
+MAC_MIN_VERSION="13.5"
 # The folder that stands where systemd runs the box; a test points it elsewhere.
 SYSTEMD_RUN_DIR="${APP_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # How long a Mac's install waits for its running LaunchAgent to stop before it

@@ -9,7 +9,7 @@ import type { TerminalModule } from "./terminal/contract.js";
  * bundle-loader.test.ts -- a bundle whose import failed, as one does over a
  * connection that dropped for a moment, is imported again by the next
  * surface to read it, rather than answering the failure for the window's
- * life; and one that landed is had by every later reader. The bundle is a stand-in, failing until the connection is back.
+ * life, its own error kept as the failure's cause; and one that landed is had by every later reader. The bundle is a stand-in, failing until the connection is back.
  */
 
 /** The Terminal tab's bundle as it lands; nothing reads past who it is. */
@@ -36,6 +36,9 @@ it.effect("a bundle whose import failed is imported again by its next reader", (
 
     const failed = yield* Effect.flip(AtomRegistry.getResult(window, bundles.terminal));
     assert.equal(failed.message, TERMINAL_LOAD_FAILED);
+    // The import's own error rides along, so a report names the chunk that failed.
+    assert.ok(failed.cause instanceof Error);
+    assert.equal(failed.cause.message, "offline");
 
     online = true;
     // The registry lets go of what no reader holds once the fiber yields.

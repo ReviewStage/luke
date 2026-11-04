@@ -16,7 +16,11 @@
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { localAgentRefusalSchema, refusedDeviceSchema } from "../agent-wire.js";
-import { hostPairingHeldDataSchema, hostUpgradeNeededDataSchema } from "../host-wire.js";
+import {
+  hostPairingHeldDataSchema,
+  hostRemovedDataSchema,
+  hostUpgradeNeededDataSchema,
+} from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
@@ -84,6 +88,9 @@ const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
 
+/** What a refused bearer carries beside its slug where it was a device secret no standing host holds, which the host reads as removed. */
+const hostRemovedData = EffectSchema.toStandardSchemaV1(EffectSchema.flip(hostRemovedDataSchema));
+
 /** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes, which the daemon prints. */
 const hostUpgradeNeededData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(hostUpgradeNeededDataSchema),
@@ -101,7 +108,7 @@ const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
 
 /** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
-  [HOSTED_API_ERROR.INVALID_TOKEN]: {},
+  [HOSTED_API_ERROR.INVALID_TOKEN]: { data: hostRemovedData },
   [HOSTED_API_ERROR.INVALID_REQUEST]: {},
   [HOSTED_API_ERROR.QUOTA_EXHAUSTED]: {},
   [HOSTED_API_ERROR.UNAVAILABLE]: {},

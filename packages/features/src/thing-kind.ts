@@ -241,8 +241,9 @@ export const THING_NAME: ThingNames = {
   [THING_KIND.INBOX]: NO_LIVE_NAME,
   [THING_KIND.INBOX_ITEM]: { live: true, held: (item, known) => known.inboxItems.get(item.itemId) },
   [THING_KIND.AUTOMATIONS]: NO_LIVE_NAME,
+  // Note that an automation's chip reads its workspace's automations as it is drawn (`LinkAutomations`), so the name held is its name now.
   [THING_KIND.AUTOMATION]: {
-    live: false,
+    live: true,
     held: (automation, known) => known.automations.get(automation.automationId),
   },
   [THING_KIND.AUTOMATION_RUN]: {

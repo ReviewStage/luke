@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeysAnswer,
 } from "@repo/features/provider-key-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { type AppHostRead, type AppProviderKeyList, UNREAD } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -18,7 +19,7 @@ import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { DictateButton } from "./tasks/dictation-strip.js";
 import { useDictation } from "./tasks/use-dictation.js";
-import { fakeActPort } from "./testing/app-bridge.js";
+import { fakeActPort, quietHold } from "./testing/app-bridge.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
@@ -27,8 +28,8 @@ import { onRegistry } from "./testing/copy-feedback.js";
  * have none is offered no Dictate: it says to add the key in settings, and
  * its press opens Codex's row in Settings › Agents, where the OpenAI key is
  * saved. Until the keys are read, when a read fails, and while no one is
- * signed in, nothing is known and it stands as it always has. The window's
- * focus reads the keys again. Synthetic account and keys.
+ * signed in, nothing is known and it stands as it always has. Synthetic
+ * account and keys.
  */
 
 const HINT = "Add an OpenAI key in Settings";
@@ -60,16 +61,21 @@ function Presses(): React.JSX.Element {
   return createElement(DictateButton, { dictation, disabled: false });
 }
 
-/** The presses drawn for `account`, the keys read as `read` answers, recording what the presses opened. */
-async function mount(read: () => Promise<unknown>, signedIn = true) {
+/** The presses drawn for `account`, the keys held as `held` stands, recording what the presses opened and how often the keys were held. */
+async function mount(held: AppHostRead<AppProviderKeyList>, signedIn = true) {
   const account = signedIn ? "dev@example.com" : undefined;
-  handState({}, { settings: appSettingsWire(settingsView()) });
-  let reads = 0;
+  handState(
+    {},
+    {
+      settings: appSettingsWire(settingsView()),
+      [LIVE_READ.PROVIDER_KEYS]: account === undefined ? {} : { [account]: held },
+    },
+  );
+  let holds = 0;
   fakeActPort({
-    [ACT_KIND.PROVIDER_KEYS_READ]: () => {
-      reads += 1;
-      // SAFETY: each test answers the read in one of the shapes the port carries, or fails it.
-      return read() as Promise<ProviderKeysAnswer>;
+    [ACT_KIND.PROVIDER_KEYS_FOLLOW]: () => {
+      holds += 1;
+      return quietHold();
     },
   });
   const opened: SettingsLink[] = [];
@@ -94,7 +100,7 @@ async function mount(read: () => Promise<unknown>, signedIn = true) {
   await settle();
   const button = (label: string) =>
     container.querySelectorAll<HTMLButtonElement>(`button[aria-label="${label}"]`);
-  return { opened, button, reads: () => reads };
+  return { opened, button, holds: () => holds };
 }
 
 async function settle(): Promise<void> {
@@ -104,7 +110,7 @@ async function settle(): Promise<void> {
 }
 
 test("with no OpenAI key saved, Dictate says to add one in settings, and the press opens Codex's row in Settings › Agents rather than dictating", async () => {
-  const page = await mount(() => Promise.resolve({ keys: [ANTHROPIC_KEY] }));
+  const page = await mount({ rows: { keys: [ANTHROPIC_KEY] } });
   const press = page.button(HINT)[0];
   assert.ok(press, "the press says to add the key");
   assert.equal(page.button("Dictate").length, 0);
@@ -114,55 +120,38 @@ test("with no OpenAI key saved, Dictate says to add one in settings, and the pre
 });
 
 test("with an OpenAI key saved, Dictate is offered", async () => {
-  const page = await mount(() => Promise.resolve({ keys: [OPENAI_KEY] }));
+  const page = await mount({ rows: { keys: [OPENAI_KEY] } });
   assert.equal(page.button(HINT).length, 0);
   assert.equal(page.button("Dictate").length, 1);
   assert.deepEqual(page.opened, []);
 });
 
 test("an OpenAI key the service can no longer open counts as none, while one OpenAI refused is still tried", async () => {
-  const unreadable = await mount(() =>
-    Promise.resolve({ keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.UNREADABLE }] }),
-  );
+  const unreadable = await mount({
+    rows: { keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.UNREADABLE }] },
+  });
   assert.equal(unreadable.button(HINT).length, 1);
   act(() => roots.pop()?.unmount());
 
-  const refused = await mount(() =>
-    Promise.resolve({ keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.INVALID }] }),
-  );
+  const refused = await mount({
+    rows: { keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.INVALID }] },
+  });
   assert.equal(refused.button(HINT).length, 0);
   assert.equal(refused.button("Dictate").length, 1);
 });
 
 test("until the keys are read, when the read fails, and while no one is signed in, nothing is turned away", async () => {
-  const unread = await mount(() => new Promise(ignore));
+  const unread = await mount(UNREAD);
   assert.equal(unread.button(HINT).length, 0, "a read still out disables nothing");
   assert.equal(unread.button("Dictate").length, 1);
   act(() => roots.pop()?.unmount());
 
-  for (const failed of [
-    () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    () => Promise.reject(new Error("The port is closed.")),
-  ]) {
-    const page = await mount(failed);
-    assert.equal(page.button(HINT).length, 0, "a failed read disables nothing");
-    assert.equal(page.button("Dictate").length, 1);
-    act(() => roots.pop()?.unmount());
-  }
+  const failed = await mount({ failed: true });
+  assert.equal(failed.button(HINT).length, 0, "a failed read disables nothing");
+  assert.equal(failed.button("Dictate").length, 1);
+  act(() => roots.pop()?.unmount());
 
-  const signedOut = await mount(() => Promise.resolve({ keys: [] }), false);
-  assert.equal(signedOut.reads(), 0, "no one's keys are read");
+  const signedOut = await mount({ rows: { keys: [] } }, false);
+  assert.equal(signedOut.holds(), 0, "no one's keys are held");
   assert.equal(signedOut.button(HINT).length, 0);
-});
-
-test("the window's focus reads the keys again, so a key saved elsewhere turns Dictate back", async () => {
-  let keys: ProviderKeysAnswer["keys"] = [];
-  const page = await mount(() => Promise.resolve({ keys }));
-  assert.equal(page.button(HINT).length, 1);
-
-  keys = [OPENAI_KEY];
-  act(() => window.dispatchEvent(new Event("focus")));
-  await settle();
-  assert.equal(page.button(HINT).length, 0);
-  assert.equal(page.button("Dictate").length, 1);
 });

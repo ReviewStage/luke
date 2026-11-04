@@ -136,16 +136,25 @@
 
   /* Note that each of these selectors holds no comma inside its brackets,
      because the touch-density test reads a rule's selectors by its commas. */
-  .ui-disclosure-frame:has(
-    > details > .ui-disclosure-summary:not([data-look="transcript"]):hover
-  )::before {
-    background: var(--ui-color-fill-strong);
+  @media (hover: hover) {
+    .ui-disclosure-frame:has(
+      > details > .ui-disclosure-summary:not([data-look="transcript"]):hover
+    )::before {
+      background: var(--ui-color-fill-strong);
+    }
+
+    .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look="transcript"])):has(
+      > :not(details):hover
+    )::before {
+      background: var(--ui-color-fill-strong);
+    }
   }
 
-  .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look="transcript"])):has(
-    > :not(details):hover
+  /* A tap draws the press, since the hover above stands only where there is one. */
+  .ui-disclosure-frame:has(
+    > details > .ui-disclosure-summary:not([data-look="transcript"]):active
   )::before {
-    background: var(--ui-color-fill-strong);
+    background: var(--ui-color-fill-pressed);
   }
 
   .ui-disclosure-frame:has(

@@ -19,10 +19,11 @@
  * so and reads its record again every `UNENROLLED_REST`, rather than
  * exiting for its service to start it over; one that did runs the daemon
  * (`@repo/host/daemon`) until the service is stopped, which stops every
- * runner it started with it, or until the service refuses the box's secret, the
- * host removed, when it stops them and exits 0, and its service, starting
- * it again a minute later, finds its record refused and rests, until the
- * box is connected again by hand. A daemon the account install runs, its
+ * runner it started with it. Once the service settles the box's secret as
+ * refused, the host removed, it stops them, marks its record refused, and
+ * rests (`hostRefusedRest`), asking the service now and then whether it takes
+ * the secret again, until it does or the box is connected again; a start on
+ * a refused record rests the same way. A daemon the account install runs, its
  * own real path in a version folder of the install's releases
  * (`accountReleases`), updates itself to the newer release the service names
  * (`host-update.ts`): once it switched `current` to it, every runner
@@ -66,6 +67,7 @@ import {
   hostArch,
   hostDaemon,
   hostPlatform,
+  hostRefusedRest,
   hostRuntime,
   hostServiceOf,
   LINUX_HOST,
@@ -182,7 +184,7 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, or a rest until there is one; it ends once the service refuses the box's secret, or the daemon switched to a newer release. */
+/** The daemon on the box's record, a rest until there is one, or a rest while the service refuses it; it ends once the daemon switched to a newer release. */
 const follow = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
@@ -194,12 +196,10 @@ const follow = (runtime: HostRuntime) =>
       yield* Effect.sleep(UNENROLLED_REST);
       return undefined;
     }
-    // Note that a box the service refused before is not asked again on the dead secret: it rests removed until it is connected again.
+    // Note that a box the service refused rests, asking now and then whether the service takes its secret again, until it does or the box is connected again.
     if (device.value.refused === true) {
-      reportToStderr(
-        `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's secret before, so it was removed. Connect it again to follow its agents.`,
-      );
-      return HOST_DAEMON_END.REMOVED;
+      yield* hostRefusedRest({ stateRoot, device: device.value, version: VERSION });
+      return undefined;
     }
     const boxArch = yield* arch(runtime);
     const platform = hostPlatform({
@@ -222,9 +222,8 @@ const follow = (runtime: HostRuntime) =>
       releases: accountReleases(),
     });
     if (ended === HOST_DAEMON_END.REMOVED) {
-      reportToStderr(
-        `${PRODUCT_NAME} host: every agent it ran is stopped. It exits until this box is connected again.`,
-      );
+      reportToStderr(`${PRODUCT_NAME} host: every agent it ran is stopped.`);
+      return undefined;
     }
     return ended;
   }).pipe(Effect.repeat({ until: (ended) => ended !== undefined }));
@@ -283,7 +282,7 @@ const restartAsked = (service: HostService | undefined) =>
         ),
       );
 
-/** `vespin-host run`: the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
+/** `vespin-host run`: the daemon, resting while the service refuses the box's secret, until it switched to a newer release, which its service is asked to start at once. */
 const run = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const service = yield* serviceRunning(runtime);

@@ -115,6 +115,8 @@ export interface AgentTranscriptControl {
   failure: AgentFailure | undefined;
   /** Where a failed agent that ran directly on its Mac left its work, as the last page said; nothing for any other failure. */
   ranDirectly: { readonly folder: string } | undefined;
+  /** The host a failed agent's run was lost with, as the last page said; nothing for any other failure. */
+  hostLost: { readonly host: string } | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
   usage: AgentUsage | undefined;
   /** Who pays for the agent, as the last page said; nothing on a worker's, and for an agent from before payers. */
@@ -163,6 +165,7 @@ interface Held {
   messages: readonly AgentTranscriptMessage[];
   failure: AgentFailure | undefined;
   ranDirectly: { readonly folder: string } | undefined;
+  hostLost: { readonly host: string } | undefined;
   usage: AgentUsage | undefined;
   payer: AgentPayer | undefined;
   context: AgentContext | undefined;
@@ -196,6 +199,7 @@ function fresh(transcript: AgentTranscriptKey): Held {
     messages: [],
     failure: undefined,
     ranDirectly: undefined,
+    hostLost: undefined,
     usage: undefined,
     payer: undefined,
     context: undefined,
@@ -281,6 +285,7 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
     olderFailed: replaces ? false : was.olderFailed,
     failure: page.failureReason,
     ranDirectly: page.ranDirectly,
+    hostLost: page.hostLost,
     usage: page.usage,
     payer: page.payer,
     context: page.context,
@@ -455,6 +460,7 @@ export function useAgentTranscript(input: {
     messages: held.messages,
     failure: held.failure,
     ranDirectly: held.ranDirectly,
+    hostLost: held.hostLost,
     usage: held.usage,
     payer: held.payer,
     context: held.context,

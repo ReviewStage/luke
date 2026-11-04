@@ -56,6 +56,7 @@ const isHostedRefusal = Schema.is(
     localAgentRefusal: Schema.optionalKey(localAgentRefusalSchema),
     refusedDevice: Schema.optionalKey(refusedDeviceSchema),
     minimumVersion: Schema.optionalKey(Schema.String),
+    hostRemoved: Schema.optionalKey(Schema.Literal(true)),
   }),
 );
 

@@ -101,8 +101,18 @@ export const GATEWAY_METHOD = {
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
-  /** One task's plan's comment threads past a cursor, held open by the service while nothing changed. */
-  TASKS_COMMENTS: "tasks.comments",
+  /**
+   * One task's comments, its plan's own threads or one page's, held followed
+   * for a window from now until it is let go, over Neon Realtime, and a
+   * while after among those let go lately: the open task's plan's, or a page
+   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * app state every window draws, never answered.
+   */
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  /** One task's plan's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
+  /** One held plan's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   /** A comment thread started on one task's plan, answered with the thread as it stands. */
   TASKS_COMMENT_START: "tasks.commentStart",
   /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
@@ -207,6 +217,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
   /** The account's devices' beats let go by the window that held them. */
   HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
@@ -339,8 +351,19 @@ export const GATEWAY_METHOD = {
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
   AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
-  /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
-  PROVIDER_KEYS_READ: "providerKeys.read",
+  /**
+   * The account's own provider keys an agent runs on, as hints and statuses
+   * and never a key, held for a window from now until it is let go, asked
+   * of the service at once and again as a window comes forward, and laid from
+   * each save's, remove's, and plan default's own answer. What it holds is
+   * heard as `PROVIDER_KEYS_CHANGED` events, on the app state every window
+   * draws, never answered.
+   */
+  PROVIDER_KEYS_FOLLOW: "providerKeys.follow",
+  /** The account's provider keys let go by the window that held them. */
+  PROVIDER_KEYS_UNFOLLOW: "providerKeys.unfollow",
+  /** The account's held provider keys asked again at once, as Try again asks; answered once the ask has landed. */
+  PROVIDER_KEYS_RETRY: "providerKeys.retry",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
@@ -392,8 +415,18 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
-  /** The tools one account's server offers the account's agents, read from the service now. */
-  INTEGRATIONS_TOOLS: "integrations.tools",
+  /**
+   * The tools one account's server offers the account's agents, held for a
+   * window from now until it is let go, asked of the service at once and
+   * again as a window comes forward, and a while after among the reads let go
+   * lately. What it holds is heard as `INTEGRATION_TOOLS_CHANGED` events, on
+   * the app state every window draws, never answered.
+   */
+  INTEGRATIONS_TOOLS_FOLLOW: "integrations.toolsFollow",
+  /** One server's tools let go by the window that held them. */
+  INTEGRATIONS_TOOLS_UNFOLLOW: "integrations.toolsUnfollow",
+  /** One server's held tools asked again at once, as Try again asks; answered once the ask has landed. */
+  INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** The account's sign-in to one account at a provider under way ended on the service, revoking nothing; where it then stands. */
   INTEGRATIONS_CANCEL: "integrations.cancel",
   /** The account's connection to one account at a provider ended on the service; where it then stands. */
@@ -578,6 +611,8 @@ export const GATEWAY_EVENT = {
   TRANSCRIPT_CHANGED: "transcript.changed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
+  /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
+  PLAN_COMMENTS_CHANGED: "planComments.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
@@ -602,6 +637,10 @@ export const GATEWAY_EVENT = {
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
+  /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
+  /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

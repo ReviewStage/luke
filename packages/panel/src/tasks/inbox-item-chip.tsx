@@ -23,7 +23,7 @@ import {
   taskHolder,
   waitsOnReader,
 } from "./inbox-model.js";
-import { useMentionedPlace } from "./mentioned-agent-card.js";
+import { useMentionedPlace } from "./mentioned-place.js";
 
 /**
  * inbox-item-chip.tsx -- a chip of an Inbox item: what it asks as its glyph and its Inbox row's own card, whatever the item's standing.

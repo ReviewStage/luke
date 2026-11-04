@@ -274,6 +274,16 @@ export const wireUuidSchema = trimmedUuidText
   .check(EffectSchema.makeFilter(isWireUuid));
 
 /**
+ * The id a create's maker chose for the row it makes, minted by the client
+ * so it can draw the row before the service answers: the row is made under
+ * it, a create sent again under it makes nothing new and answers the row it
+ * made, and one under an id a row the maker does not reach holds is refused
+ * as any other refused create is, naming nothing of that row. A create that
+ * names none is made under an id the service mints.
+ */
+export const chosenIdSchema = wireUuidSchema;
+
+/**
  * A member named where the service attributes work to one: their account's
  * id, and the name it holds now, a member who has since left the workspace
  * among them. The window calls the member You only where the id is its own

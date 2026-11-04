@@ -75,16 +75,17 @@ const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-ui-6 text-muted-foreground";
  * under the press. A band across a card is filled faintly under the
  * pointer, its words coming up to the full ink and underlined under the
  * pointer or the keyboard, as a link's are, so it reads as the way to the
- * lines it names. Note that a state here is a selector of its own rather
- * than Tailwind's `hover:`, which a touch screen never answers, so a tap
- * draws as it did; and that the row's type is keyed on its look, which
+ * lines it names, and filled deeper under the press. Note that a hover here
+ * is Tailwind's `hover:`, which only a pointer that hovers answers, because
+ * a touch screen leaves the last tap hovered, so a tap draws as the press
+ * does, by `active:`; and that the row's type is keyed on its look, which
  * outweighs the box's `font: inherit`.
  */
 const LINE_LOOK = {
-  row: `${ROW_BOX} pointer-coarse:min-h-touch data-[look=row]:text-caption [&:hover:not(:active)]:bg-fill-strong [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground`,
+  row: `${ROW_BOX} pointer-coarse:min-h-touch data-[look=row]:text-caption hover:not-active:bg-fill-strong active:bg-fill-pressed data-[brightens=true]:hover:text-foreground`,
   quote:
-    "line-clamp-2 [line-clamp:2] wrap-anywhere [&:hover]:text-foreground [&:active]:opacity-70",
-  band: "decoration-1 underline-offset-[0.24em] [&:hover]:bg-muted [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
+    "line-clamp-2 [line-clamp:2] wrap-anywhere hover:text-foreground active:opacity-70",
+  band: "decoration-1 underline-offset-[0.24em] hover:bg-muted hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:bg-fill-pressed",
 } as const satisfies Record<LineButtonLook, string>;
 
 /** What an app's hint hands the line it wraps: when to show and go, and what it says of the line. */

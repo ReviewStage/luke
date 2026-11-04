@@ -59,14 +59,14 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
-import type { RowWrite } from "./live-collection.js";
-import { type AgentRow, taskListCollections } from "./task-list-collections.js";
+import { taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
@@ -270,8 +270,10 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
-  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says. */
-  let presence: DevicePresenceAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
+  let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
+  });
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
@@ -297,7 +299,7 @@ function fakeService() {
       }),
     hosts: () => Effect.succeed({ failure: "unanswered" }),
     devicePresence: () =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         asked.push("presence");
         return presence;
       }),
@@ -725,7 +727,11 @@ function fakeService() {
     },
     /** How long ago the account's devices beat, as the service answers from now on. */
     answerPresence: (next: DevicePresenceAnswerView) => {
-      presence = next;
+      presence = Effect.succeed(next);
+    },
+    /** The service never answering how long ago the devices beat, from now on. */
+    hangPresence: () => {
+      presence = Effect.never;
     },
   };
 }
@@ -794,7 +800,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
-    writeAgent?: RowWrite<AgentRow>;
+    pool?: EntityPool;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -813,7 +819,7 @@ function subject(
       focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
-      ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
+      pool: options.pool ?? (yield* entityPool()),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -837,6 +843,7 @@ function subject(
       asked: service.asked,
       startCommits: service.startCommits,
       answerPresence: service.answerPresence,
+      hangPresence: service.hangPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
       holdPages: service.holdPages,
@@ -858,6 +865,11 @@ function subject(
       accountItems: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the provider keys the host holds for the windows, whole, in order. */
+      providerKeys: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
@@ -1264,12 +1276,14 @@ it.effect(
 );
 
 it.effect(
-  "a provider key passes through to the service once and is answered back as its hint alone, and a save the schema refuses is refused in words that hold no key",
+  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held, and a save the schema refuses is refused in words that hold no key",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { call, asked, providerKeys } = yield* subject();
 
-      const read = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_READ);
+      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* settled;
+      const read = providerKeys().at(-1);
       const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key: PROVIDER_KEY,
@@ -1281,10 +1295,11 @@ it.effect(
         call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
       );
 
-      assert.deepEqual(read, { keys: [KEPT] });
+      assert.deepEqual(read, { "user-dana": { rows: { keys: [KEPT] } } });
       assert.deepEqual(saved, { keys: [KEPT] });
       assert.deepEqual(removed, { keys: [] });
-      assert.ok(!JSON.stringify([read, saved, removed]).includes(PROVIDER_KEY));
+      assert.deepEqual(providerKeys().at(-1), { "user-dana": { rows: { keys: [] } } });
+      assert.ok(!JSON.stringify([providerKeys(), saved, removed]).includes(PROVIDER_KEY));
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asked, [
@@ -2935,13 +2950,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const drawn: (readonly AgentSummary[])[] = [];
+      const pool = yield* entityPool();
       const list = yield* taskListCollections({
+        pool,
         draw: ({ taskAgents }) => void drawn.push(taskAgents),
         txWait: () => undefined,
       });
       yield* list.answer({ plans: [], agents: [{ ...agentListRow(TASK_ID, NOW), id: AGENT_ID }] });
       const answered = yield* Deferred.make<void>();
-      const { call, holdChanges } = yield* subject({ writeAgent: list.writeAgent });
+      const { call, holdChanges } = yield* subject({ pool });
       holdChanges(Deferred.await(answered));
       const standing = () => drawn.at(-1)?.[0];
 
@@ -3077,5 +3094,36 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(60));
       yield* settled;
       assert.equal(presenceAsks(), 2);
+    }),
+);
+
+it.effect(
+  "a read of the beats the service never answers counts as failed past its bound, the beats it answered before kept, stale",
+  () =>
+    Effect.gen(function* () {
+      const { call, answerPresence, hangPresence, beats } = yield* subject();
+      const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
+      answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
+      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+      yield* settled;
+
+      hangPresence();
+      yield* TestClock.adjust(Duration.seconds(20));
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(11));
+      yield* settled;
+      assert.deepEqual(
+        beats().at(-1),
+        { "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } } },
+        "a read still within its bound has not failed",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(beats().at(-1), {
+        "user-dana": {
+          rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 32_000, stale: true },
+        },
+      });
     }),
 );

@@ -202,6 +202,25 @@ export function rovingStep(
 }
 
 /**
+ * The key of the item a reach lands on (`reach`), among every item's `keys`
+ * in order, those not drawn among them, from the key of the item in hand
+ * (`from`): the first or the last, or the one after or before it, wrapping
+ * at either end; none where the set lists none, or a step from an item it
+ * does not list.
+ */
+export function reachedKey(
+  keys: readonly string[],
+  from: string | undefined,
+  to: RovingReach,
+): string | undefined {
+  if (to === ROVING_REACH.FIRST) return keys[0];
+  if (to === ROVING_REACH.LAST) return keys.at(-1);
+  const at = from === undefined ? -1 : keys.indexOf(from);
+  if (at < 0) return undefined;
+  return keys[(at + (to === ROVING_REACH.NEXT ? 1 : keys.length - 1)) % keys.length];
+}
+
+/**
  * Where a key walking the set reaches from the item in hand, `at` (below
  * zero for none): Home and End to the set's ends, and a step to the item
  * after or before it, or from none, forward to the first and back to the

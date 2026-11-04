@@ -187,23 +187,23 @@ it.effect(
           sent.push(ACT_KIND.AGENTS_LIST);
           return Promise.resolve({ agents: [] });
         },
-        [ACT_KIND.PROVIDER_KEYS_READ]: () => {
-          sent.push(ACT_KIND.PROVIDER_KEYS_READ);
-          return Promise.resolve({ keys: [] });
+        [ACT_KIND.GITHUB_TOKEN_READ]: () => {
+          sent.push(ACT_KIND.GITHUB_TOKEN_READ);
+          return Promise.resolve({ token: null });
         },
       });
 
       const listed = yield* Effect.promise(() =>
         askAct(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
       );
-      const keys = yield* Effect.promise(() => askAct(ACT_KIND.PROVIDER_KEYS_READ));
+      const token = yield* Effect.promise(() => askAct(ACT_KIND.GITHUB_TOKEN_READ));
 
       assert.ok("agents" in listed);
       assert.deepEqual(
         listed.agents.map((agent) => agent.title),
         ["Add teammate invitations"],
       );
-      assert.deepEqual(keys, { keys: [] });
-      assert.deepEqual(sent, [ACT_KIND.PROVIDER_KEYS_READ]);
+      assert.deepEqual(token, { token: null });
+      assert.deepEqual(sent, [ACT_KIND.GITHUB_TOKEN_READ]);
     }),
 );

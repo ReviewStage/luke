@@ -89,7 +89,11 @@ function bundleAtom<A>(
   failure: string,
 ): Atom.Atom<AsyncResult.AsyncResult<A, Error>> {
   let landed: { readonly module: A } | undefined;
-  const imported = Effect.tryPromise({ try: importer, catch: () => new Error(failure) }).pipe(
+  // Note that the import's own error is kept as the cause, so a report names the chunk that failed.
+  const imported = Effect.tryPromise({
+    try: importer,
+    catch: (cause) => new Error(failure, { cause }),
+  }).pipe(
     Effect.tap((module) =>
       Effect.sync(() => {
         landed = { module };

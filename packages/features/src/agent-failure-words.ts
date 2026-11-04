@@ -55,6 +55,15 @@ export function ranDirectlyWords(folder: string, starter: string | undefined): s
 }
 
 /**
+ * Why an agent whose host stopped beating while its turn ran failed, said
+ * whole in place of a failure's words: the host by its name, and that a
+ * message carries the agent on once the host is back.
+ */
+export function hostLostWords(host: string): string {
+  return `${host} went offline during this turn. Send a message to carry on once it's back.`;
+}
+
+/**
  * Why a turn failed, said of the key it ran on: the reader's own where no
  * one is named, else the named holder's, whose Settings the reader has no
  * way to mend, so the words name whose key it was and leave the way out.

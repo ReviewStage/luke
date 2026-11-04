@@ -37,8 +37,8 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
     {
       code: [
         "const answers = { [ACT_KIND.AUTOMATIONS_FOLLOW]: () => pushed };",
-        "const comments = kind === ACT_KIND.TASKS_COMMENTS;",
-        "type Asked = PortActPayload<typeof ACT_KIND.TASKS_COMMENTS>;",
+        "const comments = kind === ACT_KIND.TASKS_COMMENTS_FOLLOW;",
+        "type Asked = PortActPayload<typeof ACT_KIND.TASKS_COMMENTS_FOLLOW>;",
       ].join("\n"),
       filename: NEW_FILE,
     },
@@ -84,7 +84,7 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       errors: [{ messageId: "newRead" }],
     },
     {
-      code: "const kind = ACT_KIND.TASKS_COMMENTS;",
+      code: "const kind = ACT_KIND.TASKS_COMMENTS_FOLLOW;",
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
