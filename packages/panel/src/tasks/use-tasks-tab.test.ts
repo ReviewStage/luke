@@ -1190,6 +1190,7 @@ test("a Vespin link naming an archived agent's task, opened before the list foll
     },
   );
   await settle();
+  const told = tab.told.length;
   act(() =>
     tab.control().onOpenLink({
       workspace: "acme",
@@ -1198,6 +1199,11 @@ test("a Vespin link naming an archived agent's task, opened before the list foll
   );
   await settle();
   assert.equal(tab.control().agentView.agentId, ARCHIVED);
+  assert.equal(
+    tab.told.slice(told).includes(ACT_KIND.TASKS_SELECT),
+    false,
+    "its task, which never draws its tab, is not opened",
+  );
 });
 
 test("a Vespin link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
