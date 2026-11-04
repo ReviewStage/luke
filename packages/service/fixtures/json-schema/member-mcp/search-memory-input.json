@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace whose shared memory to act on, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "query": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "A few words naming what to look for, such as the area, tool, or convention at hand; leave it out for the memories kept most recently."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

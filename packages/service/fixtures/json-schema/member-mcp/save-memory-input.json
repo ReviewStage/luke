@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace whose shared memory to act on, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "description": "The fact or convention, as one self-contained statement a later task can read without this call, such as \"The web server's tests run on PGlite through `test:store`.\""
+    },
+    "replaces": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The id of the memory this one corrects, as search_memory answered it; leave it out for a new memory."
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "additionalProperties": false
+}

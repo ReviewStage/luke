@@ -8,18 +8,27 @@ import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resourc
 import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
-import { readAgent } from "@repo/database/models/agent-store";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { createAgent, readAgent } from "@repo/database/models/agent-store";
 import {
   createAutomation,
   listAutomationRuns,
   readAutomation,
 } from "@repo/database/models/automation-store";
+import { listMemories, rememberMemory } from "@repo/database/models/memory-store";
+import {
+  PLAN_COMMENT_OUTCOME,
+  readPlanCommentThreads,
+  startPlanCommentThread,
+} from "@repo/database/models/plan-comments";
 import { listRevisions } from "@repo/database/models/plan-revisions";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { oauthClient, oauthClientResource, oauthResource } from "@repo/database/schemas/auth";
+import { messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   getTestDB,
   joinWorkspace,
@@ -29,7 +38,7 @@ import {
   openWorkspace,
   sqlClientOverPglite,
 } from "@repo/database/testing";
-import { AGENT_ARCHIVER } from "@repo/features/agent-wire";
+import { AGENT_ARCHIVER, AGENT_PAYER } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -37,20 +46,29 @@ import {
   AUTOMATION_TRIGGER,
 } from "@repo/features/automation-wire";
 import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+} from "@repo/features/plan-comment-wire";
 import { NOTE_KIND } from "@repo/features/plan-template";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { Clock, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import { afterEach, vi } from "vitest";
+import { readWorkspaceMemories, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
+import { recordMemberPlanNotes } from "../agents/coder-host/plan-edit.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
   AUTH_BASE_PATH,
@@ -70,6 +88,7 @@ import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   fakeEve,
   freshInstallation,
@@ -91,7 +110,7 @@ import {
   signInWithGitHub,
   standingGithubRow,
 } from "../testing/github-app-fake.js";
-import { harnessFor } from "../testing/native-harness-fake.js";
+import { harnessFor, recordingHarness } from "../testing/native-harness-fake.js";
 import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpApp, memberMcpAuth, memberMcpIssuer } from "./app.js";
 import {
@@ -113,11 +132,12 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * `fetch` that reaches the in-process handler alone. The SDK's own client
  * drives the server at both revisions it serves. GitHub is reached by no
  * call here but a change to a pull request's, which answers from a script
- * as the Pull request tab's own tests script it, no agent's session is,
- * and the model catalog offers nothing. An answer's hand-off to the agent
- * that asked is driven apart, over the agents' own test world
- * (`../testing/agents-app-support.ts`): a started agent on a fake eve, its
- * server admitted on the world's bearers. Synthetic accounts and tokens.
+ * as the Pull request tab's own tests script it, an agent's harness is a
+ * recording one that takes every message, and the model catalog offers
+ * nothing. An answer's hand-off to the agent that asked is driven apart,
+ * over the agents' own test world (`../testing/agents-app-support.ts`): a
+ * started agent on a fake eve, its server admitted on the world's bearers.
+ * Synthetic accounts and tokens.
  */
 
 const ORIGIN = "https://app.test";
@@ -230,6 +250,59 @@ const WEEKLY = {
   timezone: "Europe/London",
 } as const;
 
+const decodeThread = Schema.decodeUnknownSync(
+  Schema.Struct({ thread: Schema.String, state: Schema.String }),
+);
+const decodeThreads = Schema.decodeUnknownSync(
+  Schema.Struct({
+    threads: Schema.Array(
+      Schema.Struct({
+        thread: Schema.String,
+        on: Schema.String,
+        comments: Schema.Array(Schema.Struct({ words: Schema.String })),
+      }),
+    ),
+  }),
+);
+const decodeKept = Schema.decodeUnknownSync(
+  Schema.Struct({ memory: Schema.Struct({ id: Schema.String }) }),
+);
+const decodeFound = Schema.decodeUnknownSync(
+  Schema.Struct({ memories: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+);
+
+/** The plan a stranger's task and a member's both hold, and the words a thread stands on in it. */
+const PLAN_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
+
+/** Memory turned on for the account, as Settings › Experimental turns it on. */
+const memoryOn = (userId: string) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
+
+/** An agent on the task, on Claude Code, its session standing, so a comment handed to it is taken by the recording harness. */
+const standingAgent = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const { agent } = Option.getOrThrow(
+      yield* createAgent(userId, {
+        taskId,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: null,
+        planSnapshot: null,
+        prompt: "Size the seats.",
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        payer: AGENT_PAYER.API_KEY,
+      }),
+    );
+    const claimed = yield* claimRuntimeSession(
+      { userId, conversationId: agent.conversationId },
+      `wrun_${randomUUID()}`,
+      yield* DateTime.nowAsDate,
+    );
+    assert.ok(claimed, "the agent's session stands");
+    return agent.id;
+  });
+
 /** The JSON Schema goldens of the server's tools, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(
   fileURLToPath(import.meta.url),
@@ -283,19 +356,21 @@ function testAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
 
 type TestAuth = ReturnType<typeof testAuth>;
 
-/** The server's group over the test's database, auth service, clock, and the GitHub given, as a fetch a client is handed, with the clients seeded and the key set reachable. */
+/** The server's group over the test's database, auth service, clock, and the GitHub given, as a fetch a client is handed, with the clients seeded, the key set reachable, and the agents' harnesses recorded. */
 const standingOver = (github: Layer.Layer<GitHubApp | HttpClient.HttpClient>) =>
   Effect.gen(function* () {
     const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
       Effect.promise(() => opened.close()),
     );
     const auth = testAuth(client);
+    const harness = recordingHarness();
     const services = Layer.mergeAll(
       Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github,
       modelCatalogOf([]),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+      harness.layer,
       Layer.succeed(SentryApp, sentryAppService(undefined, [])),
     );
     yield* seedRows.pipe(Effect.provide(services));
@@ -315,7 +390,7 @@ const standingOver = (github: Layer.Layer<GitHubApp | HttpClient.HttpClient>) =>
     yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
     const fetch = (input: string | URL | Request, init?: RequestInit) =>
       web.handler(new Request(input, init));
-    return { auth, fetch, services };
+    return { auth, fetch, services, heard: harness.heard };
   });
 
 /** The same, over a GitHub nobody reaches. */
@@ -693,14 +768,15 @@ it.effect(
 );
 
 it.effect(
-  "a member makes, starts, messages, stops, changes, plans, and runs nothing in a workspace they are not in",
+  "a member makes, starts, messages, stops, changes, plans, comments, remembers, and runs nothing in a workspace they are not in",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
       const member = yield* Effect.promise(() => signUp(auth));
       const stranger = yield* Effect.promise(() => signUp(auth));
       const rows = yield* Effect.gen(function* () {
-        yield* openWorkspace(member.userId);
+        const own = yield* openWorkspace(member.userId);
+        yield* memoryOn(member.userId);
         const elsewhere = yield* openWorkspace(stranger.userId);
         const task = yield* createTask(stranger.userId, {
           organizationId: elsewhere,
@@ -722,10 +798,40 @@ it.effect(
           nextRunAt: null,
           webhookSecretHash: null,
         });
-        return {
+        yield* recordMemberPlanNotes(
+          { userId: stranger.userId, taskId: task.id },
+          { notes: [PLAN_NOTE] },
+        );
+        const { text } = Option.getOrThrow(yield* readTask(stranger.userId, task.id));
+        const from = text.indexOf(PLAN_NOTE.text);
+        const started = yield* startPlanCommentThread(
+          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: stranger.userId },
+          task.id,
+          {
+            clientKey: randomUUID(),
+            scope: PLAN_COMMENT_SCOPE.WORDS,
+            quote: PLAN_NOTE.text,
+            anchor: { from, to: from + PLAN_NOTE.text.length },
+            text,
+            words: "A stranger's comment.",
+          },
+        );
+        assert.ok(started.status === PLAN_COMMENT_OUTCOME.DONE && "thread" in started.answer);
+        const kept = yield* rememberMemory(
           elsewhere,
+          stranger.userId,
+          "A stranger's convention.",
+          undefined,
+        );
+        assert.ok("memory" in kept);
+        return {
+          own,
+          elsewhere,
+          text,
           taskId: task.id,
           sectionId,
+          threadId: started.answer.thread.id,
+          memoryId: kept.memory.id,
           automationId: Option.getOrThrow(automation).id,
           agentId: yield* openTaskAgent(stranger.userId, elsewhere, task.id),
         };
@@ -739,7 +845,7 @@ it.effect(
       );
       const { client } = yield* connected(fetch, token, REVISION.MODERN);
       const workspace = `workspace-${rows.elsewhere}`;
-      const { taskId, agentId, automationId } = rows;
+      const { taskId, agentId, threadId, memoryId, automationId } = rows;
 
       const answers = yield* Effect.forEach(
         [
@@ -757,6 +863,18 @@ it.effect(
           [MEMBER_MCP_TOOL.MESSAGE_AGENT, { agentId, text: "Hello." }],
           [MEMBER_MCP_TOOL.STOP_AGENT, { agentId }],
           [MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true }],
+          [MEMBER_MCP_TOOL.READ_COMMENTS, { taskId }],
+          [MEMBER_MCP_TOOL.COMMENT_ON_PLAN, { taskId, quote: PLAN_NOTE.text, words: "Planted." }],
+          [MEMBER_MCP_TOOL.REPLY_TO_COMMENT, { taskId, thread: threadId, words: "Planted." }],
+          [MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread: threadId, resolved: true }],
+          [MEMBER_MCP_TOOL.SEARCH_MEMORY, { workspace }],
+          [MEMBER_MCP_TOOL.SAVE_MEMORY, { workspace, text: "Planted." }],
+          // Note that the member's own workspace holds no memory of that id, so a correction of it is refused.
+          [
+            MEMBER_MCP_TOOL.SAVE_MEMORY,
+            { workspace: `workspace-${rows.own}`, text: "Planted.", replaces: memoryId },
+          ],
+          [MEMBER_MCP_TOOL.FORGET_MEMORY, { workspace, memoryId }],
           [MEMBER_MCP_TOOL.LIST_AUTOMATIONS, { workspace }],
           [MEMBER_MCP_TOOL.LIST_AUTOMATIONS, { automationId }],
           [
@@ -773,12 +891,22 @@ it.effect(
             return { name, refused: answer.isError === true, text: answer.content[0].text };
           }),
       );
+      // A forget in the member's own workspace of a memory of another's forgets nothing there.
+      yield* Effect.promise(() =>
+        client.callTool({
+          name: MEMBER_MCP_TOOL.FORGET_MEMORY,
+          arguments: { workspace: `workspace-${rows.own}`, memoryId },
+        }),
+      );
       yield* Effect.promise(() => client.close());
       const after = yield* Effect.gen(function* () {
         return {
           task: yield* readTask(stranger.userId, taskId),
           sections: yield* listTaskSections(stranger.userId),
           agent: yield* readAgent(stranger.userId, agentId),
+          threads: yield* readPlanCommentThreads(stranger.userId, taskId),
+          memories: yield* listMemories(rows.elsewhere),
+          ownMemories: yield* listMemories(rows.own),
           automation: yield* readAutomation(stranger.userId, automationId),
           runs: yield* listAutomationRuns(stranger.userId, automationId),
         };
@@ -786,11 +914,27 @@ it.effect(
 
       for (const answer of answers) {
         assert.equal(answer.refused, true, `${answer.name}: ${answer.text}`);
-        assert.ok(!answer.text.includes(taskId) && !answer.text.includes(rows.elsewhere));
+        assert.ok(
+          !answer.text.includes(taskId) &&
+            !answer.text.includes(rows.elsewhere) &&
+            !answer.text.includes("A stranger's"),
+        );
       }
       const task = Option.getOrThrow(after.task);
       assert.equal(task.task.name, "A stranger's task");
-      assert.equal(task.text, "");
+      assert.equal(task.text, rows.text);
+      assert.deepEqual(
+        Option.getOrThrow(after.threads).map((thread) => ({
+          status: thread.status,
+          comments: thread.entries.map(({ words }) => words),
+        })),
+        [{ status: PLAN_COMMENT_STATUS.OPEN, comments: ["A stranger's comment."] }],
+      );
+      assert.deepEqual(
+        after.memories.map(({ text }) => text),
+        ["A stranger's convention."],
+      );
+      assert.deepEqual(after.ownMemories, []);
       assert.deepEqual(
         after.sections.sections.map(({ id }) => id),
         [rows.sectionId],
@@ -1070,6 +1214,162 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
       }),
   );
 });
+
+it.effect(
+  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it",
+  () =>
+    Effect.gen(function* () {
+      const { auth, fetch, services, heard } = yield* standing;
+      const member = yield* Effect.promise(() => signUp(auth));
+      const { taskId, agentId } = yield* Effect.gen(function* () {
+        const own = yield* openWorkspace(member.userId);
+        yield* connectAgentApiKeys(member.userId);
+        const task = yield* createTask(member.userId, { organizationId: own, name: "Seats" });
+        yield* recordMemberPlanNotes(
+          { userId: member.userId, taskId: task.id },
+          { notes: [PLAN_NOTE] },
+        );
+        return { taskId: task.id, agentId: yield* standingAgent(member.userId, task.id) };
+      }).pipe(Effect.provide(services));
+      const token = yield* Effect.promise(() =>
+        mintedToken(auth, member.cookie, {
+          client: MCP_CLIENT,
+          scope: [MEMBER_MCP_SCOPE.MCP],
+          resource: RESOURCE,
+        }),
+      );
+      const { client } = yield* connected(fetch, token, REVISION.MODERN);
+      const call = (name: string, args: Record<string, unknown>) =>
+        Effect.promise(async () => {
+          const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+          assert.notEqual(answer.isError, true, `${name}: ${answer.content[0].text}`);
+          return JSON.parse(answer.content[0].text);
+        });
+      const mention = `[@Seats](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
+
+      const { thread } = decodeThread(
+        yield* call(MEMBER_MCP_TOOL.COMMENT_ON_PLAN, {
+          taskId,
+          quote: PLAN_NOTE.text,
+          words: `${mention} do seats still drift?`,
+        }),
+      );
+      yield* call(MEMBER_MCP_TOOL.REPLY_TO_COMMENT, { taskId, thread, words: "Invoices too." });
+      const open = decodeThreads(yield* call(MEMBER_MCP_TOOL.READ_COMMENTS, { taskId }));
+      const resolved = decodeThread(
+        yield* call(MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread, resolved: true }),
+      );
+      yield* Effect.promise(() => client.close());
+      const lines = yield* Effect.gen(function* () {
+        const db = yield* Database;
+        return yield* db
+          .select({ words: sql<string>`${messages.metadata} ->> 'words'` })
+          .from(messages)
+          .where(sql`${messages.metadata} ->> 'thread_id' = ${thread}`);
+      }).pipe(Effect.provide(services));
+      const stored = yield* readPlanCommentThreads(member.userId, taskId).pipe(
+        Effect.provide(services),
+      );
+
+      assert.deepEqual(
+        open.threads.map((read) => ({
+          thread: read.thread,
+          on: read.on,
+          comments: read.comments.map(({ words }) => words),
+        })),
+        [
+          {
+            thread,
+            on: PLAN_NOTE.text,
+            comments: [`${mention} do seats still drift?`, "Invoices too."],
+          },
+        ],
+      );
+      assert.equal(resolved.state, PLAN_COMMENT_STATUS.RESOLVED);
+      // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
+      assert.deepEqual(
+        lines.map(({ words }) => words),
+        [`${mention} do seats still drift?`, "Invoices too."],
+      );
+      assert.deepEqual(
+        heard.map(({ account }) => account),
+        [member.userId, member.userId],
+      );
+      const entries = Option.getOrThrow(stored)[0]?.entries ?? [];
+      assert.deepEqual(
+        entries
+          .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT)
+          .map((entry) => [entry.writer.actor, entry.writer.by?.userId]),
+        [
+          [PLAN_COMMENT_ACTOR.MEMBER, member.userId],
+          [PLAN_COMMENT_ACTOR.MEMBER, member.userId],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a member with Memory on keeps a memory Settings › Memory lists as theirs, finds it, corrects it, and forgets it; with Memory off nothing runs",
+  () =>
+    Effect.gen(function* () {
+      const { auth, fetch, services } = yield* standing;
+      const member = yield* Effect.promise(() => signUp(auth));
+      const workspaceId = yield* openWorkspace(member.userId).pipe(Effect.provide(services));
+      const token = yield* Effect.promise(() =>
+        mintedToken(auth, member.cookie, {
+          client: MCP_CLIENT,
+          scope: [MEMBER_MCP_SCOPE.MCP],
+          resource: RESOURCE,
+        }),
+      );
+      const { client } = yield* connected(fetch, token, REVISION.MODERN);
+      const call = (name: string, args: Record<string, unknown>) =>
+        Effect.promise(async () => {
+          const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+          return { refused: answer.isError === true, read: JSON.parse(answer.content[0].text) };
+        });
+      const settings = readWorkspaceMemories(member.userId, workspaceId).pipe(
+        Effect.provide(services),
+      );
+
+      const off = yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, { text: "Tests run on PGlite." });
+      yield* memoryOn(member.userId).pipe(Effect.provide(services));
+      const kept = decodeKept(
+        (yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, { text: "Tests run on PGlite." })).read,
+      );
+      const listed = yield* settings;
+      const found = decodeFound(
+        (yield* call(MEMBER_MCP_TOOL.SEARCH_MEMORY, { query: "pglite" })).read,
+      );
+      yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, {
+        text: "Tests run on PGlite through test:store.",
+        replaces: kept.memory.id,
+      });
+      const corrected = yield* settings;
+      const forgot = yield* call(MEMBER_MCP_TOOL.FORGET_MEMORY, { memoryId: kept.memory.id });
+      const forgotten = yield* settings;
+      yield* Effect.promise(() => client.close());
+
+      assert.equal(off.refused, true);
+      assert.ok(listed.kind === WORKSPACE_MEMORY.READ);
+      assert.deepEqual(
+        listed.memories.map(({ id, text, keptBy }) => ({ id, text, keptBy: keptBy?.userId })),
+        [{ id: kept.memory.id, text: "Tests run on PGlite.", keptBy: member.userId }],
+      );
+      assert.deepEqual(
+        found.memories.map(({ id }) => id),
+        [kept.memory.id],
+      );
+      assert.ok(corrected.kind === WORKSPACE_MEMORY.READ);
+      assert.deepEqual(
+        corrected.memories.map(({ id, text }) => ({ id, text })),
+        [{ id: kept.memory.id, text: "Tests run on PGlite through test:store." }],
+      );
+      assert.equal(forgot.refused, false);
+      assert.ok(forgotten.kind === WORKSPACE_MEMORY.READ);
+      assert.deepEqual(forgotten.memories, []);
+    }),
+);
 
 it.effect("the metadata names the resource, the auth service, the scopes, and the header", () =>
   Effect.gen(function* () {
