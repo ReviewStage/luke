@@ -271,7 +271,6 @@ interface ConversationNaming {
   readonly opening: string;
 }
 
-/** Nothing to name an agent from yet. */
 const NOTHING_TO_NAME: ConversationNaming = { exchange: "", opening: "" };
 
 /**
@@ -416,14 +415,10 @@ export function titleInboxThread(
 
 /**
  * An agent's title generated from its first exchange and written where
- * none stands, as words are received in, or as one ends, one of its first
- * `CODER.TITLE_TURNS` turns: a title
- * already standing, the developer's own included, is never asked for
- * again, an agent past those turns is left on the model's name, and an
- * exchange with no words in it asks nothing. A call that answers nothing
- * writes nothing, so the next words or turn's end ask again. The title
- * written also names the agent's task where it still stands untitled.
- * With no model the title is cut from the opening's first words.
+ * none stands, as words are received or as one of its first
+ * `CODER.TITLE_TURNS` turns ends (`titleOfConversation`), its task named
+ * with it where that still stands untitled. A title already standing,
+ * the developer's own included, is never asked for again.
  */
 export function titleAgent(
   model: LanguageModel | undefined,

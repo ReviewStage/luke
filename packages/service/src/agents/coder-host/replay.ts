@@ -114,7 +114,6 @@ import { CURSOR_START } from "./transcript.js";
  * new agent to the default branch.
  */
 
-/** The bounds a replay keeps to. */
 export const REPLAY_BOUNDS = {
   /** The most characters of a step's one-line summary drawn from words; the step's words themselves are replayed whole. */
   SUMMARY_CHARS: 160,
@@ -553,11 +552,7 @@ const recordsOf = (source: Agent, messageId: string | undefined) =>
     return { records, cutSeq } satisfies SourceRecords;
   });
 
-/**
- * How a branch of the repository is checked out in the new agent's
- * checkout, which is cloned with the default branch alone, so the branch is
- * added to what the remote fetches, fetched, and tracked as it is switched to.
- */
+/** The words that check a branch out in the new agent's checkout, which was cloned with the default branch alone. */
 function fetchWords(branch: string): string {
   const quoted = shellQuoted(branch);
   return `fetch and check that branch out with \`git remote set-branches --add origin ${quoted} && git fetch origin ${quoted} && git switch ${quoted}\`, since your checkout was cloned with the default branch alone`;
@@ -568,7 +563,6 @@ function shellQuoted(word: string): string {
   return `'${word.replaceAll("'", "'\\''")}'`;
 }
 
-/** The words with their first letter capital. */
 function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
@@ -615,12 +609,7 @@ const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullReq
         ),
       );
 
-/**
- * How a continue carries the copy of its source's work onto the branch of the
- * source's pull request still open, rather than opening a second one from the
- * copy: that branch checked out, the copy's commits brought onto it, a
- * fast-forward where it has not moved since the source's checkout was copied.
- */
+/** How a continue is told to carry the copy onto its source's pull request, still open, rather than open a second one. */
 function carryOntoWords(copied: string, branch: string): string {
   return (
     ` Its pull request is still open, so carry on in it rather than open a second one; this takes the place of your instructions' own branch and pull request steps for this work: once the copy is fetched, ${fetchWords(branch)}, ` +
@@ -662,13 +651,9 @@ function carriedWhere(carried: CarriedWork): string {
 }
 
 /**
- * Where the source's work stands for the new agent: the branch its checkout
- * was copied to, or, where it could not be, the branch and pull request it
- * left, or those of the work it carried where it made no branch of its own.
- * A continue of a source whose pull request is still open goes on in that
- * pull request, the copy carried onto its branch, so the work does not
- * split across two (`goesOnInPullRequest`); a fork, a line of work of its
- * own, opens its own.
+ * Where the source's work stands for the new agent. Note that a continue
+ * whose source's pull request is still open goes on in it, so the work does
+ * not split across two (`goesOnInPullRequest`); a fork opens its own.
  */
 function whereOf(
   source: Agent,
@@ -768,7 +753,7 @@ function preambleOf(
   );
 }
 
-/** What a Start from another agent is handed and runs on: the source's brief, the replay, the source's files that fit beside the note's, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
+/** What a Start from another agent is handed and runs on. */
 export interface StartFrom {
   readonly source: Agent;
   /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
@@ -789,7 +774,7 @@ export interface StartFrom {
   readonly told: ReplayTold;
 }
 
-/** What a replay says of where it came from, beside its steps: the source and its pull request, the copy of its work, the fork and the files edited after it, the files not passed on, and the message it was forked at. */
+/** What a replay says of where it came from, beside its steps. */
 interface ReplayTold {
   readonly published: AgentPullRequest | null;
   readonly copy: SnapshotOutcome;
@@ -958,7 +943,6 @@ const lineageOf = (userId: string, source: Agent, repository: string | null) =>
     return { lineage, carried };
   });
 
-/** One message's parts. */
 type Parts = StoredMessageRecord["message"]["parts"];
 
 /** A message's parts as a fork cuts them: those it keeps, and those it leaves out. */
@@ -1063,16 +1047,11 @@ const placeRepository = (userId: string, place: StartWhere) =>
   });
 
 /**
- * The source agent of the place read as the account, on the plan or with
- * no plan in the workspace, its transcript cut and
- * replayed as above, its work copied to a branch for the new agent under the
- * Start's key, and what the new agent is handed and runs on, the source's
- * files held to what fits beside `noteFiles`, the ones the Start's note
- * carries, within one message's bounds and named in the preamble past them;
- * refused as naming nothing where the account reaches no such agent in this
- * place, so a source on another plan, or on none where the place is a
- * plan's, is never dropped and started afresh, and as invalid where the
- * message named is none of its journals.
+ * What a Start from another agent of the place is handed and runs on, read
+ * as the account, the source's files held to what fits beside `noteFiles`.
+ * Note that a source the account reaches in no such place is refused as
+ * naming nothing, so a source on another plan is never dropped and started
+ * afresh; a message that is none of its journals is invalid.
  */
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,

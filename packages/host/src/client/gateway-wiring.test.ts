@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TasksView } from "@repo/features/tasks-view";
 import {
   carried,
   GATEWAY_CLIENT_ROLE,
@@ -42,11 +42,7 @@ it.effect(
         state,
         node: { openExternal: () => Promise.resolve() },
       });
-      const view: TasksView = {
-        ...IDLE_TASKS_VIEW,
-        activeTaskId: "plan-1",
-        document: { status: TASKS_READ.READING },
-      };
+      const view: TasksView = { ...IDLE_TASKS_VIEW, activeTaskId: "plan-1" };
 
       gateway.emit(GATEWAY_EVENT.TASKS_CHANGED, carried(view));
 
