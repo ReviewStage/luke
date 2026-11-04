@@ -394,6 +394,7 @@ function RepositoryPath({
   const repository: Crumb = {
     label: menu.label,
     detail: menu.owner,
+    name: task.repository ?? undefined,
     glyph: menu.glyph,
     card: menu.card,
     kept: true,

@@ -1,11 +1,12 @@
 /**
- * repositories.tsx -- a repository as every surface names it: its owner's
- * picture, then its name; `owner/name` where another in the view shares the
- * name; no repository's crossed-out folder; a picture that cannot be drawn
- * standing as the repository's glyph; its picture and no repository's
- * mark alone, as a slot holds them; the one repository a chip sets, its
- * owner muted after its name; and its card, the owner under the name. The catalog draws no owners' pictures, which
- * it would ask of the network, so each picture stands as the glyph.
+ * repositories.tsx -- a repository as every surface names it.
+ *
+ * A line shows its owner's picture, then its name. Where another repository
+ * in the view shares the name, the line says `owner/name`. No repository is a
+ * crossed-out folder. A glyph slot holds the picture, or that folder, alone.
+ * A chip that sets one repository shows its name, then its owner muted. The
+ * card shows the owner under the name. The catalog asks nothing of the
+ * network, so every picture stands as the repository's glyph.
  */
 
 import {

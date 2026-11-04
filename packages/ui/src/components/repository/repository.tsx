@@ -9,6 +9,7 @@ import { GLYPH_INK, GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { HoverCard, HoverCardHead } from "../hover-card/hover-card.js";
 import { OneLine } from "../one-line/one-line.js";
 import type { MenuRow } from "../searchable-menu/searchable-menu.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * repository.tsx -- a GitHub repository as every surface draws it: its owner's picture, then its name.
@@ -81,8 +82,8 @@ export function NoRepositoryGlyph(): React.JSX.Element {
 
 /**
  * A repository named in a line: its owner's picture in a glyph's slot, then
- * its words, cut short where the line ends; or, for none, the crossed-out
- * folder and "No repository".
+ * its words, cut short where the line ends, the whole `owner/name` hung over
+ * them on hover; or, for none, the crossed-out folder and "No repository".
  */
 export function RepositoryName({
   repository,
@@ -106,7 +107,19 @@ export function RepositoryName({
           <RepositoryPicture repository={repository} pictures={pictures} />
         )}
       </GlyphSlot>
-      <OneLine>{words}</OneLine>
+      <OneLine
+        hint={
+          repository === null
+            ? undefined
+            : (line, clipped) => (
+                <Tooltip label={clipped || words !== repository ? repository : undefined}>
+                  {line}
+                </Tooltip>
+              )
+        }
+      >
+        {words}
+      </OneLine>
     </span>
   );
 }

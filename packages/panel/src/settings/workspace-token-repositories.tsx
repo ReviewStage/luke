@@ -12,6 +12,7 @@ import type { AppGitHubToken } from "@repo/host/app-state";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
+  AVATAR_SIZE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -239,7 +240,11 @@ function TokenRepositoryRow({
         indent={SETTINGS_ROW_INDENT.MARK}
         leading={
           <SettingsRowMark>
-            <RepositoryPicture repository={repository.fullName} pictures={pictures} />
+            <RepositoryPicture
+              repository={repository.fullName}
+              pictures={pictures}
+              size={AVATAR_SIZE.STACK}
+            />
           </SettingsRowMark>
         }
         label={repository.fullName}

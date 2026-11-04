@@ -17,7 +17,6 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { repositoryParts } from "@repo/ui/task-list-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMemo, useState } from "react";
 import { useAct } from "../act.js";
@@ -172,7 +171,7 @@ function DefaultRepositoryRow({
       label={WORDS.DEFAULT_LABEL}
       detail={WORDS.DEFAULT_DETAIL}
       value={chosen ?? NONE_ROW}
-      valueLabel={chosen === undefined ? WORDS.NONE : repositoryParts(chosen).name}
+      valueLabel={chosen ?? WORDS.NONE}
       valueIcon={
         chosen === undefined ? undefined : (
           <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
@@ -260,11 +259,7 @@ function ChannelRow({
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
               value={channel.repository ?? NONE_ROW}
-              valueLabel={
-                channel.repository === undefined
-                  ? WORDS.DEFAULT
-                  : repositoryParts(channel.repository).name
-              }
+              valueLabel={channel.repository ?? WORDS.DEFAULT}
               valueIcon={
                 channel.repository === undefined ? undefined : (
                   <RepositoryPicture

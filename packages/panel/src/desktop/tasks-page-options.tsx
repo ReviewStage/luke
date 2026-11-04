@@ -50,7 +50,7 @@ import {
   UserIcon,
   UserXIcon,
 } from "@repo/ui/icons";
-import { NO_REPOSITORY, repositoryParts } from "@repo/ui/task-list-model";
+import { NO_REPOSITORY, repositoryLabel, repositoryParts } from "@repo/ui/task-list-model";
 import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
@@ -408,7 +408,12 @@ function fieldValues(
           )
           .map((repository) => ({
             value: repository,
-            words: repositoryParts(repository).name,
+            // Note that the chip says `owner/name` where two kept repositories share a name, as a header would; the menu's row names it apart by its owner.
+            words: repositoryLabel(
+              repository,
+              [...held].map((each) => ({ repository: each })),
+            ),
+            label: repositoryParts(repository).name,
             detail: repositoryParts(repository).owner,
             card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: <RepositoryPicture repository={repository} pictures={pictures} />,

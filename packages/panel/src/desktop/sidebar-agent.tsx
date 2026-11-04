@@ -135,7 +135,7 @@ export function SidebarAgent({
   now: number;
   /** The time the row shows, which the list's order chooses. */
   at: number;
-  /** The repository the row names, its owner's picture and its name,, muted before its time, where its group does not say it. */
+  /** The repository the row names, its owner's picture and its name, muted before its time, where its group does not say it. */
   repository?: React.ReactNode;
   /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;

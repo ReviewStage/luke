@@ -980,7 +980,7 @@ export function SidebarTask({
   now: number;
   /** The time the row shows, which the list's order chooses: its last update unless said. */
   at?: number;
-  /** The repository the row names, its owner's picture and its name,, muted before its time, where the list hands one. */
+  /** The repository the row names, its owner's picture and its name, muted before its time, where the list hands one. */
   repository?: React.ReactNode;
   /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
