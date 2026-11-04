@@ -316,10 +316,10 @@ describe("the host's install script", () => {
   for (const [computer, machine, macos, refusal] of [
     ["an Apple silicon Mac on macOS 14.5", "arm64", "14.5", undefined],
     [
-      "an Apple silicon Mac on macOS 12.2",
+      "an Apple silicon Mac on macOS 13.4",
       "arm64",
-      "12.2",
-      "Vespin host needs macOS 12.3 or later, and this Mac runs macOS 12.2.",
+      "13.4",
+      "Vespin host needs macOS 13.5 or later, and this Mac runs macOS 13.4.",
     ],
     ["an Intel Mac", "x86_64", "14.5", "Vespin does not run agents on Intel Macs."],
   ] as const) {
