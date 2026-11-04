@@ -1,3 +1,4 @@
+import { eventIterator, type } from "@orpc/contract";
 import {
   integrationAccountViewSchema,
   integrationConnectViewSchema,
@@ -5,7 +6,6 @@ import {
   integrationRenameParamsSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
-  integrationToolsViewSchema,
 } from "@repo/features/integration-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -29,11 +29,17 @@ export const integrationActsContract = {
   )
     .input(exactInput(integrationProviderParamsSchema))
     .output(EffectSchema.flip(integrationConnectViewSchema)),
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS]: actProcedure(
-    "Could not read that integration's tools on this system.",
+  // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
+  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW]: actProcedure(
+    "Could not follow that integration's tools on this system.",
   )
     .input(exactInput(integrationProviderParamsSchema))
-    .output(EffectSchema.flip(integrationToolsViewSchema)),
+    .output(eventIterator(type<never>())),
+  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]: actProcedure(
+    "Could not read that integration's tools again on this system.",
+  )
+    .input(exactInput(integrationProviderParamsSchema))
+    .output(EffectSchema.Void),
   [INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL]: actProcedure(
     "Could not cancel connecting that integration on this system.",
   )

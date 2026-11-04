@@ -7,9 +7,11 @@ import type {
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
+import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -362,6 +364,20 @@ export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePr
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
+/** Each integration server's tools the windows hold, by the server's name, as the host's read of them stands: its tools, or why it listed none. */
+export type AppIntegrationTools = Readonly<Record<string, AppHostRead<IntegrationToolsAnswer>>>;
+
+/**
+ * The account's own provider keys and plans as the service last answered
+ * them, a read's or a write's: each provider, its status, its times, and its
+ * hint, a label of the key's prefix and its last four characters. Never a
+ * key, which the service never answers, and never a write's own outcome.
+ */
+export type AppProviderKeyList = Pick<ProviderKeysAnswer, "keys" | "subscriptions">;
+
+/** The account's provider keys the windows hold, by the account, as the host's read of them stands. */
+export type AppProviderKeys = Readonly<Record<string, AppHostRead<AppProviderKeyList>>>;
+
 /** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
 export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
 
@@ -407,7 +423,9 @@ export const NO_PLAN_COMMENTS: AppPlanComments = {
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.PAGES]: readonly PageLine[];
+  [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
@@ -505,8 +523,12 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
+  [LIVE_READ.INTEGRATION_TOOLS]: AppIntegrationTools;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
+  /** The account's own provider keys, held while a window draws them: what Settings › Agents and Call and Dictate read. */
+  [LIVE_READ.PROVIDER_KEYS]: AppProviderKeys;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
@@ -638,7 +660,9 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof InboxItem,
   },
+  [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PLAN_COMMENTS]: {
     keys: READ_KEYS.TWO,

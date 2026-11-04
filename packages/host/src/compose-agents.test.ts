@@ -866,6 +866,11 @@ function subject(
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
         ),
+      /** Every telling of the provider keys the host holds for the windows, whole, in order. */
+      providerKeys: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
+        ),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
         events.flatMap((event) =>
@@ -1271,12 +1276,14 @@ it.effect(
 );
 
 it.effect(
-  "a provider key passes through to the service once and is answered back as its hint alone, and a save the schema refuses is refused in words that hold no key",
+  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held, and a save the schema refuses is refused in words that hold no key",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { call, asked, providerKeys } = yield* subject();
 
-      const read = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_READ);
+      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* settled;
+      const read = providerKeys().at(-1);
       const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key: PROVIDER_KEY,
@@ -1288,10 +1295,11 @@ it.effect(
         call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
       );
 
-      assert.deepEqual(read, { keys: [KEPT] });
+      assert.deepEqual(read, { "user-dana": { rows: { keys: [KEPT] } } });
       assert.deepEqual(saved, { keys: [KEPT] });
       assert.deepEqual(removed, { keys: [] });
-      assert.ok(!JSON.stringify([read, saved, removed]).includes(PROVIDER_KEY));
+      assert.deepEqual(providerKeys().at(-1), { "user-dana": { rows: { keys: [] } } });
+      assert.ok(!JSON.stringify([providerKeys(), saved, removed]).includes(PROVIDER_KEY));
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asked, [

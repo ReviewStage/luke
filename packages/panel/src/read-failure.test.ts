@@ -26,7 +26,7 @@ import { SHELL_ROOM } from "./shell-room.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handInboxItems } from "./testing/app-state.js";
+import { handHostReads, handInboxItems } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
@@ -53,13 +53,9 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
-let answering = false;
-
 beforeEach(() => {
   installScrollIntoView();
   fakeAppPlatform(QUIET_PANEL);
-  answering = false;
   window.localStorage.clear();
   // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
@@ -69,7 +65,6 @@ beforeEach(() => {
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
-    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });
 });
 
@@ -242,10 +237,18 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
+  // The host's read of the keys failed before it ever answered, and answers on Try again.
+  const { deliverKeys } = handHostReads({ keys: { failed: true } });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.PROVIDER_KEYS_RETRY]: () => {
+      deliverKeys({ rows: { keys: [] } });
+      return Promise.resolve();
+    },
+  });
   const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
   const keysFailure = readFailure(keys);
   assertSaidAlike(keysFailure, "Your keys could not be read.");
-  answering = true;
   keysFailure.retry();
   await settle();
   assert.equal(keys.querySelector('[role="alert"]'), null, "the keys were read, so nothing fails");

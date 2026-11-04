@@ -61,6 +61,7 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
+  type ChatGptSignInAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
@@ -97,6 +98,7 @@ import {
 } from "@repo/features/inbox-writes";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -105,6 +107,7 @@ import {
   pullRequestChaptersReadParamsSchema,
 } from "@repo/features/pull-request-chapters-view";
 import { commitShaSchema } from "@repo/features/task-wire";
+import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -135,6 +138,8 @@ import {
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
+  type AppProviderKeyList,
+  type AppProviderKeys,
   type AppWorkspaceTools,
   NO_KEYS_HELD,
   UNREAD,
@@ -143,7 +148,7 @@ import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
-import { type HeldFetch, heldFetch } from "./held-fetch.js";
+import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   INBOX_CHANGE,
@@ -321,6 +326,10 @@ export interface AgentsDependencies {
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
+  /** The account's keys as an answer of the service's leaves them, as a ChatGPT sign-in answers them, laid where the windows hold them; nothing where it carries none. */
+  readonly keysAnswered: (
+    answer: ProviderKeysAnswerView | ChatGptSignInAnswerView,
+  ) => Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -501,13 +510,24 @@ interface ChapterFollows {
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
 interface FetchedReads {
   /** When the account's own devices last beat, by the account. */
-  readonly presence: HeldFetch<string>;
-  /** The windows' hold on the beats, one fiber standing until let go, under the account signed in as it was taken. */
-  readonly presenceHold: FiberHandle.FiberHandle<void>;
+  readonly presence: HeldFetch<string, AppDevicePresence>;
+  /** The windows' hold on the beats, under the account signed in. */
+  readonly presenceHold: AccountHeld;
   /** Our own tools each agent is offered, by the agent. */
-  readonly tools: HeldFetch<string>;
+  readonly tools: HeldFetch<string, WorkspaceToolsAnswer>;
   /** The windows' hold on each agent's tools, one fiber standing until let go. */
   readonly toolsHolds: FiberMap.FiberMap<string>;
+  /** The account's own provider keys, by the account. */
+  readonly keys: HeldFetch<string, AppProviderKeyList>;
+  /** The windows' hold on the keys, under the account signed in. */
+  readonly keysHold: AccountHeld;
+}
+
+/** The keys and plans an answer of the service's says the account holds, without what it says of the one write. */
+function keyListOf(answer: ProviderKeysAnswer): AppProviderKeyList {
+  return answer.subscriptions === undefined
+    ? { keys: answer.keys }
+    : { keys: answer.keys, subscriptions: answer.subscriptions };
 }
 
 /** The beats as the service answered them, each aged at `askedAt`, the host's instant as the answer landed. */
@@ -520,18 +540,18 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats are asked for the account signed in now alone, since the
- * service answers that account's devices, and that an ask which fails, or
- * runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the
- * beats it answered, marked stale, under the new instant, so a window says it
- * cannot check rather than that a device left.
+ * that the beats and the keys are asked for the account signed in now
+ * alone, since the service answers that account's, and that an ask of the
+ * beats which fails, or runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one
+ * answered keeps the beats it answered, marked stale, under the new instant,
+ * so a window says it cannot check rather than that a device left.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
   asked: ReturnType<typeof askedOf>,
 ): Effect.Effect<FetchedReads, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const { client, kernel, focus } = dependencies;
+    const { client, kernel, focus, accountId } = dependencies;
     const gate = gateOf(dependencies);
     const presence = yield* heldFetch<typeof LIVE_READ.DEVICE_PRESENCE, string>({
       empty: NO_KEYS_HELD,
@@ -541,7 +561,7 @@ function fetchedReads(
       every: Duration.millis(MAC_PRESENCE.POLL_MS),
       fetch: (userId, held) =>
         Effect.gen(function* () {
-          if (userId !== dependencies.accountId()) return Option.none();
+          if (userId !== accountId()) return Option.none();
           // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
           const answer = yield* Effect.timeoutOption(
             asked(client.devicePresence()),
@@ -570,11 +590,27 @@ function fetchedReads(
       tell: (held: AppWorkspaceTools) =>
         kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),
     });
+    const keys = yield* heldFetch<typeof LIVE_READ.PROVIDER_KEYS, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      fetch: (userId) =>
+        userId === accountId()
+          ? Effect.map(asked(client.readProviderKeys()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some(keyListOf(answer)),
+            )
+          : Effect.succeed(Option.none()),
+      tell: (held: AppProviderKeys) =>
+        kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
+    });
     return {
       presence,
-      presenceHold: yield* FiberHandle.make<void>(),
+      presenceHold: yield* accountHeld(presence, accountId),
       tools,
       toolsHolds: yield* FiberMap.make<string>(),
+      keys,
+      keysHold: yield* accountHeld(keys, accountId),
     };
   });
 }
@@ -591,7 +627,7 @@ function composed(
   { reads: sessionReads, followItems }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
-  { presence, presenceHold, tools, toolsHolds }: FetchedReads,
+  { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -661,18 +697,17 @@ function composed(
       };
     });
 
-  /** Whether any window holds the beats, so the gate opening for another account holds them anew under it. */
-  let presenceHeld = false;
-  /** The windows' hold on the beats taken under the account signed in now, in place of any taken before; none while nobody is. */
-  const holdPresence = Effect.suspend(() => {
-    const userId = dependencies.accountId();
-    return userId === undefined
-      ? FiberHandle.clear(presenceHold)
-      : FiberHandle.run(
-          presenceHold,
-          Effect.scoped(Effect.andThen(presence.hold(userId), Effect.never)),
-        );
-  });
+  /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
+  const keysWritten = (answer: ProviderKeysAnswerView) =>
+    Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
+  /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them. */
+  const keysAnswered = (answer: ProviderKeysAnswerView | ChatGptSignInAnswerView) =>
+    Effect.suspend(() => {
+      const userId = dependencies.accountId();
+      return userId === undefined || !("keys" in answer)
+        ? Effect.void
+        : keys.answered(userId, keyListOf(answer));
+    });
 
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
@@ -692,18 +727,8 @@ function composed(
     [GATEWAY_METHOD.HOSTS_LIST]: () =>
       Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
     // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
-    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () =>
-      Effect.gen(function* () {
-        presenceHeld = true;
-        yield* holdPresence;
-        return {};
-      }),
-    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () =>
-      Effect.gen(function* () {
-        presenceHeld = false;
-        yield* FiberHandle.clear(presenceHold);
-        return {};
-      }),
+    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
+    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () => Effect.as(presenceHold.unfollow, {}),
     // Note that the beats are asked again only where a window holds them, as a window coming forward asks them.
     [GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH]: () =>
       Effect.gen(function* () {
@@ -734,10 +759,14 @@ function composed(
         const { code } = yield* readParams(hostPairingParamsSchema, params, "a deny names a code");
         return carried<HostPairingDenyView>(yield* asked(client.denyHostPairing(code)));
       }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
-      Effect.map(asked(client.readProviderKeys()), (answer) =>
-        carried<ProviderKeysAnswerView>(answer),
-      ),
+    // The keys are held for the windows while any draws them, under the account signed in, and told only on the app state (`PROVIDER_KEYS_CHANGED`); each write's own answer is laid there too.
+    [GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW]: () => Effect.as(keysHold.follow, {}),
+    [GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW]: () => Effect.as(keysHold.unfollow, {}),
+    [GATEWAY_METHOD.PROVIDER_KEYS_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
+      }),
     [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a key.
@@ -746,8 +775,7 @@ function composed(
           params,
           "a save names a provider and a key",
         );
-        const answer = yield* asked(client.saveProviderKey(save));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.saveProviderKey(save)));
       }),
     [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
       Effect.gen(function* () {
@@ -787,8 +815,7 @@ function composed(
           params,
           "a removal names a provider",
         );
-        const answer = yield* asked(client.removeProviderKey(removal));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.removeProviderKey(removal)));
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
       Effect.gen(function* () {
@@ -797,8 +824,7 @@ function composed(
           params,
           "a default names a provider, a plan, and on or off",
         );
-        const answer = yield* asked(client.setProviderKeyForAgents(change));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
       Effect.map(asked(client.readGitHubToken()), (answer) =>
@@ -1488,16 +1514,18 @@ function composed(
     yield* sessionReads.end;
     yield* presence.end;
     yield* tools.end;
+    yield* keys.end;
   });
 
-  // Note that the beats are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
+  // Note that the beats and the keys are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
     yield* chapters.open;
-    if (presenceHeld) yield* holdPresence;
+    yield* presenceHold.open;
+    yield* keysHold.open;
     yield* tools.open;
   });
 
-  return { methods, lifetime: Effect.void, open, reset };
+  return { methods, lifetime: Effect.void, open, reset, keysAnswered };
 }

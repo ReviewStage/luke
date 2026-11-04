@@ -51,7 +51,7 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { stateWith } from "../testing/app-state.js";
+import { handHostReads, holdIntegrationTools, stateWith } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -225,6 +225,15 @@ const roots: Root[] = [];
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
+/** What every connected server lists, three of them under names a mention cannot carry. */
+const LISTED_TOOLS = [
+  { name: "list_issues", description: "List the team's issues." },
+  { name: "get_issue", description: "Read one issue." },
+  { name: "list/issues", description: "A name no mention can carry." },
+  { name: "list\ud800", description: "A name that is no string of characters." },
+  { name: "..", description: "A name an address resolves away." },
+];
+
 /** What main answers the box's acts with on the act port, every one told. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   told.push(request);
@@ -239,45 +248,29 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
             integrations: LINEAR_CONNECTED,
           },
         }
-      : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-        ? {
-            status: FAKE_ANSWER.DONE,
-            value: {
-              tools: [
-                { name: "list_issues", description: "List the team's issues." },
-                { name: "get_issue", description: "Read one issue." },
-                { name: "list/issues", description: "A name no mention can carry." },
-                {
-                  name: "list\ud800",
-                  description: "A name that is no string of characters.",
-                },
-                { name: "..", description: "A name an address resolves away." },
-              ],
-            },
-          }
-        : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+      : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+        ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
+        : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+          ? {
+              status: FAKE_ANSWER.DONE,
+              value: {
+                agents: workspaceAnswer(request.payload),
+              },
+            }
+          : request.kind === ACT_KIND.TASKS_TREE
             ? {
                 status: FAKE_ANSWER.DONE,
                 value: {
-                  agents: workspaceAnswer(request.payload),
+                  folder: {
+                    path: "",
+                    repository: standing,
+                    branch: "main",
+                    entries: TREES.get(standing) ?? [],
+                    truncated: false,
+                  },
                 },
               }
-            : request.kind === ACT_KIND.TASKS_TREE
-              ? {
-                  status: FAKE_ANSWER.DONE,
-                  value: {
-                    folder: {
-                      path: "",
-                      repository: standing,
-                      branch: "main",
-                      entries: TREES.get(standing) ?? [],
-                      truncated: false,
-                    },
-                  },
-                }
-              : { status: FAKE_ANSWER.UNKNOWN_ACT },
+            : { status: FAKE_ANSWER.UNKNOWN_ACT },
   );
 }
 
@@ -290,6 +283,8 @@ beforeEach(() => {
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActs({ act: answer });
+  // Every connected server lists the same tools, three of them under names a mention cannot carry.
+  holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: LISTED_TOOLS }));
 });
 
 afterEach(() => {
