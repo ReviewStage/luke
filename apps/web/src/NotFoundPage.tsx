@@ -21,7 +21,7 @@ export function NotFoundPage(): React.JSX.Element {
       footer={<SiteFooterLinks />}
       address={useAskedPath()}
       title="No agent could find this page."
-      lead="We sent one to look. It searched every branch, read every file, and came back empty-handed. The link may be mistyped, or the page may have moved."
+      lead="The link may be mistyped, or the page may have moved."
       actions={
         <>
           <ButtonLink variant={BUTTON_VARIANT.PRIMARY} href={SITE_PAGE.HOME}>
