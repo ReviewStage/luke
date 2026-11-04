@@ -64,6 +64,7 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { automationTriggerText } from "@repo/features/automation-list-model";
 import type { AutomationSummary } from "@repo/features/automation-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -78,7 +79,11 @@ import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { TERMINAL_ASK } from "@repo/features/terminal-entry";
 import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@repo/features/words";
 import { taskKey } from "@repo/features/workspace-key";
-import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import type {
+  Workspace,
+  WorkspaceMember,
+  WorkspaceMembersAnswer,
+} from "@repo/features/workspace-wire";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
@@ -195,11 +200,8 @@ import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-pa
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import {
-  useWorkspaceMembersRead,
-  type WorkspaceMembersRead,
-} from "../tasks/use-workspace-members.js";
 import { useCapability, useExperimentChoices } from "../use-app-state.js";
+import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
@@ -610,14 +612,14 @@ function tasksNotice(
  */
 function peopleNotice(
   tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
-  read: WorkspaceMembersRead,
+  read: HostRead<WorkspaceMembersAnswer>,
 ): PaletteNotice | undefined {
   if (tasks.workspace === undefined) {
     const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
     return coming ? { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE } : undefined;
   }
-  if (read.members !== undefined) return undefined;
-  return read.refused
+  if (read.rows !== undefined) return undefined;
+  return read.status === HOST_READ_STATUS.FAILED
     ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: read.retry }
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
@@ -2034,9 +2036,9 @@ export function CommandPalette({
 
   const tokens = searchTokens(sought);
   // The listed workspace's members, read once for it, name a task's assignee by face.
-  const membersRead = useWorkspaceMembersRead(tasks.workspace);
+  const membersRead = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, tasks.workspace?.id);
   const originOf = useTaskOrigin();
-  const { members } = membersRead;
+  const members = membersRead.rows?.members;
   // Note that the tasks' rows are built once for what they say rather than on every render, and
   // only while a filter that lists them stands open, because a key, an arrow, or the pointer
   // moving ranks or lights them again but changes none of them, and an account may hold thousands.

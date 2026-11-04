@@ -39,7 +39,6 @@ import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
-import { useWorkspaceMembers } from "./use-workspace-members.js";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -178,7 +177,7 @@ function AskOwners({
   workspaceName: string | undefined;
   ask: OwnerAsk;
 }): React.JSX.Element {
-  const members = useWorkspaceMembers(workspaceId === undefined ? undefined : { id: workspaceId });
+  const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId).rows?.members;
   const owners = (members ?? [])
     .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
     .map((each) => each.name);

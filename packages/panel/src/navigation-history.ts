@@ -85,6 +85,7 @@
 
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
 import { linkOf, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { SettingsView } from "@repo/settings/settings-views";
 import {
   HISTORY_LIMIT,
@@ -134,8 +135,8 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
 import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
+import { useHostRead } from "./use-host-read.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
@@ -1601,7 +1602,10 @@ export function useWindowHistory(input: {
         .current()
         .entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON),
   );
-  const { members } = useWorkspaceMembersRead(personListed ? tasks.workspace : undefined);
+  const members = useHostRead(
+    LIVE_READ.WORKSPACE_MEMBERS,
+    personListed ? tasks.workspace?.id : undefined,
+  ).rows?.members;
   const named = (to: Place) => liveStepTitle(namedStepOf(to), titleOf(to), tasks, members);
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     place,

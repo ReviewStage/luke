@@ -17,10 +17,7 @@ import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
-import type {
-  TasksWorkspaceInvitationsAnswer,
-  TasksWorkspaceMembersAnswer,
-} from "@repo/features/tasks-view";
+import type { TasksWorkspaceInvitationsAnswer } from "@repo/features/tasks-view";
 import { dayAndTimeText } from "@repo/features/time-format";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
@@ -34,6 +31,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@repo/host/acts";
+import { type AppWorkspaceMembers, NO_KEYS_HELD } from "@repo/host/app-state";
 import {
   type ActPortClient,
   type PortActKind,
@@ -58,11 +56,13 @@ import {
   type FakeActAnswer,
   fakeActPort,
   fakeAppBridge,
+  quietHold,
   refusedOnPort,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
+  type HostReadsHanded,
   handCapabilities,
   handHostReads,
   holdAutomations,
@@ -133,8 +133,10 @@ let sent: Asked[] = [];
 let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
 let refuseMembersRead = false;
-/** Where the next members read waits, holding what it read, so a test can land it after a write. */
-let membersHeld: Promise<void> | undefined;
+/** Lays each workspace's people on the window's document, as the host does once the page holds them. */
+let deliverPeople: HostReadsHanded["deliverMembers"] = () => undefined;
+/** Each workspace's people the host holds for the window, as last laid. */
+let people: AppWorkspaceMembers = NO_KEYS_HELD;
 /** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
 /** The invitations the test's service holds pending. */
@@ -256,21 +258,22 @@ type Answered = FakeActAnswer;
 
 const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
 
-/** The bridge, answering the section's acts the way the host would. */
+/** Lays a workspace's people on the window's document as the service holds them, or as refused where it refuses them. */
+function layPeople(workspaceId: string): void {
+  people = {
+    ...people,
+    [workspaceId]: refuseMembersRead ? { failed: true } : { rows: { members: stored } },
+  };
+  deliverPeople(people);
+}
+
+/** The bridge, answering the section's acts the way the host would, a member write drawn on the document from its answer. */
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.WORKSPACE_MEMBERS_READ:
-      if (refuseMembersRead) {
-        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
-      }
-      if (membersHeld !== undefined) {
-        const held = membersHeld;
-        const read = stored;
-        membersHeld = undefined;
-        return held.then(() => done(read));
-      }
-      return Promise.resolve(done(stored));
+    case ACT_KIND.WORKSPACE_MEMBERS_RETRY:
+      layPeople(request.payload.workspaceId);
+      return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_MEMBER_REMOVE:
       if (refuseRemoval) {
         return Promise.resolve({
@@ -279,6 +282,7 @@ function answer(request: Asked): Promise<Answered> {
         });
       }
       stored = stored.filter((member) => member.userId !== request.payload.userId);
+      layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_INVITATIONS_READ: {
       if (refuseInvitationsRead) {
@@ -379,6 +383,7 @@ function answer(request: Asked): Promise<Answered> {
       }
       const { userId, role } = request.payload;
       stored = stored.map((member) => (member.userId === userId ? { ...member, role } : member));
+      layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
     }
     case ACT_KIND.WORKSPACE_TRANSFER: {
@@ -390,6 +395,7 @@ function answer(request: Asked): Promise<Answered> {
             ? { ...member, role: WORKSPACE_ROLE.ADMIN }
             : member,
       );
+      layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
     }
     case ACT_KIND.GITHUB_TOKEN_READ:
@@ -444,9 +450,6 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
 
-/** What the act port answers a workspace's people's stream with. */
-type PeopleStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_PEOPLE]>>;
-
 /** What the act port answers a workspace's invitations' stream with. */
 type InvitationsStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_INVITATIONS]>>;
 
@@ -456,7 +459,7 @@ let invitationStreams: {
   push: (view: TasksWorkspaceInvitationsAnswer) => void;
 }[] = [];
 
-/** A stream the test pushes words into, as the host streams a followed workspace's people. */
+/** A stream the test pushes words into, as the host streams a followed workspace's invitations. */
 function pushableStream<A>() {
   const held: A[] = [];
   const waiting: ((read: IteratorResult<A, undefined>) => void)[] = [];
@@ -484,17 +487,6 @@ function pushableStream<A>() {
   return { iterator, push };
 }
 
-/** Each workspace's people's streams the page holds open, newest last, which a test pushes a word to. */
-let peopleStreams: {
-  readonly workspaceId: string;
-  push: (view: TasksWorkspaceMembersAnswer) => void;
-}[] = [];
-
-/** A word of a workspace's people, pushed to every stream of it the page holds open. */
-const pushPeople = (workspaceId: string, view: TasksWorkspaceMembersAnswer) => {
-  for (const stream of peopleStreams) if (stream.workspaceId === workspaceId) stream.push(view);
-};
-
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
@@ -503,7 +495,6 @@ beforeEach(() => {
   stored = [OWNER, MEMBER];
   sent = [];
   refuseMembersRead = false;
-  membersHeld = undefined;
   refuseInvitationsRead = false;
   refuseRemoval = false;
   invitations = [];
@@ -528,16 +519,14 @@ beforeEach(() => {
   opened = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
-  peopleStreams = [];
   invitationStreams = [];
   fakeActPort({
     ...workspacePort(),
-    [ACT_KIND.WORKSPACE_PEOPLE]: (input) => {
-      sent.push({ kind: ACT_KIND.WORKSPACE_PEOPLE, payload: input });
-      const stream = pushableStream<TasksWorkspaceMembersAnswer>();
-      peopleStreams.push({ workspaceId: input.workspaceId, push: stream.push });
-      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
-      return Promise.resolve(stream.iterator as PeopleStream);
+    // Note that the host lays what it read once the hold is taken, never inside it.
+    [ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, payload: input });
+      void Promise.resolve().then(() => layPeople(input.workspaceId));
+      return quietHold();
     },
     [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
       sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
@@ -548,7 +537,9 @@ beforeEach(() => {
     },
   });
   handCapabilities(DESKTOP_CAPABILITIES);
+  people = NO_KEYS_HELD;
   const reads = handHostReads({});
+  deliverPeople = reads.deliverMembers;
   // Note that a workspace's automations are laid as the leave holds them, where the test names any.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
@@ -1006,11 +997,7 @@ test("the chosen team workspace's members are listed with their email and role, 
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => request.kind),
-    [
-      ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
-      ACT_KIND.WORKSPACE_PEOPLE,
-      ACT_KIND.WORKSPACE_MEMBERS_READ,
-    ],
+    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACT_KIND.WORKSPACE_MEMBERS_FOLLOW],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1085,12 +1072,17 @@ test("while the members are being read the rest of the page stands, a placeholde
     listFailed: false,
     onRetryList: () => undefined,
   };
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   act(() =>
     root.render(
-      createElement(SettingsPage, {
-        title: "Workspace",
-        children: createElement(WorkspacePage, { control, readerId: READER_ID }),
-      }),
+      onRegistry(
+        registry,
+        createElement(SettingsPage, {
+          title: "Workspace",
+          children: createElement(WorkspacePage, { control, readerId: READER_ID }),
+        }),
+      ),
     ),
   );
   const members = section(container, SETTINGS_SECTION.MEMBERS);
@@ -1396,44 +1388,27 @@ test("the leave names the automations the reader made where the service says who
   assert.equal(unsaid[2], "Automations you created stop running.");
 });
 
-test("the members the host streams are drawn with nothing read again, so an admin who joined meanwhile may be handed the workspace", async () => {
+test("the members the host lays on the document are drawn with nothing asked again, so an admin who joined meanwhile may be handed the workspace", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
   const offeredBefore = buttons(
     leaveGroup(page) ?? assert.fail("no leave"),
     "Transfer ownership",
   ).length;
-  act(() => pushPeople(ACME.id, { members: [OWNER, ADMIN_OLA, MEMBER] }));
+  act(() => deliverPeople({ [ACME.id]: { rows: { members: [OWNER, ADMIN_OLA, MEMBER] } } }));
   await settle();
   act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
   await settle();
 
   assert.equal(offeredBefore, 0);
-  assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length,
-    1,
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind.startsWith("workspace.members"))
+      .map((request) => request.kind),
+    [ACT_KIND.WORKSPACE_MEMBERS_FOLLOW],
   );
   assert.equal(
     dialog().querySelector('button[aria-label^="New owner"]')?.getAttribute("aria-label"),
     "New owner: Ola",
-  );
-});
-
-test("a members read sent before a role change and landing after it does not put back the role the change made", async () => {
-  stored = [OWNER, ADMIN_OLA, MEMBER];
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  let release: () => void = () => undefined;
-  membersHeld = new Promise((resolve) => {
-    release = resolve;
-  });
-  act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
-  act(() => button(dialog(), "Cancel").click());
-  await chooseAction(memberNamed(page, "Sam"), "Make admin");
-  release();
-  await settle();
-
-  assert.equal(
-    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
-    "Admin",
   );
 });
 
@@ -1928,7 +1903,7 @@ test("the page has no workspace picker of its own, and shows another workspace, 
   assert.equal(roleLine(page), "You're an admin");
   assert.deepEqual(
     sent
-      .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ)
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_FOLLOW)
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }, { workspaceId: beta.id }],
   );
@@ -2063,8 +2038,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
     sent
       .filter(
         (request) =>
-          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
-          request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
+          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_FOLLOW &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,

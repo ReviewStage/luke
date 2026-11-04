@@ -270,7 +270,6 @@ import {
   type TasksWorkspaceMemberRemoveParams,
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
-  type TasksWorkspaceMembersParams,
   type TasksWorkspaceParams,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspacePhotoParams,
@@ -321,9 +320,7 @@ import {
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
-  type WorkspacePeopleFollowed,
   workspaceInvitationsFollowedSchema,
-  workspacePeopleFollowedSchema,
 } from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -381,6 +378,7 @@ import type {
   AppPlanComments,
   AppProviderKeys,
   AppRepositoryLists,
+  AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -634,14 +632,14 @@ export interface HostOperator {
   workspaceSlackBotChannel(
     params: TasksWorkspaceSlackBotChannelParams,
   ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** One workspace's members; or why there are none. */
-  workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
-  workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's people let go: nothing more is heard of them until they are followed again. */
-  workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's people as they now stand, each time they move while followed. */
-  onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
+  /** One workspace's people held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceMembersChanged`. */
+  workspaceMembersFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** One workspace's people let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  workspaceMembersUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** One workspace's held people read again at once, as Try again asks. */
+  workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** Every workspace's people the host holds for the windows, whole, each time any of them moves. */
+  onWorkspaceMembersChanged(listener: (held: AppWorkspaceMembers) => void): () => void;
   /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
   workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
   /** A followed workspace's invitations let go. */
@@ -1641,22 +1639,23 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, { ...params }),
         answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),
-    workspaceMembers: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
+    workspaceMembersFollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: scope.workspaceId }),
       ),
-    workspacePeopleFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, scope)),
-    workspacePeopleUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, scope)),
-    onWorkspacePeopleChanged: (listener) =>
+    workspaceMembersUnfollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW, { workspaceId: scope.workspaceId }),
+      ),
+    workspaceMembersRetry: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY, { workspaceId: scope.workspaceId }),
+      ),
+    onWorkspaceMembersChanged: (listener) =>
       on(
-        GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(workspacePeopleFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED,
+        // Note that the held people are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceMembers>(payload) : undefined),
         listener,
       ),
     workspaceInvitationsFollow: (scope) =>

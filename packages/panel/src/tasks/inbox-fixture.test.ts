@@ -23,7 +23,6 @@ import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, refusedOnPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { appStateFirstRead } from "../use-app-state.js";
-import { fixtureAppState as tasksAppState } from "./tasks-fixture.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js";
 
 /**
@@ -175,7 +174,7 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
 );
 
 it.effect(
-  "any other profile lays nothing over the tasks fixture's own document, and stages no Inbox",
+  "any other profile leaves main's account and Inbox as they are, and stages no Inbox",
   () =>
     Effect.gen(function* () {
       yield* standFixtureRun(RUN_PROFILE.TASKS);
@@ -183,7 +182,11 @@ it.effect(
       assert.ok(fixture);
       const tasks = fixtureRun(RUN_PROFILE.TASKS);
 
-      assert.deepEqual(fixture.fixtureAppState(tasks), tasksAppState(tasks));
+      // Note that every profile holds the fixture workspaces' people (`settings-fixture.ts`), so the document is laid over, its account and Inbox untouched.
+      const staged = fixture.fixtureAppState(tasks);
+      assert.equal(staged.account, tasks.account);
+      assert.equal(staged.inbox, tasks.inbox);
+      assert.equal(staged[LIVE_READ.INBOX_ITEMS], tasks[LIVE_READ.INBOX_ITEMS]);
       assert.equal(
         fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
         undefined,

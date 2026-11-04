@@ -4,14 +4,16 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -52,10 +54,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([LEE]),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-  });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [], former: [LEE] } }));
 });
 
 afterEach(() => {
@@ -85,33 +85,41 @@ function drawn(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
+  // Note that each draw reads main's document on a registry of its own, as the window does, so the people the test lays are the ones it reads.
   act(() =>
     root.render(
-      createElement(DesktopVersionHistory, {
-        sidebar: {
-          collapsed: false,
-          compact: false,
-          overlay: SIDEBAR_OVERLAY.CLOSED,
-          width: 264,
-          onToggle: ignore,
-          onOverlay: ignore,
-          onResize: ignore,
-          staged: false,
-        },
-        room: SHELL_ROOM.WIDE,
-        history: {
-          canGoBack: false,
-          canGoForward: false,
-          onBack: ignore,
-          onForward: ignore,
-          steps: { back: [], forward: [] },
-          onGoTo: ignore,
-        },
-        subject: taskVersionSubject(tasks),
-        account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        onExit: ignore,
-        onRestored: ignore,
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopVersionHistory, {
+          sidebar: {
+            collapsed: false,
+            compact: false,
+            overlay: SIDEBAR_OVERLAY.CLOSED,
+            width: 264,
+            onToggle: ignore,
+            onOverlay: ignore,
+            onResize: ignore,
+            staged: false,
+          },
+          room: SHELL_ROOM.WIDE,
+          history: {
+            canGoBack: false,
+            canGoForward: false,
+            onBack: ignore,
+            onForward: ignore,
+            steps: { back: [], forward: [] },
+            onGoTo: ignore,
+          },
+          subject: taskVersionSubject(tasks),
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: "dev@example.com",
+            provider: "github",
+          },
+          onExit: ignore,
+          onRestored: ignore,
+        }),
+      ),
     ),
   );
   return container;
@@ -139,11 +147,9 @@ test("a version by a member who left names them as one, in its row and over its 
 });
 
 test("a version by a member hangs their card beside its row while the pointer rests on it", async () => {
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([{ ...LEE, email: "lee@example.com", role: WORKSPACE_ROLE.MEMBER }]),
-  });
+  handMembers(() => ({
+    rows: { members: [{ ...LEE, email: "lee@example.com", role: WORKSPACE_ROLE.MEMBER }] },
+  }));
   const view = drawn();
   await settle();
 

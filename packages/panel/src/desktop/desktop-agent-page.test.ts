@@ -74,6 +74,7 @@ import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
   handHostReads,
+  handMembers,
   handState,
   holdAutomations,
   holdPages,
@@ -263,13 +264,6 @@ beforeEach(() => {
   workspace = [];
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve(
-          members === undefined
-            ? { status: FAKE_ANSWER.REFUSED, reason: "Not here." }
-            : { status: FAKE_ANSWER.DONE, value: members },
-        );
-      }
       told.push(request);
       if (request.kind === ACT_KIND.AGENTS_TRANSCRIPT) {
         const pages = transcript === undefined ? [] : [transcript];
@@ -383,6 +377,8 @@ beforeEach(() => {
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
+  // Note that the agent's workspace's people are laid on the document as the page holds them, refused where the test names none.
+  handMembers(() => (members === undefined ? { failed: true } : { rows: { members } }));
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 
@@ -1336,6 +1332,8 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  // Note that the workspace's people stand on the document from the first frame, as the host holds them for a page drawn again.
+  handHostReads({ members: { [PAGE.workspaceId]: { rows: { members } } } });
   const page = mount(
     tasksControl({
       me: "user-dean",

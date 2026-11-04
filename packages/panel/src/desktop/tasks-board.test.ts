@@ -11,7 +11,6 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { CARD_PRESS_SELECTOR, CHIP_LOOK } from "@repo/ui";
 import {
@@ -31,6 +30,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -109,7 +109,8 @@ beforeEach(() => {
     openWeb: (url) => pages.push(url),
   });
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {

@@ -18,6 +18,5 @@
   "packages/panel/src/tasks/task-mentions.tsx": "P18: agents for mentions",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default",
-  "packages/panel/src/tasks/use-tasks-tab.ts": "P11: version history",
-  "packages/panel/src/tasks/use-workspace-members.ts": "P7: member directory"
+  "packages/panel/src/tasks/use-tasks-tab.ts": "P11: version history"
 }

@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
 import { planSections } from "@repo/features/plan-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -79,13 +80,13 @@ import {
   type ViewedVersion,
 } from "../tasks/use-plan-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import {
   useVersionRestore,
   VersionPageSkeleton,
   type VersionRestore,
   VersionView,
 } from "../tasks/version-view.js";
+import { useHostRead } from "../use-host-read.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -739,7 +740,7 @@ export function DesktopVersionHistory({
   const log = useRef<HTMLDivElement>(null);
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
-  const members = useWorkspaceMembers(subject.workspace);
+  const people = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, subject.workspace?.id).rows;
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
@@ -759,8 +760,7 @@ export function DesktopVersionHistory({
           ),
           chord,
         );
-  const former = useFormerMembers(subject.workspace);
-  const reader = readerOf(account, members, former);
+  const reader = readerOf(account, people?.members, people?.former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);

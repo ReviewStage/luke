@@ -904,11 +904,6 @@ export const tasksWorkspaceSlackBotChannelParamsSchema = workspaceSlackBotChanne
 export type TasksWorkspaceSlackBotChannelParams =
   typeof tasksWorkspaceSlackBotChannelParamsSchema.Type;
 
-/** A workspace's members, as the window asks for them: the workspace. */
-export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
-
-export type TasksWorkspaceMembersParams = typeof tasksWorkspaceMembersParamsSchema.Type;
-
 /** Removing one member of a workspace, as the window asks it: the workspace and the member's account. */
 export const tasksWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalSchema;
 
@@ -940,18 +935,6 @@ export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSche
 export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
 export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
-
-/**
- * A followed workspace's people as they now stand, told by the host each
- * time they move: its members and who its work names but left, or why there
- * are none.
- */
-export const workspacePeopleFollowedSchema = EffectSchema.Struct({
-  workspaceId: workspaceIdSchema,
-  view: tasksWorkspaceMembersAnswerSchema,
-});
-
-export type WorkspacePeopleFollowed = typeof workspacePeopleFollowedSchema.Type;
 
 /** A workspace's photo, as a window's tile asks for it: the workspace. */
 export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;

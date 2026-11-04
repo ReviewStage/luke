@@ -105,8 +105,7 @@ import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, failureShown, refusedShown, unreadShown } from "../failure-report.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
-import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { MenuRow } from "./menu-row.js";
@@ -435,30 +434,20 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
 }
 
 /**
- * The workspace's members, read once and followed while the page stands
- * (`useWorkspaceMembersRead`): whatever moves them, here or elsewhere, is
- * pushed. A write's answer stands in once it lands, until the next push.
- * Retry reads and follows again from nothing.
+ * The workspace's members as the host holds them while the page stands
+ * (`LIVE_READ.WORKSPACE_MEMBERS`): whatever moves them, here or elsewhere,
+ * is drawn there, a write of the page's own from its answer on. Retry reads
+ * them again.
  */
 function useMembersRead(workspace: Workspace) {
-  const followed = useWorkspaceMembersRead(workspace);
-  const [answered, setAnswered] = useState<{
-    readonly over: readonly WorkspaceMember[] | undefined;
-    readonly items: readonly WorkspaceMember[];
-  }>();
+  const { rows, status, retry } = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id);
   const read: ListRead<WorkspaceMember> =
-    answered !== undefined && answered.over === followed.members
-      ? { items: answered.items }
-      : followed.members !== undefined
-        ? { items: followed.members }
-        : followed.refused
-          ? { failed: READ_FAILED.MEMBERS }
-          : undefined;
-  return {
-    read,
-    retry: followed.retry,
-    changed: (items: readonly WorkspaceMember[]) => setAnswered({ over: followed.members, items }),
-  };
+    rows !== undefined
+      ? { items: rows.members }
+      : status === HOST_READ_STATUS.FAILED
+        ? { failed: READ_FAILED.MEMBERS }
+        : undefined;
+  return { read, retry };
 }
 
 /**
@@ -477,7 +466,6 @@ function MemberRow({
   member,
   readerId,
   slotted,
-  onChanged,
 }: {
   workspace: Workspace;
   member: WorkspaceMember;
@@ -485,17 +473,13 @@ function MemberRow({
   readerId: string | undefined;
   /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
   slotted: boolean;
-  onChanged: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
   const { userId } = member;
   const may = memberActs(workspace, member, userId === readerId);
   const [refusal, setRefusal] = useState<string>();
-  const answered = (members: readonly WorkspaceMember[]) => {
-    onChanged(members);
-    return ACCEPTED;
-  };
+  const answered = () => ACCEPTED;
   const remove = useConfirmDialog(
     { subject: may.remove, surfaceOpen: true },
     () =>
@@ -509,9 +493,8 @@ function MemberRow({
   );
   const giveRole = (role: WorkspaceInvitation["role"]) => {
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_MEMBER_ROLE, { workspaceId, userId, role }).then(
-      onChanged,
-      (refused: Error) => setRefusal(refused.message),
+    act(ACT_KIND.WORKSPACE_MEMBER_ROLE, { workspaceId, userId, role }).catch((refused: Error) =>
+      setRefusal(refused.message),
     );
   };
   const openPerson = useOpenPerson();
@@ -765,19 +748,16 @@ function HeirChip({
  * row says so, and with an admin to hand it to offers Transfer ownership,
  * the confirm dialog with the admin to make the owner as its field, the
  * first admin unless another is chosen; with none it says to make one
- * first. The members the service answers after the handover stand in at
- * once, and the reader's own new role arrives with the followed workspaces,
- * which turns this row into a member's leave.
+ * first. The roles the service answers after the handover stand in the
+ * members at once, and the reader's own new role arrives with the followed
+ * workspaces, which turns this row into a member's leave.
  */
 function OwnerLeave({
   workspace,
   members,
-  onChanged,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
-  onChanged: (members: readonly WorkspaceMember[]) => void;
-  /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
 }): React.JSX.Element {
   const { act } = useAct();
   // Note that the admins stand in the order the menu lists them, so the first offered is the first listed.
@@ -795,10 +775,7 @@ function OwnerLeave({
       heir === undefined
         ? Promise.resolve(ACCEPTED)
         : act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: workspace.id, userId: heir.userId }).then(
-            (items) => {
-              onChanged(items);
-              return ACCEPTED;
-            },
+            () => ACCEPTED,
             refusedWith,
           ),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER),
@@ -862,21 +839,19 @@ function LeaveGroup({
   members,
   ownName,
   onLeft,
-  onChanged,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
   /** The name of the account's own workspace, which a leave leaves alone; absent from a service that names none. */
   ownName: string | undefined;
   onLeft: () => void;
-  onChanged: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element | null {
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
     <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
-        <OwnerLeave workspace={workspace} members={members} onChanged={onChanged} />
+        <OwnerLeave workspace={workspace} members={members} />
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
@@ -890,13 +865,11 @@ function TeamMembers({
   readerId,
   members,
   onRetry,
-  onChanged,
 }: {
   workspace: Workspace;
   readerId: string | undefined;
   members: ListRead<WorkspaceMember>;
   onRetry: () => void;
-  onChanged: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
   const manages = managesWorkspace(workspace);
   if (members === undefined) {
@@ -927,7 +900,6 @@ function TeamMembers({
           member={member}
           readerId={readerId}
           slotted={manages}
-          onChanged={onChanged}
         />
       ))}
     </>
@@ -2152,7 +2124,6 @@ function ShownWorkspace({
           readerId={readerId}
           members={members.read}
           onRetry={members.retry}
-          onChanged={members.changed}
         />
       </SettingsSection>
       {managesWorkspace(workspace) ? (
@@ -2170,7 +2141,6 @@ function ShownWorkspace({
         members={members.read}
         ownName={ownName}
         onLeft={() => control.onLeft(workspace.id)}
-        onChanged={members.changed}
       />
     </>
   );

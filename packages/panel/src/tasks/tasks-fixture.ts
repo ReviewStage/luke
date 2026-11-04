@@ -47,7 +47,6 @@ import {
 import { automationsAppState, automationsLaunchPlace } from "./automations-fixture.js";
 import {
   FIXTURE_PERSON,
-  fixtureMembersAnswer,
   settingsActAnswer,
   settingsAppState,
   settingsLaunchLink,
@@ -656,10 +655,9 @@ function emptyTaskAnswer(
  * so an act that answers nothing is told from one left to main: the
  * fixture task's version history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads (an
- * Automations profile's are laid on its document instead), every
- * profile's workspace members, every other profile's task as one with no
- * agents, and nothing else, which goes to main as it
- * would.
+ * Automations profile's are laid on its document instead), every other
+ * profile's task as one with no agents, and nothing else, which goes to
+ * main as it would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
@@ -670,14 +668,14 @@ export function fixtureActAnswer(
     historyActAnswer(kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
-    fixtureMembersAnswer(kind, payload) ??
     emptyTaskAnswer(kind)
   );
 }
 
 /**
  * Main's document as a fixture run draws it (`use-app-state.ts`): with the
- * synthetic account signed in under the profiles that stage one
+ * fixture workspaces' members held under every profile, and the synthetic
+ * account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles
