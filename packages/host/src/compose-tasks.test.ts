@@ -16,6 +16,7 @@ import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
 import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
@@ -33,6 +34,7 @@ import {
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSections,
+  type TaskSectionsWritten,
   type TaskSectionWrite,
 } from "@repo/features/task-section-wire";
 import {
@@ -40,6 +42,7 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type RepositoryPin,
+  type RepositoryPinsWritten,
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
   TASK_PRIORITY,
@@ -86,7 +89,7 @@ import {
   type GatewayMethod,
 } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
-import { entityPool } from "@repo/sync";
+import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
@@ -236,6 +239,10 @@ interface FakeService extends TasksClient {
   sectionWrites: TaskSectionWrite[];
   /** The kind of section change the service refuses, where a test names one. */
   sectionRefused: TaskSectionWrite["kind"] | undefined;
+  /** How a task's rename goes untaken where a test names it: unanswered as offline, or refused. */
+  renameUntaken: WriteUntaken | undefined;
+  /** The idempotency key each rename asked was sent under, in order. */
+  renameKeys: (string | undefined)[];
   /** What a section change's answer waits on once the service has it, so a test can ask another meanwhile. */
   sectionAnswered: Effect.Effect<void>;
   /** The workspaces the account is a member of, as the service lists them. */
@@ -624,6 +631,8 @@ function fakeService(tasks: Task[]): FakeService {
     sections: undefined,
     sectionWrites: [],
     sectionRefused: undefined,
+    renameUntaken: undefined,
+    renameKeys: [],
     sectionAnswered: Effect.void,
     get memberships() {
       return memberships;
@@ -896,23 +905,29 @@ function fakeService(tasks: Task[]): FakeService {
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
       Effect.andThen(
-        Effect.sync(() => {
-          if (service.pinsFail) return undefined;
+        Effect.sync((): TaskCallResult<RepositoryPinsWritten, WriteUntaken> => {
+          if (service.pinsFail) return { ok: false, failure: WRITE_UNTAKEN.REFUSED };
           const others = service.pins.filter((pin) => pin.repository !== repository);
           const standing = service.pins.find((pin) => pin.repository === repository);
           service.pins = pinned
             ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
             : others;
           const txid = service.pinTxid;
-          return { pins: service.pins, ...(txid === undefined ? undefined : { txid }) };
+          return {
+            ok: true,
+            answer: { pins: service.pins, ...(txid === undefined ? undefined : { txid }) },
+          };
         }),
         (answer) => Effect.as(service.pinAnswered, answer),
       ),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
-      Effect.sync(() => {
+      Effect.sync((): TaskCallResult<TaskSectionsWritten, WriteUntaken> => {
         service.sectionWrites.push(write);
-        return write.kind === service.sectionRefused ? undefined : service.sections;
+        const { sections } = service;
+        return write.kind === service.sectionRefused || sections === undefined
+          ? { ok: false, failure: WRITE_UNTAKEN.REFUSED }
+          : { ok: true, answer: sections };
       }).pipe(Effect.tap(() => service.sectionAnswered)),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1103,22 +1118,25 @@ function fakeService(tasks: Task[]): FakeService {
         return { ok: true, answer: { task: moved } };
       }).pipe(Effect.tap(() => service.relationAnswered)),
     // The service re-titles the document with the name, as the store does.
-    rename: (taskId, { name }) =>
-      Effect.sync(() => {
+    rename: (taskId, { name }, key) =>
+      Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
+        service.renameKeys.push(key);
+        if (service.renameUntaken !== undefined)
+          return { ok: false, failure: service.renameUntaken };
         const found = service.tasks.find((candidate) => candidate.id === taskId);
-        if (found === undefined) return undefined;
+        if (found === undefined) return { ok: false, failure: WRITE_UNTAKEN.REFUSED };
         const renamed = { ...found, name, document: { ...found.document, body: `# ${name}` } };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return { task: renamed };
+        return { ok: true, answer: { task: renamed } };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
     // their account, and leaves the rest standing; null assigns the task to no one.
     setStanding: (taskId, { assigneeId, ...standing }) =>
-      Effect.sync(() => {
+      Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
-        if (found === undefined) return undefined;
+        if (found === undefined) return { ok: false, failure: WRITE_UNTAKEN.REFUSED };
         const { assignee: _standingAssignee, ...rest } = found;
         const changed =
           assigneeId === undefined
@@ -1129,13 +1147,15 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return { task: changed };
+        return { ok: true, answer: { task: changed } };
       }),
     // The service stamps a pin at its own clock, and a false takes it away.
     mark: (taskId, { pinned }) =>
-      Effect.sync(() => {
+      Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
-        if (found === undefined || service.markFails) return undefined;
+        if (found === undefined || service.markFails) {
+          return { ok: false, failure: WRITE_UNTAKEN.REFUSED };
+        }
         const { pinnedAt, ...rest } = found;
         const pin = pinned === undefined ? pinnedAt : pinned ? MARKED_AT : undefined;
         const marked = {
@@ -1146,7 +1166,10 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? marked : candidate,
         );
         const txid = service.markTxid;
-        return { task: marked, ...(txid === undefined ? undefined : { txid }) };
+        return {
+          ok: true,
+          answer: { task: marked, ...(txid === undefined ? undefined : { txid }) },
+        };
       }).pipe(Effect.tap(() => service.markAnswered)),
     delete: (taskId) =>
       Effect.sync(() => {
@@ -1191,6 +1214,8 @@ function subject(
     accountId?: () => string;
     /** The account's lists kept on disk, none where none is named. */
     entities?: EntityStore;
+    /** The pool the composer's rows stand in, a fresh one that keeps no write waiting where none is named. */
+    pool?: EntityPool;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -1234,8 +1259,9 @@ function subject(
       member: () => ({ userId: options.accountId?.() ?? "user-dana", name: "Dana" }),
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       focus,
-      pool: yield* entityPool(),
+      pool: options.pool ?? (yield* entityPool()),
       entities: () => options.entities,
+      offlineRefused: { clear: () => undefined },
       githubMoved: Effect.void,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -1520,6 +1546,84 @@ it.effect(
       assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
       assert.equal(asked[0], "7");
     }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "a rename the service did not answer stays drawn through a relaunch on the same disk, and is sent once more under its key",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("tasks-queue-");
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameUntaken = WRITE_UNTAKEN.UNANSWERED;
+      const options = { mintKey: () => "rename-key", replayRefused: Effect.void };
+      const opened = (pool: EntityPool) =>
+        openEntityStore({
+          directory,
+          cipher: testCipher(),
+          accountId: "user-dana",
+          queued: pool.queued,
+        });
+      const quit = yield* Scope.make();
+      const before = yield* Scope.provide(quit)(entityPool(options));
+      const kept = yield* Scope.provide(quit)(opened(before));
+      const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
+      yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* first.listed();
+      const answered = yield* first.call(GATEWAY_METHOD.TASKS_RENAME, {
+        taskId: INVITES,
+        name: "Invitations",
+      });
+      yield* Scope.close(quit, Exit.void);
+
+      const pool = yield* entityPool(options);
+      const entities = yield* opened(pool);
+      const relaunched = yield* subject(service, { entities, pool });
+      yield* pool.requeue(entities.queue, relaunched.tasks.queueable);
+      service.renameUntaken = undefined;
+      yield* relaunched.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* relaunched.listed();
+      yield* relaunched.settled;
+
+      assert.deepEqual(answered, { renamed: true });
+      assert.deepEqual(
+        relaunched.last()?.tasks.map((each) => each.name),
+        ["Invitations"],
+      );
+      assert.deepEqual(service.renameKeys, ["rename-key", "rename-key"]);
+      assert.deepEqual(pool.queued(), []);
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "a change made offline that the service refuses as it is sent again is taken back and counted",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.renameUntaken = WRITE_UNTAKEN.UNANSWERED;
+      const refused = { times: 0 };
+      const pool = yield* entityPool({
+        mintKey: () => "rename-key",
+        replayRefused: Effect.sync(() => {
+          refused.times += 1;
+        }),
+      });
+      const { call, listed, last, settled } = yield* subject(service, { pool });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
+      const drawn = last()?.tasks.map((each) => each.name);
+
+      service.renameUntaken = WRITE_UNTAKEN.REFUSED;
+      yield* listed();
+      yield* settled;
+
+      assert.deepEqual(drawn, ["Invitations"]);
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.name),
+        ["Teammate invitations"],
+      );
+      assert.equal(refused.times, 1);
+    }),
 );
 
 it.effect(
@@ -2813,11 +2917,14 @@ it.effect(
       assert.deepEqual(removed, { workspace: ACME });
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-      assert.deepEqual(service.reads.slice(before), [
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-        `photoSet:${ACME.id}:none`,
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-      ]);
+      assert.deepEqual(
+        service.reads.slice(before).filter((read) => read.startsWith("photoSet:")),
+        [
+          `photoSet:${ACME.id}:${PHOTO_URL}`,
+          `photoSet:${ACME.id}:none`,
+          `photoSet:${ACME.id}:${PHOTO_URL}`,
+        ],
+      );
     }),
 );
 
@@ -3020,22 +3127,40 @@ it.effect(
     }),
 );
 
+/** Every telling of the workspaces' photos the host holds for the windows, whole, in order. */
+function heldPhotos(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED ? [payload] : [],
+  );
+}
+
 it.effect(
-  "a workspace's photo is read on the service with nothing else, answered as its bytes or as none where it has none",
+  "a listed workspace's photo is fetched once per version, laid under it, and fetched again as the version moves",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
+      service.memberships = [PERSONAL, { ...ACME, photoVersion: "v1" }];
       const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
       service.photos[ACME.id] = photo;
-      const { call } = yield* subject(service);
+      const { call, pushed, settled } = yield* subject(service);
+      const fetches = () => service.reads.filter((read) => read.startsWith("photo:"));
 
-      const read = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: ACME.id });
-      const none = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: PERSONAL.id });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const first = heldPhotos(pushed).at(-1);
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* nextPoll(settled);
+      const renamed = fetches().length;
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      yield* settled;
 
-      assert.deepEqual(read, photo);
-      assert.deepEqual(none, { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(service.reads, [`photo:${ACME.id}`, `photo:${PERSONAL.id}`]);
+      const url = "data:image/png;base64,iVBORw0KGgo=";
+      assert.deepEqual(first, { [ACME.id]: { rows: { version: "v1", url } } });
+      assert.equal(renamed, 1, "a move that leaves the version fetches nothing");
+      assert.deepEqual(fetches(), [`photo:${ACME.id}`, `photo:${ACME.id}`]);
+      assert.deepEqual(heldPhotos(pushed).at(-1), {
+        [ACME.id]: { rows: { version: PHOTO_URL, url } },
+      });
     }),
 );
 
@@ -4940,6 +5065,50 @@ it.effect(
       yield* settled;
       assert.equal(service.live.people.held(), 0, "a sign-out lets its poll go");
       assert.deepEqual(heldMembers(pushed).at(-1), {});
+    }),
+);
+
+/** Every telling of the token repositories the host holds for the windows, whole, in order. */
+function heldTokenRepositories(
+  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED ? [payload] : [],
+  );
+}
+
+it.effect(
+  "a workspace's token repositories asked before an addition land behind the addition's answer, never over it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const listed = (fullName: string) => ({
+        fullName,
+        addedBy: "Ada",
+        addedAt: 1,
+        removable: true,
+      });
+      const before = [listed("acme/relay")];
+      const after = [listed("acme/side"), ...before];
+      const answering = yield* Deferred.make<void>();
+      Object.assign(service.workspaces, {
+        tokenRepositories: () =>
+          Effect.as(Deferred.await(answering), { ok: true as const, answer: before }),
+        setTokenRepository: () => Effect.succeed({ ok: true as const, answer: after }),
+      });
+      const { call, pushed, settled } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+        workspaceId: ACME.id,
+        repository: "acme/side",
+        added: true,
+      });
+      yield* Deferred.succeed(answering, undefined);
+      yield* settled;
+
+      assert.deepEqual(heldTokenRepositories(pushed).at(-1), { [ACME.id]: { rows: after } });
     }),
 );
 

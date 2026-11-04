@@ -89,7 +89,7 @@ const LAYOUT_DATA = `
   sections selected separator shown side sidebar-collapsed sidebar-overlay
   single size slot stand start state status style submit surface swiped
   thumb tone truncate-container truncate-group-container turn turned type
-  ui-boot-sidebar ui-density ui-profile ui-room ui-theme under under-more
+  ui-density ui-profile ui-room ui-theme under under-more
   unread variant whole wide width worded wrap-heading
   wrapped zoom
 `

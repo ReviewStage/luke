@@ -13,8 +13,6 @@ import type {
   TasksWorkspaceMemberRoleParams,
   TasksWorkspaceMembersAnswer,
   TasksWorkspaceParams,
-  TasksWorkspacePhotoAnswer,
-  TasksWorkspacePhotoParams,
   TasksWorkspacePhotoSetParams,
   TasksWorkspaceRenameParams,
   TasksWorkspaceSentryAnswer,
@@ -50,11 +48,11 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words. A
- * workspace's people, and its invitations, are each held followed while a
- * panel holds its stream open: the host holds them on the first stream and
- * lets them go with the last, and what they hold reaches every panel on app
- * state, never down the stream, which carries nothing. How many streams
- * stand open of each is all else held here.
+ * workspace's people, its token repositories, and its invitations, are each
+ * held while a panel holds their stream open: the host holds them on the
+ * first stream and lets them go with the last, and what they hold reaches
+ * every panel on app state, never down the stream, which carries nothing.
+ * How many streams stand open of each is all else held here.
  */
 export interface WorkspaceProceduresDependencies {
   host: {
@@ -99,7 +97,6 @@ export interface WorkspaceProceduresDependencies {
     workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     /** A held workspace's invitations read again at once, as Try again asks. */
     workspaceInvitationsRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-    workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
     workspaceMemberRemove(
       params: TasksWorkspaceMemberRemoveParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -116,9 +113,17 @@ export interface WorkspaceProceduresDependencies {
     workspaceInvitationCancel(
       params: TasksWorkspaceInvitationCancelParams,
     ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
-    workspaceTokenRepositories(
+    /** A workspace's token repositories held at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    workspaceTokenRepositoriesFollow(
       params: TasksWorkspaceTokenRepositoriesParams,
-    ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+    ): Effect.Effect<void>;
+    workspaceTokenRepositoriesUnfollow(
+      params: TasksWorkspaceTokenRepositoriesParams,
+    ): Effect.Effect<void>;
+    /** A workspace's held token repositories asked again at once, as Try again asks; done once the ask has landed. */
+    workspaceTokenRepositoriesRetry(
+      params: TasksWorkspaceTokenRepositoriesParams,
+    ): Effect.Effect<void>;
     workspaceTokenRepositorySet(
       params: TasksWorkspaceTokenRepositorySetParams,
     ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
@@ -199,8 +204,9 @@ function workspaceHold(
 
 export function workspaceProcedures(dependencies: WorkspaceProceduresDependencies) {
   const { host, openExternal } = dependencies;
-  /** Every workspace whose people, and whose invitations, a window holds a stream open of, so the host lets each go only with the last. */
+  /** Every workspace whose people, token repositories, or invitations a window holds a stream open of, each so the host lets them go only with the last. */
   const openPeople: OpenFollows<never> = MutableHashMap.empty();
+  const openTokenRepositories: OpenFollows<never> = MutableHashMap.empty();
   const openInvitations: OpenFollows<never> = MutableHashMap.empty();
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
@@ -378,15 +384,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.workspaceInvitationsRetry(input);
     }),
-    // Note that the photo's answer, a failure among them, is the panel's to
-    // read, as an inbox image's is, because a tile that hears none draws its
-    // letter rather than a refusal.
-    [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.workspacePhoto(input);
-    }),
     [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE
     ].effect(function* ({ input, context, errors }) {
@@ -411,13 +408,29 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         return yield* refusedWorkspace(errors.REFUSED, answer.failure);
       },
     ),
-    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceTokenRepositories(input);
-      if ("repositories" in answer) return answer.repositories;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+      // Note that nothing is heard down the hold, since the held repositories reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (held: TasksWorkspaceTokenRepositoriesParams) => held.workspaceId,
+          follow: host.workspaceTokenRepositoriesFollow,
+          unfollow: host.workspaceTokenRepositoriesUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openTokenRepositories,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceTokenRepositoriesRetry(input);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET

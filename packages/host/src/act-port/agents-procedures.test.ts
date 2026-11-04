@@ -22,7 +22,6 @@ import {
 } from "@repo/features/agent-view";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
-  FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@repo/features/pull-request-write-wire";
@@ -83,12 +82,8 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
-  [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
-    "Could not read the repository's reviewers and labels on this system.",
   [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: "Could not read the pull request's image on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: "Could not change the pull request on this system.",
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]:
-    "Could not read which files you viewed on this system.",
 } as const;
 
 type HostAsk = AgentProceduresDependencies["host"];
@@ -200,11 +195,6 @@ const ACTS: readonly {
     ask: "agentChanges",
   },
   {
-    kind: AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS,
-    payload: { agentId: AGENT_ID },
-    ask: "agentReviewOptions",
-  },
-  {
     kind: AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE,
     payload: { agentId: AGENT_ID, src: "https://github.com/user-attachments/assets/seats.png" },
     ask: "agentGitHubImage",
@@ -213,11 +203,6 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION,
     payload: { agentId: AGENT_ID, request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT } },
     ask: "agentPullRequestAction",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED,
-    payload: { agentId: AGENT_ID },
-    ask: "agentPullRequestViewed",
   },
 ];
 
@@ -407,15 +392,10 @@ it("a panel's Mark as read on an agent clears its unseen dot without naming a pa
   assert.deepEqual(asked, []);
 });
 
-it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and its read of which files it viewed hears each file's mark", async () => {
-  const viewed = {
-    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-    files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
-  };
+it("a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it", async () => {
   const { call, asked, noted } = windowPort(PANEL, {
     answers: {
       agentPullRequestAction: () => Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
-      agentPullRequestViewed: () => Effect.succeed(viewed),
     },
   });
   const change = {
@@ -427,13 +407,7 @@ it("a panel's change to an agent's pull request reaches the host as asked and he
   assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION, change), {
     answer: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
   });
-  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }), {
-    answer: viewed,
-  });
-  assert.deepEqual(asked, [
-    ["agentPullRequestAction", change],
-    ["agentPullRequestViewed", { agentId: AGENT_ID }],
-  ]);
+  assert.deepEqual(asked, [["agentPullRequestAction", change]]);
   assert.deepEqual(noted, []);
 });
 

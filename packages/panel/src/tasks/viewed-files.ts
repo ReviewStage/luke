@@ -3,6 +3,7 @@ import {
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
 } from "@repo/features/agent-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   FILE_VIEWED_STATE,
   type FileViewedState,
@@ -10,7 +11,9 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@repo/features/pull-request-write-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import type { ViewedMarks } from "./changes-list.js";
+import { pullRequestAsked } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 import { noteOf, type WriteNote } from "./pull-request-writes.js";
 
@@ -19,9 +22,10 @@ import { noteOf, type WriteNote } from "./pull-request-writes.js";
  *
  * The marks are GitHub's own, the ones its Viewed box sets, so they are read
  * and written by the service on the member's own GitHub sign-in and never on
- * our GitHub App (`pull-request-write-wire.ts`): the read
- * (`AGENTS_PULL_REQUEST_VIEWED`) each time the changes are read, so
- * the two describe the same push, and a mark or an unmark as one of the
+ * our GitHub App (`pull-request-write-wire.ts`): the read, held by the host
+ * while Files changed reads a pull request (`LIVE_READ.PULL_REQUEST_VIEWED`)
+ * and asked again each time the changes are read anew, so the two describe
+ * the same push, and as its head moves, and a mark or an unmark as one of the
  * pull request's changes (`AGENTS_PULL_REQUEST_ACTION`). A file marked
  * viewed and changed since (GitHub's dismissed) reads as not viewed, as
  * GitHub unticks it.
@@ -33,9 +37,10 @@ import { noteOf, type WriteNote } from "./pull-request-writes.js";
  * holds. Every mark GitHub takes is its word on the file at once, so where
  * GitHub would not take the last press, the mark goes back to what GitHub
  * holds and the line under the bar says why, as any other change's does
- * (`pull-request-writes.tsx`). A read never undoes a mark settled or pressed
- * since it was asked; a read that does not answer takes the marks away
- * rather than leave ones it can no longer vouch for, until one answers.
+ * (`pull-request-writes.tsx`). A read never undoes a mark pressed and not
+ * yet settled, nor one settled since the read before it landed; a read that
+ * does not answer takes the marks away rather than leave ones it can no
+ * longer vouch for, until one answers.
  */
 
 /** The member's viewed marks: the marks, once read, what the last read or press left to say, and the door that lets it go. */
@@ -45,6 +50,9 @@ export interface ViewedFiles {
   readonly note: WriteNote | undefined;
   readonly dismiss: () => void;
 }
+
+/** A read of the marks the service did not answer. */
+const UNANSWERED: AgentPullRequestViewedAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /** What a read of the marks leaves to say, as a change's answer would. */
 function readNote(answer: AgentPullRequestViewedAnswerView): WriteNote | undefined {
@@ -66,58 +74,62 @@ interface Pressing {
 }
 
 /**
- * The member's marks on the agent's pull request's files, read anew each
- * time `reading` counts another answer of the changes read, and marked or
- * unmarked a file at a time, several files at once.
+ * The member's marks on the agent's pull request's files, held by the host
+ * while `reading` names a pull request and asked again each time it counts
+ * another answer of the changes read, and marked or unmarked a file at a
+ * time, several files at once.
  */
 export function useViewedFiles(
   agentId: string,
-  source: Pick<PullRequestSource, "readViewed" | "write">,
+  source: Pick<PullRequestSource, "number" | "write">,
   /** How many answers the changes read has landed with, a pull request named in the latest; none while none is. */
   reading: number | undefined,
 ): ViewedFiles {
-  const { readViewed: read, write } = source;
+  const { number, write } = source;
+  const held = useHostRead(
+    LIVE_READ.PULL_REQUEST_VIEWED,
+    reading === undefined ? undefined : pullRequestAsked(agentId, number),
+  );
   const [states, setStates] = useState<ReadonlyMap<string, FileViewedState> | undefined>();
   const [pressed, setPressed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
-  const latest = useRef({ read });
-  latest.current = { read };
   // Note that the presses still to settle, and how far each file's marks have settled, are held in refs, because an answer reads them as they are when it lands.
   const pressing = useRef(new Map<string, Pressing>());
   const settled = useRef({ count: 0, at: new Map<string, number>() });
+  // How far the marks had settled as the answer before this one was taken.
+  const takenAt = useRef(0);
   // How many of a file's presses there had been when its mark out now was sent.
   const sentAt = useRef(new Map<string, number>()).current;
 
+  // The changes read landing anew asks the marks again, so the two describe the same push.
+  const { retry } = held;
+  const readFor = useRef(reading);
   useEffect(() => {
-    if (reading === undefined) return undefined;
-    let standing = true;
-    const asked = settled.current.count;
-    latest.current
-      .read()
-      .catch(
-        (): AgentPullRequestViewedAnswerView => ({
-          failure: AGENT_CALL_FAILURE.UNANSWERED,
-        }),
-      )
-      .then((answer) => {
-        if (!standing) return;
-        setNote(readNote(answer));
-        if ("failure" in answer || answer.outcome !== PULL_REQUEST_WRITE_OUTCOME.DONE) {
-          return setStates(undefined);
-        }
-        // A file settled or pressed since the read was asked keeps the mark it has now.
-        const since = (path: string) =>
-          (settled.current.at.get(path) ?? 0) > asked || pressing.current.has(path);
-        setStates((was) => {
-          const next = new Map(answer.files.map((file) => [file.path, file.state]));
-          for (const [path, state] of was ?? []) if (since(path)) next.set(path, state);
-          return next;
-        });
-      });
-    return () => {
-      standing = false;
-    };
-  }, [agentId, reading]);
+    const was = readFor.current;
+    readFor.current = reading;
+    if (was !== undefined && reading !== undefined && was !== reading) void retry();
+  }, [reading, retry]);
+
+  const answer: AgentPullRequestViewedAnswerView | undefined =
+    held.rows ?? (held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined);
+  useEffect(() => {
+    if (answer === undefined) return;
+    const asked = takenAt.current;
+    takenAt.current = settled.current.count;
+    setNote(readNote(answer));
+    if ("failure" in answer || answer.outcome !== PULL_REQUEST_WRITE_OUTCOME.DONE) {
+      setStates(undefined);
+      return;
+    }
+    // A file pressed and not settled, or settled since the answer before this one, keeps the mark it has now.
+    const since = (path: string) =>
+      (settled.current.at.get(path) ?? 0) > asked || pressing.current.has(path);
+    setStates((was) => {
+      const next = new Map(answer.files.map((file) => [file.path, file.state]));
+      for (const [path, state] of was ?? []) if (since(path)) next.set(path, state);
+      return next;
+    });
+  }, [answer]);
 
   const viewed = useCallback(
     (path: string) => pressed.get(path) ?? states?.get(path) === FILE_VIEWED_STATE.VIEWED,

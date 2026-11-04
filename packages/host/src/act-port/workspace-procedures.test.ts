@@ -3,7 +3,7 @@ import { afterEach, it } from "@effect/vitest";
 import { ORPCError } from "@orpc/client";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type { TasksWorkspaceGitHubConnectAnswer } from "@repo/features/tasks-view";
-import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
 import {
@@ -90,8 +90,6 @@ const REFUSAL = {
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE]: "Could not change that member's role on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER]: "Could not transfer that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_LEAVE]: "Could not leave that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ]:
-    "Could not read that workspace's photo on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]:
     "Could not change that workspace's photo on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: "Could not change that workspace's link on this system.",
@@ -130,7 +128,6 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER, payload: { ...WORKSPACE, userId: GRACE.userId } },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...WORKSPACE, photo: null } },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET, payload: { ...WORKSPACE, slug: "acme-labs" } },
 ];
@@ -177,10 +174,12 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       return answer();
     });
   const host: WorkspaceProceduresDependencies["host"] = {
-    workspaceTokenRepositories: (params) =>
-      ask(`tokenRepositories:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { repositories: [] },
-      ),
+    workspaceTokenRepositoriesFollow: (params) =>
+      ask(`tokenRepositoriesFollow:${params.workspaceId}`, () => undefined),
+    workspaceTokenRepositoriesUnfollow: (params) =>
+      ask(`tokenRepositoriesUnfollow:${params.workspaceId}`, () => undefined),
+    workspaceTokenRepositoriesRetry: (params) =>
+      ask(`tokenRepositoriesRetry:${params.workspaceId}`, () => undefined),
     workspaceTokenRepositorySet: (params) =>
       ask(`tokenRepositorySet:${params.workspaceId}:${params.repository}:${params.added}`, () =>
         script.notPermitted ? refusal() : { repositories: [] },
@@ -254,12 +253,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceMembersUnfollow: (scope) =>
       ask(`membersUnfollow:${scope.workspaceId}`, () => undefined),
     workspaceMembersRetry: (scope) => ask(`membersRetry:${scope.workspaceId}`, () => undefined),
-    workspacePhoto: (params) =>
-      ask(`photo:${params.workspaceId}`, () =>
-        params.workspaceId === ACME.id
-          ? { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" }
-          : ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const),
-      ),
     workspaceMemberRemove: (params) =>
       ask(`remove:${params.workspaceId}:${params.userId}`, () =>
         script.notPermitted ? refusal() : { members: [] },
@@ -425,21 +418,6 @@ it("a member's role is changed and a workspace handed over from a panel, each an
     `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
     `transfer:${ACME.id}:${GRACE.userId}`,
   ]);
-});
-
-it("a workspace's photo is read from a panel, its absence answered rather than refused", async () => {
-  const { client, asked } = windowPort(PANEL);
-
-  const read = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ, WORKSPACE);
-  const none = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ, {
-    workspaceId: "workspace-plain",
-  });
-
-  assert.deepEqual(read, {
-    answer: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
-  });
-  assert.deepEqual(none, { answer: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } });
-  assert.deepEqual(asked, [`photo:${ACME.id}`, "photo:workspace-plain"]);
 });
 
 it("an invitation is made and canceled from a panel, and an address already invited is refused in words that say so", async () => {

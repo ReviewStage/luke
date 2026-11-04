@@ -37,12 +37,10 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
-  type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentQueueParams,
   type AgentRenameParams,
-  type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
   type AgentServersParams,
   type AgentStartParams,
@@ -120,7 +118,6 @@ export interface AgentProceduresDependencies {
     /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
     pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
     agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
-    agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
     /** One agent's own tools held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
     agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
@@ -130,9 +127,6 @@ export interface AgentProceduresDependencies {
     agentPullRequestAction(
       params: AgentPullRequestActionParams,
     ): Effect.Effect<AgentPullRequestWriteAnswerView>;
-    agentPullRequestViewed(
-      params: AgentPullRequestReadParams,
-    ): Effect.Effect<AgentPullRequestViewedAnswerView>;
   };
   /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -561,12 +555,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.pullRequestPartRetry(input);
     }),
-    [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actPort[AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentReviewOptions(input);
-      },
-    ),
     [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actPort[
       AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
@@ -603,12 +591,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentPullRequestAction(input);
-    }),
-    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: actPort[
-      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentPullRequestViewed(input);
     }),
   };
 }

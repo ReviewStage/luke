@@ -2,15 +2,11 @@
   "packages/panel/src/act-stream.ts": "P22: the hold's door",
   "packages/panel/src/desktop/automations-page.tsx": "P14: Sentry and Slack bot settings",
   "packages/panel/src/desktop/use-run-choices.ts": "P28: the default agent and models",
-  "packages/panel/src/desktop/workspace-tile.tsx": "P18: workspace photo",
-  "packages/panel/src/onboarding/setup-github.tsx": "P18: GitHub token set",
-  "packages/panel/src/settings/account-section.tsx": "P18: GitHub token set",
   "packages/panel/src/settings/agents-page.tsx": "P28: default agent, models",
   "packages/panel/src/settings/chapters-model-section.tsx": "P28: chapters model",
   "packages/panel/src/settings/host-connect-dialog.tsx": "P18: a host's pairing",
   "packages/panel/src/settings/hosts-section.tsx": "P18: hosts",
   "packages/panel/src/settings/workspace-page.tsx": "P14: Sentry and Slack bot settings",
-  "packages/panel/src/settings/workspace-token-repositories.tsx": "P18: GitHub token set, token repositories",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default"
 }

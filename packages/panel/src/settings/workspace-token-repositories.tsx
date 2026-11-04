@@ -1,3 +1,4 @@
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import type { GitHubRepositoriesAnswer } from "@repo/features/github-repositories-wire";
 import {
   GITHUB_ACCESS,
@@ -7,6 +8,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppGitHubToken } from "@repo/host/app-state";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
@@ -25,13 +27,14 @@ import {
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import { repositoryMenuRow } from "../repository-row.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 
@@ -48,10 +51,12 @@ import { AddMenuButton } from "./add-menu-button.js";
  * push to that neither the App nor the workspace's list already holds, read
  * as the menu opens from the addable the repository picker's listing
  * answers beside its own, each drawn as the repository chip's menu draws one
- * (`repository-row.tsx`); a pick adds it, and the service answers the list
- * as it then stands. The list is read, still being read, or refused: while
- * it is read the rows say Reading, and refused they say so with Retry,
- * neither drawn as a workspace with none.
+ * (`repository-row.tsx`); a pick adds it, and the list the service then
+ * answers lands where the host holds it. With no token of the reader's
+ * saved, as the host holds it, the menu says to add one. The list is the
+ * host's (`LIVE_READ.TOKEN_REPOSITORIES`), read, still being read, or
+ * refused: while it is read the rows say Reading, and refused they say so
+ * with Retry, neither drawn as a workspace with none.
  */
 
 /** The words the rows and the menu say: labels and facts alone. */
@@ -92,48 +97,34 @@ export interface TokenRepositories {
   readonly change: (repository: string, added: boolean) => Promise<string | undefined>;
 }
 
-/** Reads the workspace's token repositories once, and holds what each change answers. */
+/** Where the list stands, by where the host's read of it stands. */
+const TOKEN_REPOSITORIES_READ_OF = {
+  [HOST_READ_STATUS.LOADING]: TOKEN_REPOSITORIES_READ.READING,
+  [HOST_READ_STATUS.FAILED]: TOKEN_REPOSITORIES_READ.FAILED,
+  [HOST_READ_STATUS.READY]: TOKEN_REPOSITORIES_READ.READY,
+} as const satisfies Record<HostReadStatus, TokenRepositoriesRead>;
+
+/** No token repositories, while none is read. */
+const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
+
+/**
+ * The workspace's token repositories as the host holds them while the
+ * surface draws them (`LIVE_READ.TOKEN_REPOSITORIES`), where each change's
+ * own answer lands too. Note that a read that fails says so rather than
+ * listing none, because a workspace with none is a list read.
+ */
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
   const { act } = useAct();
-  const [listed, setListed] = useState<readonly WorkspaceTokenRepository[]>([]);
-  const [read, setRead] = useState<TokenRepositoriesRead>(TOKEN_REPOSITORIES_READ.READING);
-  const [attempt, setAttempt] = useState(0);
-  // Whether a change has answered since the read began, whose list is newer than the read's.
-  const changed = useRef(false);
-  useEffect(() => {
-    let live = true;
-    changed.current = false;
-    setRead(TOKEN_REPOSITORIES_READ.READING);
-    // Note that a read that fails says so rather than listing none, because a workspace with none is a list read.
-    act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, { workspaceId }).then(
-      (answer) => {
-        if (!live || changed.current) return;
-        setListed(answer);
-        setRead(TOKEN_REPOSITORIES_READ.READY);
-      },
-      () => {
-        if (live && !changed.current) setRead(TOKEN_REPOSITORIES_READ.FAILED);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId, attempt]);
-  const retry = useCallback(() => setAttempt((count) => count + 1), []);
+  const { rows, status, retry } = useHostRead(LIVE_READ.TOKEN_REPOSITORIES, workspaceId);
   const change = useCallback(
     (repository: string, added: boolean) =>
       act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, { workspaceId, repository, added }).then(
-        (now) => {
-          changed.current = true;
-          setListed(now);
-          setRead(TOKEN_REPOSITORIES_READ.READY);
-          return undefined;
-        },
+        () => undefined,
         (refused: Error) => refused.message,
       ),
     [act, workspaceId],
   );
-  return { read, listed, retry, change };
+  return { read: TOKEN_REPOSITORIES_READ_OF[status], listed: rows ?? NONE_LISTED, retry, change };
 }
 
 /** The repositories the reader's own token may push to that the workspace lists nowhere yet; nothing while unread, and why where the read failed. */
@@ -143,24 +134,19 @@ type Candidates =
   | { readonly kind: "no-token" }
   | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
 
-/** What the member's own token was found to be as the picker last opened: not asked yet, being asked, none saved, or one saved or not known. */
-const TOKEN_WORD = {
-  UNASKED: "unasked",
-  ASKING: "asking",
-  NONE: "none",
-  HELD: "held",
-} as const;
-
-type TokenWord = (typeof TOKEN_WORD)[keyof typeof TOKEN_WORD];
-
-/** What the picker offers, from the token as it was found and the workspace's repositories as the host holds them, less those already listed. */
+/**
+ * What the picker offers, from the reader's token and the workspace's
+ * repositories as the host holds them, less those already listed. Note that
+ * a token read that fails is taken for no word on the token, because the
+ * list alone says what the token may reach.
+ */
 function candidatesOf(
-  token: TokenWord,
+  token: { readonly rows: AppGitHubToken | undefined; readonly status: HostReadStatus },
   list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
   listed: readonly { readonly fullName: string }[],
 ): Candidates {
-  if (token === TOKEN_WORD.NONE) return { kind: "no-token" };
-  if (token === TOKEN_WORD.ASKING || token === TOKEN_WORD.UNASKED) return { kind: "reading" };
+  if (token.rows?.token === null) return { kind: "no-token" };
+  if (token.status === HOST_READ_STATUS.LOADING) return { kind: "reading" };
   if (list.rows === undefined) {
     return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
   }
@@ -187,21 +173,12 @@ export function AddTokenRepository({
   repositories: TokenRepositories;
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  // Note that the workspace's repositories are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`), and the token is asked as it opens.
+  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  // Note that the workspace's repositories and the reader's token are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`, `LIVE_READ.GITHUB_TOKEN`).
   const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
-  const [token, setToken] = useState<TokenWord>(TOKEN_WORD.UNASKED);
+  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
   const read = () => {
-    setToken(TOKEN_WORD.ASKING);
     if (list.status === HOST_READ_STATUS.FAILED) list.retry();
-    // Note that a token read that fails is taken for no word on the token, because the list alone says what the token may reach.
-    act(ACT_KIND.GITHUB_TOKEN_READ).then(
-      (answer) =>
-        setToken(
-          !("failure" in answer) && answer.token === null ? TOKEN_WORD.NONE : TOKEN_WORD.HELD,
-        ),
-      () => setToken(TOKEN_WORD.HELD),
-    );
   };
   const candidates = candidatesOf(token, list, repositories.listed);
   const rows = candidates.kind === "read" ? candidates.rows : [];

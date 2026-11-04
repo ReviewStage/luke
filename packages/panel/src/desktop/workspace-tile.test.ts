@@ -1,70 +1,59 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type { TasksWorkspacePhotoAnswer } from "@repo/features/tasks-view";
-import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import { LIVE_READ } from "@repo/features/live-wire";
+import type { AppWorkspacePhotos } from "@repo/host/app-state";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { afterEach, test } from "vitest";
+import { handState } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
 /**
  * A workspace's tile as the developer meets it: the photo an owner or admin
- * uploaded once the host answers it, read with the workspace's id; the
- * owner's sign-in picture on a personal workspace with no photo; and the
- * letter where there is neither, while the photo loads, and where an image
- * fails to load. Synthetic workspaces and addresses throughout.
+ * uploaded, as the host holds it at the version the list names; the owner's
+ * sign-in picture on a personal workspace with no photo; and the letter
+ * where there is neither, while the photo loads, and where an image fails
+ * to load. Synthetic workspaces and addresses throughout.
  */
 
-const PHOTO = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
+const PHOTO_URL = "data:image/png;base64,iVBORw0KGgo=";
 const PICTURE_URL = "https://avatars.githubusercontent.com/u/1";
 
 const roots: Root[] = [];
-
-/** Every act the tile sent, in order. */
-let sent: { kind: string; payload?: unknown }[] = [];
-
-/** What the host answers a photo read with. */
-let answer: TasksWorkspacePhotoAnswer = PHOTO;
-
-beforeEach(() => {
-  sent = [];
-  answer = PHOTO;
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_PHOTO_READ]: (payload) => {
-      sent.push({ kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload });
-      return Promise.resolve(answer);
-    },
-  });
-});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets the window's document, and the redraw it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The tile for the workspace given, as a row draws it. */
-function mount(workspace: {
-  id: string;
-  name: string;
-  photoVersion?: string;
-  pictureUrl?: string;
-}): HTMLElement {
+/** The tile for the workspace given, as a row draws it, the host holding the photos given. */
+function mount(
+  workspace: {
+    id: string;
+    name: string;
+    photoVersion?: string;
+    pictureUrl?: string;
+  },
+  photos: AppWorkspacePhotos = {},
+): HTMLElement {
+  handState({}, { [LIVE_READ.WORKSPACE_PHOTOS]: photos });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(WorkspaceTile, { workspace })));
+  act(() =>
+    root.render(onRegistry(AtomRegistry.make(), createElement(WorkspaceTile, { workspace }))),
+  );
   return container;
 }
 
@@ -97,8 +86,12 @@ function load(container: HTMLElement): void {
   act(() => container.querySelector("img")?.dispatchEvent(new Event("load")));
 }
 
-test("a workspace with a photo draws its letter while it loads, then the photo the host read for its id alone, with no letter or hue under it", async () => {
-  const tile = mount({ id: "workspace-photo", name: "acme", photoVersion: "1a2b3c4d5e6f7a8b" });
+test("a workspace with a photo draws its letter while it loads, then the photo the host holds for its id, with no letter or hue under it", async () => {
+  const version = "1a2b3c4d5e6f7a8b";
+  const tile = mount(
+    { id: "workspace-photo", name: "acme", photoVersion: version },
+    { "workspace-photo": { rows: { version, url: PHOTO_URL } } },
+  );
 
   assert.deepEqual(drawn(tile), letterTile("A"));
   await settle();
@@ -106,26 +99,33 @@ test("a workspace with a photo draws its letter while it loads, then the photo t
   load(tile);
 
   assert.deepEqual(read, letterTile("A"), "the letter stands until the photo has loaded");
-  assert.deepEqual(drawn(tile), pictureTile(`data:image/png;base64,${PHOTO.base64}`));
-  assert.deepEqual(sent, [
-    { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-photo" } },
-  ]);
+  assert.deepEqual(drawn(tile), pictureTile(PHOTO_URL));
 });
 
-test("a photo the host has none of, or that fails to load, leaves the letter", async () => {
-  answer = { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
-  const missing = mount({
-    id: "workspace-missing",
-    name: "relay",
-    photoVersion: "0f0f0f0f0f0f0f0f",
-  });
+test("a photo the host holds none of at the version the list names, or that fails to load, leaves the letter", async () => {
+  const photos: AppWorkspacePhotos = {
+    "workspace-stale": { rows: { version: "0c0c0c0c0c0c0c0c", url: PHOTO_URL } },
+    "workspace-broken": { rows: { version: "0e0e0e0e0e0e0e0e", url: PHOTO_URL } },
+  };
+  const missing = mount(
+    { id: "workspace-missing", name: "relay", photoVersion: "0f0f0f0f0f0f0f0f" },
+    photos,
+  );
+  const stale = mount(
+    { id: "workspace-stale", name: "stale", photoVersion: "0d0d0d0d0d0d0d0d" },
+    photos,
+  );
+  const broken = mount(
+    { id: "workspace-broken", name: "zeta", photoVersion: "0e0e0e0e0e0e0e0e" },
+    photos,
+  );
   await settle();
-  answer = PHOTO;
-  const broken = mount({ id: "workspace-broken", name: "zeta", photoVersion: "0e0e0e0e0e0e0e0e" });
-  await settle();
+  const offered = broken.querySelector("img") !== null;
   act(() => broken.querySelector("img")?.dispatchEvent(new Event("error")));
 
   assert.deepEqual(drawn(missing), letterTile("R"));
+  assert.equal(stale.querySelector("img"), null, "a photo of another version is not drawn");
+  assert.equal(offered, true, "the photo at the version listed is drawn");
   assert.deepEqual(drawn(broken), letterTile("Z"));
 });
 
@@ -135,49 +135,15 @@ test("a personal workspace with no photo draws its letter while its owner's pict
   assert.deepEqual(drawn(tile), letterTile("P"));
   load(tile);
   assert.deepEqual(drawn(tile), pictureTile(PICTURE_URL));
-  assert.deepEqual(sent, []);
 
   act(() => tile.querySelector("img")?.dispatchEvent(new Event("error")));
 
   assert.deepEqual(drawn(tile), letterTile("P"));
 });
 
-test("a workspace with neither a photo nor a picture draws its letter and reads nothing", async () => {
+test("a workspace with neither a photo nor a picture draws its letter", async () => {
   const tile = mount({ id: "workspace-plain", name: "plain" });
   await settle();
 
   assert.deepEqual(drawn(tile), letterTile("P"));
-  assert.deepEqual(sent, []);
-});
-
-test("a read of a version asked for again lands though an earlier read of it failed after the second was asked", async () => {
-  // Each photo read waits until the test answers it, in the order it was asked.
-  const answers: ((value: TasksWorkspacePhotoAnswer) => void)[] = [];
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_PHOTO_READ]: () => new Promise((resolve) => answers.push(resolve)),
-  });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const draw = (photoVersion: string) =>
-    act(() =>
-      root.render(
-        createElement(WorkspaceTile, {
-          workspace: { id: "workspace-flip", name: "flip", photoVersion },
-        }),
-      ),
-    );
-
-  draw("aaaaaaaaaaaaaaaa");
-  draw("bbbbbbbbbbbbbbbb");
-  draw("aaaaaaaaaaaaaaaa");
-  await settle();
-  answers[0]?.({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
-  await settle();
-  answers[2]?.(PHOTO);
-  await settle();
-  load(container);
-
-  assert.deepEqual(drawn(container), pictureTile(`data:image/png;base64,${PHOTO.base64}`));
 });

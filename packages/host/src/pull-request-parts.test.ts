@@ -14,6 +14,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import { PULL_REQUEST_WRITE_OUTCOME } from "@repo/features/pull-request-write-wire";
 import { Effect, PubSub, Stream } from "effect";
 import { type AppPullRequestParts, OWN_PULL_REQUEST } from "./app-state.js";
 import {
@@ -90,6 +91,14 @@ function listing(
 
 const PARTS = Object.values(PULL_REQUEST_PART);
 
+/** The parts asked again together as the pull request or its agent moves; the viewed marks move with its head alone, and the pickers' options with nothing. */
+const MOVING = [
+  PULL_REQUEST_PART.PULL_REQUEST,
+  PULL_REQUEST_PART.CHECKS,
+  PULL_REQUEST_PART.CONVERSATION,
+  PULL_REQUEST_PART.PUBLISHED,
+];
+
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 /** The parts over a fake service, each ask written down as `part number`, the agent's own written `own`, with the list's drawings handed through `draw`. */
@@ -121,6 +130,15 @@ function subject(failing: Set<PullRequestPart> = new Set()) {
           repository: "acme/relay",
           branch: "agent/invite-once",
           pullRequest: line(OWN, 42),
+        })),
+        reviewOptions: answering(PULL_REQUEST_PART.REVIEW_OPTIONS, () => ({
+          labels: [],
+          users: [],
+          teams: [],
+        })),
+        viewed: answering(PULL_REQUEST_PART.VIEWED, () => ({
+          outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+          files: [],
         })),
       },
       listings: Effect.map(PubSub.subscribe(drawings), Stream.fromSubscription),
@@ -158,13 +176,16 @@ it.effect(
       assert.deepEqual(asked, []);
 
       yield* draw(listing({ own: { headSha: "e4f5a6b" } }));
-      assert.deepEqual(asked.toSorted(), PARTS.map((part) => `${part} own`).toSorted());
+      assert.deepEqual(
+        asked.toSorted(),
+        [...MOVING, PULL_REQUEST_PART.VIEWED].map((part) => `${part} own`).toSorted(),
+      );
 
       asked.length = 0;
       yield* draw(
         listing({ own: { headSha: "e4f5a6b" }, other: { checks: CHECK_SUMMARY.PASSING } }),
       );
-      assert.deepEqual(asked.toSorted(), PARTS.map((part) => `${part} 7`).toSorted());
+      assert.deepEqual(asked.toSorted(), MOVING.map((part) => `${part} 7`).toSorted());
     }),
 );
 
@@ -181,8 +202,30 @@ it.effect(
 
       assert.deepEqual(
         asked.toSorted(),
-        PARTS.flatMap((part) => [`${part} own`, `${part} 7`]).toSorted(),
+        MOVING.flatMap((part) => [`${part} own`, `${part} 7`]).toSorted(),
       );
+    }),
+);
+
+it.effect(
+  "the viewed marks hold every answer, so a read that fails after one landed takes the marks away",
+  () =>
+    Effect.gen(function* () {
+      const failing = new Set<PullRequestPart>();
+      const { parts, told } = yield* subject(failing);
+      const viewedHeld = () => told.findLast((held) => LIVE_READ.PULL_REQUEST_VIEWED in held);
+      const key = { part: PULL_REQUEST_PART.VIEWED, agentId: AGENT } as const;
+
+      yield* parts.follow(key);
+      yield* settled;
+      failing.add(PULL_REQUEST_PART.VIEWED);
+      yield* parts.retry(key);
+
+      assert.deepEqual(viewedHeld(), {
+        [LIVE_READ.PULL_REQUEST_VIEWED]: {
+          [AGENT]: { [OWN_PULL_REQUEST]: { rows: { failure: AGENT_CALL_FAILURE.UNANSWERED } } },
+        },
+      });
     }),
 );
 

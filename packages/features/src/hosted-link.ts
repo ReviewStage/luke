@@ -63,6 +63,7 @@ import {
   HOSTED_API_ERROR,
   type HostedApiError,
   hostedErrorSchema,
+  IDEMPOTENCY_KEY,
   readServiceAnswer,
 } from "./service-wire.js";
 
@@ -115,10 +116,11 @@ const UNDECLARED_CODE = "UNDECLARED";
 /** The content type the link names a JSON body with, which the account call writes itself. */
 const CONTENT_TYPE_HEADER = "content-type";
 
-/** What one ask hands the link: the caller's own services to run the call on, and its deadline. */
+/** What one ask hands the link: the caller's own services to run the call on, its deadline, and the idempotency key it is sent under, where it has one. */
 interface HostedLinkContext {
   readonly services: Context.Context<HttpClient.HttpClient>;
   readonly deadline: HostedDeadline;
+  readonly idempotencyKey?: string;
 }
 
 /** The fields a refusal carries beside its slug, by the declared error that carries them. */
@@ -341,8 +343,14 @@ async function sent(
         : LONG_DEADLINE_MS[context.deadline],
   });
   const send = options.inSession === true ? sendInSession(call, options.credential) : call.send;
+  const request = callRequest(url, init);
+  const { idempotencyKey } = context;
+  const keyed: CallRequest =
+    idempotencyKey === undefined
+      ? request
+      : { ...request, headers: { ...request.headers, [IDEMPOTENCY_KEY.HEADER]: idempotencyKey } };
   const exit = await Effect.runPromiseExitWith(context.services)(
-    send(callRequest(url, init)),
+    send(keyed),
     init.signal ? { signal: init.signal } : undefined,
   );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
@@ -433,12 +441,15 @@ function traced(failed: HostedFailure, traceId: string): HostedFailure {
  * traveled under. The ask is a client span of its own, so every attempt it
  * sends carries that span's trace in `traceparent` (Effect's `HttpClient`
  * writes it), which the service continues, and is sampled at the rate the
- * service's traces are, so the flag it sends says whether to trace it.
+ * service's traces are, so the flag it sends says whether to trace it. A
+ * write sent under an idempotency key carries it on every attempt, the
+ * renewed one after a 401 among them (`IDEMPOTENCY_KEY`).
  */
 export function askHosted<Input, Output>(
   procedure: HostedProcedure<Input, Output>,
   input: Input,
   deadline: HostedDeadline = HOSTED_DEADLINE.USUAL,
+  idempotencyKey?: string,
 ): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const sampled = (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
@@ -446,7 +457,13 @@ export function askHosted<Input, Output>(
       const span = yield* Effect.orDie(Effect.currentSpan);
       const services = yield* Effect.context<HttpClient.HttpClient>();
       return yield* Effect.mapError(
-        procedure(input, { context: { services, deadline } }),
+        procedure(input, {
+          context: {
+            services,
+            deadline,
+            ...(idempotencyKey === undefined ? undefined : { idempotencyKey }),
+          },
+        }),
         (error) => traced(hostedFailureOf(error), span.traceId),
       );
     });
