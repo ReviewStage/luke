@@ -5,8 +5,10 @@
 // options)`, `sql(text, params)`, `origin`, and `setPage(page)`; what it
 // returns, what it threw, the page's address, and the console errors it raised
 // are written to `<run>/queue/out/<name>.json`, and its file leaves
-// `running/`. A step still running at `STEP_DEADLINE_MS` is answered as timed
-// out and the queue moves on. A `quit.js` stops the driver.
+// `running/`. Its deadline, `STEP_DEADLINE_MS`, counts from when it was
+// queued: a step that waited past it is answered as expired without running,
+// and one still running at it is answered as timed out while the queue moves
+// on. A `quit.js` stops the driver.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -56,12 +58,12 @@ function answerText(out) {
 
 // Note that a body past its deadline cannot be stopped, only left: it may
 // still act on the page, which the answer says so the caller looks first.
-function bounded(promise) {
+function bounded(promise, remainingMs) {
   let timer;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(
       () => reject(new Error(`the step ran past ${STEP_DEADLINE_MS} ms and was left running`)),
-      STEP_DEADLINE_MS,
+      remainingMs,
     );
   });
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
@@ -78,6 +80,8 @@ async function runStep(file, state) {
     throw error;
   }
   const code = fs.readFileSync(running, "utf8");
+  // Note that `step.sh` writes the step as it queues it, so its file's time is when the caller started waiting.
+  const remainingMs = STEP_DEADLINE_MS - (Date.now() - fs.statSync(running).mtimeMs);
   state.logs.length = 0;
   const shot = async (shotName, options = {}) => {
     const target = path.join(RUN, "shots", `${shotName}.png`);
@@ -86,11 +90,13 @@ async function runStep(file, state) {
   };
   const out = { name };
   try {
+    if (remainingMs <= 0) throw new Error(`the step waited past ${STEP_DEADLINE_MS} ms in the queue and was not run`);
     const body = new AsyncFunction("page", "context", "shot", "sql", "origin", "setPage", code);
     out.result = await bounded(
       body(state.page, state.context, shot, sql, ORIGIN, (page) => {
         state.page = page;
       }),
+      remainingMs,
     );
   } catch (error) {
     out.error = String(error?.stack ?? error).slice(0, 2000);
