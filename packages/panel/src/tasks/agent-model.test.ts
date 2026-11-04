@@ -702,22 +702,30 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
-test("a message Vespin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry, and says the developer is offline while the app does not reach the service", () => {
+test("a message Vespin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+  assert.deepEqual(
+    [
+      messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
+      messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
+    ],
+    ["No answer came back. Try again.", "No answer came back."],
+  );
+});
+
+test("a message Vespin heard nothing back on while the app does not reach the service says the developer is offline, in the composer and the Inbox, and any other note keeps its words", () => {
   const unheard = { failure: AGENT_CALL_FAILURE.UNANSWERED };
-  const boxNote = { ...messageFailureNote(unheard, null), cause: unheard };
+  const tooLong = { failure: AGENT_CALL_FAILURE.MESSAGE_TOO_LONG };
   const inboxNote = { words: messageFailureWords(unheard.failure), failure: unheard.failure };
   assert.deepEqual(
     [
-      inboxNoteReading(inboxNote, undefined, true).words,
-      noteWhileOffline(boxNote, true)?.text,
+      noteWhileOffline({ ...messageFailureNote(unheard, null), cause: unheard }, false)?.text,
       inboxNoteReading(inboxNote, undefined, false).words,
-      noteWhileOffline(boxNote, false)?.text,
+      noteWhileOffline({ ...messageFailureNote(tooLong, null), cause: tooLong }, false)?.text,
     ],
     [
-      "No answer came back. Try again.",
-      "No answer came back.",
-      "You're offline. Try again once you're back online.",
       "You're offline.",
+      "You're offline. Try again once you're back online.",
+      "That message is too long.",
     ],
   );
 });
