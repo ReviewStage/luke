@@ -199,7 +199,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * keys, by the account, which the window holds while signed in and
  * Settings › Agents draws; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
- * memories, which Settings › Memory holds; one workspace's
+ * memories, which Settings › Memory holds; the skills the account sees in
+ * one workspace, which Settings › Skills holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
  * page's tab each hold; one task's plan history, which its version history
@@ -233,6 +234,12 @@ const HOST_READS = {
     path: (key: InboxHolderKey) => [key.kind, key.id],
     hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
     retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
+  }),
+  [LIVE_READ.INSTALLED_SKILLS]: hostRead(LIVE_READ.INSTALLED_SKILLS, {
+    slice: APP_SLICE.INSTALLED_SKILLS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.INSTALLED_SKILLS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.INSTALLED_SKILLS_RETRY, { workspaceId }),
   }),
   [LIVE_READ.INTEGRATIONS]: hostRead(LIVE_READ.INTEGRATIONS, {
     slice: APP_SLICE.INTEGRATIONS,

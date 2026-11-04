@@ -13,6 +13,7 @@ import type {
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
+import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -454,6 +455,9 @@ export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
 /** Each workspace's memories the windows hold, by the workspace, most recently kept or corrected first, as the host's read of them stands, with every forget drawn over them until the read carries it (`memory-follow.ts`). */
 export type AppMemories = AppHeldById<readonly MemorySummary[]>;
 
+/** The skills the account sees in each workspace the windows hold, by the workspace, the workspace's first and then its own, as the host's read of them stands, with every write drawn over them until the read carries it (`installed-skills-follow.ts`). */
+export type AppInstalledSkills = AppHeldById<readonly InstalledSkillSummary[]>;
+
 /**
  * Each task's plan the host holds for the windows (`compose-tasks.ts`): the
  * tasks a window opened, and the few it opened lately, by the task's id,
@@ -505,6 +509,7 @@ export interface AppHostReads {
   [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.INSTALLED_SKILLS]: readonly InstalledSkillSummary[];
   [LIVE_READ.INTEGRATIONS]: IntegrationStatusesAnswer;
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.MEMORIES]: readonly MemorySummary[];
@@ -614,6 +619,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** The skills the account sees in each workspace the windows chose, by the workspace, held while Settings › Skills shows them and a while after: what that page draws. */
+  [LIVE_READ.INSTALLED_SKILLS]: AppInstalledSkills;
   /** Where every one of the account's integrations stands, held while a window draws one and a while after: what Settings › Integrations, onboarding's tools step, the composer's servers, and every server's card read. */
   [LIVE_READ.INTEGRATIONS]: AppIntegrations;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
@@ -765,6 +772,11 @@ export const HOST_READ_SLICE = {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof InboxItem,
+  },
+  [LIVE_READ.INSTALLED_SKILLS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof InstalledSkillSummary,
   },
   [LIVE_READ.INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },

@@ -10,7 +10,6 @@
   "packages/panel/src/settings/chapters-model-section.tsx": "P28: chapters model",
   "packages/panel/src/settings/host-connect-dialog.tsx": "P18: a host's pairing",
   "packages/panel/src/settings/hosts-section.tsx": "P18: hosts",
-  "packages/panel/src/settings/skills-page.tsx": "P17: Skills",
   "packages/panel/src/settings/slack-bot-channels.tsx": "P19: repositories",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
   "packages/panel/src/settings/workspace-token-repositories.tsx": "P18, P19: GitHub token set, token repositories, repositories",

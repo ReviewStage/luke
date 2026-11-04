@@ -1,10 +1,10 @@
+import { eventIterator, type } from "@orpc/contract";
 import {
   installedSkillContentViewSchema,
+  installedSkillFollowParamsSchema,
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
   installedSkillInstallViewSchema,
-  installedSkillListParamsSchema,
-  installedSkillListViewSchema,
   installedSkillPreviewFileParamsSchema,
   installedSkillPreviewFileViewSchema,
   installedSkillPreviewParamsSchema,
@@ -29,11 +29,17 @@ import { INSTALLED_SKILL_ACT_KIND } from "./kinds.js";
  * keeps (`@repo/features/contract`).
  */
 export const installedSkillActsContract = {
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_LIST]: actProcedure(
-    "Could not read your skills on this system.",
+  // Note that the hold's stream carries nothing: the held skills reach the panel on app state, and the stream is the window's hold on them.
+  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_FOLLOW]: actProcedure(
+    "Could not follow your skills on this system.",
   )
-    .input(exactInput(installedSkillListParamsSchema))
-    .output(EffectSchema.flip(installedSkillListViewSchema)),
+    .input(exactInput(installedSkillFollowParamsSchema))
+    .output(eventIterator(type<never>())),
+  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_RETRY]: actProcedure(
+    "Could not read your skills again on this system.",
+  )
+    .input(exactInput(installedSkillFollowParamsSchema))
+    .output(EffectSchema.Void),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_READ]: actProcedure(
     "Could not read the skill on this system.",
   )
