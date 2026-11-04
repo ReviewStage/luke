@@ -1548,12 +1548,15 @@ const githubGroup = (page: HTMLElement) =>
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.GITHUB_REPOSITORIES}"]`,
   ) ?? assert.fail("no GitHub group");
 
-/** What a row says: its name, and the line under it. */
+/** What a row says: its name, and the line under it, its facts read apart by one space whatever joins or separates them. */
 const rowWords = (row: HTMLElement) => [
   nameOf(row),
-  row.matches(".ui-settings-row")
+  (row.matches(".ui-settings-row")
     ? row.querySelector('[id$="description"]')?.textContent
-    : row.querySelector("small")?.textContent,
+    : row.querySelector("small")?.textContent
+  )
+    ?.replace(/\s+/gu, " ")
+    .trim(),
 ];
 
 /** What every row of the Integrations group says, in order. */
@@ -1603,7 +1606,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
       ["GitHub", undefined],
-      ["acme-org", "Connected · 0 repositories"],
+      ["acme-org", "Connected 0 repositories"],
       ["acme-labs", "Suspended or removed on GitHub."],
     ]);
     assert.equal(
@@ -1649,7 +1652,7 @@ test("an active account counts the App's repositories whose owner is its login i
   const org = rowNamed(group, "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [
-    ["acme-org", "Connected · 2 repositories"],
+    ["acme-org", "Connected 2 repositories"],
     ["acme-labs", "Suspended or removed on GitHub."],
   ]);
   assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
@@ -1682,10 +1685,17 @@ test("an account given every repository says All N and opens on the note that la
   const org = rowNamed(githubGroup(page), "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [
-    ["acme-org", "Connected · All 8 repositories"],
-    ["acme-labs-renamed", "Connected · 1 selected repository"],
-    ["acme-tools", "Connected · 2 repositories"],
+    ["acme-org", "Connected All 8 repositories"],
+    ["acme-labs-renamed", "Connected 1 selected repository"],
+    ["acme-tools", "Connected 2 repositories"],
   ]);
+  assert.deepEqual(
+    [...(org.querySelector(".ui-settings-row-description .ui-inline")?.children ?? [])].map(
+      (fact) => fact.textContent,
+    ),
+    ["Connected ", "All\u00a08\u00a0repositories "],
+    "each fact is whole, with no dot to strew at a line's edge",
+  );
   assert.deepEqual(foldLines(org), [], "more than five start folded");
   act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), [
@@ -1704,7 +1714,7 @@ test("while the repositories are read each active account's line says so, and a 
   repositoriesReadHeld = true;
   const reading = await mount(SEVERAL);
   assert.deepEqual(integrationRows(reading.page).slice(1), [
-    ["acme-org", "Connected · Reading repositories"],
+    ["acme-org", "Connected Reading repositories"],
     ["acme-labs", "Suspended or removed on GitHub."],
   ]);
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -1720,7 +1730,7 @@ test("while the repositories are read each active account's line says so, and a 
   githubRepositories = ["acme-org/relay"];
   act(() => button(group, "Retry").click());
   await settle();
-  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected · 1 repository"]]);
+  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected 1 repository"]]);
   assert.equal(group.textContent?.includes("Repositories could not be read."), false);
 });
 
@@ -1742,7 +1752,7 @@ test("a service from before several connections names one GitHub account alone, 
 
   assert.deepEqual(integrationRows(page), [
     ["GitHub", undefined],
-    ["acme-org", "Connected · 0 repositories"],
+    ["acme-org", "Connected 0 repositories"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
@@ -1803,7 +1813,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
 
   assert.deepEqual(integrationRows(connected.page), [
     ["GitHub", MANAGED_ON_GITHUB],
-    ["acme-org", "Connected · 0 repositories"],
+    ["acme-org", "Connected 0 repositories"],
     ["acme-labs", "Suspended or removed on GitHub."],
   ]);
   assert.deepEqual(integrationRows(unconnected.page), [

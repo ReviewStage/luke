@@ -14,6 +14,7 @@ import {
   ErrorState,
   SETTINGS_ROW_INDENT,
   SETTINGS_ROW_STATE,
+  SettingsFacts,
   SettingsFoldFoot,
   SettingsFoldLine,
   SettingsFoldRow,
@@ -22,6 +23,9 @@ import {
   SettingsRowMark,
   SettingsRowStateLine,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
@@ -31,6 +35,7 @@ import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { unreadShown } from "../failure-report.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { FACT_BREAK } from "./github-dialog.js";
 
 /**
  * workspace-github-accounts.tsx -- every GitHub account connected to a workspace, under GitHub's row on Settings › Workspace, each with the repositories it gave our GitHub App.
@@ -132,19 +137,30 @@ function AccountMark({ login }: { login: string }): React.JSX.Element {
   );
 }
 
-/** An active account's line: Connected, and after it what else is known, each part breaking from the other rather than inside it. */
+/**
+ * An active account's line: Connected, and after it what else is known, as
+ * the token's facts are set (`TokenFacts`): each fact whole, its words
+ * joined so it never breaks inside, and the two set apart by their gap
+ * rather than a dot, which a narrow row would strew at a line's edge.
+ */
 function ConnectedLine({ after }: { after: string | undefined }): React.JSX.Element {
-  return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} wrap={after !== undefined}>
-      {after === undefined ? (
-        WORDS.CONNECTED
-      ) : (
-        <>
-          <span>{`${WORDS.CONNECTED} · `}</span>
-          <span>{after}</span>
-        </>
-      )}
+  const connected = (
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+      {WORDS.CONNECTED}
     </SettingsRowStateLine>
+  );
+  if (after === undefined) return connected;
+  return (
+    <SettingsFacts>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
+        {connected}
+        {FACT_BREAK}
+      </Text>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
+        {after.replaceAll(" ", "\u00a0")}
+        {FACT_BREAK}
+      </Text>
+    </SettingsFacts>
   );
 }
 
