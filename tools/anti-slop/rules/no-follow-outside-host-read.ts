@@ -111,9 +111,9 @@ export const noFollowOutsideHostReadRule = defineRule({
       },
       CallExpression(node) {
         const { callee } = node;
-        if (callee.type === "Identifier" && FOLLOW_OPENERS.has(callee.name)) {
-          reads.push({ node, what: callee.name });
-        }
+        if (callee.type !== "Identifier") return;
+        if (FOLLOW_OPENERS.has(callee.name)) reads.push({ node, what: callee.name });
+        if (callee.name === "require") noteImport(node, literalText(node.arguments[0]));
       },
       MemberExpression(node) {
         const named = memberNamed(node);

@@ -100,15 +100,17 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       filename: NEW_UI_FILE,
       errors: [{ messageId: "newPoll" }],
     },
-    // The hook's door reached from anywhere else, under an alias, re-exported, or imported late.
+    // The hook's door reached from anywhere else: under an alias, re-exported, imported late, or required.
     {
       code: [
         'import { streamFrom as hold } from "../act-stream.js";',
         'export { followStream } from "../act-stream.js";',
         'const door = import("../act-stream.js");',
+        'const required = require("../act-stream.js");',
       ].join("\n"),
       filename: NEW_FILE,
       errors: [
+        { messageId: "doorImport" },
         { messageId: "doorImport" },
         { messageId: "doorImport" },
         { messageId: "doorImport" },

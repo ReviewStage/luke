@@ -53,9 +53,10 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
  * one hook path reads, so a read added is an entry rather than a hook.
- * Nothing in `packages/panel` or `packages/ui` reads server data outside
- * this hook, and only this hook imports `act-stream.ts`, the door it holds
- * its follows open by (`anti-slop/no-follow-outside-host-read`).
+ * Nothing in `packages/panel` or `packages/ui` but a test reads server
+ * data outside this hook, and nothing but this hook and the door's own test
+ * imports `act-stream.ts`, the door it holds its follows open by
+ * (`anti-slop/no-follow-outside-host-read`).
  */
 
 export const HOST_READ_STATUS = {
