@@ -92,11 +92,12 @@ function followChapters(
           })
         : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
     decode: (parts) => Option.some(parts.chapters),
-    publish: (chapters) => {
-      if (chapters === undefined) return answers.unanswered();
-      rows = chapters;
-      draw();
-    },
+    publish: (chapters) =>
+      Effect.sync(() => {
+        if (chapters === undefined) return answers.unanswered();
+        rows = chapters;
+        draw();
+      }),
   });
 }
 

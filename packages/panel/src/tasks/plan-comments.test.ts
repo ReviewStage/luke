@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@repo/brand";
 import { formatCount } from "@repo/features/number-format";
 import {
   PLAN_COMMENT_ACTION,
@@ -717,30 +716,6 @@ test("a press that opens a thread puts the caret in its reply, and a thread draw
   );
 });
 
-test("a failed send says why in the foot under the box, and no note stands over the card", async () => {
-  const { container } = wide(() => drawn("page", []));
-  const paragraph = [...container.querySelectorAll("p")].find((p) =>
-    p.textContent?.startsWith("Admins can withdraw"),
-  );
-  assert.ok(paragraph);
-  act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
-  act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
-  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
-  typeInto(pending()?.querySelector("textarea"), "Ask Vespin about retries");
-
-  act(() => {
-    pending()
-      ?.querySelector("textarea")
-      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-  await act(async () => undefined);
-
-  const foot = pending()?.querySelector(".ui-composer-foot-note");
-  assert.equal(foot?.textContent, "not in this test");
-  assert.equal(foot?.querySelector("[role='alert']")?.textContent, "not in this test");
-  assert.equal(pending()?.querySelector(".comment-note"), null);
-});
-
 test("a failed act on an open thread says why in its reply's foot", () => {
   const { container, notes } = drawn("page");
   const mark = container.querySelector<HTMLElement>(
@@ -1187,7 +1162,7 @@ test("a comment's field offers no Vespin among the agents, since no task has one
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
 
-test("a reply's field empties as it is sent, and a refused reply takes the words back, or with one queued behind it, which never goes, stands apart with it as not sent, Retry sending each under its own key", async () => {
+test("a reply's field empties as it is sent and takes the next at once, each sent as it is written, and a refused reply comes back into the field, sent again under its key", async () => {
   const answer = Promise.withResolvers<boolean>();
   const { container, asked } = drawn("page", THREADS, () =>
     asked.length === 1 ? false : asked.length === 2 ? answer.promise : true,
@@ -1202,128 +1177,50 @@ test("a reply's field empties as it is sent, and a refused reply takes the words
   );
   assert.ok(field);
   await post(field, "Not for v1.");
-  assert.equal(field.value, "Not for v1.", "a reply refused alone comes back into the field");
+  assert.equal(field.value, "Not for v1.", "a reply refused comes back into the field");
 
   await post(field, "Not for v1.");
   assert.equal(field.value, "", "the field empties as the words are sent");
   await post(field, "Maybe v2.");
-  await act(async () => answer.resolve(false));
   const words = () => asked.map(({ action }) => ("words" in action ? action.words : undefined));
-  assert.deepEqual(words(), ["Not for v1.", "Not for v1."], "the reply behind never goes");
-  assert.equal(field.value, "");
-  const unsent = container.querySelector<HTMLElement>(".comment-unsent");
-  assert.deepEqual(
-    [...(unsent?.querySelectorAll(".comment-words") ?? [])].map((each) => each.textContent),
-    ["Not for v1.", "Maybe v2."],
-  );
+  assert.deepEqual(words(), ["Not for v1.", "Not for v1.", "Maybe v2."], "none waits on another");
+  await act(async () => answer.resolve(false));
+  assert.equal(field.value, "Not for v1.");
 
-  await act(async () =>
-    [...(unsent?.querySelectorAll("button") ?? [])]
-      .find((button) => button.textContent === "Retry")
-      ?.click(),
-  );
-  await act(async () => undefined);
   const keys = asked.map(({ action }) => ("clientKey" in action ? action.clientKey : undefined));
-  assert.deepEqual(words().slice(2), ["Not for v1.", "Maybe v2."]);
-  assert.equal(keys[2], keys[1], "the reply whose answer may be lost goes again under its key");
-  assert.notEqual(keys[3], keys[2]);
+  assert.equal(keys[1], keys[0], "the reply whose answer may be lost goes again under its key");
+  assert.notEqual(keys[2], keys[1]);
 });
 
-test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy, and one the thread already holds is drawn there alone", async () => {
-  const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
-  const { container, asked, rethread } = drawn(
-    "page",
-    THREADS,
-    () => answers[asked.length - 1]?.promise ?? true,
-    PLAN,
-    undefined,
-    undefined,
-    "u-dean",
-  );
-  act(() =>
-    container
-      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
-      ?.click(),
-  );
-  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
-  assert.ok(card);
-  const field = card.querySelector<HTMLTextAreaElement>("textarea");
-  assert.ok(field);
-  const sent = () => asked.map(({ action }) => ("words" in action ? action.words : undefined));
-  const sending = () =>
-    [...card.querySelectorAll("[data-sending] .comment-words")].map((words) => words.textContent);
-
-  await post(field, "Not for v1.");
-  await post(field, "Maybe v2.");
-  assert.deepEqual(sending(), ["Not for v1.", "Maybe v2."]);
-  assert.deepEqual(sent(), ["Not for v1."], "the second waits on the first's answer");
-  typeInto(field, "And a third?");
-  const foot = (label: string) =>
-    card.querySelector<HTMLButtonElement>(`.ui-composer-foot button[aria-label="${label}"]`);
-  assert.equal(foot("Sending"), null);
-  assert.equal(foot("Reply")?.disabled, false);
-  assert.equal(foot("Attach files")?.disabled, false);
-
-  await act(async () => answers[0]?.resolve(true));
-  assert.deepEqual(sent(), ["Not for v1.", "Maybe v2."]);
-  assert.deepEqual(sending(), ["Maybe v2."]);
-  // The read brings the reply before its send answers, as one that wakes an agent may.
-  rethread(
-    THREADS.map((thread) =>
-      thread.id === ID.OPEN
-        ? {
-            ...thread,
-            entries: [
-              ...thread.entries,
-              {
-                id: "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a",
-                kind: PLAN_COMMENT_ENTRY.COMMENT,
-                writer: {
-                  actor: PLAN_COMMENT_ACTOR.MEMBER,
-                  by: { userId: "u-dean", name: "Dean" },
-                },
-                words: "Maybe v2.",
-                at: 2,
-              },
-            ],
-          }
-        : thread,
-    ),
-  );
-  const shown = [...card.querySelectorAll(".comment-words")].map((words) => words.textContent);
-  assert.equal(shown.filter((words) => words === "Maybe v2.").length, 1);
-  await act(async () => answers[1]?.resolve(true));
-  assert.deepEqual(sending(), []);
-});
-
-test("a thread being started keeps its card through a press away while its words are sent, and takes them back where the send fails", async () => {
-  const { container } = wide(() => drawn("page", []));
+test("a thread being started gives its card's place to the thread as its words are sent, under the id its first comment's key names, and words refused stand as not sent where its words are commented on again", async () => {
+  const { container, started } = wide(() => drawn("page", []));
   const paragraph = [...container.querySelectorAll("p")].find((p) =>
     p.textContent?.startsWith("Admins can withdraw"),
   );
   assert.ok(paragraph);
-  act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
-  act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+  const comment = () => {
+    act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
+    act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+  };
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  comment();
   const field = pending()?.querySelector<HTMLTextAreaElement>("textarea");
   assert.ok(field);
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(field, "Ask Vespin about retries");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  typeInto(field, "Ask Vespin about retries");
 
   act(() => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
-  assert.ok(pending(), "the card stays while its words are sent");
+  assert.equal(pending(), null, "the card gives way as its words are sent");
+  const [start] = started;
+  assert.ok(start);
+  assert.equal(start.id, start.clientKey);
 
   await act(async () => undefined);
+  comment();
   assert.equal(
-    pending()?.querySelector<HTMLTextAreaElement>("textarea")?.value,
+    pending()?.querySelector("[data-unsent] .comment-words")?.textContent,
     "Ask Vespin about retries",
-    "and takes them back where the send fails",
   );
 });
 
@@ -1998,64 +1895,18 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
   );
 });
 
-test("a comment's Save is busy from the press, shows its ring once the answer has waited the settle delay, and is a button again when the service answers", async () => {
-  const answer = Promise.withResolvers<boolean>();
-  const { container, edit, field, asked } = ownComment(() => answer.promise);
+test("an edit's field closes on Save, before the service answers", () => {
+  const { edit, field, press, asked } = ownComment(() => Promise.withResolvers<boolean>().promise);
 
   edit();
   typeInto(field(), "Ship by Friday.");
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  try {
-    const save = () =>
-      [...container.querySelectorAll<HTMLButtonElement>(".comment-editing button")].find(
-        (each) => each.textContent === "Save" || each.getAttribute("aria-label") === "Saving",
-      );
-    act(() => save()?.click());
-    assert.equal(save()?.getAttribute("aria-label"), "Saving");
-    assert.equal(save()?.querySelector(".ui-spinner-ring") != null, false);
-    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-    assert.equal(save()?.querySelector(".ui-spinner-ring") != null, true);
+  press("Save");
 
-    // A press while it is out asks nothing more.
-    act(() => save()?.click());
-    assert.equal(asked.length, 1);
-
-    // The service refuses: the field stays, and Save is a button again.
-    await act(async () => answer.resolve(false));
-    assert.equal(save()?.getAttribute("aria-busy"), null);
-    assert.ok(field() !== null);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test("a thread's check shows busy while its Resolve is out, and stops when the service answers", async () => {
-  const answer = Promise.withResolvers<boolean>();
-  const { container, asked } = drawn("tab", THREADS, () => answer.promise);
-  const card = () =>
-    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
-  const check = () =>
-    card()?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Resolve"], button[aria-label="Resolving"]',
-    );
-  act(() => card()?.querySelector<HTMLElement>(".comment-entry")?.click());
-
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  try {
-    act(() => check()?.click());
-    assert.equal(check()?.getAttribute("aria-label"), "Resolving");
-    assert.equal(check()?.querySelector(".ui-spinner-ring") != null, false);
-    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-    assert.equal(check()?.querySelector(".ui-spinner-ring") != null, true);
-    act(() => check()?.click());
-    assert.equal(asked.length, 1);
-
-    await act(async () => answer.resolve(false));
-    assert.equal(check()?.getAttribute("aria-label"), "Resolve");
-    assert.equal(check()?.getAttribute("aria-busy"), null);
-  } finally {
-    vi.useRealTimers();
-  }
+  assert.ok(field() === null);
+  assert.deepEqual(
+    asked.map(({ action }) => ("words" in action ? action.words : undefined)),
+    ["Ship by Friday."],
+  );
 });
 
 test("an edit emptied and saved asks to delete the comment, and only the confirm deletes it", async () => {

@@ -661,9 +661,9 @@ function useCommenting(place: PlanCommentPlace | undefined) {
     stopPick: () => setPicking(false),
     quote: ({ box, ...element }: PagePicked) => begin({ element, box }, element.quote),
     wholePage: () => begin({ element: undefined, box: undefined }, undefined),
-    started: (thread: PlanCommentThread) => {
+    started: (threadId: string) => {
       setPending(undefined);
-      setOpen([thread.id]);
+      setOpen([threadId]);
     },
     dismiss,
     setOpen,
