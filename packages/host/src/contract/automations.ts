@@ -1,19 +1,14 @@
+import { eventIterator, type } from "@orpc/contract";
 import {
-  type AutomationListView,
-  type AutomationRunsView,
   automationChangeParamsSchema,
   automationCreateParamsSchema,
   automationDeletedViewSchema,
   automationFollowSchema,
   automationIdParamsSchema,
-  automationListParamsSchema,
-  automationListViewSchema,
   automationRunParamsSchema,
-  automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
 } from "@repo/features/automation-view";
-import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AUTOMATION_ACT_KIND } from "./kinds.js";
@@ -22,15 +17,11 @@ import { AUTOMATION_ACT_KIND } from "./kinds.js";
  * automations.ts -- the Automations pages' asks of the host about the account's automations, as procedures.
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port. A follow's output is the stream
- * of what it follows, each as it now stands, for as long as it is held open.
+ * row's value into what crosses the port. A hold's stream carries nothing:
+ * what it holds reaches the panel on app state, and the stream is the
+ * window's hold on it.
  */
 export const automationActsContract = {
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]: actProcedure(
-    "Could not read the automations on this system.",
-  )
-    .input(exactInput(automationListParamsSchema))
-    .output(EffectSchema.flip(automationListViewSchema)),
   [AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE]: actProcedure(
     "Could not make the automation on this system.",
   )
@@ -51,11 +42,6 @@ export const automationActsContract = {
   )
     .input(exactInput(automationRunParamsSchema))
     .output(EffectSchema.flip(automationRunViewSchema)),
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS]: actProcedure(
-    "Could not read the automation's runs on this system.",
-  )
-    .input(exactInput(automationIdParamsSchema))
-    .output(EffectSchema.flip(automationRunsViewSchema)),
   [AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: actProcedure(
     "Could not make a new webhook secret on this system.",
   )
@@ -65,5 +51,10 @@ export const automationActsContract = {
     "Could not follow the automations on this system.",
   )
     .input(exactInput(automationFollowSchema))
-    .output(eventIterator(type<AutomationListView | AutomationRunsView>())),
+    .output(eventIterator(type<never>())),
+  [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: actProcedure(
+    "Could not read the automations again on this system.",
+  )
+    .input(exactInput(automationFollowSchema))
+    .output(EffectSchema.Void),
 };

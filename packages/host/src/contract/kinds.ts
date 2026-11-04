@@ -70,18 +70,18 @@ export const ACCOUNT_ASK_ACT_KIND = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
 } as const;
 
-/** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
+/** The Automations pages' asks: the account's automations made, changed, deleted, and run now, and a workspace's automations, its runs, or one's runs held and read again. */
 export const AUTOMATION_ACT_KIND = {
-  AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
-  AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  /** A workspace's automations, its runs, or one's runs held for the window while it holds the stream open; what they hold reaches it on app state. */
   AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A held list or history read again at once, as Try again asks. */
+  AUTOMATIONS_RETRY: "automations.retry",
 } as const;
 
 /**
@@ -698,14 +698,13 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
   AGENTS_PICTURE: ACT_USE.FETCH,
 
-  AUTOMATIONS_LIST: ACT_USE.READ,
   AUTOMATIONS_CREATE: ACT_USE.WRITE,
   AUTOMATIONS_CHANGE: ACT_USE.WRITE,
   AUTOMATIONS_DELETE: ACT_USE.WRITE,
   AUTOMATIONS_RUN: ACT_USE.WRITE,
-  AUTOMATIONS_RUNS: ACT_USE.READ,
   AUTOMATIONS_NEW_WEBHOOK_SECRET: ACT_USE.WRITE,
   AUTOMATIONS_FOLLOW: ACT_USE.READ,
+  AUTOMATIONS_RETRY: ACT_USE.READ,
 
   BROWSER_LIVE_ATTACH: ACT_USE.WRITE,
   BROWSER_LIVE_DETACH: ACT_USE.WRITE,

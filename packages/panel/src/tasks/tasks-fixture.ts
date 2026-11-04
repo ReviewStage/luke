@@ -38,7 +38,7 @@ import {
   agentTasksView,
   FIXTURE_AGENT_ID,
 } from "./agent-fixture.js";
-import { automationsActAnswer, automationsLaunchPlace } from "./automations-fixture.js";
+import { automationsAppState, automationsLaunchPlace } from "./automations-fixture.js";
 import {
   FIXTURE_PERSON,
   fixtureMembersAnswer,
@@ -94,6 +94,9 @@ const FIXTURE_TEAM: Workspace = {
   github: { login: "acme", active: true },
 };
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
+
+/** The fixture's workspaces by id, which their automations' reads are held by. */
+export const FIXTURE_WORKSPACE_IDS: readonly string[] = FIXTURE_WORKSPACES.map(({ id }) => id);
 
 /**
  * The reference journey's task partway through its conversation: the
@@ -642,7 +645,8 @@ function emptyTaskAnswer(
  * so an act that answers nothing is told from one left to main: the
  * tasks-comments profile's plan comments, the fixture task's version
  * history under every profile, its agent
- * profiles' tabs' reads, its signed-in profiles' pages' reads, every
+ * profiles' tabs' reads, its signed-in profiles' pages' reads (an
+ * Automations profile's are laid on its document instead), every
  * profile's workspace members, every other profile's task as one with no
  * agents, and nothing else, which goes to main as it
  * would.
@@ -656,7 +660,6 @@ export function fixtureActAnswer(
     commentsActAnswer(run.profile, kind, payload) ??
     historyActAnswer(kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
-    automationsActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
     fixtureMembersAnswer(kind, payload) ??
     emptyTaskAnswer(kind)
@@ -667,11 +670,15 @@ export function fixtureActAnswer(
  * Main's document as a fixture run draws it (`use-app-state.ts`): with the
  * synthetic account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
- * agent showed under the agent profiles (`agent-fixture.ts`), and as main
- * holds it under any other.
+ * agent showed under the agent profiles (`agent-fixture.ts`), the
+ * workspaces' automations and runs held under the Automations profiles
+ * (`automations-fixture.ts`), and as main holds it under any other.
  */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
-  return agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID);
+  return automationsAppState(
+    agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID),
+    FIXTURE_WORKSPACE_IDS,
+  );
 }
 
 /**

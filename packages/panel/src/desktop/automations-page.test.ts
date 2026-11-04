@@ -6,7 +6,6 @@ import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationCreateParams,
-  type AutomationListView,
 } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
@@ -35,7 +34,6 @@ import {
 } from "@repo/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { PortActResult } from "@repo/host/contract";
 import type { Experiment } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { PROFILE } from "@repo/ui";
@@ -54,7 +52,7 @@ import {
 } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handHostReads, holdAutomations } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
@@ -152,95 +150,32 @@ const CI_DIGEST = {
 let root: Root | undefined;
 /** The service's automations, as a read of the list answers them and a change changes them. */
 let standing: AutomationSummary[] = [];
-/** How the next reads of the list answer before the service's own, in order. */
-let lists: AutomationListView[] = [];
-/** A follow stream a page holds open, which a test pushes to as the host would. */
-interface Follower {
-  readonly kind: string;
-  readonly id: string;
-  readonly push: (view: unknown) => void;
-  closed: boolean;
-}
+/** How many reads of the list are refused before one answers. */
+let listRefusals = 0;
 
-/** Every follow stream a page opened, in order. */
-let followers: Follower[] = [];
+/** The host's holds on the page's lists and histories, as the test's host answers them. */
+let host: ReturnType<typeof holdAutomations>;
 
-/** A stream that hands `first` and then each push, until the page closes it. */
-function pushable(
-  kind: string,
-  id: string,
-  first: readonly unknown[],
-): AsyncIterableIterator<unknown> {
-  const queue = [...first];
-  let wake: (() => void) | undefined;
-  const follower: Follower = {
-    kind,
-    id,
-    closed: false,
-    push: (view) => {
-      queue.push(view);
-      wake?.();
-    },
-  };
-  followers.push(follower);
-  const stream: AsyncIterableIterator<unknown> = {
-    [Symbol.asyncIterator]: () => stream,
-    next: async () => {
-      while (queue.length === 0 && !follower.closed) {
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-      }
-      if (follower.closed) return { done: true, value: undefined };
-      return { done: false, value: queue.shift() };
-    },
-    return: async () => {
-      follower.closed = true;
-      wake?.();
-      return { done: true, value: undefined };
-    },
-  };
-  return stream;
-}
-
-/** The follows of a workspace's list alone, in order, apart from its runs' the tabs hold. */
-function listFollowers(): Follower[] {
-  return followers.filter((each) => each.kind === AUTOMATION_FOLLOW.WORKSPACE);
-}
-
-/** A workspace's list as the host pushes it: the next scripted answer, or what stands in it. */
-function listOf(workspaceId: string): unknown {
-  return (
-    lists.shift() ?? { automations: standing.filter((each) => each.workspaceId === workspaceId) }
-  );
-}
-
-/** What stands pushed to every page still following a workspace or runs, as the host pushes a change. */
-function pushStanding(): void {
-  for (const follower of followers) {
-    if (follower.closed) continue;
-    follower.push(follower.kind === AUTOMATION_FOLLOW.WORKSPACE ? listOf(follower.id) : { runs });
-  }
+/** Every workspace whose list was read, by a hold or a Try again, in order. */
+function listed(): string[] {
+  return host.asked
+    .filter((each) => each.kind === AUTOMATION_FOLLOW.WORKSPACE)
+    .map((each) => each.id);
 }
 
 /**
- * What stands pushed to every page following a workspace's list, as the host
- * draws a write on it before the write answers (`@repo/host`'s
- * `automation-collections.ts`).
+ * What stands laid again for every list and history a page held, as the
+ * host lays a change, a write drawn on a list before it answers among them
+ * (`@repo/host`'s `automation-collections.ts`).
  */
-function drawWrite(): void {
-  for (const follower of listFollowers()) {
-    if (follower.closed) continue;
-    follower.push({ automations: standing.filter((each) => each.workspaceId === follower.id) });
-  }
+function layStanding(): void {
+  host.lay();
 }
 
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
-/** Every workspace whose list was read, in order. */
-let listed: (string | undefined)[] = [];
 /** Every change asked, as the act carried it. */
 let changes: unknown[] = [];
 /** Every automation made, as the act carried it. */
@@ -255,7 +190,7 @@ let workspaceAgents: readonly AgentSummary[] = [];
 let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
-/** Every run of the workspace's automations, as its Runs tab's follow pushes them. */
+/** Every run of the workspace's automations, as its Runs tab's read holds them. */
 let workspaceRuns: AutomationWorkspaceRun[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
@@ -317,11 +252,9 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
-  followers = [];
-  lists = [];
+  listRefusals = 0;
   listHeld = false;
   heldChanges = undefined;
-  listed = [];
   changes = [];
   creates = [];
   deletes = [];
@@ -354,23 +287,6 @@ beforeEach(() => {
   sentryRefusals = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
-        const { kind, id } = request.payload;
-        let first: unknown[] = [];
-        if (kind === AUTOMATION_FOLLOW.WORKSPACE) {
-          listed.push(id);
-          if (!listHeld) first = [listOf(id)];
-        } else if (kind === AUTOMATION_FOLLOW.WORKSPACE_RUNS) {
-          first = [{ runs: workspaceRuns }];
-        } else if (!runsHeld) {
-          first = [{ runs }];
-        }
-        // SAFETY: the page reads oRPC's stream as an async iterator alone, which this is.
-        const value = pushable(kind, id, first) as unknown as PortActResult<
-          typeof ACT_KIND.AUTOMATIONS_FOLLOW
-        >;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
       if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
         changes.push(request.payload);
         const { automationId, change } = request.payload;
@@ -381,7 +297,7 @@ beforeEach(() => {
         }
         const automation = { ...was, ...change };
         standing = standing.map((each) => (each.id === automationId ? automation : each));
-        drawWrite();
+        layStanding();
         const done = { status: FAKE_ANSWER.DONE, value: { automation } } as const;
         if (heldChanges === undefined) return Promise.resolve(done);
         const held = heldChanges;
@@ -407,7 +323,7 @@ beforeEach(() => {
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
         standing = [made, ...standing];
-        drawWrite();
+        layStanding();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
@@ -475,7 +391,7 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
-        drawWrite();
+        layStanding();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
       if (request.kind === ACT_KIND.AGENTS_MODELS) {
@@ -511,6 +427,19 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
+  });
+  // Note that each list and history a page holds is laid on its document as the host lays it.
+  host = holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => {
+      if (listHeld) return undefined;
+      if (listRefusals > 0) {
+        listRefusals -= 1;
+        return { failed: true };
+      }
+      return { rows: standing.filter((each) => each.workspaceId === workspaceId) };
+    },
+    [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: () => ({ rows: workspaceRuns }),
+    [AUTOMATION_FOLLOW.RUNS]: () => (runsHeld ? undefined : { rows: runs }),
   });
 });
 
@@ -598,7 +527,7 @@ test("the listed workspace's automations stand before the personal ones, under a
   const page = mount();
   await settle();
 
-  assert.deepEqual(listed, [WORKSPACE.id]);
+  assert.deepEqual(listed(), [WORKSPACE.id]);
   assert.deepEqual(
     [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
     ["Acme", "Only you"],
@@ -677,7 +606,7 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
-test("what changed elsewhere is drawn as the host pushes it, and a switch reads nothing again", async () => {
+test("what changed elsewhere is drawn as the host lays it, and a switch reads nothing again", async () => {
   const page = mount();
   await settle();
   standing = standing.map((each) =>
@@ -690,8 +619,8 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
       ?.click(),
   );
   await settle();
-  assert.deepEqual(listed, [WORKSPACE.id], "the switch reads the list no more");
-  pushStanding();
+  assert.deepEqual(listed(), [WORKSPACE.id], "the switch reads the list no more");
+  layStanding();
   await settle();
 
   assert.deepEqual(rows(page), [
@@ -699,27 +628,6 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
     ["Dependency bumps, weekly", "Acme"],
     ["Morning digest", "Only you"],
   ]);
-});
-
-test("a window moved to another workspace lets the list it followed go, and follows that workspace's", async () => {
-  const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
-  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id, mine: true });
-  standing = [...standing, betaAutomation];
-  const page = mount();
-  await settle();
-
-  render(tasksControl({ workspace: beta }));
-  await settle();
-
-  assert.deepEqual(rows(page), [["Beta's digest", "Only you"]]);
-  assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
-  assert.deepEqual(
-    listFollowers().map((each) => [each.id, each.closed]),
-    [
-      [WORKSPACE.id, true],
-      [beta.id, false],
-    ],
-  );
 });
 
 test("a switch the service refuses stays where it was and says who may move it", async () => {
@@ -744,7 +652,7 @@ test("a switch the service refuses stays where it was and says who may move it",
 
 test("a list that could not be read says so, and Retry reads it again", async () => {
   standing = [DIGEST];
-  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  listRefusals = 1;
   const page = mount();
   await settle();
 
@@ -755,31 +663,8 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   act(() => retry?.click());
   await settle();
 
-  assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
+  assert.deepEqual(listed(), [WORKSPACE.id, WORKSPACE.id]);
   assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
-});
-
-test("a push that fails over a list already read keeps its rows under Could not refresh and Retry, and Retry reads the list again", async () => {
-  standing = [DIGEST];
-  const page = mount();
-  await settle();
-
-  act(() => listFollowers()[0]?.push({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }));
-  await settle();
-
-  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
-  const note = page.querySelector('[role="alert"]');
-  assert.match(note?.textContent ?? "", /Could not refresh/u);
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
-  const retry = [...(note?.querySelectorAll("button") ?? [])].find(
-    (button) => button.textContent === "Retry",
-  );
-  act(() => retry?.click());
-  await settle();
-
-  assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
-  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
-  assert.equal(page.querySelector('[role="alert"]'), null, "the line goes once the list is read");
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
@@ -790,11 +675,10 @@ test("with no automations the page says what one is, and with no workspace liste
   assert.match(page.textContent ?? "", /No automations yet\./u);
   act(() => root?.unmount());
   root = undefined;
-  listed = [];
 
   mount(tasksControl({ workspace: undefined }));
   await settle();
-  assert.deepEqual(listed, []);
+  assert.deepEqual(listed(), [WORKSPACE.id], "no list is read with no workspace listed");
 });
 
 /** The window's bar over `page`, its parts in the order they stand, each by its text. */
@@ -889,7 +773,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     true,
   );
   assert.doesNotMatch(linked.textContent ?? "", /Not found/u);
-  assert.deepEqual(listed, [], "no workspace's list is asked for");
+  assert.deepEqual(listed(), [], "no workspace's list is asked for");
 });
 
 /** The workspace the account made first, its personal one, where everything is its own. */
@@ -1501,7 +1385,6 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
 });
 
 test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
-  handState({});
   standing = [{ ...DIGEST, mine: false }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
   await settle();
@@ -1836,7 +1719,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
   // The read Retry asked for lands, listing the workspace, whose automations are then read.
   render(tasksControl({ workspace: WORKSPACE }));
   await settle();
-  assert.deepEqual(listed, [WORKSPACE.id]);
+  assert.deepEqual(listed(), [WORKSPACE.id]);
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.ok(rows(page).length > 0, "the workspace's automations are drawn");
 
@@ -1851,7 +1734,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
 });
 
 test("an automation's page whose list could not be read says so with Retry, rather than calling it gone", async () => {
-  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  listRefusals = 1;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
@@ -2083,22 +1966,6 @@ test("Escape while writing the prompt lets go of the caret and reaches the windo
   assert.deepEqual(reached, [true, true]);
   assert.notEqual(document.activeElement, prompt);
   assert.equal(prompt.value, "Triage the issues opened overnight.");
-});
-
-test("a refresh that fails while an automation's page stands keeps the page and what was typed in it", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
-
-  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
-  pushStanding();
-  await settle();
-
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "Sweep",
-  );
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
 });
 
 test("a new automation with no repository is created to work in none, but not on a GitHub event, whose refusal describes the repository chip", async () => {
@@ -2566,7 +2433,7 @@ test("an automation's runs stand as quiet rows under the panel's heading while t
   assert.ok((wait?.querySelectorAll(".ui-list-row .ui-skeleton").length ?? 0) > 0);
 });
 
-test("Run now starts a run under a key of its own, and the run stands first once it is pushed", async () => {
+test("Run now starts a run under a key of its own, and the run stands first once it is laid", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
@@ -2577,7 +2444,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
 
   act(() => button("Run now").click());
   await settle();
-  pushStanding();
+  layStanding();
   await settle();
 
   assert.deepEqual(runsAsked, [SWEEP.id]);

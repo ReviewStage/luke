@@ -21,6 +21,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -72,6 +73,7 @@ import {
   handCapabilities,
   handHostReads,
   handState,
+  holdAutomations,
   holdPages,
   stateWith,
 } from "../testing/app-state.js";
@@ -246,12 +248,6 @@ beforeEach(() => {
   gitHub = new Map();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value: { automations: [SWEEP] },
-        });
-      }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve(
           members === undefined
@@ -1330,6 +1326,9 @@ function origin(page: HTMLElement): OpenedOrigin {
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
+  holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: [SWEEP] }),
+  });
   const opened: unknown[] = [];
   const tasks = tasksControl({ workspaces: [ACME] });
   const page = mount({

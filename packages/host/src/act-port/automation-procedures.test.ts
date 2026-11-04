@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import {
-  AUTOMATION_CALL_FAILURE,
-  AUTOMATION_FOLLOW,
-  type AutomationFollowed,
-} from "@repo/features/automation-view";
+import { AUTOMATION_CALL_FAILURE, AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import { Effect } from "effect";
 import {
   type ActPortClient,
@@ -23,9 +19,9 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * only a panel of this build's own renderer asks; any other
  * window, and a frame this build does not trust, are refused in each
  * kind's own words before the host is asked; and a panel's ask reaches the
- * host with its payload as the panel sent it. A follow's stream has the
- * host follow what it names from its first stream to its last, and hears
- * what the host tells of it alone.
+ * host with its payload as the panel sent it. A hold's stream has the
+ * host hold what it names from its first stream to its last, and carries
+ * nothing, since what it holds reaches the panel on app state.
  */
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -56,11 +52,9 @@ const RUN_KEY = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]: "Could not read the automations on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE]: "Could not change the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE]: "Could not delete the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_RUN]: "Could not run the automation on this system.",
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS]: "Could not read the automation's runs on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]:
     "Could not make a new webhook secret on this system.",
 } as const;
@@ -74,12 +68,6 @@ const ACTS: readonly {
   payload: PortActPayload<Kind>;
   call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
 }[] = [
-  {
-    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_LIST,
-    host: "list",
-    payload: { workspaceId: "workspace-1" },
-    call: (client) => client[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]({ workspaceId: "workspace-1" }),
-  },
   {
     kind: AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE,
     host: "change",
@@ -108,12 +96,6 @@ const ACTS: readonly {
       }),
   },
   {
-    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS,
-    host: "runs",
-    payload: { automationId: AUTOMATION_ID },
-    call: (client) => client[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS]({ automationId: AUTOMATION_ID }),
-  },
-  {
     kind: AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET,
     host: "new secret",
     payload: { automationId: AUTOMATION_ID },
@@ -136,16 +118,14 @@ function windowPort(actor: typeof PANEL, trusted = true) {
       return { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
     });
   const host: HostAsk = {
-    automationList: unanswered("list"),
     automationCreate: unanswered("create"),
     automationChange: unanswered("change"),
     automationDelete: unanswered("delete"),
     automationRun: unanswered("run"),
-    automationRuns: unanswered("runs"),
     automationNewWebhookSecret: unanswered("new secret"),
     automationsFollow: () => Effect.void,
     automationsUnfollow: () => Effect.void,
-    onAutomationsChanged: () => () => undefined,
+    automationsRetry: () => Effect.void,
   };
   const client = windowClient(automationProcedures({ host }), actor, trusted);
   return { client, asked };
@@ -185,8 +165,8 @@ it("a payload carrying a key its kind does not name is refused in the kind's own
   // A payload held in a binding, as a window built it, so the compiler leaves its extra key be.
   const payload = { automationId: AUTOMATION_ID, extra: true };
 
-  assert.deepEqual(await settledAct(client[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS](payload)), {
-    refused: REFUSAL[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS],
+  assert.deepEqual(await settledAct(client[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE](payload)), {
+    refused: REFUSAL[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE],
   });
   assert.deepEqual(asked, []);
 });
@@ -196,48 +176,30 @@ async function until(ready: () => boolean): Promise<void> {
   for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
 }
 
-it("a panel's follow stream follows at the host once for every stream of it, hears what is told of it alone, and lets it go once its last stream closes", async () => {
+it("a panel's hold on a list follows it at the host once for every stream of it, hears nothing down the hold, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: AutomationFollowed) => void>();
-  const follows: Pick<
-    HostAsk,
-    "automationsFollow" | "automationsUnfollow" | "onAutomationsChanged"
-  > = {
+  const follows: Pick<HostAsk, "automationsFollow" | "automationsUnfollow"> = {
     automationsFollow: () => Effect.sync(() => void asked.push("follow")),
     automationsUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
-    onAutomationsChanged: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
   };
-  // SAFETY: the stream reaches the follow asks alone.
+  // SAFETY: the hold reaches the follow asks alone.
   const host = follows as HostAsk;
   const port = testActPort(automationProcedures({ host }));
   ports.push(port);
   const client = port.as(PANEL);
   const scope = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-1" } as const;
-  const view = { automations: [] };
 
   const one = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);
   const two = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);
   const first = one.next();
-  const second = two.next();
-  await until(() => listeners.size === 2);
+  await until(() => asked.length === 1);
   assert.deepEqual(asked, ["follow"], "two streams of one list share one follow");
-  for (const listener of [...listeners]) {
-    listener({
-      scope: { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID },
-      view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND },
-    });
-    listener({ scope, view });
-  }
-  assert.deepEqual((await first).value, view);
-  assert.deepEqual((await second).value, view);
 
   await one.return(undefined);
-  await until(() => listeners.size === 1);
-  assert.deepEqual(asked, ["follow"]);
+  await nextTurn();
+  assert.deepEqual(asked, ["follow"], "the first stream closing lets nothing go");
   await two.return(undefined);
   await until(() => asked.length === 2);
   assert.deepEqual(asked, ["follow", "unfollow"]);
+  assert.deepEqual(await first, { done: true, value: undefined }, "the hold carried nothing");
 });

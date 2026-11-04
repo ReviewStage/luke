@@ -1,4 +1,5 @@
 import type { AgentInboxScope } from "@repo/features/agent-view";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
@@ -27,8 +28,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, or a task's or an agent's pages, is held by the surface that
- * reads it: the host follows it while any surface holds it and a while
+ * own inbox, a task's or an agent's pages, a workspace's automations or
+ * runs, or an automation's runs, is held by the surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
  * one hook path reads, so a read added is an entry rather than a hook.
@@ -150,6 +151,15 @@ function hostRead<
   };
 }
 
+/** The automations' hold on one list or history, a stream that carries nothing, and its Try again, by what it holds. */
+function automationsRead(kind: AutomationFollow["kind"]) {
+  return {
+    path: (id: string) => [id],
+    hold: (id: string) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id }),
+    retry: (id: string) => tellAct(ACT_KIND.AUTOMATIONS_RETRY, { kind, id }),
+  };
+}
+
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
@@ -157,13 +167,15 @@ function hostRead<
  * page, the panel beside an Inbox item, an agent's page, and a page's card
  * or frame each hold; one agent's pull request's chapters, by the number its
  * Pull request tab's own read of it found; the account's devices' beats, by
- * the account, which every surface drawing a device's standing holds; and
- * one agent's own tools, which its servers popover holds. Pages offer no Try
- * again, because the host reads pages that did not answer again on its own,
- * and pages it was refused, a plan's or an agent's the reader cannot reach,
- * stand failed until every surface lets them go and one holds them anew (`@repo/host`'s
- * `live-push.ts`); nor do the beats, which the host asks for again every
- * `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`).
+ * the account, which every surface drawing a device's standing holds; one
+ * agent's own tools, which its servers popover holds; and one workspace's
+ * automations, one workspace's runs, or one automation's runs, by its id.
+ * Pages offer no Try again, because the host reads pages that did not
+ * answer again on its own, and pages it was refused, a plan's or an agent's
+ * the reader cannot reach, stand failed until every surface lets them go
+ * and one holds them anew (`@repo/host`'s `live-push.ts`); nor do the
+ * beats, which the host asks for again every `MAC_PRESENCE.POLL_MS` while
+ * they are held (`held-fetch.ts`).
  */
 const HOST_READS = {
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
@@ -207,6 +219,18 @@ const HOST_READS = {
     path: (agentId: string) => [agentId],
     hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
     retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
+  }),
+  [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
+    slice: APP_SLICE.AUTOMATIONS,
+    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE),
+  }),
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: hostRead(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, {
+    slice: APP_SLICE.AUTOMATION_WORKSPACE_RUNS,
+    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
+  }),
+  [LIVE_READ.AUTOMATION_RUNS]: hostRead(LIVE_READ.AUTOMATION_RUNS, {
+    slice: APP_SLICE.AUTOMATION_RUNS,
+    ...automationsRead(AUTOMATION_FOLLOW.RUNS),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 

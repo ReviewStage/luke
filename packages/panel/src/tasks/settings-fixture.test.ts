@@ -7,9 +7,9 @@ import {
   ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_READ,
 } from "@repo/features/admin-wire";
-import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import {
@@ -98,13 +98,6 @@ function answered<Kind extends PortActKind>(
   return staged.answer as PortActResult<Kind>;
 }
 
-/** Every view a follow pushes, until it ends. */
-async function pushed(stream: AsyncIterable<unknown>): Promise<readonly unknown[]> {
-  const views: unknown[] = [];
-  for await (const view of stream) views.push(view);
-  return views;
-}
-
 test("every read a signed-in profile answers is one the act port's contract carries", () => {
   const refused = SIGNED_IN_PROFILES.flatMap((profile) =>
     READS.flatMap(({ kind, payload }) =>
@@ -128,19 +121,12 @@ test("the integrations profile draws some accounts connected and some with their
   assert.ok(standing.has(INTEGRATION_STATUS.EXPIRED));
 });
 
-test("an Automations profile follows three automations in the listed workspace, one whose newest run failed, and that one's runs", async () => {
-  const [list] = await pushed(
-    answered(RUN_PROFILE.AUTOMATIONS, ACT_KIND.AUTOMATIONS_FOLLOW, {
-      kind: AUTOMATION_FOLLOW.WORKSPACE,
-      id: "workspace-personal",
-    }),
-  );
-  assert.ok(typeof list === "object" && list !== null && "automations" in list);
-  const automations = list.automations as readonly {
-    id: string;
-    workspaceId: string;
-    lastRun: { status: string } | null;
-  }[];
+test("an Automations profile holds three automations in the listed workspace, one whose newest run failed, and that one's runs", () => {
+  const { run } = stateWith({}, {});
+  /** The document an Automations profile draws. */
+  const staged = (profile: string) => fixtureAppState(stateWith({}, { run: { ...run, profile } }));
+  const automations =
+    staged(RUN_PROFILE.AUTOMATIONS)[LIVE_READ.AUTOMATIONS]["workspace-personal"]?.rows ?? [];
   const failed = automations.filter(
     (automation) => automation.lastRun?.status === AUTOMATION_RUN_STATUS.FAILED,
   );
@@ -148,18 +134,10 @@ test("an Automations profile follows three automations in the listed workspace, 
   assert.ok(automations.every((automation) => automation.workspaceId === "workspace-personal"));
   assert.equal(failed.length, 1);
 
-  const [runs] = await pushed(
-    answered(RUN_PROFILE.AUTOMATIONS_RUNS, ACT_KIND.AUTOMATIONS_FOLLOW, {
-      kind: AUTOMATION_FOLLOW.RUNS,
-      id: failed[0]?.id ?? "",
-    }),
-  );
-  assert.ok(typeof runs === "object" && runs !== null && "runs" in runs);
-  assert.ok(
-    (runs.runs as readonly { status: string }[]).some(
-      (run) => run.status === AUTOMATION_RUN_STATUS.FAILED,
-    ),
-  );
+  const runs =
+    staged(RUN_PROFILE.AUTOMATIONS_RUNS)[LIVE_READ.AUTOMATION_RUNS][failed[0]?.id ?? ""]?.rows ??
+    [];
+  assert.ok(runs.some((each) => each.status === AUTOMATION_RUN_STATUS.FAILED));
 });
 
 test("every skill the Skills profile lists reads whole when viewed", () => {

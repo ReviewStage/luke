@@ -1,6 +1,11 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type {
+  AutomationRunSummary,
+  AutomationSummary,
+  AutomationWorkspaceRun,
+} from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
@@ -359,6 +364,21 @@ export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToo
 /** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
 export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
 
+/**
+ * One read the host holds for the windows by one id, as each held as its
+ * own read stands: those a window chose, and the few let go lately. One
+ * absent is held by nobody.
+ */
+export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
+
+/** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
+export type AppAutomationReads = Pick<
+  AppState,
+  | typeof LIVE_READ.AUTOMATIONS
+  | typeof LIVE_READ.AUTOMATION_WORKSPACE_RUNS
+  | typeof LIVE_READ.AUTOMATION_RUNS
+>;
+
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
@@ -367,6 +387,9 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
+  [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
+  [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
 }
 
 /**
@@ -465,6 +488,12 @@ export interface AppState {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
+  /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
+  [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;
+  /** Each workspace's runs the windows chose, by the workspace, newest fired first, held as the automations are: what the Runs tab and the sidebar's Automations row read. */
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: AppHeldById<readonly AutomationWorkspaceRun[]>;
+  /** Each automation's runs the windows chose, by the automation, newest fired first, held as the automations are: what its editor and an agent its run started read. */
+  [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -591,6 +620,21 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.AUTOMATIONS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationSummary,
+  },
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationWorkspaceRun,
+  },
+  [LIVE_READ.AUTOMATION_RUNS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationRunSummary,
+  },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 
 /** A slice `HOST_READ_SLICE` declares. */

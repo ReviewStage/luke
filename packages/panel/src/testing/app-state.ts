@@ -3,10 +3,12 @@
  */
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
+  type AppAutomationReads,
   type AppChapters,
   type AppDevicePresence,
   type AppHolderInboxes,
@@ -22,7 +24,7 @@ import {
   NO_PAGES,
   UNREAD,
 } from "@repo/host/app-state";
-import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
+import { AUTOMATION_ACT_KIND, SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
@@ -35,6 +37,7 @@ import {
   fakeActPortCalls,
   fakeAppBridge,
   fakeAppBridgeCalls,
+  heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
 
@@ -79,6 +82,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -170,6 +176,7 @@ export interface HostReadsHanded {
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
   readonly deliverChapters: (next: AppChapters) => void;
+  readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
 }
 
 /**
@@ -212,6 +219,93 @@ export function handHostReads(first: {
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
+    deliverAutomations: (next) => deliver(next),
+  };
+}
+
+/** The automations' read each kind of hold names, by the kind. */
+const AUTOMATIONS_READ_OF = {
+  [AUTOMATION_FOLLOW.WORKSPACE]: LIVE_READ.AUTOMATIONS,
+  [AUTOMATION_FOLLOW.RUNS]: LIVE_READ.AUTOMATION_RUNS,
+  [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+} as const satisfies Record<AutomationFollow["kind"], keyof AppAutomationReads>;
+
+/** What a test's host reads of each of the automations' holds, by its kind: the key's read, none while it answers nothing. */
+export type AutomationReadsOf = {
+  readonly [Kind in AutomationFollow["kind"]]?: (
+    id: string,
+  ) => AppAutomationReads[(typeof AUTOMATIONS_READ_OF)[Kind]][string] | undefined;
+};
+
+/** One hold the window asked of the automations' reads, and whether it has let it go. */
+export interface AutomationsHold {
+  readonly held: AutomationFollow;
+  closed: boolean;
+}
+
+/**
+ * Answers the window's holds on the automations' reads as the host does,
+ * beside whatever acts the test answers by now: each key `readsOf`
+ * answers laid on the document through `deliver` as it is held, as a
+ * window opened anew draws it where it stands, and again as Try again
+ * reads it, and every key held since laid again as `lay` asks, as the host
+ * lays a read that moved, each staying laid once let go; a read that
+ * fails over rows keeps them, as the host keeps them. Answers with every
+ * hold asked for, in order, and every read asked for, by a hold or a Try
+ * again, in order.
+ */
+export function holdAutomations(
+  deliver: HostReadsHanded["deliverAutomations"],
+  readsOf: AutomationReadsOf,
+): {
+  readonly holds: readonly AutomationsHold[];
+  readonly asked: readonly AutomationFollow[];
+  readonly lay: () => void;
+} {
+  const holds: AutomationsHold[] = [];
+  const asked: AutomationFollow[] = [];
+  const laid: Record<keyof AppAutomationReads, Readonly<Record<string, object>>> = {
+    [LIVE_READ.AUTOMATIONS]: {},
+    [LIVE_READ.AUTOMATION_RUNS]: {},
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: {},
+  };
+  /** Lays the key's read as the test's host reads it now, answering whether it read any. */
+  const layKey = ({ kind, id }: AutomationFollow) => {
+    const read = readsOf[kind]?.(id);
+    if (read === undefined) return false;
+    const slice = AUTOMATIONS_READ_OF[kind];
+    const held: { readonly rows?: unknown } | undefined = laid[slice][id];
+    if (read.rows === undefined && held?.rows !== undefined) return false;
+    laid[slice] = { ...laid[slice], [id]: read };
+    return true;
+  };
+  // SAFETY: each read's keys hold what its kind's `readsOf` answered, which is that read's (`AutomationReadsOf`).
+  const delivered = () => deliver({ ...laid } as Partial<AppAutomationReads>);
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: (held) => {
+      const hold: AutomationsHold = { held, closed: false };
+      holds.push(hold);
+      asked.push(held);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      if (layKey(held)) void Promise.resolve().then(delivered);
+      return heldUntilClosed(() => {
+        hold.closed = true;
+      });
+    },
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: (held) => {
+      asked.push(held);
+      if (layKey(held)) delivered();
+      return Promise.resolve();
+    },
+  });
+  return {
+    holds,
+    asked,
+    lay: () => {
+      for (const { held } of holds) layKey(held);
+      delivered();
+    },
   };
 }
 

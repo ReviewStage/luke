@@ -19,7 +19,6 @@
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
-import { AUTOMATION_FOLLOW, type AutomationListView } from "@repo/features/automation-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -37,6 +36,7 @@ import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/tas
 import type { TasksView } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppHeldById,
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppStateSnapshot,
@@ -562,12 +562,22 @@ function stagedInbox(inbox: AppStateSnapshot["inbox"]): AppStateSnapshot["inbox"
   return staged;
 }
 
+/** Each of `workspaceIds` held with no automation, nor any run of one, as a read of them holds them once read. */
+function noneHeldIn(workspaceIds: readonly string[]): AppHeldById<readonly never[]> {
+  return Object.fromEntries(workspaceIds.map((id) => [id, { rows: [] }]));
+}
+
 /**
- * Main's document as these profiles draw it: the account signed in, and its
- * read of what waits naming the tasks holding items. The same document, the
+ * Main's document as these profiles draw it: the account signed in, its
+ * read of what waits naming the tasks holding items, and each of
+ * `workspaceIds` held with no automation, so the person page and the
+ * sidebar list none rather than reading for good. The same document, the
  * very object, under any other profile.
  */
-export function inboxAppState(state: AppStateSnapshot): AppStateSnapshot {
+export function inboxAppState(
+  state: AppStateSnapshot,
+  workspaceIds: readonly string[],
+): AppStateSnapshot {
   if (!STAGED_PROFILES.has(state.run.profile)) return state;
   // Note that the account's feed of every item, which the window's Inbox draws from, holds each staged task's items whole.
   const fed = Object.fromEntries([...INBOXES].filter(([, items]) => items.length > 0));
@@ -578,27 +588,17 @@ export function inboxAppState(state: AppStateSnapshot): AppStateSnapshot {
     [LIVE_READ.INBOX_ITEMS]: {
       rows: { [INBOX_SCOPE_KIND.PLAN]: fed, [INBOX_SCOPE_KIND.AGENT]: {} },
     },
+    [LIVE_READ.AUTOMATIONS]: noneHeldIn(workspaceIds),
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: noneHeldIn(workspaceIds),
   };
 }
 
 /* ----- The act door ----- */
 
-/** A follow that pushes what stands once, as the host's does on opening, and nothing after, since nothing here moves. */
-async function* pushedOnce<View>(view: View): AsyncGenerator<View> {
-  yield view;
-}
-
-/**
- * One kind's staged answer: its result, or, for a follow, the generator that
- * pushes it, which the port's own stream type (an oRPC iterator class) is
- * read as by every caller, since they only iterate it.
- */
+/** One kind's staged answer: its result. */
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
-) => PortActResult<Kind> | AsyncGenerator<unknown>;
-
-/** No automation stands in the fixture's workspaces under these profiles, so the person page lists none rather than reading for good. */
-const NO_AUTOMATIONS: AutomationListView = { automations: [] };
+) => PortActResult<Kind>;
 
 /**
  * Every read the Inbox, its items, and the person page ask, answered as the
@@ -611,8 +611,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
-  [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
-    pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves, so its dot stays as staged: the host draws a mark, and none stands behind a fixture run's act door.
   [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
   [ACT_KIND.AGENTS_INBOX_READ_ALL]: () => ({
@@ -631,10 +629,7 @@ export function inboxActAnswer(
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   if (!STAGED_PROFILES.has(profile)) return undefined;
-  // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its
-  // result, or a follow's pushes, which its caller iterates as the port's stream.
+  // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its result.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
-  return answer === undefined
-    ? undefined
-    : { answer: answer(payload) as PortActResult<PortActKind> };
+  return answer === undefined ? undefined : { answer: answer(payload) };
 }
