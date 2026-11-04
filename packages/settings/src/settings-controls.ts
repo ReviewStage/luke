@@ -62,6 +62,8 @@ export interface UpdateControl {
   onCheck: () => Promise<void>;
   /** Restarts into the downloaded release. */
   onInstall: () => void;
+  /** Moves the app into Applications, where an install a read-only volume refused can land. */
+  onMoveToApplications: () => void;
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
 }
