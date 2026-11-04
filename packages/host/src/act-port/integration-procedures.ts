@@ -7,9 +7,11 @@ import type {
   IntegrationStatusView,
   IntegrationToolsView,
 } from "@repo/features/integration-view";
-import { Effect } from "effect";
+import type { McpClientRevokeParams, McpClientsView } from "@repo/features/mcp-client-view";
+import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { INTEGRATION_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
  * integration-procedures.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations.
@@ -19,7 +21,8 @@ import { type ActSender, actPort } from "./base.js";
  * in its own sentence. What the service answers comes back as the panel's
  * own answer; a Connect answers whether the host sent the browser to sign
  * in, and the address it sent it to never crosses into a window. Nothing is
- * held here.
+ * held here but the windows' holds on the outside MCP clients, one follow
+ * of the host's for all of them, whose clients reach the panel on app state.
  */
 export interface IntegrationProceduresDependencies {
   host: {
@@ -29,6 +32,10 @@ export interface IntegrationProceduresDependencies {
     integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
     integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
     integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
+    mcpClientsFollow(): Effect.Effect<void>;
+    mcpClientsUnfollow(): Effect.Effect<void>;
+    mcpClientsRetry(): Effect.Effect<void>;
+    mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
   };
 }
 
@@ -39,6 +46,8 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 
 export function integrationProcedures(dependencies: IntegrationProceduresDependencies) {
   const { host } = dependencies;
+  /** The windows' holds on the outside MCP clients, one follow of the host's for all of them. */
+  const openClients: OpenFollows<never> = MutableHashMap.empty();
   return {
     [INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]: actPort[
       INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS
@@ -75,6 +84,36 @@ export function integrationProcedures(dependencies: IntegrationProceduresDepende
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.integrationsRename(input);
+    }),
+    [INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW]: actPort[
+      INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held clients reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: () => "mcpClients",
+          follow: () => host.mcpClientsFollow(),
+          unfollow: () => host.mcpClientsUnfollow(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openClients,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [INTEGRATION_ACT_KIND.MCP_CLIENTS_RETRY]: actPort[
+      INTEGRATION_ACT_KIND.MCP_CLIENTS_RETRY
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.mcpClientsRetry();
+    }),
+    [INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE]: actPort[
+      INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.mcpClientsRevoke(input);
     }),
   };
 }

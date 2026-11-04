@@ -96,7 +96,7 @@ import {
   ChoiceList,
   CONFIRM_LOSS,
   ConfirmDialog,
-  CopyButton,
+  CopyField,
   cssCustomProperties,
   DetailPage,
   ErrorState,
@@ -1613,17 +1613,7 @@ function ShownSecretRow({
       >
         {() => (
           <>
-            <span className="automation-webhook-field w-automation-webhook max-w-full">
-              <TextField
-                label="Secret"
-                font={TEXT_FIELD_FONT.MONO}
-                spellCheck={false}
-                readOnly
-                value={secret}
-                onChange={() => undefined}
-              />
-            </span>
-            <CopyButton text={secret} what="secret" copy={copyThroughShell} />
+            <CopyField label="Secret" value={secret} what="secret" copy={copyThroughShell} />
             <Button onClick={onDone}>Done</Button>
           </>
         )}
@@ -1696,17 +1686,7 @@ function WebhookRows({
       >
         {() => (
           <>
-            <span className="automation-webhook-field w-automation-webhook max-w-full">
-              <TextField
-                label="Webhook address"
-                font={TEXT_FIELD_FONT.MONO}
-                spellCheck={false}
-                readOnly
-                value={url}
-                onChange={() => undefined}
-              />
-            </span>
-            <CopyButton text={url} what="address" copy={copyThroughShell} />
+            <CopyField label="Webhook address" value={url} what="address" copy={copyThroughShell} />
           </>
         )}
       </SettingsRow>

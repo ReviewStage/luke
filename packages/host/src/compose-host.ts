@@ -7,6 +7,7 @@ import {
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
+  HostedMcpClientsClient,
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
@@ -202,6 +203,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
       }),
+      mcpClients: new HostedMcpClientsClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        credential: account.credential,
+        sessionCredential: account.sessionCredential,
+      }),
+      accountId,
+      focus,
       // Note that a refusal's reason is not reported, because it may carry the address.
       openExternal: (url) =>
         Effect.map(
@@ -290,6 +298,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* tasks.open;
         yield* agents.open;
         yield* automations.open;
+        yield* integrations.open;
       }
       yield* settings.emitSettings();
     });
@@ -300,6 +309,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* agents.reset;
       yield* automations.reset;
+      yield* integrations.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* settings.emitSettings();

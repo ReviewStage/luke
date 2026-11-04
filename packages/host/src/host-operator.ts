@@ -190,6 +190,12 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@repo/features/integration-view";
+import {
+  MCP_CLIENTS_CALL_FAILURE,
+  type McpClientRevokeParams,
+  type McpClientsView,
+  mcpClientsViewSchema,
+} from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
   type ChaptersModelAnswerView,
@@ -382,6 +388,7 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppMcpClients,
   AppPages,
   AppWorkspaceTools,
   SessionReplayState,
@@ -554,6 +561,16 @@ export interface HostOperator {
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
   integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
+  /** The outside MCP clients the account allowed, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onMcpClientsChanged`. */
+  mcpClientsFollow(): Effect.Effect<void>;
+  /** The outside MCP clients let go by the windows. */
+  mcpClientsUnfollow(): Effect.Effect<void>;
+  /** The held outside MCP clients asked again at once, as Try again asks; done once the ask has landed. */
+  mcpClientsRetry(): Effect.Effect<void>;
+  /** The outside MCP clients the host holds for the windows, whole, each time they move. */
+  onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
+  /** One outside MCP client revoked under the Mac's session; the clients as they then stand, or why the revoke did not finish. */
+  mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -1032,6 +1049,9 @@ const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+/** An outside MCP clients call that reached no answer. */
+const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
+
 /** An installed skills call that reached no answer, as every installed skills method answers one. */
 const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
 
@@ -1113,6 +1133,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           label: params.label,
         }),
         answerOf(integrationAccountViewSchema, INTEGRATION_UNANSWERED),
+      ),
+    mcpClientsFollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW, {})),
+    mcpClientsUnfollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW, {})),
+    mcpClientsRetry: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_RETRY, {})),
+    onMcpClientsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MCP_CLIENTS_CHANGED,
+        // Note that the held clients are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppMcpClients>(payload) : undefined),
+        listener,
+      ),
+    mcpClientsRevoke: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: params.clientId }),
+        answerOf(mcpClientsViewSchema, MCP_CLIENTS_UNANSWERED),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>

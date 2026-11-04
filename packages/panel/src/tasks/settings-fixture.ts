@@ -60,7 +60,12 @@ import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppDevicePresences, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import {
+  type AppDevicePresences,
+  type AppMcpClients,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
@@ -798,6 +803,31 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
+/** The outside agents the account allowed: one on this computer that refreshed lately, one on the web that never has. */
+const STAGED_MCP_CLIENTS: AppMcpClients = {
+  [ACCOUNT_ID]: {
+    rows: {
+      serverUrl: "https://app.example.com/api/mcp",
+      clients: [
+        {
+          clientId: "https://claude.example/.well-known/oauth-client-metadata.json",
+          name: "Claude Code",
+          redirectUris: ["http://localhost:51703/callback"],
+          allowedAt: NOW - 2 * DAY,
+          lastRefreshedAt: NOW - 3 * HOUR,
+        },
+        {
+          clientId: "dcr-7f3a9c2e",
+          name: "ChatGPT",
+          redirectUris: ["https://chatgpt.example/connector/oauth/callback"],
+          allowedAt: NOW - 9 * DAY,
+          lastRefreshedAt: null,
+        },
+      ],
+    },
+  },
+};
+
 /** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
 let stagedBeats: AppDevicePresences | undefined;
 
@@ -828,6 +858,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }

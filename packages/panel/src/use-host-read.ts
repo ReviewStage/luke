@@ -168,8 +168,10 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * or frame each hold; one agent's pull request's chapters, by the number its
  * Pull request tab's own read of it found; the account's devices' beats, by
  * the account, which every surface drawing a device's standing holds; one
- * agent's own tools, which its servers popover holds; and one workspace's
- * automations, one workspace's runs, or one automation's runs, by its id.
+ * agent's own tools, which its servers popover holds; the outside MCP
+ * clients the account allowed, by the account, which Settings › Integrations
+ * holds; and one workspace's automations, one workspace's runs, or one
+ * automation's runs, by its id.
  * Pages offer no Try again, because the host reads pages that did not
  * answer again on its own, and pages it was refused, a plan's or an agent's
  * the reader cannot reach, stand failed until every surface lets them go
@@ -219,6 +221,13 @@ const HOST_READS = {
     path: (agentId: string) => [agentId],
     hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
     retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
+  }),
+  [LIVE_READ.MCP_CLIENTS]: hostRead(LIVE_READ.MCP_CLIENTS, {
+    slice: APP_SLICE.MCP_CLIENTS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the clients of whoever is signed in, so the hold names no account.
+    hold: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.MCP_CLIENTS_RETRY),
   }),
   [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
     slice: APP_SLICE.AUTOMATIONS,

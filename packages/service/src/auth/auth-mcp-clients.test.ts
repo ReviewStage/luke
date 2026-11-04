@@ -18,6 +18,8 @@ import {
   post,
   RESOURCE,
   REVISION,
+  register,
+  registration,
   signUp,
 } from "../testing/member-mcp-auth.js";
 import { AUTH_SERVER_METADATA_PATHS } from "./auth-app.js";
@@ -78,19 +80,6 @@ function fetchMetadataDocument(input: RequestInfo | URL): Promise<Response> {
   );
 }
 
-/** What a client registers by RFC 7591 as Cursor and its kind do: public, PKCE, a loopback redirect, the server's scopes. */
-function registration(scope: readonly string[]) {
-  return {
-    client_name: "A client registered dynamically",
-    redirect_uris: [MEMBER_MCP_TEST.LOOPBACK],
-    application_type: "native",
-    token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    scope: scope.join(" "),
-  };
-}
-
 const decodeRegistered = Schema.decodeUnknownSync(
   Schema.Struct({ client_id: Schema.String, scope: Schema.String }),
 );
@@ -110,17 +99,6 @@ const decodeAuthServerMetadata = Schema.decodeUnknownSync(
     scopes_supported: Schema.Array(Schema.String),
   }),
 );
-
-/** One registration as a client posts it, answered as the provider answers it. */
-async function register(auth: MemberMcpTestAuth, body: object): Promise<Response> {
-  return auth.handler(
-    new Request(`${AUTH}/oauth2/register`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
-}
 
 /** The claims a signed access token carries, read without verifying, which is the server's job. */
 function claimsOf(token: string) {

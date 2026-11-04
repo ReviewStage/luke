@@ -12,6 +12,7 @@ import {
   AUTOMATION_ACT_KIND,
   actContract,
   CHAPTERS_ACT_KIND,
+  INTEGRATION_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -35,13 +36,14 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, an agent's own tools, and the automations' lists and histories. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, an agent's own tools, the outside MCP clients, and the automations' lists and histories. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
+  | typeof INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW;
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
@@ -77,8 +79,8 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
- * account's beats, an agent's own tools, or the automations' lists and
- * histories, is held quietly, and an automations' Try again taken, since
+ * account's beats, an agent's own tools, the outside MCP clients, or the
+ * automations' lists and histories, is held quietly, and an automations' Try again taken, since
  * what the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
@@ -89,6 +91,7 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: quietHold,
+    [INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW]: quietHold,
     [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: quietHold,
     [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: () => Promise.resolve(),
     ...procedures,

@@ -401,6 +401,19 @@ export const GATEWAY_METHOD = {
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
   /**
+   * The outside MCP clients the account allowed, held for the windows from
+   * now until let go, under the account signed in: read from the service as
+   * held, and again whenever a window comes forward. What it holds is heard
+   * as `MCP_CLIENTS_CHANGED` events, on the state channel, never answered.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The outside MCP clients let go: no more asks for them until they are followed again. */
+  MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
+  /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked on the service under the Mac's session; the clients as they then stand. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
+  /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
@@ -587,6 +600,8 @@ export const GATEWAY_EVENT = {
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
+  /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;
