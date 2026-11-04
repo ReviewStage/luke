@@ -22,7 +22,7 @@
  *
  * A device asks here too, for a GitHub token for one of its agents
  * (`@repo/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
- * agents never reach a git login of the box's: an enrolled machine on
+ * agents never reach a git login on the box: an enrolled machine on
  * its device secret, a Linux box and a Mac alike, read as a device caller
  * (`../../orpc/base.ts`'s `deviceCallerOf`) and held
  * to one rule (`deviceGithubToken`): the agent the member's own and pinned

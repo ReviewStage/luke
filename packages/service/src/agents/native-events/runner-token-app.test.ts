@@ -271,6 +271,18 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
+    "hands a Codex agent recorded on its Mac's sign-in the plan's token, which its launch turns to",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* standing;
+        const agent = yield* agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.MAC_SIGN_IN);
+        yield* signIn(agent.userId, 60);
+
+        assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
+      }),
+  );
+
+  it.effect(
     "hands a runner whose bearer happens to begin like a host's device secret its token",
     () =>
       Effect.gen(function* () {

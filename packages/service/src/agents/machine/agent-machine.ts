@@ -68,8 +68,8 @@ export interface MachinePlace {
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
  * folder a message's files are written under, the Claude Code CLI and the
- * Codex a launch runs, none where the harness's own default stands, the
- * and the folders the agent's commands may write beside its checkout.
+ * Codex a launch runs, none where the harness's own default stands, and
+ * the folders the agent's commands may write beside its checkout.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;

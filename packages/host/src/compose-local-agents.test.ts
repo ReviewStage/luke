@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and an agent whose checkout stands started though the state keeps nothing of it.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and an agent whose checkout stands started though the machine's state file is corrupt.
  *
  * The follower runs over a scripted spawner, a file system that holds
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
@@ -623,12 +623,14 @@ it.effect(
 );
 
 it.effect(
-  "an agent whose checkout already stands starts though the state keeps nothing of it, as a lost or unreadable state file leaves it",
+  "an agent whose checkout already stands starts though the machine's state file is corrupt and keeps nothing of it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
+        const files = new Map([[`${STATE_ROOT}/local-agents.json`, "{ not json\n"]]);
         const { spawned, settled } = yield* followingDevice(() => Effect.void, {
           checkoutStands: true,
+          files,
         });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 

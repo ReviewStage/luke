@@ -116,7 +116,7 @@ import {
 import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
-  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and a released desktop build's, refused elsewhere as needing an upgrade (`deviceMiddleware`). */
+  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and no other procedure's. */
   resolveUserId: UserIdResolver;
 }
 

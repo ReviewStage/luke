@@ -1,5 +1,5 @@
 /**
- * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on a local agent's Mac's own Codex sign-in.
+ * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on its OpenAI API key.
  *
  * The `codex` implementation of `AgentSessions`
  * (`eve-host/eve-sessions.ts`), on the launch machinery every native
@@ -32,14 +32,11 @@
  *   plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
- * - A local agent runs the Codex its Mac checked against the pin, in its
- *   folder there, its commands under Codex's own sandbox writing that
- *   folder (`@repo/agent-runner`'s `codex.ts`), and `CODEX_HOME` left as
- *   the developer's. Where its Mac said Codex holds a sign-in of its own,
- *   the launch hands it nothing of the account's and Codex runs and
- *   refreshes that sign-in itself; otherwise it runs on the account's saved
- *   credential as a cloud agent does, the plan's token asked of the route
- *   over HTTPS, so no token ever travels through the Mac's queue.
+ * - A local agent runs the Codex its host checked against the pin, in its
+ *   folder there, with `CODEX_HOME` left at its default under the agent's
+ *   own home, on the account's saved credential as a cloud agent does, the
+ *   plan's token asked of the route over HTTPS, so no token ever travels
+ *   through the host's queue.
  */
 
 import { CODEX_PIN } from "@repo/agent-runner/pins";

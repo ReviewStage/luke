@@ -212,7 +212,7 @@ demo_stop() {
         fi
     done
     if [[ -n $host_pid ]]; then
-        demo_agents_removed "$demo_profile"
+        rm -rf -- "$demo_profile/${DEMO_HOST_HOME:?}"
     fi
     if [[ -n $demo_folder ]]; then
         rm -rf -- "$demo_folder"
