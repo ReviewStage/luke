@@ -47,7 +47,6 @@ import {
   type AgentPictureParams,
   type AgentPinParams,
   type AgentPullRequestActionParams,
-  type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
   type AgentPullRequestWriteAnswerView,
@@ -80,7 +79,6 @@ import {
   agentModelsAnswerSchema,
   agentPageAnswerViewSchema,
   agentPartViewSchema,
-  agentPullRequestAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptChangedSchema,
@@ -778,8 +776,6 @@ export interface HostOperator {
   automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
   /** One of the automations' held reads, whole, by its name, each time any of its keys moves. */
   onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
-  /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
-  agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
   pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
   /** One pull request's part let go by the windows, kept a while among those let go lately. */
@@ -2110,11 +2106,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
         listener,
-      ),
-    agentPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentPullRequestAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersFollow: (params) =>
       fire(

@@ -11,6 +11,7 @@ import {
 } from "@repo/features/agent-browser-tab-wire";
 import {
   AGENT_CALL_FAILURE,
+  PULL_REQUEST_PART,
   type PullRequestPart,
   type PullRequestPartParams,
 } from "@repo/features/agent-view";
@@ -467,8 +468,8 @@ export type PullRequestPartAnswers = {
  * now: each part asked of `answers` as it is first held and again on Try
  * again, which settles once its answer is laid, and laid on the document
  * through `deliver`; an answer that is a failure keeps an answer the part
- * held, and one that rejects is a failure. Answers with every ask made, in
- * order.
+ * held, but for the viewed marks, which hold every answer as the host's do,
+ * and one that rejects is a failure. Answers with every ask made, in order.
  */
 export function holdPullRequestParts(
   deliver: HostReadsHanded["deliverParts"],
@@ -495,7 +496,11 @@ export function holdPullRequestParts(
     const slice: Readonly<Record<string, Readonly<Record<string, AppHostRead<object>>>>> =
       held[read];
     const was = slice[params.agentId]?.[number]?.rows;
-    const kept = "failure" in landed && was !== undefined && !("failure" in was);
+    const kept =
+      params.part !== PULL_REQUEST_PART.VIEWED &&
+      "failure" in landed &&
+      was !== undefined &&
+      !("failure" in was);
     if (kept) return;
     // SAFETY: what lands for a part is that part's read (`PartAnswerOf`), laid at its key's path.
     held = {

@@ -25,7 +25,7 @@ import {
 import { windowFocus } from "./window-focus.js";
 
 /**
- * pull-request-parts.test.ts -- the parts of a pull request a Pull request tab holds are asked again together as the task list says it moved, and keep an answer over a later failure.
+ * pull-request-parts.test.ts -- the parts of a pull request a Pull request tab holds are asked again together as the task list says it moved, or first names the agent's own, and keep an answer over a later failure.
  */
 
 const AGENT = "3c2e1d0f-9a8b-4c7d-8e6f-5a4b3c2d1e0f";
@@ -126,10 +126,10 @@ function subject(failing: Set<PullRequestPart> = new Set()) {
         conversation: answering(PULL_REQUEST_PART.CONVERSATION, () => ({
           pullRequest: { reviewers: [], conversation: [], earlier: 0 },
         })),
-        published: answering(PULL_REQUEST_PART.PUBLISHED, () => ({
+        published: answering(PULL_REQUEST_PART.PUBLISHED, (key) => ({
           repository: "acme/relay",
           branch: "agent/invite-once",
-          pullRequest: line(OWN, 42),
+          pullRequest: key.number === undefined ? line(OWN, 42) : line(OTHER, key.number),
         })),
         reviewOptions: answering(PULL_REQUEST_PART.REVIEW_OPTIONS, () => ({
           labels: [],
@@ -204,6 +204,25 @@ it.effect(
         asked.toSorted(),
         MOVING.flatMap((part) => [`${part} own`, `${part} 7`]).toSorted(),
       );
+    }),
+);
+
+it.effect(
+  "an agent's own parts are asked again as the list first names a pull request it published, which is how a window drawing it from the list hears its branch",
+  () =>
+    Effect.gen(function* () {
+      const { parts, asked, draw } = yield* subject();
+      yield* Effect.forEach(MOVING, (part) => parts.follow({ part, agentId: AGENT }));
+      const listed = listing();
+      yield* draw({
+        ...listed,
+        pullRequests: listed.pullRequests.filter((each) => each.agentId !== AGENT),
+      });
+      asked.length = 0;
+
+      yield* draw(listed);
+
+      assert.deepEqual(asked.toSorted(), MOVING.map((part) => `${part} own`).toSorted());
     }),
 );
 

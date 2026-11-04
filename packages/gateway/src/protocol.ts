@@ -376,7 +376,6 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_SHARE: "installedSkills.share",
   /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
-  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /**
    * One part of one agent's pull request as its Pull request tab draws it,
    * by the part, the agent, and the pull request's number, or no number for

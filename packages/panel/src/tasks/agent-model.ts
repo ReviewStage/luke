@@ -2812,6 +2812,3 @@ export function pullRequestPillLabel(
 ): string {
   return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}`;
 }
-
-/** How long a tab lets pass between two reads of what the agent published while its transcript keeps landing pages, the service keeping its own answer about as long. */
-export const PUBLISHED_REREAD_MS = 15_000;

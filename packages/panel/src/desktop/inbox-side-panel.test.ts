@@ -222,11 +222,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.AGENTS_PULL_REQUEST:
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: { repository: REPOSITORY, branch: "luke/batch-invitations", pullRequest: BATCHED },
-      });
     case ACT_KIND.AGENTS_TRANSCRIPT:
       // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
       return Promise.resolve({

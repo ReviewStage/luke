@@ -27,10 +27,12 @@ import {
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { ListedPullRequest, TaskMode } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { OWN_PULL_REQUEST } from "@repo/host/app-state";
 import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import {
@@ -46,7 +48,7 @@ import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { useExperiment } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
 import {
   ARCHIVE_NOT_READY,
   archiveWords,
@@ -64,16 +66,12 @@ import {
   startFailureNote,
 } from "./agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
-import {
-  type ByPullRequestTab,
-  pullRequestAsked,
-  withPullRequestTab,
-} from "./pull-request-number.js";
+import { type ByPullRequestTab, pullRequestAsked } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
-import { type PullRequestReader, useListedPullRequests } from "./use-agent-pull-request.js";
+import { useListedPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
 import {
   type TranscriptFollower,
@@ -103,6 +101,34 @@ const NO_KEYWORDS: readonly string[] = [];
 
 /** No agent listed, as the list reads where it is not followed. */
 const NO_LISTED_AGENTS: readonly AgentSummary[] = [];
+
+/** No pull request a tab names by its number, one map so a draw that holds none hands down the same one. */
+const NO_NUMBERED_PULL_REQUESTS: ByPullRequestTab<AgentPullRequest> = new Map();
+
+/**
+ * Each pull request a Pull request tab names by its number, by agent and
+ * then number, as the host holds what was published of it
+ * (`LIVE_READ.PULL_REQUEST_PUBLISHED`) while a surface holds it: the side
+ * panel each numbered tab it draws, and the tab shown its own. A read that
+ * failed, or named no pull request, holds none, and the agents' own stand
+ * apart (`pullRequests`).
+ */
+const numberedPullRequestsAtom = Atom.map(
+  APP_SLICE.PULL_REQUEST_PUBLISHED,
+  (held): ByPullRequestTab<AgentPullRequest> => {
+    const numbered = new Map<string, Map<number | undefined, AgentPullRequest>>();
+    for (const [agentId, ofAgent] of Object.entries(held ?? {})) {
+      for (const [number, read] of Object.entries(ofAgent)) {
+        const rows = read.rows;
+        if (number === OWN_PULL_REQUEST || rows === undefined || "failure" in rows) continue;
+        if (rows.pullRequest === null) continue;
+        const kept = numbered.get(agentId) ?? new Map<number | undefined, AgentPullRequest>();
+        numbered.set(agentId, kept.set(Number(number), rows.pullRequest));
+      }
+    }
+    return numbered.size === 0 ? NO_NUMBERED_PULL_REQUESTS : numbered;
+  },
+);
 
 /** How long a read of the models may stay out before it is said as failed, past the host's own ten-second bound on the call it makes. */
 const MODELS_READ_BOUND_MS = 15_000;
@@ -373,14 +399,10 @@ export interface AgentsControl {
   readTranscript: TranscriptReader;
   /** How a shown tab follows its transcript and hears its pages pushed. */
   transcripts: TranscriptFollower;
-  /** One read of what an agent published, as its tab asks it; the service writes what it found on the agent's row, which `pullRequests` then carries. */
-  readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one, as the task list carries them (`useListedPullRequests`). */
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
-  /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as `readNumberedPullRequest` last read it. */
+  /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as the host holds what was published of it while a surface holds it. */
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
-  /** One read of the pull request of an agent's repository by its number, its answer kept in `numberedPullRequests`; whether it named one. */
-  readNumberedPullRequest: (agentId: string, number: number) => Promise<boolean>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
@@ -1394,10 +1416,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const readPullRequest = useCallback<PullRequestReader>(
-    (agentId) => act(ACT_KIND.AGENTS_PULL_REQUEST, { agentId }),
-    [act],
-  );
   // Note that every agent's pull request, an archived one's among them, is the task list's, so
   // choosing a task, or the page of an agent on none, reads none of them.
   const pullRequests = useListedPullRequests(
@@ -1406,32 +1424,8 @@ export function useAgents(input: {
   );
 
   // A pull request a tab names by its number is kept by agent and number,
-  // apart from the agents' own, so it never stands for what an agent
-  // published. Each read of one is numbered, so only the latest one's answer
-  // is kept, and an older read landing late never takes back a newer one.
-  const [numberedPullRequests, setNumberedPullRequests] = useState<
-    ByPullRequestTab<AgentPullRequest>
-  >(() => new Map());
-  const numberedAsks = useRef(new Map<string, Map<number, number>>());
-  const readNumberedPullRequest = useCallback<AgentsControl["readNumberedPullRequest"]>(
-    (agentId, number) => {
-      const ofAgent = numberedAsks.current.get(agentId) ?? new Map<number, number>();
-      numberedAsks.current.set(agentId, ofAgent);
-      const ask = (ofAgent.get(number) ?? 0) + 1;
-      ofAgent.set(number, ask);
-      return act(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) => {
-        if ("failure" in answer) return false;
-        if (ofAgent.get(number) === ask) {
-          const tab = { changes: agentId, number };
-          setNumberedPullRequests((was) =>
-            withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
-          );
-        }
-        return answer.pullRequest !== null;
-      });
-    },
-    [act],
-  );
+  // apart from the agents' own, so it never stands for what an agent published.
+  const numberedPullRequests = useAppSlice(numberedPullRequestsAtom);
 
   // Note that who a pull request names is kept beside the agent, with the
   // pull request it was read for, so its Changes card says them wherever it
@@ -1586,10 +1580,8 @@ export function useAgents(input: {
     readAgent,
     readTranscript,
     transcripts: windowTranscriptFollower,
-    readPullRequest,
     pullRequests,
     numberedPullRequests,
-    readNumberedPullRequest,
     readChanges,
     changesPeople,
     generateChapters,
