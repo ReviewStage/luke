@@ -73,7 +73,12 @@ import {
 } from "./testing/recorded-stream.js";
 
 const BEARER = "runner-bearer-for-tests";
-/** Note the quote, the backslash, and the newline, which a token's JSON spells escaped. */
+/**
+ * What the CLI's credential variable holds, which the runner hands on and
+ * takes out of every event alike: in a sandbox the launch's placeholder, on a
+ * host the plan's token. Note the quote, the backslash, and the newline, which
+ * a token's JSON spells escaped.
+ */
 const CLAUDE_TOKEN = 'plan-token-"for\\tests\n';
 const EVENTS_URL = "https://app.test/runner/events";
 const FIRST_SEQUENCE = 7;

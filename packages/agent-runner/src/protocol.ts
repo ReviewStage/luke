@@ -29,7 +29,10 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
  * with the bearer, to every command the agent runs. An Anthropic API key
- * stands in its place for an agent the account's key pays for. Codex's token is never
+ * stands in its place for an agent the account's key pays for. In a sandbox
+ * either is a placeholder minted for the launch, which the sandbox's firewall
+ * swaps for the real one on Anthropic's API, so neither enters the sandbox;
+ * on a host it is the credential itself. Codex's token is never
  * in it: app-server asks the service for it through the runner's token command.
  */
 export const RUNNER_ENV = {

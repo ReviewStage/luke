@@ -582,9 +582,14 @@ repository and Claude Code's own session files: its record of the session,
 which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
 stops, and are deleted with the sandbox when the task is deleted, as above.
-Your plan's token, or your API key, is handed to Claude Code alone, in its
-process's environment: it is never written to that disk, a command Claude Code runs,
-or the conversation's record. What you send such an agent in its sandbox, a
+Your plan's token, or your API key, never enters the agent's sandbox: Claude
+Code there is handed a random stand-in made for each launch, and the
+sandbox's network firewall puts the real one in its place on Claude Code's
+requests to Anthropic's API alone, kept in our database with what else that
+firewall carries, as above, until the agent's runner ends. A local agent's
+Claude Code is handed the token or key itself, in its process's environment,
+since your Mac has no firewall of ours. Either way it is never written to that
+disk, a command Claude Code runs, or the conversation's record. What you send such an agent in its sandbox, a
 message with the files it carries as Claude Code takes them, a Stop, or a change
 of model, waits in our database as a line for the agent's runner, which reads it
 from there; a message the runner never took is handed to the agent's next launch
