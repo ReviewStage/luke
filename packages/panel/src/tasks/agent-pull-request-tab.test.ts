@@ -46,6 +46,7 @@ import {
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@repo/features/pull-request-write-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppWorkspaceMembers } from "@repo/host/app-state";
@@ -76,7 +77,7 @@ import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import {
   handHostReads,
@@ -2290,6 +2291,45 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
     "build, running",
     "test, passed",
   ]);
+});
+
+test("until the pull request's own read lands, the line under the title draws what its link's card draws of it, as the host holds it for the agent's workspace", async () => {
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: { login: "acme", active: true },
+    memberCount: 2,
+  };
+  const pullRequest = {
+    number: 42,
+    title: "Expire invitations",
+    url: PAGE,
+    state: PULL_REQUEST_STATE.OPEN,
+    baseRef: "main",
+    headRef: "luke/expiry-job",
+    author: "luke-agent[bot]",
+    openedAt: 1_000,
+  };
+  // The host holds the pull request's link standing, as a chip naming it read it, and the workspace it was read through.
+  const earlier = fakeAppBridgeCalls().requestAppState ?? assert.fail("the document is handed");
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => {
+      const state = await earlier();
+      return {
+        ...state,
+        tasks: { ...IDLE_TASKS_VIEW, workspaces: [workspace] },
+        [LIVE_READ.LINK_STANDINGS]: { [workspace.id]: { [PAGE]: { rows: { pullRequest } } } },
+      };
+    },
+  });
+  const control = controlAnswering({ pullRequest: held<never>().read });
+  const tab = await draw({ ...control, workspaceId: workspace.id });
+
+  assert.deepEqual(waiting(tab), ["Reading description"]);
+  assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
+  assert.match(tab.querySelector(".pull-request-opened")?.textContent ?? "", /opened/u);
 });
 
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
