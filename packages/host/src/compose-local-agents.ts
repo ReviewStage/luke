@@ -105,8 +105,11 @@ import type { RunMode } from "./run-mode.js";
  * its home folder, the Claude Code and Codex its agents run on
  * (`LocalAgentPlatformSeam.tools`), and no harness signed in by itself,
  * since no login of the device's is what its agents run on, so every launch
- * carries the sign-in saved in the account; then it beats every `BEAT_EVERY` while
- * it follows. It holds one read for its lines and one for its requests,
+ * carries the sign-in saved in the account; then it beats every `BEAT_EVERY` from
+ * then on, while it recovers what the run before left and while it follows,
+ * each beat given `BEAT_DEADLINE` and sent again as `BEAT_RETRY` says where
+ * it went unanswered, on a fiber of its own, so nothing the device does
+ * with an answer holds up the next beat. It holds one read for its lines and one for its requests,
  * each answered by the service as soon as one waits, and claims each by its
  * id.
  *
@@ -197,7 +200,8 @@ import type { RunMode } from "./run-mode.js";
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
- * to it. A kept launch whose runner ended is settled again on every beat
+ * to it, apart from the beats and to the latest answer where it fell
+ * behind. A kept launch whose runner ended is settled again on every beat
  * until the service takes it, or no longer lists it; a runner whose launch
  * the answer does not name, after a Stop, a settle, or a lapse of the
  * device's lease, is stopped as a stop line stops it; and a launch it names
@@ -263,6 +267,10 @@ const SETUP_RETRY = {
 } as const;
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
 const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
+/** How long one beat waits for its answer before it is taken as unanswered, well inside `BEAT_EVERY`. */
+const BEAT_DEADLINE = Duration.seconds(5);
+/** How an unanswered beat is sent again before the next is due: after `FIRST`, then twice that, `TIMES` in all, each wait stretched or shrunk by up to a fifth. */
+const BEAT_RETRY = { FIRST: Duration.seconds(2), TIMES: 2 } as const;
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */
@@ -390,6 +398,13 @@ interface Runner {
   readonly handle: ChildProcessSpawner.ChildProcessHandle;
   /** The fiber that settles the launch line once the runner exits. */
   readonly exited: Fiber.Fiber<void>;
+}
+
+/** A beat's answer, with the runners the device ran and the launches it knew of just before the beat was sent, which the answer is judged against. */
+interface HeardBeat {
+  readonly beat: DeviceAgentBeat;
+  readonly ran: ReadonlyMap<string, Runner>;
+  readonly knew: ReadonlySet<string>;
 }
 
 type LocalAgentServices =
@@ -653,27 +668,48 @@ export function composeLocalAgents(
       );
 
     /**
-     * The beats, each `beaten` (a beat alone, or a follow's beat and what it
-     * converges to its answer), for as long as the gate stands and the
-     * account signed in is the one `userId` names; it returns once either
-     * changes.
+     * One beat given `BEAT_DEADLINE` to be answered, and sent again as
+     * `BEAT_RETRY` says while it goes unanswered; its answer, none where no
+     * try was answered.
+     */
+    const retriedBeat = <A>(beat: Effect.Effect<A | undefined>) =>
+      beat.pipe(
+        Effect.timeoutOption(BEAT_DEADLINE),
+        Effect.map(Option.getOrUndefined),
+        Effect.repeat({
+          schedule: Schedule.jittered(Schedule.exponential(BEAT_RETRY.FIRST)),
+          times: BEAT_RETRY.TIMES,
+          until: (answer) => answer !== undefined,
+        }),
+      );
+
+    /**
+     * The beats, each `beaten` (a beat alone, or a follow's beat with its
+     * answer handed on), for as long as the gate stands and the account
+     * signed in is the one `userId` names; it returns once either changes.
+     * Note that they run every `BEAT_EVERY` on a fiber of their own, because
+     * the window reads a device as away from how long ago it beat, and
+     * nothing a beat's answer sets off may hold up the next.
      */
     const presence = (
       userId: string,
       deviceId: string,
-      beaten: Effect.Effect<unknown> = beatOf(deviceId),
+      beaten: Effect.Effect<unknown> = retriedBeat(beatOf(deviceId)),
     ) =>
-      Effect.gen(function* () {
-        let sinceBeat = Duration.toMillis(BEAT_EVERY);
-        while ((yield* gateOpen) && dependencies.accountId() === userId) {
-          if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
-            yield* beaten;
-            sinceBeat = 0;
+      Effect.scoped(
+        Effect.gen(function* () {
+          const standing = Effect.map(
+            gateOpen,
+            (open) => open && dependencies.accountId() === userId,
+          );
+          if (!(yield* standing)) return;
+          yield* Effect.forkScoped(Effect.repeat(beaten, Schedule.fixed(BEAT_EVERY)));
+          for (;;) {
+            yield* Effect.sleep(IDLE);
+            if (!(yield* standing)) return;
           }
-          yield* Effect.sleep(IDLE);
-          sinceBeat += Duration.toMillis(IDLE);
-        }
-      });
+        }),
+      );
 
     // -- what the agents run on --------------------------------------------------
 
@@ -1496,48 +1532,58 @@ export function composeLocalAgents(
           });
 
         /**
-         * A beat, and the device converged to the launches its answer holds
-         * it to: every kept launch whose runner ended settled again; every
-         * runner that ran as the beat was sent whose launch the answer does
-         * not name stopped, as a stop line stops it; and every launch the
-         * answer names that the device neither ran, started, nor kept as the
-         * beat was sent, and still does not, settled as a runner gone. Note
-         * that what the device runs is read before the beat is sent, because
-         * the answer is read after it: a launch claimed later is never judged
-         * against an answer that could not have named it. An answer naming no
-         * launches, from a service before the list, converges nothing but
-         * the kept launches' settles. The beat's answer, where one came.
+         * One beat, with what the device ran and knew of read just before it
+         * was sent, because the answer is read after it: a launch claimed
+         * later is never judged against an answer that could not have named
+         * it. None where the beat was not answered.
          */
-        const reconciledBeat = Effect.gen(function* () {
-          const ran = new Map(runners);
-          const knew = new Set([
+        const heardBeat = Effect.gen(function* () {
+          const ran: ReadonlyMap<string, Runner> = new Map(runners);
+          const knew: ReadonlySet<string> = new Set([
             ...starting,
             ...runningLaunches(),
             ...(yield* Ref.get(state)).launches.map((launch) => launch.id),
           ]);
-          const beat: DeviceAgentBeat | undefined = yield* beatOf(deviceId);
-          if (beat !== undefined) yield* Deferred.succeed(beaten, undefined);
-          const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
-          yield* pendingSettled(open);
-          if (open === undefined) return beat;
-          for (const [agentId, runner] of ran) {
-            if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
-            report("a local agent's runner was stopped, since the service no longer holds it here");
-            yield* FiberSet.run(stopping, ended(runner));
-          }
-          const kept = new Set((yield* Ref.get(state)).launches.map((launch) => launch.id));
-          const unknown = [...open].filter((id) => !knew.has(id) && !kept.has(id));
-          if (unknown.length === 0) return beat;
-          // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
-          yield* claiming.withPermit(
-            Effect.forEach(
-              unknown,
-              (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
-              { discard: true },
-            ),
-          );
-          return beat;
+          const beat = yield* beatOf(deviceId);
+          return beat === undefined ? undefined : ({ beat, ran, knew } satisfies HeardBeat);
         });
+
+        /**
+         * The device converged to the launches a beat's answer (`heard`)
+         * holds it to: every kept launch whose runner ended settled again;
+         * every runner that ran as the beat was sent whose launch the answer
+         * does not name stopped, as a stop line stops it; and every launch
+         * the answer names that the device neither ran, started, nor kept as
+         * the beat was sent, and still does not, settled as a runner gone.
+         * A beat not answered, and an answer naming no launches, from a
+         * service before the list, converge nothing but the kept launches'
+         * settles.
+         */
+        const reconciledBeat = (heard: HeardBeat | undefined) =>
+          Effect.gen(function* () {
+            const listed = heard?.beat.openLaunches;
+            const open = listed === undefined ? undefined : new Set(listed);
+            yield* pendingSettled(open);
+            if (heard === undefined || open === undefined) return;
+            for (const [agentId, runner] of heard.ran) {
+              if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
+              report(
+                "a local agent's runner was stopped, since the service no longer holds it here",
+              );
+              yield* FiberSet.run(stopping, ended(runner));
+            }
+            const kept = new Set((yield* Ref.get(state)).launches.map((launch) => launch.id));
+            const unknown = [...open].filter((id) => !heard.knew.has(id) && !kept.has(id));
+            if (unknown.length === 0) return;
+            // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
+            yield* claiming.withPermit(
+              Effect.forEach(
+                unknown,
+                (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
+                { discard: true },
+              ),
+            );
+          });
 
         /** Whether the device runs nothing and has nothing under way: no runner, no launch starting, no line it claimed waiting or being delivered, and no request being answered. */
         const idle = Effect.map(
@@ -1572,14 +1618,15 @@ export function composeLocalAgents(
             if (!(yield* update.switched(beatOf(deviceId)))) paused = false;
           });
 
-        /** A beat converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
-        const followedBeat = Effect.gen(function* () {
-          const beat = yield* reconciledBeat;
-          const { update } = dependencies;
-          if (update === undefined || beat === undefined) return;
-          yield* update.heard(beat.release);
-          if (yield* update.waiting) yield* switchedWhileIdle(update);
-        });
+        /** A beat's answer converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
+        const followedBeat = (heard: HeardBeat | undefined) =>
+          Effect.gen(function* () {
+            yield* reconciledBeat(heard);
+            const { update } = dependencies;
+            if (update === undefined || heard === undefined) return;
+            yield* update.heard(heard.beat.release);
+            if (yield* update.waiting) yield* switchedWhileIdle(update);
+          });
 
         /** The successful reads in a row each agent this machine made was left out of, by its id. */
         const missedReads = new Map<string, number>();
@@ -1781,7 +1828,20 @@ export function composeLocalAgents(
             Effect.repeat(sweepPass, Schedule.spaced(PASS_EVERY)),
           ),
         );
-        yield* presence(userId, deviceId, Effect.provideContext(followedBeat, services));
+        // Note that each beat's outcome is handed to the reconcile through a queue keeping the latest alone, so a slow settle or claim never holds up the next beat, and a reconcile that falls behind converges to the newest answer.
+        const latest = yield* Queue.sliding<HeardBeat | undefined>(1);
+        const told = Effect.flatMap(retriedBeat(heardBeat), (heard) =>
+          Effect.andThen(
+            heard === undefined ? Effect.void : Deferred.succeed(beaten, undefined),
+            Queue.offer(latest, heard),
+          ),
+        );
+        const reconciling = Effect.forever(Effect.flatMap(Queue.take(latest), followedBeat));
+        // Note that a reconcile that died ends the follow, as it did while it ran on the beat's own path, so the turn reports it and starts again.
+        yield* Effect.raceFirst(
+          presence(userId, deviceId, told),
+          Effect.provideContext(reconciling, services),
+        );
       });
 
     /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
@@ -1871,22 +1931,32 @@ export function composeLocalAgents(
         }
         const shellVariables = yield* shellEnvironment;
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
-        // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before its first pass runs.
-        yield* adopted(folder);
-        yield* unstampedStamped(folder);
-        const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
-        for (const launch of left) {
-          // Note that a runner that ended with the app left its turn standing, so its turn is let go of before its launch is settled.
-          if (launch.agentId !== undefined) {
-            yield* turnLetGo(deviceAgentLayout(folder, launch.agentId));
-          }
-          if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
-        }
-        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another install sharing `~/.vespin/agents` are never named here.
-        const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
-        for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
-          if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));
-        }
+        // Note that the device beats from its register on while it recovers what the run before left, so a restart on a busy box never reads as away; the follow's own beats take over as it starts.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* Effect.forkScoped(presence(userId, deviceId));
+            // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before its first pass runs.
+            yield* adopted(folder);
+            yield* unstampedStamped(folder);
+            const left = (yield* Ref.get(state)).launches.filter(
+              (launch) => launch.userId === userId,
+            );
+            for (const launch of left) {
+              // Note that a runner that ended with the app left its turn standing, so its turn is let go of before its launch is settled.
+              if (launch.agentId !== undefined) {
+                yield* turnLetGo(deviceAgentLayout(folder, launch.agentId));
+              }
+              if (yield* asked(client.settleLine(deviceId, launch.id))) {
+                yield* forgetLaunch(launch.id);
+              }
+            }
+            // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another install sharing `~/.vespin/agents` are never named here.
+            const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
+            for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
+              if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));
+            }
+          }),
+        );
         yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
       });
 
