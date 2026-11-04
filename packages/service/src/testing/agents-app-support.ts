@@ -109,8 +109,6 @@ export const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 export const AGENT_NEWEST = "/api/agents/messages-newest";
 export const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 export const AGENT_STARTS = "/api/agents/agents";
-/** A Start in a workspace with no task, by the workspace's id. */
-export const WORKSPACE_STARTS = "/api/workspaces/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
 /** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
@@ -381,7 +379,6 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/queue", (id: string) => `/api/agents/${id}/queue`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
-  ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],

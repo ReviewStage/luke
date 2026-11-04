@@ -6,6 +6,7 @@ import {
   archiveAgentOfDoneTask,
   beginTaskWork,
   finishTaskWork,
+  isStartTask,
   readTaskWorkspace,
   type TaskArchivedAgent,
 } from "@repo/database/models/task-store";
@@ -47,12 +48,13 @@ import {
  * reads it (`stop.ts`'s `standsStopped`): a line awaiting its turn reads as
  * running, an agent started blank with no turn as idle.
  *
- * A task an automation's run or a Slack message made for itself asks no
- * merged pull request: it is done once every agent of it finished well and
- * nothing it holds waits on the developer, so a run that failed, was
- * stopped, or asked something leaves it in progress, as does a Slack
- * agent's turn that did, or one that opened a pull request, which its merge
- * then finishes.
+ * A task an automation's run or a Slack message made for itself, or
+ * `start_agent` made for the agent it started from a caller on no task,
+ * asks no merged pull request: it is done once every agent of it finished
+ * well and nothing it holds waits on the developer, so a run that failed,
+ * was stopped, or asked something leaves it in progress, as does a Slack
+ * agent's or a helper's turn that did, or one that opened a pull request,
+ * which its merge then finishes.
  *
  * The finish archives no agent, since someone may be talking to one: an
  * agent brought back and messaged on a task we finished takes the task up,
@@ -85,17 +87,18 @@ function logged<A>(what: string, move: Effect.Effect<A, unknown, DatabaseService
   );
 }
 
-/** What made the task for itself, which finishes it with no merge asked: an automation's run, or a Slack message; none for any other task. */
+/** What made the task for itself, which finishes it with no merge asked: an automation's run, a Slack message, or `start_agent` for a caller on no task; none for any other task. */
 const madeForItselfBy = Effect.fnUntraced(function* (taskId: string) {
   if (yield* isRunTask(taskId)) return SERVER_TASK_FINISHER.RUN;
   if (yield* isSlackTask(taskId)) return SERVER_TASK_FINISHER.SLACK;
+  if (yield* isStartTask(taskId)) return SERVER_TASK_FINISHER.START;
   return undefined;
 });
 
 /**
  * The task moved to done where its work is finished, counted under the
  * account it was made for, in the task's workspace, where it moved. A task
- * an automation's run or a Slack message made for itself is finished once
+ * an automation's run, a Slack message, or `start_agent` made for itself is finished once
  * every agent of it finished well, with no merge asked, since its agent may
  * publish nothing; one that failed, was stopped, or waits on someone leaves
  * it in progress.

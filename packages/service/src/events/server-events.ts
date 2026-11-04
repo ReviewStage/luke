@@ -230,12 +230,13 @@ export const SERVER_HOST_KIND = {
   THIS_MAC: "this_mac",
 } as const;
 
-/** Who finished a task: a member, by moving it to Done or Canceled, or the service, on the merge of its work or, for a task an automation's run or a Slack message made, on its agents finishing well. */
+/** Who finished a task: a member, by moving it to Done or Canceled, or the service, on the merge of its work or, for a task an automation's run, a Slack message, or `start_agent` made, on its agents finishing well. */
 export const SERVER_TASK_FINISHER = {
   MEMBER: "member",
   MERGE: "merge",
   RUN: "run",
   SLACK: "slack",
+  START: "start",
 } as const;
 
 /**

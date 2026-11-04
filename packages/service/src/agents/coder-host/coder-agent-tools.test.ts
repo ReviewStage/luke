@@ -97,6 +97,7 @@ import {
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
+  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@repo/wire";
@@ -1800,7 +1801,7 @@ test("start_agent from a source whose transcript does not fit the new agent's wi
   assert.ok(words.includes("Step 29."), "the newest steps are kept whole");
 });
 
-test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused, one a run's agent starts beside itself belonging to that run", async () => {
+test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task starts one on a task it names or on one made for it, one a run's agent starts beside itself belonging to that run", async () => {
   const { workspaceId, elsewhere, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1899,9 +1900,10 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
-  // An agent on no task starts one beside itself, in its own workspace and repository, or in none
-  // where it names none, and on a task only where it names one. A run's agent starts one beside
-  // itself that belongs to its run, and one on a task that the task alone owns.
+  // An agent on no task starts one on a task made for it, untitled for its agent's title to name,
+  // assigned to the member it works for, in progress with a blank plan, the prompt handed to the agent
+  // alone, in its own repository, or in none where it names none, and on a task it names only where it names one. A run's agent starts one
+  // on a task made for it that belongs to its run, and one on a named task that the task alone owns.
   const {
     runIds: [run = "", later = ""],
   } = await automationRunsOf(caller.userId, workspaceId, 2);
@@ -1913,20 +1915,34 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     const made = Option.getOrThrow(await database.run(readAgent(caller.userId, answer.agent.id)));
     return [made.taskId, made.organizationId, made.repository, made.automationRunId];
   };
+  const prompt = "Sweep the stale invitations.\nThen say what you swept.";
+  const madeFor = async (answer: WireRecord) => {
+    const [taskId, ...rest] = await placeOf(answer);
+    assert.ok(isWireString(taskId), "a helper of an agent on no task lands on a task");
+    assert.ok(isRecord(answer.agent) && isWireString(answer.agent.id));
+    const helper = Option.getOrThrow(await database.run(readAgent(caller.userId, answer.agent.id)));
+    assert.ok(helper.prompt?.includes(prompt), "the prompt is handed to the agent");
+    const stored = Option.getOrThrow(await database.run(readTask(caller.userId, taskId)));
+    const { name, status, repository, assignee } = stored.task;
+    return [name, assignee?.userId, status, repository, stored.text, ...rest];
+  };
   assert.deepEqual(
-    await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none")),
-    [null, workspaceId, RELAY_FULL_NAME, run],
+    await madeFor(await fromNoTask(CODER_TOOL.START_AGENT, { prompt }, "call-none")),
+    [
+      UNTITLED_TASK_NAME,
+      caller.userId,
+      TASK_STATUS.IN_PROGRESS,
+      RELAY_FULL_NAME,
+      "",
+      workspaceId,
+      RELAY_FULL_NAME,
+      run,
+    ],
   );
-  assert.deepEqual(
-    await placeOf(
-      await fromNoTask(
-        CODER_TOOL.START_AGENT,
-        { prompt: "Talk the release through.", repository: null },
-        "call-bare",
-      ),
-    ),
-    [null, workspaceId, null, run],
+  const bare = await madeFor(
+    await fromNoTask(CODER_TOOL.START_AGENT, { prompt, repository: null }, "call-bare"),
   );
+  assert.deepEqual([bare[3], bare.at(-2)], [null, null]);
   assert.deepEqual(
     await fromNoTask(
       CODER_TOOL.START_AGENT,
@@ -1955,8 +1971,10 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   // agents it starts from then on, from the run's claim on, before the run holds the agent.
   assert.ok(await database.run(claimAutomationRun(later, sweeper.id)));
   assert.deepEqual(
-    await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-later")),
-    [null, workspaceId, RELAY_FULL_NAME, later],
+    (
+      await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-later"))
+    ).slice(1),
+    [workspaceId, RELAY_FULL_NAME, later],
   );
 
   // A run's agent on the task its run made starts one beside itself there, which belongs to its run too.

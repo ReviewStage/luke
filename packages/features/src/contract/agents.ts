@@ -12,15 +12,13 @@
  * agent rather than a task (`POST /api/agents/{id}/agents`), so an agent with
  * no task is continued and forked as one on a task is; its body is a Start's,
  * whose `from` names the path's agent. A delete (`DELETE /api/agents/{id}`)
- * takes the agent for good, as a task's delete takes a task. An agent with no task is started in
- * its workspace (`POST /api/workspaces/{id}/agents`), its body a Start's
- * with the repository it works in, where it works in one. Outputs are the
+ * takes the agent for good, as a task's delete takes a task. No path starts
+ * a fresh agent on no task. Outputs are the
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
-import { wireKeys } from "@repo/wire/effect";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AGENT_LIST_QUERY,
@@ -36,12 +34,9 @@ import {
   agentReviewOptionsAnswerSchema,
   agentRewindRequestSchema,
   agentServersRequestSchema,
-  agentStartRequestFields,
   agentStartRequestSchema,
   MAXIMUM_START_BODY_BYTES,
-  startBrief,
 } from "../agent-wire.js";
-import { githubRepositoryFullNameSchema } from "../github-repositories-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
@@ -97,17 +92,6 @@ const agentChangeRequestSchema = EffectSchema.Union([
 /** A change as it travels. */
 export type AgentChangeRequest = typeof agentChangeRequestSchema.Encoded;
 
-/** A Start's fields bar its source, since a Start from an agent lands in that agent's own place on its own path. */
-const { from: _from, ...workspaceStartFields } = agentStartRequestFields;
-
-/** A Start in a workspace with no task: a fresh Start's body, and the repository the agent works in, where it works in one. */
-const workspaceStartRequestSchema = EffectSchema.Struct({
-  ...workspaceStartFields,
-  repository: EffectSchema.optionalKey(githubRepositoryFullNameSchema),
-})
-  .pipe(wireKeys({ prompt: "task" }))
-  .check(startBrief);
-
 /** A Start's answer: its status, and the agent. */
 const startAnswerSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(AGENT_START_STATUS)),
@@ -162,19 +146,6 @@ export const agentsContract = {
       }),
     )
     .input(exactBodyInput(idParams, agentStartRequestSchema))
-    .output(EffectSchema.flip(startAnswerSchema)),
-  /** An agent started in the workspace the path names with no task, in the repository the body names or in none, or the one a retry under the same key already started. */
-  startInWorkspace: hostedProcedure
-    .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
-    .meta(
-      openapi({
-        method: HTTP_METHOD.POST,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES}/{id}/agents`,
-        inputStructure: "detailed",
-        outputStructure: "detailed",
-      }),
-    )
-    .input(exactBodyInput(idParams, workspaceStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
   /** One agent as its own page. */
   read: hostedProcedure

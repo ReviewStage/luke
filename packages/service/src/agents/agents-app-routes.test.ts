@@ -126,7 +126,6 @@ import {
   text,
   transcriptRow,
   WORKSPACE_AGENTS,
-  WORKSPACE_STARTS,
 } from "../testing/agents-app-support.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
@@ -523,54 +522,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           { failure: "unreachable", started_by: "member", agent_kind: "coder" },
         ]);
         assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START), []);
-      }),
-  );
-
-  it.effect(
-    "a workspace's Start makes an agent on no task in that workspace, in the repository it names or in none, and one of a workspace the account is not in is not found",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, task, eve, ask } = yield* openTask();
-        const startIn = (bearer: string, body: WireBoundaryInput) =>
-          ask(request(WORKSPACE_STARTS, bearer, { method: "POST", id: task.workspaceId, body }));
-        const placeOf = (answer: Answer) =>
-          Effect.gen(function* () {
-            const { agent } = readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer);
-            const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-            return [stored.taskId, stored.organizationId, stored.repository];
-          });
-
-        const inRepository = yield* startIn(owner, {
-          idempotencyKey: randomUUID(),
-          task: "Sweep the flaky tests.",
-          repository: RELAY_FULL_NAME,
-        });
-        const inNone = yield* startIn(owner, {
-          idempotencyKey: randomUUID(),
-          task: "Talk the release through.",
-        });
-        const stranger = yield* startIn(other, {
-          idempotencyKey: randomUUID(),
-          task: "Sweep the flaky tests.",
-        });
-        // A Start from an agent goes by that agent's own path, never into a workspace place it may not stand in.
-        const fromAgent = yield* startIn(owner, {
-          idempotencyKey: randomUUID(),
-          from: { agentId: randomUUID() },
-          repository: RELAY_FULL_NAME,
-        });
-
-        assert.deepEqual(yield* placeOf(inRepository), [null, task.workspaceId, RELAY_FULL_NAME]);
-        assert.deepEqual(yield* placeOf(inNone), [null, task.workspaceId, null]);
-        assert.deepEqual(
-          stranger,
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-        );
-        assert.deepEqual(
-          fromAgent,
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
-        assert.equal(eve.opened.length, 2);
       }),
   );
 

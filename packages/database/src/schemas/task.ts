@@ -14,6 +14,7 @@ import {
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  boolean,
   check,
   index,
   integer,
@@ -102,6 +103,12 @@ export const task = pgTable(
     creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * Whether `start_agent` made the task for the agent it started, its
+     * caller on no task, which finishes once its agents finished well with no
+     * merge asked, as a run's does (`task-finish.ts`); false for every other.
+     */
+    madeByStart: boolean("made_by_start").notNull().default(false),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
