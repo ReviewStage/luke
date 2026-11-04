@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { INTEGRATION_CALL_FAILURE } from "@repo/features/integration-view";
-import {
-  INTEGRATION_PROVIDER,
-  INTEGRATION_PROVIDER_LIST,
-  INTEGRATION_STATUS,
-  type IntegrationProvider,
-  type IntegrationStatus,
-} from "@repo/features/integration-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import { Effect } from "effect";
 import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
 import type { ActSender } from "./base.js";
@@ -20,7 +14,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * only a panel of this build's own renderer asks; any other
  * window, and a frame this build does not trust, are refused in each
  * kind's own words before the host is asked; and a panel's ask reaches the
- * host, the status read with no payload at all.
+ * host, Try again on the held integrations with no payload at all.
  */
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -53,14 +47,10 @@ const RENAME = {
   label: "Work",
 } as const;
 
-// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
-const DISCONNECTED = Object.fromEntries(
-  INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.DISCONNECTED]),
-) as Record<IntegrationProvider, IntegrationStatus>;
-
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]: "Could not read your integrations on this system.",
+  [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]:
+    "Could not read your integrations again on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT]: "Could not connect that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]:
     "Could not read that integration's tools again on this system.",
@@ -80,8 +70,8 @@ const ACTS: readonly {
   call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
 }[] = [
   {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS](),
+    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY,
+    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY](),
   },
   {
     kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT,
@@ -114,10 +104,17 @@ const ACTS: readonly {
 function windowPort(actor: ActSender, trusted = true) {
   const asked: string[] = [];
   const host: IntegrationProceduresDependencies["host"] = {
-    integrationsStatus: () =>
+    integrationsFollow: () =>
       Effect.sync(() => {
-        asked.push("status");
-        return { integrations: { ...DISCONNECTED, linear: INTEGRATION_STATUS.CONNECTED } };
+        asked.push("follow");
+      }),
+    integrationsUnfollow: () =>
+      Effect.sync(() => {
+        asked.push("unfollow");
+      }),
+    integrationsRetry: () =>
+      Effect.sync(() => {
+        asked.push("retry");
       }),
     integrationsConnect: ({ provider }) =>
       Effect.sync(() => {
@@ -183,8 +180,8 @@ it("a frame this build does not trust is refused every integration act, even as 
 it("a panel's ask reaches the host, and the host's answer is the panel's", async () => {
   const { client, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]()), {
-    answer: { integrations: { ...DISCONNECTED, linear: INTEGRATION_STATUS.CONNECTED } },
+  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]()), {
+    answer: undefined,
   });
   assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR)), {
     answer: { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED },
@@ -199,5 +196,5 @@ it("a panel's ask reaches the host, and the host's answer is the panel's", async
       },
     },
   });
-  assert.deepEqual(asked, ["status", "connect linear", "rename linear linear-2"]);
+  assert.deepEqual(asked, ["retry", "connect linear", "rename linear linear-2"]);
 });

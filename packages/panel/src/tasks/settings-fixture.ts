@@ -63,6 +63,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
+  type AppIntegrations,
   type AppIntegrationTools,
   type AppMcpClients,
   type AppMemories,
@@ -693,11 +694,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
   }),
-  [ACT_KIND.INTEGRATIONS_STATUS]: () => ({
-    integrations: integrationStatuses(),
-    accounts: INTEGRATION_ACCOUNTS,
-    addable: [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.SLACK],
-  }),
   [ACT_KIND.WORKSPACE_INVITATIONS_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME
       ? [
@@ -851,17 +847,28 @@ function beatsStaged(): AppDevicePresences {
   return stagedBeats;
 }
 
+/** The staged integrations as the host holds them for the account signed in, one object across deliveries. */
+const STAGED_INTEGRATIONS: AppIntegrations = {
+  [ACCOUNT_ID]: {
+    rows: {
+      integrations: integrationStatuses(),
+      accounts: INTEGRATION_ACCOUNTS,
+      addable: [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.SLACK],
+    },
+  },
+};
+
 /**
  * Main's document as these profiles draw it: the fixture workspaces'
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
- * staged hosts beating, and its credentials, servers' tools, and the staged
- * workspace's memories held. The members are held under every profile
- * rather than only the signed-in ones, because ⌘K's People, a task's
- * assignee and creator faces, and the person page read them wherever the
- * window stands. Each slice laid over is one object across deliveries, but
- * the settings, which carry main's own, so a delivery that moves nothing of
- * them draws nothing again.
+ * staged hosts beating, and its integrations, credentials, servers' tools,
+ * and the staged workspace's memories held. The members are held under
+ * every profile rather than only the signed-in ones, because ⌘K's People, a
+ * task's assignee and creator faces, and the person page read them wherever
+ * the window stands. Each slice laid over is one object across deliveries,
+ * but the settings, which carry main's own, so a delivery that moves nothing
+ * of them draws nothing again.
  */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
   const held = { ...state, [LIVE_READ.WORKSPACE_MEMBERS]: HELD_MEMBERS };
@@ -871,6 +878,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.INTEGRATIONS]: STAGED_INTEGRATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,

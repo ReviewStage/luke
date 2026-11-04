@@ -53,6 +53,7 @@ import {
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import {
   handHostReads,
+  holdIntegrations,
   holdIntegrationTools,
   holdMembers,
   stateWith,
@@ -246,34 +247,27 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
   }
   return Promise.resolve(
-    request.kind === ACT_KIND.INTEGRATIONS_STATUS
+    request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
       ? {
           status: FAKE_ANSWER.DONE,
           value: {
-            integrations: LINEAR_CONNECTED,
+            agents: workspaceAnswer(request.payload),
           },
         }
-      : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+      : request.kind === ACT_KIND.TASKS_TREE
         ? {
             status: FAKE_ANSWER.DONE,
             value: {
-              agents: workspaceAnswer(request.payload),
+              folder: {
+                path: "",
+                repository: standing,
+                branch: "main",
+                entries: TREES.get(standing) ?? [],
+                truncated: false,
+              },
             },
           }
-        : request.kind === ACT_KIND.TASKS_TREE
-          ? {
-              status: FAKE_ANSWER.DONE,
-              value: {
-                folder: {
-                  path: "",
-                  repository: standing,
-                  branch: "main",
-                  entries: TREES.get(standing) ?? [],
-                  truncated: false,
-                },
-              },
-            }
-          : { status: FAKE_ANSWER.UNKNOWN_ACT },
+        : { status: FAKE_ANSWER.UNKNOWN_ACT },
   );
 }
 
@@ -290,6 +284,7 @@ beforeEach(() => {
   const reads = handHostReads({});
   holdIntegrationTools(reads.deliverTools, () => ({ tools: LISTED_TOOLS }));
   holdMembers(reads.deliverMembers, () => ({ rows: { members: MEMBERS } }));
+  holdIntegrations(() => ({ rows: { integrations: LINEAR_CONNECTED } }));
 });
 
 afterEach(() => {

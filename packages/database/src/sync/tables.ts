@@ -38,6 +38,7 @@ import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
+import { integrationConnection } from "../schemas/integration.js";
 import { macCommand } from "../schemas/mac-command.js";
 import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
@@ -274,6 +275,29 @@ export const agentPinSync = defineSyncTable(agentPin, {
  */
 export const macCommandSync = defineSyncTable(macCommand, {
   topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/**
+ * One account's connection to an account at an integration, on the
+ * account's integrations topic, which only its open integration reads are
+ * woken on: the account's own topic would wake its task list and its inbox
+ * on every sign-in. Note that a sign-in's one-time state, the retired
+ * verifier, and the subject Connect holds the grant under are ignored,
+ * since no view reads them and a sign-in begun or ended moves its issue
+ * instant beside the state; and so are the tools a launch lists and their
+ * instant, which every native agent's start rewrites, and the row's own
+ * instant, which moves only beside a watched column.
+ */
+export const integrationConnectionSync = defineSyncTable(integrationConnection, {
+  topics: [{ kind: TOPIC.ACCOUNT_INTEGRATIONS, column: integrationConnection.userId }],
+  ignore: [
+    integrationConnection.state,
+    integrationConnection.connectVerifier,
+    integrationConnection.connectSubject,
+    integrationConnection.tools,
+    integrationConnection.toolsListedAt,
+    integrationConnection.updatedAt,
+  ],
 });
 
 /**
@@ -604,6 +628,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   taskPinSync,
   agentPinSync,
   macCommandSync,
+  integrationConnectionSync,
   runnerLineSync,
   agentQueueSync,
   deviceAgentLineSync,

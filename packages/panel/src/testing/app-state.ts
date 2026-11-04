@@ -10,6 +10,7 @@ import {
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -103,6 +104,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AGENT_ORIGINS]: NO_AGENT_ORIGINS,
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.INTEGRATIONS]: NO_KEYS_HELD,
     [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.MEMORIES]: NO_KEYS_HELD,
     [LIVE_READ.PAGES]: NO_PAGES,
@@ -117,6 +119,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -596,4 +599,88 @@ export function handBeats(
       };
     },
   });
+}
+
+/** The id the account a test's integrations are held for goes by, where the document handed names none. */
+const INTEGRATIONS_ACCOUNT_ID = "user-integrations";
+
+/** The window's hold on the account's integrations as a test's host answers it. */
+export interface IntegrationsHeld {
+  /** Lays the read as the test's host reads it now, as the host lays a read that moved. */
+  readonly lay: () => void;
+  /** How many holds the window took. */
+  readonly holds: () => number;
+  /** How many Try agains the window asked. */
+  readonly retries: () => number;
+}
+
+/**
+ * Answers the window's hold on the account's integrations as the host does,
+ * beside whatever acts the test answers by now: the read `readOf` answers
+ * laid on the document under the account signed in, given an id where the
+ * document names none, as the window first asks for the document, again as
+ * Try again asks, and again as `lay` asks, as the host lays a read that
+ * moved; none is laid while it answers none. Note that each read is laid
+ * under the newest version the window was handed, by the document or a
+ * delivery of the helpers beneath this one, which a delivery repeating it
+ * is adopted at, so it never puts another helper's later delivery behind it.
+ */
+export function holdIntegrations(
+  readOf: () => AppHostRead<IntegrationStatusesAnswer> | undefined,
+): IntegrationsHeld {
+  const handed = fakeAppBridgeCalls().requestAppState;
+  const listening = fakeAppBridgeCalls().onAppState;
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let accountId = INTEGRATIONS_ACCOUNT_ID;
+  let version = 0;
+  let holds = 0;
+  let retries = 0;
+  const laid = () => {
+    const read = readOf();
+    return read === undefined ? NO_KEYS_HELD : { [accountId]: read };
+  };
+  const lay = () => {
+    for (const listener of [...listeners]) {
+      listener({ version, entries: { [LIVE_READ.INTEGRATIONS]: laid() } });
+    }
+  };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => {
+      const snapshot = handed === undefined ? snapshotWith({}) : await handed();
+      version = Math.max(version, snapshot.version);
+      const { account } = snapshot;
+      if (account.status !== ACCOUNT_STATUS.SIGNED_IN) return snapshot;
+      accountId = account.id ?? INTEGRATIONS_ACCOUNT_ID;
+      return {
+        ...snapshot,
+        account: { ...account, id: accountId },
+        [LIVE_READ.INTEGRATIONS]: laid(),
+      };
+    },
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      const before = listening?.((delivery) => {
+        version = Math.max(version, delivery.version);
+        listener(delivery);
+      });
+      return () => {
+        listeners.delete(listener);
+        before?.();
+      };
+    },
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: () => {
+      holds += 1;
+      return quietHold();
+    },
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: () => {
+      retries += 1;
+      lay();
+      return Promise.resolve();
+    },
+  });
+  return { lay, holds: () => holds, retries: () => retries };
 }

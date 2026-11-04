@@ -34,7 +34,12 @@ import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState, signedInAs } from "../testing/app-state.js";
+import {
+  handState,
+  holdIntegrations,
+  type IntegrationsHeld,
+  signedInAs,
+} from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -75,6 +80,9 @@ const UNAVAILABLE = Object.fromEntries(
 /** Every integration a Connect was asked for on the act port, in order. */
 let connects: IntegrationProviderParams[] = [];
 
+/** The account's integrations as the host holds them for the window, laid again as the service's rows move. */
+let integrations: IntegrationsHeld;
+
 const DRAFT: AgentDraft = {
   id: "draft-1",
   prompt: "Can you see Slack messages?",
@@ -96,28 +104,31 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
+  // A Connect stands Slack pending at the service, and a Cancel disconnects it, each reaching the host's read just after it answers.
   fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
-      Promise.resolve({
-        integrations: {
-          ...UNAVAILABLE,
-          [INTEGRATION_PROVIDER.SLACK]: slack,
-          [INTEGRATION_PROVIDER.GITHUB]: github,
-        },
-      }),
-    // A Connect stands Slack pending at the service, and a Cancel disconnects it.
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       connects.push(payload);
       if (refuseConnect) return Promise.reject(new Error("Not now."));
       if (payload.provider === INTEGRATION_PROVIDER.SLACK) slack = INTEGRATION_STATUS.PENDING;
+      void Promise.resolve().then(integrations.lay);
       return Promise.resolve({ opened: true });
     },
     [ACT_KIND.INTEGRATIONS_CANCEL]: () => {
       slack = INTEGRATION_STATUS.DISCONNECTED;
+      void Promise.resolve().then(integrations.lay);
       return Promise.resolve({ status: INTEGRATION_STATUS.DISCONNECTED });
     },
   });
   fakeAppBridge({});
+  integrations = holdIntegrations(() => ({
+    rows: {
+      integrations: {
+        ...UNAVAILABLE,
+        [INTEGRATION_PROVIDER.SLACK]: slack,
+        [INTEGRATION_PROVIDER.GITHUB]: github,
+      },
+    },
+  }));
 });
 
 afterEach(() => {
@@ -467,10 +478,9 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
     buttons: ["Reopen", "Cancel"],
   });
 
+  // The browser came back without a grant: the service ends the sign-in, and the host's read moves with it.
   slack = INTEGRATION_STATUS.DISCONNECTED;
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
+  act(() => integrations.lay());
   await settle();
   assert.deepEqual(slackRow(), {
     words: "Slack could not be connected: the sign-in came back without access.",

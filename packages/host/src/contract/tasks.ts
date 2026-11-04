@@ -19,6 +19,7 @@ import {
   codeLinesSchema,
   type TasksRevisionsAnswer,
   taskBrowserTabsFollowSchema,
+  taskDocumentFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksBlockAnswerSchema,
@@ -247,6 +248,17 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<never>())),
+  // Note that the hold's stream carries nothing: the held plan reaches the panel on app state, and the stream is the window's hold on it.
+  [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
+    "Could not follow that task's plan on this system.",
+  )
+    .input(exactInput(taskDocumentFollowSchema))
+    .output(eventIterator(type<never>())),
+  [TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY]: actProcedure(
+    "Could not read that task's plan again on this system.",
+  )
+    .input(exactInput(taskDocumentFollowSchema))
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
     "Could not follow that plan's history on this system.",
   )

@@ -27,6 +27,12 @@ export const SYNC_PAYLOAD_BYTES = 8000;
 export const TOPIC = {
   /** A user's account, by user id. */
   ACCOUNT: "account",
+  /**
+   * A user's integrations, by user id: narrower than the account's own
+   * topic, so a sign-in begun, settled, or ended wakes the account's open
+   * integration reads and never its task list or its inbox.
+   */
+  ACCOUNT_INTEGRATIONS: "account-integrations",
   /** A workspace, by organization id. */
   WORKSPACE: "workspace",
   /**

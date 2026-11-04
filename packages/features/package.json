@@ -80,6 +80,7 @@
     "./open-address": "./src/open-address.js",
     "./integration-row-wire": "./src/integration-row-wire.js",
     "./integration-view": "./src/integration-view.js",
+    "./integration-live": "./src/integration-live.js",
     "./integration-wire": "./src/integration-wire.js",
     "./integration-status-words": "./src/integration-status-words.js",
     "./model-label": "./src/model-label.js",

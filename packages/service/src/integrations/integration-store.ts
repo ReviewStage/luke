@@ -15,7 +15,17 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import {
+  type LiveStatement,
+  liveSelection,
+  liveStatementOf,
+} from "@repo/database/core/live-statement";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@repo/database/core/query";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
@@ -23,10 +33,11 @@ import {
 import { InstantColumnSchema } from "@repo/database/models/columns";
 import { integrationConnection } from "@repo/database/schemas/integration";
 import {
+  INTEGRATION_STATUS,
   type IntegrationProvider,
   integrationProviderSchema,
 } from "@repo/features/integration-wire";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
@@ -157,6 +168,54 @@ export function readIntegrationConnection(
   return Effect.map(
     findByAccount({ userId, connectionName }),
     Option.match({ onNone: () => undefined, onSome: rowOf }),
+  );
+}
+
+/**
+ * Where a row stands as stored, settling nothing, in the wire's words, as
+ * the statuses read answers one that settles nothing
+ * (`integrations-procedures.ts`'s `storedStanding`): connected, else
+ * pending while a sign-in begun at `issuedSince` or later stands, else
+ * expired, else disconnected. Note that a sign-in under way is told by when
+ * it began alone, since its state is set and cleared beside that instant
+ * and the capture ignores it.
+ */
+function storedStatusWord(issuedSince: Date) {
+  return sql<string>`case
+    when ${eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED)} then ${INTEGRATION_STATUS.CONNECTED}
+    when ${gte(integrationConnection.stateIssuedAt, issuedSince)} then ${INTEGRATION_STATUS.PENDING}
+    when ${eq(integrationConnection.status, INTEGRATION_ROW_STATUS.EXPIRED)} then ${INTEGRATION_STATUS.EXPIRED}
+    else ${INTEGRATION_STATUS.DISCONNECTED}
+  end`;
+}
+
+/**
+ * Every row the account holds as its live read answers them
+ * (`@repo/service`'s `integrationStatusesLive`): each by its id, under the
+ * name it goes by, its provider, its label, and where it stands as stored
+ * (`storedStatusWord`), each under the key `@repo/features/integration-live`
+ * reads it by. Nothing reads the clock: a sign-in's window is bound by the
+ * reader as `issuedSince`, and the order is the reader's, since Realtime
+ * keeps none. The grant's subject, the state, and the tools are never
+ * selected.
+ */
+export function integrationStatusesLiveStatement(
+  userId: string,
+  issuedSince: Date,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          id: integrationConnection.id,
+          connection: integrationConnection.connectionName,
+          provider: integrationConnection.provider,
+          label: integrationConnection.label,
+          status: storedStatusWord(issuedSince),
+        }),
+      )
+      .from(integrationConnection)
+      .where(eq(integrationConnection.userId, userId)),
   );
 }
 

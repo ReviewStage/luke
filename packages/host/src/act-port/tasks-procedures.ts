@@ -20,6 +20,7 @@ import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
   type TaskBrowserTabsFollow,
+  type TaskDocumentFollow,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -127,6 +128,10 @@ export interface TasksProceduresDependencies {
     /** A plan's or agent's pages held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
+    /** A task's plan held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+    tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+    tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
     /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
     tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
@@ -188,6 +193,8 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<never> = MutableHashMap.empty();
+  /** Every task's plan a window holds a stream open of, so the host lets one go only with the last. */
+  const openDocuments: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id, which never collide. */
   const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
@@ -542,6 +549,30 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
           input,
         );
         return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that nothing is heard down the hold, since the held plan reaches the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: (scope: TaskDocumentFollow) => scope.taskId,
+            follow: host.tasksDocumentFollow,
+            unfollow: host.tasksDocumentUnfollow,
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openDocuments,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY]: actPort[TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.tasksDocumentRetry(input);
       },
     ),
     [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(

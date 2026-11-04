@@ -79,6 +79,18 @@ export const GATEWAY_METHOD = {
   /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
   /**
+   * One task's plan held for a window from now until it is let go, and a
+   * while after among those let go lately: the task's record followed over
+   * the service's held poll, and its plan read again whenever its mark moves
+   * past the copy held. What it holds is heard as `PLAN_DOCUMENTS_CHANGED`
+   * events, on the app state every window draws, never answered.
+   */
+  TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
+  /** One task's plan let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  TASKS_DOCUMENT_UNFOLLOW: "tasks.documentUnfollow",
+  /** One task's held plan read again at once, as Try again asks; never answered. */
+  TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
+  /**
    * One plan's newest page of history, followed from now until let go, over
    * Neon Realtime. What it holds is heard as `TASKS_HISTORY_CHANGED` events,
    * never answered; following what is already followed does nothing.
@@ -434,8 +446,19 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
-  /** Where every one of the account's integrations stands, read from the service now. */
-  INTEGRATIONS_STATUS: "integrations.status",
+  /**
+   * Where every one of the account's integrations stands, held for a window
+   * from now until it is let go, followed on the service's live read with
+   * GitHub's standing asked beside it, and a while after among the reads let
+   * go lately; while a sign-in stands pending, the host settles it on its
+   * own. What it holds is heard as `INTEGRATIONS_CHANGED` events, on the app
+   * state every window draws, never answered.
+   */
+  INTEGRATIONS_FOLLOW: "integrations.follow",
+  /** The account's integrations let go by the window that held them. */
+  INTEGRATIONS_UNFOLLOW: "integrations.unfollow",
+  /** The account's held integrations read again at once, as Try again asks. */
+  INTEGRATIONS_RETRY: "integrations.retry",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
   /**
@@ -620,7 +643,7 @@ export const GATEWAY_EVENT = {
   /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
   ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
-  /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
+  /** The panel's tasks and active task, whole, whenever a read moved them. */
   TASKS_CHANGED: "tasks.changed",
   /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
   TERMINAL_OUTPUT: "terminal.output",
@@ -636,6 +659,8 @@ export const GATEWAY_EVENT = {
   PAGES_CHANGED: "pages.changed",
   /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
   PLAN_COMMENTS_CHANGED: "planComments.changed",
+  /** Every task's plan the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
+  PLAN_DOCUMENTS_CHANGED: "planDocuments.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
@@ -656,6 +681,8 @@ export const GATEWAY_EVENT = {
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
   BROWSER_TABS_CHANGED: "browserTabs.changed",
+  /** The account's integrations the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
