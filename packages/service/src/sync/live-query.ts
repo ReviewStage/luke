@@ -30,7 +30,8 @@
  * A read with `delta` also answers a reader that names a sync id
  * (`LIVE_POLL.SYNC`) with what moved past it alone: the log's rows between
  * that id and the settled one (`@repo/database/models/sync-log`), the
- * reader's topics reach or of a table it takes whatever they name, narrow
+ * reader's topics reach (`reach`, its own topics where it names none) or
+ * of a table it takes whatever they name, narrow
  * each part's statement to the rows they could move (`statements`), and a
  * part's own row a write the reader's topics reach moved, and the narrowed
  * read no longer finds, is answered gone. A write to one of its `whole`
@@ -95,6 +96,8 @@ interface LiveDeltaRead<Param extends string, Part extends string> {
   readonly whole: readonly SyncTable[];
   /** The tables whose moved rows are taken whatever topics they name, since they name none of a reader's; their keys only narrow statements that keep their own rule of who reads them. */
   readonly anyTopic: readonly SyncTable[];
+  /** The topics a moved row must name to be taken, where they are wider than those the read is woken on; those where left out. */
+  reach?(params: LiveParams<Param>): LiveTopics;
   /** Each part's own rows, of the parts whose rows can leave it; a part not named answers none gone. */
   readonly own: Readonly<Partial<Record<Part, LiveDeltaOwn>>>;
   /** The read's statements, each narrowed to the rows what moved could move; none where they can't be built. */

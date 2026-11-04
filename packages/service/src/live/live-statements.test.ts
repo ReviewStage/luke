@@ -19,6 +19,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
@@ -59,6 +60,13 @@ function liveStatements() {
       browserTabsLiveStatement(USER_ID, { agentId: randomUUID() }),
     ),
     "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
+    ...Object.fromEntries(
+      Object.entries(
+        Option.getOrThrow(
+          taskCommentsLiveStatements(USER_ID, { taskId: randomUUID(), pageId: randomUUID() }),
+        ),
+      ).map(([part, query]) => [`task.comments.${part}`, query]),
+    ),
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
     ),

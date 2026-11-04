@@ -24,7 +24,7 @@ import type { AgentsControl } from "./use-agents.js";
  * The tab and its parts, its header, Conversation, Checks, Chapters, and
  * Files changed, reach the pull request only through a `PullRequestSource`:
  * the pull request as last read, its overview's parts, its changed files,
- * its chapters, the member's viewed marks, and its changes, a review's among
+ * its chapters' Generate, the member's viewed marks, and its changes, a review's among
  * them. A tab is an agent's for now (`agentPullRequestSource`), so each read
  * names the agent, and the pull request's number where the tab names one
  * (`pull-request-number.ts`). The tab hands its source down
@@ -54,8 +54,6 @@ export interface PullRequestSource {
   readonly readChanges: () => Promise<AgentChangesAnswerView>;
   /** Which of its files the member marked viewed on GitHub. */
   readonly readViewed: () => Promise<AgentPullRequestViewedAnswerView>;
-  /** Its chapters, by the number the tab's own read of the pull request found. */
-  readonly readChapters: (number: number) => Promise<PullRequestChaptersAnswerView>;
   /** Its chapters generated for its head now, answering once they land. */
   readonly generateChapters: () => Promise<PullRequestChaptersAnswerView>;
   /** One change to it, a viewed mark and a review among them. */
@@ -110,7 +108,6 @@ export function useAgentPullRequestSource(
     readReviewOptions,
     readChanges,
     readPullRequestViewed,
-    readChapters,
     generateChapters,
   } = control;
   // Note that the doors are kept while what they name stands, because every part under the tab that hears the source draws anew on a new one.
@@ -127,7 +124,6 @@ export function useAgentPullRequestSource(
       readReviewOptions: () => readReviewOptions(agentId),
       readChanges: () => readChanges(agentId, number),
       readViewed: () => readPullRequestViewed(agentId, number),
-      readChapters: (found: number) => readChapters(agentId, found),
       generateChapters: () => generateChapters(agentId, number),
       write: agentPullRequestWrite(act, agentId, number),
     }),
@@ -143,7 +139,6 @@ export function useAgentPullRequestSource(
       readReviewOptions,
       readChanges,
       readPullRequestViewed,
-      readChapters,
       generateChapters,
     ],
   );

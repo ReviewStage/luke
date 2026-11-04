@@ -18,9 +18,9 @@
  *
  * A table a delta read reads is logged too (`log`), its every write, or,
  * for one rewritten in place more often than any delta read reads it, its
- * rows' arrival and removal alone (`LOG.ROWS`): the task list's tables
- * (`@repo/service`'s `tasksLive`), each declared logged once for every
- * read that follows it by deltas.
+ * rows' arrival and removal alone (`LOG.ROWS`): the task list's tables and
+ * the inbox items' (`@repo/service`'s `tasksLive`, `inboxItemsLive`), each
+ * declared logged once for every read that follows it by deltas.
  */
 
 import { agentDelegationTable, agentTable } from "../schemas/agent.js";
@@ -353,6 +353,7 @@ export const inboxItemSync = defineSyncTable(inboxItem, {
       topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
     },
   ],
+  log: LOG.EVERY,
 });
 
 /** A message on an inbox item's thread, on its item's task and agent, which it names only by the item; its Slack DM is no reader's, so it is hot. */
@@ -369,6 +370,7 @@ export const inboxMessageSync = defineSyncTable(inboxMessage, {
     },
   ],
   ignore: [inboxMessage.slackDm],
+  log: LOG.EVERY,
 });
 
 /** Where a member read an inbox item through, or marked it unread, on the member's topic and on the item's task and agent. */
@@ -385,6 +387,7 @@ export const inboxItemReadSync = defineSyncTable(inboxItemRead, {
       ],
     },
   ],
+  log: LOG.EVERY,
 });
 
 /**
@@ -404,6 +407,7 @@ export const attachmentSync = defineSyncTable(attachment, {
     },
   ],
   ignore: [attachment.bytes],
+  log: LOG.EVERY,
 });
 
 /** An automation, on its workspace's topic and its creator's. */

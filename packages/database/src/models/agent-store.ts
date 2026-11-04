@@ -1342,23 +1342,30 @@ const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
  * native harness, read with no account in hand, because the sweep that asks
  * acts for every account at once.
  */
-const findNativeAgentConversation = SqlSchema.findOneOption({
-  Request: Schema.Struct({ agentId: Schema.String }),
-  Result: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
-  execute: ({ agentId }) =>
+const findNativeAgentConversations = SqlSchema.findAll({
+  Request: Schema.Struct({ agentIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    agentId: Schema.String,
+    conversationId: Schema.String,
+    userId: Schema.String,
+  }),
+  execute: ({ agentIds }) =>
     Database.use((db) =>
       db
-        .select({ conversationId: conversations.id, userId: agentTable.userId })
+        .select({
+          agentId: agentTable.id,
+          conversationId: conversations.id,
+          userId: agentTable.userId,
+        })
         .from(agentTable)
         .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
-            eq(agentTable.id, agentId),
+            inArray(agentTable.id, [...agentIds]),
             inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
             isNull(conversations.deletedAt),
           ),
-        )
-        .limit(1),
+        ),
     ),
 });
 
@@ -3377,14 +3384,19 @@ export function readRunnerTokenConversation(
 }
 
 /** When the conversation's newest turn ended; null while it is queued or running, or before any turn. */
+/** When the newest turn ended, or null where it has not or there is none. */
+function endedAtOf(
+  newest: Option.Option<{ readonly status: string; readonly settledAt: Date | null }>,
+): Date | null {
+  const ended = Option.filter(newest, (turn) =>
+    ENDED_TURN_STATUSES.some((status) => status === turn.status),
+  );
+  // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
+  return Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
+}
+
 function newestTurnEndedAt(conversationId: string): AgentStoreEffect<Date | null> {
-  return Effect.map(findNewestTurnStanding({ conversationId }), (newest) => {
-    const ended = Option.filter(newest, (turn) =>
-      ENDED_TURN_STATUSES.some((status) => status === turn.status),
-    );
-    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
-    return Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
-  });
+  return Effect.map(findNewestTurnStanding({ conversationId }), endedAtOf);
 }
 
 /** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
@@ -3408,16 +3420,30 @@ export interface NativeRunStanding {
 export function readNativeRunStanding(
   agentId: string,
 ): AgentStoreEffect<Option.Option<NativeRunStanding>> {
+  return Effect.map(readNativeRunStandings([agentId]), (standings) =>
+    Option.fromUndefinedOr(standings.get(agentId)),
+  );
+}
+
+/** Where the run of each agent under these ids stands, as `readNativeRunStanding` reads one, in two statements for the lot, keyed by agent id; an id it answers nothing for is absent. */
+export function readNativeRunStandings(
+  agentIds: readonly string[],
+): AgentStoreEffect<ReadonlyMap<string, NativeRunStanding>> {
   return Effect.gen(function* () {
-    if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
-    const found = yield* findNativeAgentConversation({ agentId });
-    if (Option.isNone(found)) return Option.none();
-    const { conversationId, userId } = found.value;
-    return Option.some({
-      conversationId,
-      userId,
-      endedAt: yield* newestTurnEndedAt(conversationId),
-    });
+    const ids = agentIds.filter((agentId) => AGENT_ID_PATTERN.test(agentId));
+    if (ids.length === 0) return new Map();
+    const found = yield* findNativeAgentConversations({ agentIds: ids });
+    const newest = yield* latestTurnsOfReached(found.map((row) => row.conversationId));
+    return new Map(
+      found.map(({ agentId, conversationId, userId }): [string, NativeRunStanding] => [
+        agentId,
+        {
+          conversationId,
+          userId,
+          endedAt: endedAtOf(Option.fromUndefinedOr(newest.get(conversationId))),
+        },
+      ]),
+    );
   });
 }
 

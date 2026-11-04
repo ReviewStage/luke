@@ -851,6 +851,8 @@ export const LIVE_READ = {
   PAGES: "pages",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
+  /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
+  PLAN_COMMENTS: "taskComments",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
@@ -889,7 +891,10 @@ export function liveDigestOn(
  * whole, with their threads and files, as a plan's inbox carries them
  * (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
  * (`ACCOUNT_INBOX_ITEMS.HELD_ON`), whose digest the reader sends as `after`
- * (`liveDigestOn`).
+ * (`liveDigestOn`). Past a sync id (`LIVE_POLL.SYNC`), every part carries
+ * the items that moved alone, each whole: its stamp, its row, and every
+ * message and file its thread draws, which the reader takes in place of
+ * what it holds of the item; a part's `gone` names items alone.
  */
 export const accountInboxItemsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,

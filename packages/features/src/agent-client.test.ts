@@ -711,7 +711,7 @@ it.effect(
 );
 
 it.effect(
-  "a pull request's chapters are read by the tab's number and generated with it in the query, each refusal the tab acts on read as its own failure",
+  "a pull request's chapters are generated with the tab's number in the query, each refusal the tab acts on read as its own failure",
   () =>
     Effect.gen(function* () {
       const path = `/api/agents/${AGENT_ID}/chapters`;
@@ -723,20 +723,18 @@ it.effect(
         },
       };
       const api = fakeCloudApi({
-        [`GET ${path}`]: { answer: () => answer },
         [`POST ${path}`]: { answer: () => answer },
       });
 
-      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID, 7), api.layer), answer);
       assert.deepEqual(
         yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
         answer,
       );
       assert.deepEqual(
         api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
-        [`GET ${path}?number=7`, `POST ${path}?number=7`],
+        [`POST ${path}?number=7`],
       );
-      assert.equal(api.requests()[1]?.body ?? "", "");
+      assert.equal(api.requests()[0]?.body ?? "", "");
 
       const refusals = [
         [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],

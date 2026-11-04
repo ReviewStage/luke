@@ -23,6 +23,7 @@ import {
 import {
   listJournals,
   messageSeqOf,
+  newestJournalsOfReached,
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
@@ -1220,6 +1221,13 @@ const offeredModels = Effect.flatMap(ModelCatalog, (catalog) =>
   Effect.orElseSucceed(catalog.read, (): readonly OfferedModel[] => []),
 );
 
+/** The newest journal of each agent's conversation, read once for the lot, keyed by conversation. The agents were read through their workspace's gate, so their conversations are read by id. */
+const newestJournalsOf = (agents: readonly Agent[]) =>
+  newestJournalsOfReached(
+    agents.map((agent) => agent.conversationId),
+    CODER_TOOL_SET,
+  );
+
 const readAgentReading = (
   agent: Agent,
   task: AgentTaskReading,
@@ -1227,33 +1235,32 @@ const readAgentReading = (
     readonly status: AgentStatus;
     readonly failureReason: AgentFailure | undefined;
   },
+  newest: StoredMessageRecord | undefined,
   offered: readonly OfferedModel[],
   workspace: string,
-): Effect.Effect<AgentReading, StoreFailure, DatabaseServices> =>
-  Effect.gen(function* () {
-    const [newest] = yield* journalsOf(agent, 1);
-    const activity =
-      newest === undefined
-        ? undefined
-        : entriesOf(newest.message, AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
-    return {
-      id: agent.id,
-      ...task,
-      archived: agent.archivedAt !== null,
-      title: agent.title ?? agent.model,
-      model: agent.model,
-      modelName: modelLabel(agent.model, offered),
-      effort: agent.effort,
-      status: standing.status,
-      ...(standing.failureReason === undefined
-        ? undefined
-        : { failureReason: standing.failureReason }),
-      repository: agent.repository,
-      branch: agent.branch,
-      activity: activity ?? null,
-      mention: agentMention(agent, workspace),
-    };
-  });
+): AgentReading => {
+  const activity =
+    newest === undefined
+      ? undefined
+      : entriesOf(newest.message, AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
+  return {
+    id: agent.id,
+    ...task,
+    archived: agent.archivedAt !== null,
+    title: agent.title ?? agent.model,
+    model: agent.model,
+    modelName: modelLabel(agent.model, offered),
+    effort: agent.effort,
+    status: standing.status,
+    ...(standing.failureReason === undefined
+      ? undefined
+      : { failureReason: standing.failureReason }),
+    repository: agent.repository,
+    branch: agent.branch,
+    activity: activity ?? null,
+    mention: agentMention(agent, workspace),
+  };
+};
 
 /** What the agent published as GitHub holds it, or nothing where GitHub could not be asked, which is said as no publication rather than none. */
 const publishedOf = (
@@ -1494,13 +1501,15 @@ export function runListAgents(
         narrowed.success,
       );
       const standing = yield* standingsOf(agents);
+      const newest = yield* newestJournalsOf(agents);
       const offered = yield* offeredModels;
       const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
-      const readings = yield* Effect.forEach(agents, (agent) =>
+      const readings = agents.map((agent) =>
         readAgentReading(
           agent,
           taskReading(taskOf(agent), ownTask),
           standing(agent),
+          newest.get(agent.conversationId),
           offered,
           step,
         ),
@@ -1556,10 +1565,12 @@ export function runReadAgent(
       const { agent, task, workspaceId } = found.value;
       const standing = yield* standingsOf([agent]);
       const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
-      const reading = yield* readAgentReading(
+      const newest = yield* newestJournalsOf([agent]);
+      const reading = readAgentReading(
         agent,
         task,
         standing(agent),
+        newest.get(agent.conversationId),
         yield* offeredModels,
         step,
       );

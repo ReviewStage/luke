@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   LIVE_COUNT,
   type LiveStatement,
+  liveKeysIn,
   liveLatest,
   liveSelection,
   liveStatementOf,
@@ -32,6 +33,16 @@ import { inboxItemRead } from "@repo/database/schemas/inbox-item-read";
 import { inboxMessage } from "@repo/database/schemas/inbox-message";
 import { task } from "@repo/database/schemas/task";
 import { INBOX_ATTACHMENT_KIND } from "@repo/database/storage-vocabulary";
+import { TOPIC } from "@repo/database/sync/notification";
+import {
+  agentSync,
+  attachmentSync,
+  inboxItemReadSync,
+  inboxItemSync,
+  inboxMessageSync,
+  taskSync,
+  userSync,
+} from "@repo/database/sync/tables";
 import type {
   AccountInboxAgent,
   AccountInboxAutomation,
@@ -91,6 +102,7 @@ import {
 import { type AnyPgColumn, type AnyPgTable, alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import type { SyncMoved } from "../sync/live-query.js";
 
 /**
  * inbox-store.ts -- the developer's inbox: the items a task's coding agents post, close, and read as threads of messages with asks, and the developer's answers to them.
@@ -709,21 +721,29 @@ const MessageFileWriteSchema = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
 });
 
-/** One file of a message's written as a row of the item's, naming the message, at its place among the message's files. */
-const insertMessageFile = SqlSchema.void({
-  Request: MessageFileWriteSchema,
-  execute: ({ now, itemId, messageId, ...file }) =>
+const insertMessageFiles = SqlSchema.void({
+  Request: Schema.Array(MessageFileWriteSchema),
+  execute: (files) =>
     Database.use((db) =>
-      db.insert(attachment).values({
-        ...file,
-        inboxItemId: itemId,
-        inboxMessageId: messageId,
-        kind: INBOX_ATTACHMENT_KIND.MESSAGE,
-        byteCount: file.bytes.byteLength,
-        createdAt: now,
-      }),
+      db.insert(attachment).values(
+        files.map(({ now, itemId, messageId, ...file }) => ({
+          ...file,
+          inboxItemId: itemId,
+          inboxMessageId: messageId,
+          kind: INBOX_ATTACHMENT_KIND.MESSAGE,
+          byteCount: file.bytes.byteLength,
+          createdAt: now,
+        })),
+      ),
     ),
 });
+
+/** A message's files written as rows of the item's in one statement, each naming the message, at its place among the message's files. */
+function writeMessageFiles(
+  files: readonly (typeof MessageFileWriteSchema.Type)[],
+): InboxStoreEffect<void> {
+  return files.length === 0 ? Effect.void : insertMessageFiles(files);
+}
 
 /** Where an ask is to stand: open again, answered, replaced, or withdrawn with why. */
 const AskStandingSchema = Schema.Struct({
@@ -1698,10 +1718,21 @@ export function accountItemsLiveStatements(
   since: Date,
   settledSince: Date,
 ): Option.Option<AccountItemsLiveStatements> {
+  return accountItemsOf(userId, settledSince, sql`true`, gte(inboxItem.updatedAt, since));
+}
+
+/** The account's items `narrowed` keeps, as `accountItemsLiveStatements` reads them, those `changed` keeps among them whole. */
+function accountItemsOf(
+  userId: string,
+  settledSince: Date,
+  narrowed: SQL,
+  changed: SQL,
+): Option.Option<AccountItemsLiveStatements> {
   const carried = and(
     // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
     or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
+    narrowed,
   );
   const stamps = liveStatementOf(
     queryBuilder
@@ -1728,10 +1759,61 @@ export function accountItemsLiveStatements(
   return Option.map(
     Option.all({
       stamps,
-      changed: itemsLiveStatements(userId, and(carried, gte(inboxItem.updatedAt, since))),
+      changed: itemsLiveStatements(userId, and(carried, changed)),
     }),
     ({ stamps, changed }) => ({ stamps, ...changed }),
   );
+}
+
+/** The tables whose moved rows name the tasks and agents whose items they move. */
+const ITEM_NAMERS = [inboxMessageSync, inboxItemReadSync, attachmentSync, taskSync, agentSync];
+
+/**
+ * The items what moved could move: their own rows, those of a task or an
+ * agent a moved message, read mark, file, task, or agent names, and those
+ * naming a moved member, as their starter, answerer, closer, addressee, or
+ * task's assignee, or as the author of one of their messages.
+ */
+function movedItems(moved: SyncMoved): SQL {
+  const members = moved.keys(userSync, user.id);
+  const named = (kind: typeof TOPIC.TASK | typeof TOPIC.AGENT) =>
+    ITEM_NAMERS.flatMap((table) => moved.topics(table, kind));
+  const assigned = queryBuilder
+    .select({ id: task.id })
+    .from(task)
+    .where(liveKeysIn(task.assigneeId, members));
+  const authored = queryBuilder
+    .select({ id: inboxMessage.itemId })
+    .from(inboxMessage)
+    .where(liveKeysIn(inboxMessage.userId, members));
+  return (
+    or(
+      liveKeysIn(inboxItem.id, moved.keys(inboxItemSync, inboxItem.id)),
+      liveKeysIn(inboxItem.taskId, named(TOPIC.TASK)),
+      liveKeysIn(inboxItem.agentId, named(TOPIC.AGENT)),
+      liveKeysIn(inboxItem.userId, members),
+      liveKeysIn(inboxItem.answeredBy, members),
+      liveKeysIn(inboxItem.closedBy, members),
+      liveKeysIn(inboxItem.addresseeId, members),
+      members.length === 0 ? undefined : inArray(inboxItem.taskId, assigned),
+      members.length === 0 ? undefined : inArray(inboxItem.id, authored),
+    ) ?? sql`false`
+  );
+}
+
+/**
+ * The account's inbox items narrowed to those what moved past a reader's
+ * sync id could move, every part of them, `stamps` among them, and each
+ * moved item whole with its thread's messages and files, which the reader
+ * takes in place of what it holds of the item; none where a statement
+ * names a value Realtime cannot carry.
+ */
+export function accountItemsDeltaStatements(
+  userId: string,
+  settledSince: Date,
+  moved: SyncMoved,
+): Option.Option<AccountItemsLiveStatements> {
+  return accountItemsOf(userId, settledSince, movedItems(moved), sql`true`);
 }
 
 /** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
@@ -2255,8 +2337,8 @@ function keepPost(
       withdrawnAt: null,
     });
     if (ask !== null) yield* holdAsk({ itemId, messageId: message.id });
-    yield* Effect.forEach(post.pictures, (picture, position) =>
-      insertMessageFile({
+    yield* writeMessageFiles(
+      post.pictures.map((picture, position) => ({
         id: picture.id,
         userId: agent.userId,
         taskId: agent.taskId,
@@ -2268,7 +2350,7 @@ function keepPost(
         contentType: picture.contentType,
         bytes: picture.bytes,
         now,
-      }),
+      })),
     );
     return yield* itemAsWritten(agent.userId, itemId);
   });
@@ -2949,8 +3031,8 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
     });
     if (write.files.length === 0) return;
     const scope = yield* itemScope({ itemId });
-    yield* Effect.forEach(write.files, (file, position) =>
-      insertMessageFile({
+    yield* writeMessageFiles(
+      write.files.map((file, position) => ({
         ...scope,
         itemId,
         messageId: written.value.id,
@@ -2959,7 +3041,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
         contentType: file.mediaType,
         bytes: bytesOf(file),
         now,
-      }),
+      })),
     );
   });
 }
@@ -3278,15 +3360,15 @@ function writeInboxMessage(
         });
         if (Option.isSome(written)) {
           const scope = yield* itemScope({ itemId });
-          yield* Effect.forEach(files, (file, position) =>
-            insertMessageFile({
+          yield* writeMessageFiles(
+            files.map((file, position) => ({
               ...scope,
               itemId,
               messageId: written.value.id,
               ...file,
               position,
               now,
-            }),
+            })),
           );
           yield* touchItem({ itemId, now });
           if (member !== undefined) {
@@ -3578,8 +3660,8 @@ export function startInboxThread(
           clientKey,
           now,
         });
-        yield* Effect.forEach(files, (file, position) =>
-          insertMessageFile({
+        yield* writeMessageFiles(
+          files.map((file, position) => ({
             userId: agent.userId,
             taskId: agent.taskId,
             organizationId,
@@ -3588,7 +3670,7 @@ export function startInboxThread(
             ...file,
             position,
             now,
-          }),
+          })),
         );
         yield* upsertRead({ userId, itemId });
         const item = yield* itemAsWritten(userId, itemId, userId);

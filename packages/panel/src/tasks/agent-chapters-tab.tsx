@@ -73,7 +73,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from "@repo/ui";
-import { CheckIcon, GLYPH, RotateCwIcon } from "@repo/ui/icons";
+import { CheckIcon, GLYPH } from "@repo/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -116,15 +116,15 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
  *
- * The chapters are read from the service, which keeps the workspace's
- * newest for the pull request, as what draws them first comes on screen,
- * when the developer presses Refresh, and after a Generate
- * (`chapters-read.ts`'s `useChaptersRead`), never on a clock. The view is a
+ * The chapters are the workspace's newest for the pull request, which the
+ * host holds while the tab is shown and follows over the service's live read
+ * (`chapters-read.ts`'s `useChaptersRead`), so any member's claim, finish,
+ * or failure draws here within a moment, never on a clock. The view is a
  * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
  * Generate chapters, which answers once the generation lands, minutes later
  * at most; until then the view stands as a ring timed from the press.
- * Chapters someone else is making stand the same way, with a Refresh, since
- * only a read sees them land. A generation that failed says why with a
+ * Chapters someone else is making stand the same way, until their
+ * generation lands. A generation that failed says why with a
  * Retry; a member who saved no API key, which chapters run on, is told to
  * save one. Chapters made for a head the pull request has moved on
  * from stand as they were, under a line saying new commits came since,
@@ -187,8 +187,6 @@ const CHAPTERS_WORDS = {
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
-  REFRESH: "Refresh",
-  REFRESHING: "Refreshing",
   REGENERATE: "Regenerate",
   REGENERATE_CHAPTERS: "Regenerate chapters",
   NOTHING: "This pull request has nothing to chapter.",
@@ -344,38 +342,15 @@ function ChapterReading({
 }
 
 /**
- * Chapters being made: a ring over what is happening and how long it has
- * been, counted only while the view is shown, since the view stays mounted
- * behind `hidden`; where another's Generate is making them, a Refresh,
- * since only a read sees them land.
+ * Chapters being made, by this window's Generate or another's: a ring over
+ * what is happening and how long it has been, counted only while the view
+ * is shown, since the view stays mounted behind `hidden`.
  */
-function Generating({
-  startedAt,
-  ours,
-  live,
-  reading,
-  onRefresh,
-}: {
-  startedAt: number;
-  ours: boolean;
-  live: boolean;
-  reading: boolean;
-  onRefresh: () => void;
-}): React.JSX.Element {
+function Generating({ startedAt, live }: { startedAt: number; live: boolean }): React.JSX.Element {
   return (
     <EmptyState
       icon={<Spinner label={CHAPTERS_WORDS.GENERATING} size={SPINNER_SIZE.REGION} delay={false} />}
       title={CHAPTERS_WORDS.GENERATING}
-      action={
-        ours
-          ? undefined
-          : {
-              label: CHAPTERS_WORDS.REFRESH,
-              icon: <RotateCwIcon aria-hidden="true" />,
-              busy: reading ? CHAPTERS_WORDS.REFRESHING : undefined,
-              onClick: onRefresh,
-            }
-      }
     >
       {live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : undefined}
     </EmptyState>
@@ -999,7 +974,7 @@ function chaptersState(
       return (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.AGENT_CHAPTERS_READ)}
-          onRetry={read.ask}
+          onRetry={read.retry}
           placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {CHAPTERS_WORDS.FAILED}
@@ -1029,15 +1004,7 @@ function chaptersState(
         </EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:
-      return (
-        <Generating
-          startedAt={state.startedAt}
-          ours={state.ours}
-          live={live}
-          reading={read.out}
-          onRefresh={read.ask}
-        />
-      );
+      return <Generating startedAt={state.startedAt} live={live} />;
     case CHAPTERS_SHOWN.GENERATION_FAILED:
       return (
         <ErrorState
@@ -1085,7 +1052,7 @@ export function AgentChaptersTab({
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
   // Note that the files' head counts as well as the pull request's, because a chapter's hunks are found in the files drawn.
-  const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, {
+  const state = chaptersShown(chapters.answer, chapters.generating, {
     pullRequest: chapters.head,
     files: changes.pullRequest?.headSha,
   });

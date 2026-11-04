@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  FAILURE_KIND,
+  FAILURE_SURFACE,
+  type ShownFailureReport,
+} from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
+import { UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { UpdatesSection } from "./updates.js";
 
@@ -29,6 +35,8 @@ interface AboutGroup {
   asked: () => number;
   /** How many times the release page was asked for through the update control. */
   openedLatest: () => number;
+  /** How many times the move to Applications was asked for through the update control. */
+  moved: () => number;
 }
 
 /**
@@ -38,6 +46,7 @@ interface AboutGroup {
 function about(initial: UpdateSnapshot): AboutGroup {
   let asked = 0;
   let openedLatest = 0;
+  let moved = 0;
   function MainProcess(): React.JSX.Element {
     const [update, setUpdate] = useState<UpdateSnapshot>(initial);
     return createElement(UpdatesSection, {
@@ -55,6 +64,9 @@ function about(initial: UpdateSnapshot): AboutGroup {
           return Promise.resolve();
         },
         onInstall: () => undefined,
+        onMoveToApplications: () => {
+          moved += 1;
+        },
         onOpenLatest: () => {
           openedLatest += 1;
         },
@@ -66,7 +78,7 @@ function about(initial: UpdateSnapshot): AboutGroup {
   const root = createRoot(page);
   roots.push(root);
   act(() => root.render(createElement(MainProcess)));
-  return { page, asked: () => asked, openedLatest: () => openedLatest };
+  return { page, asked: () => asked, openedLatest: () => openedLatest, moved: () => moved };
 }
 
 /** The button a reader is told is named `name`, or nothing while none is. */
@@ -154,6 +166,34 @@ test("an install that failed reads as an alert with no Retry, beside the Downloa
   assert.equal(page.querySelector('[role="alert"]')?.textContent, "Couldn't install 0.18.0");
   assert.equal(button(page, "Retry"), undefined);
   assert.ok(link(page, "Download"), "the browser is the way to the release");
+});
+
+test("an install a read-only volume refused offers the move beside the Download, and is reported as a refusal", () => {
+  const reports: ShownFailureReport[] = [];
+  const uninstall = installShownFailureReporter((report) => {
+    reports.push(report);
+    return undefined;
+  });
+  const { page, moved } = about({
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.17.0",
+    latestVersion: "0.18.0",
+    installSupported: true,
+    failure: UPDATE_FAILURE.READ_ONLY_VOLUME,
+  });
+  uninstall();
+
+  assert.equal(
+    page.querySelector('[role="alert"]')?.textContent,
+    "Move Vespin to Applications to install 0.18.0",
+  );
+  assert.ok(link(page, "Download"), "the browser is still a way to the release");
+  act(() => button(page, "Move to Applications")?.click());
+  assert.equal(moved(), 1);
+  assert.deepEqual(
+    reports.map((report) => [report.surface, report.kind]),
+    [[FAILURE_SURFACE.UPDATE_CHECK, FAILURE_KIND.REFUSED]],
+  );
 });
 
 test("Download is a link to the release page whose press opens it through the update act, not the browser", () => {

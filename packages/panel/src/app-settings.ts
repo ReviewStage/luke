@@ -75,6 +75,7 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
               await act(ACT_KIND.UPDATE_CHECK);
             },
             onInstall: () => press(ACT_KIND.UPDATE_INSTALL),
+            onMoveToApplications: () => press(ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS),
             onOpenLatest: () => press(ACT_KIND.UPDATE_OPEN_RELEASE),
           },
     [update, packaged, commit, act, press],

@@ -1,11 +1,11 @@
 /**
- * updates.ts -- the updater as a window reaches it: a check, the install, and the releases page and changelog opened, as procedures.
+ * updates.ts -- the updater as a window reaches it: a check, the install, the move to Applications, and the releases page and changelog opened, as procedures.
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/update-acts.ts`),
  * since the updater is Electron's; a browser tab refuses every one.
  */
 
-import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
+import { UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { UPDATE_ACT_KIND } from "./kinds.js";
@@ -52,6 +52,7 @@ const updateSnapshotSchema: EffectSchema.Codec<UpdateSnapshot> = EffectSchema.Un
     status: EffectSchema.Literal(UPDATE_STATUS.ERROR),
     ...standing,
     latestVersion: EffectSchema.optionalKey(EffectSchema.String),
+    failure: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(UPDATE_FAILURE))),
   }),
 ]);
 
@@ -60,6 +61,11 @@ export const updateActsContract = {
     .input(exactInput(EffectSchema.Undefined))
     .output(updateSnapshotSchema),
   [UPDATE_ACT_KIND.UPDATE_INSTALL]: actProcedure("Could not install that update on this system.")
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
+  [UPDATE_ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS]: actProcedure(
+    "Could not move the app to Applications on this system.",
+  )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
   [UPDATE_ACT_KIND.UPDATE_OPEN_RELEASE]: actProcedure("Could not open the releases page.")

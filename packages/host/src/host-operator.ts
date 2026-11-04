@@ -387,6 +387,7 @@ import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Resu
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
+  AppChapters,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
@@ -733,10 +734,14 @@ export interface HostOperator {
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
-  /** The workspace's newest chapters of one agent's pull request by its number; or why there are none. */
-  pullRequestChapters(
-    params: PullRequestChaptersReadParams,
-  ): Effect.Effect<PullRequestChaptersAnswerView>;
+  /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
+  chaptersFollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
+  /** One agent's pull request's chapters let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  chaptersUnfollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
+  /** One agent's pull request's held chapters read again at once, as Try again asks. */
+  chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
+  /** Every agent's pull request's chapters the host holds for the windows, whole, each time any of them moves. */
+  onChaptersChanged(listener: (held: AppChapters) => void): () => void;
   /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
@@ -1923,13 +1928,33 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
         answerOf(agentPullRequestAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    pullRequestChapters: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, {
+    chaptersFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW, {
           agentId: params.agentId,
           number: params.number,
         }),
-        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    chaptersUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW, {
+          agentId: params.agentId,
+          number: params.number,
+        }),
+      ),
+    chaptersRetry: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY, {
+          agentId: params.agentId,
+          number: params.number,
+        }),
+      ),
+    onChaptersChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHAPTERS_CHANGED,
+        // Note that the held chapters are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppChapters>(payload) : undefined),
+        listener,
       ),
     pullRequestChaptersGenerate: (params) =>
       Effect.map(

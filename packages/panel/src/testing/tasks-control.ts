@@ -181,7 +181,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     numberedPullRequests: new Map(),
     readNumberedPullRequest: () => Promise.resolve(false),
     readChanges: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    readChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readOverviewPullRequest: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readReviewOptions: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),

@@ -118,12 +118,11 @@ function orderedChapters(chapters: readonly Chapter[]): readonly Chapter[] {
 /**
  * What the view draws from its read as it stands, and this window's own
  * Generate where one is out, which stands over whatever the read last said
- * until it answers. A failure gives way to the wait as soon as the read is
- * asked again, while anything else drawn stands until the answer lands.
+ * until it answers. A read asked again after a failure stands unread until
+ * it answers (`useHostRead`), so the failure gives way to the wait.
  */
 export function chaptersShown(
   answer: PullRequestChaptersAnswerView | undefined,
-  out: boolean,
   /** When this window's own Generate was pressed, while it is out. */
   generating: number | undefined,
   heads: ChaptersHeads = { pullRequest: undefined, files: undefined },
@@ -131,7 +130,7 @@ export function chaptersShown(
   if (generating !== undefined) {
     return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: generating, ours: true };
   }
-  if (answer === undefined || (out && "failure" in answer)) return { kind: CHAPTERS_SHOWN.READING };
+  if (answer === undefined) return { kind: CHAPTERS_SHOWN.READING };
   if ("failure" in answer) return { kind: CHAPTERS_SHOWN.FAILED, failure: answer.failure };
   const { pullRequest } = answer;
   if (pullRequest === null) return { kind: CHAPTERS_SHOWN.NO_PULL_REQUEST };

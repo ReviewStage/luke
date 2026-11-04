@@ -106,6 +106,7 @@ function mount(
                 build: { packaged: false },
                 onCheck: () => Promise.resolve(),
                 onInstall: () => undefined,
+                onMoveToApplications: () => undefined,
                 onOpenLatest: () => undefined,
               },
               shown: true,
