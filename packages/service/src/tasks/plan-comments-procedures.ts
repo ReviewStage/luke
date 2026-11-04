@@ -118,6 +118,19 @@ const outcomeAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return outcome.answer;
 });
 
+/**
+ * A write's answer with the transaction it committed in, where it wrote one,
+ * so the desktop following the thread waits for it; the agents' tools and
+ * the member MCP server answer without it.
+ */
+function withTxid(
+  body: PlanCommentThreadAnswer,
+  outcome: PlanCommentOutcome,
+): PlanCommentThreadAnswer {
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || outcome.txid === undefined) return body;
+  return "refused" in body ? body : { ...body, txid: outcome.txid };
+}
+
 /** A member's comment, as its mentions are read from it and handed over under its key. */
 export interface MentioningComment {
   readonly userId: string;
@@ -430,7 +443,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
       });
       return {
         status: "thread" in body ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
-        body,
+        body: withTxid(body, outcome),
       };
     }),
     act: member.act.effect(function* ({ input, context }) {
@@ -441,14 +454,17 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
       const outcome = yield* hostedStoreOrUnavailable(
         actOnPlanCommentThread(writer, taskId, threadId, action),
       );
-      if (action.action !== PLAN_COMMENT_ACTION.REPLY) return yield* outcomeAnswer(outcome);
-      return yield* commentAnswer(outcome, {
+      if (action.action !== PLAN_COMMENT_ACTION.REPLY) {
+        return withTxid(yield* outcomeAnswer(outcome), outcome);
+      }
+      const body = yield* commentAnswer(outcome, {
         userId: context.userId,
         taskId,
         words: action.words,
         clientKey: action.clientKey,
         isReply: true,
       });
+      return withTxid(body, outcome);
     }),
   };
 }
