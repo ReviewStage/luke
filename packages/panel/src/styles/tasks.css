@@ -2653,6 +2653,15 @@ svg.lucide {
   }
 }
 
+/* A finger's press on each tool stands a touch target across (button.css),
+   so on a coarse pointer the tools stand apart enough that Resolve's and
+   the ⋯'s never overlap. */
+@media (pointer: coarse) {
+  .comment-tools {
+    gap: var(--ui-space-20);
+  }
+}
+
 /* What happened to a thread, a line drawn as a comment's head: its writer
    level with every name above it, what they did in the quiet ink, and the
    time at the row's end. */
@@ -2707,11 +2716,19 @@ svg.lucide {
 
 /* A field's foot, a reply's `ComposerFoot` and an edit's Cancel and Save,
    holds its tools a size under a page's, at the field's padding; a
-   dictation's strip stands at their height. */
+   dictation's strip stands at their height. A finger keeps the page's size,
+   so on a coarse pointer the tools stand a touch target tall and Dictate's
+   press never reaches Reply. */
 .comment-field-foot,
 .comment-field .ui-composer-foot {
-  --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
   padding: var(--ui-space-2) var(--ui-item-gap) var(--ui-item-gap);
+}
+
+@media not all and (pointer: coarse) {
+  .comment-field-foot,
+  .comment-field .ui-composer-foot {
+    --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  }
 }
 
 /* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */
