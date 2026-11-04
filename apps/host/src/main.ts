@@ -21,9 +21,8 @@
  * (`@repo/host/daemon`) until the service is stopped, which stops every
  * runner it started with it. Once the service settles the box's secret as
  * refused, the host removed, it stops them, marks its record refused, and
- * rests (`hostRefusedRest`), asking the service now and then whether it takes
- * the secret again, until it does or the box is connected again; a start on
- * a refused record rests the same way. A daemon the account install runs, its
+ * rests (`hostRefusedRest`) until the box is connected again; a start on a
+ * refused record rests the same way. A daemon the account install runs, its
  * own real path in a version folder of the install's releases
  * (`accountReleases`), updates itself to the newer release the service names
  * (`host-update.ts`): once it switched `current` to it, every runner
@@ -196,9 +195,9 @@ const follow = (runtime: HostRuntime) =>
       yield* Effect.sleep(UNENROLLED_REST);
       return undefined;
     }
-    // Note that a box the service refused rests, asking now and then whether the service takes its secret again, until it does or the box is connected again.
+    // Note that a box the service refused rests until it is connected again.
     if (device.value.refused === true) {
-      yield* hostRefusedRest({ stateRoot, device: device.value, version: VERSION });
+      yield* hostRefusedRest({ stateRoot, device: device.value });
       return undefined;
     }
     const boxArch = yield* arch(runtime);

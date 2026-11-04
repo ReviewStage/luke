@@ -542,15 +542,15 @@ export type DeviceAgentRelease = typeof deviceAgentReleaseSchema.Type;
  * the ids of its launch lines still unsettled with no stop queued after
  * them, claimed or not, read after the beat was written. The device stops a
  * runner whose launch it does not name and settles a named launch it runs
- * nothing for; a service from before the field names none, and a build from
- * before it ignores it. Where the service publishes a release newer than
- * the version the host called with (`HOST_WIRE.VERSION_HEADER`), it names
- * that release, which a host updates itself to; a host on it or past it is
- * named none, and a build from before the field drops it unread.
+ * nothing for; a build from before the field ignores it. Where the service
+ * publishes a release newer than the version the host called with
+ * (`HOST_WIRE.VERSION_HEADER`), it names that release, which a host updates
+ * itself to; a host on it or past it is named none, and a build from before
+ * the field drops it unread.
  */
 export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
-  openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  openLaunches: EffectSchema.Array(wireUuidSchema),
   release: EffectSchema.optionalKey(deviceAgentReleaseSchema),
 });
 

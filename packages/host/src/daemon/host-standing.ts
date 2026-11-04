@@ -20,13 +20,11 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * rather than exiting for systemd to start it over every few seconds.
  *
  * A 401 is not taken as the host removed by itself, since anything on the
- * origin may answer one: a deployment's protection, a database restored
- * from before the box's secret, one route's bug. The host is removed only
- * once its own register or beat says so, and says it again: the service
- * marks the 401 of a secret no standing host holds `hostRemoved`
- * (`hostRemovedDataSchema`), and a second such answer at least `CONFIRM`
- * after the first, with nothing of the service's taken between, settles it.
- * Any other 401, a bare one to register or beat among them, settles
+ * origin may answer one: a deployment's protection, one route's bug. The
+ * host is removed once its own register or beat says so: the service marks
+ * the 401 of a secret no standing host holds `hostRemoved`
+ * (`hostRemovedDataSchema`), and the first such answer settles it. Any
+ * other 401, a bare one to register or beat among them, settles
  * nothing: it is said once, until the service next takes a call, and the
  * daemon keeps asking at its own pace, its runners left running, since a
  * quiet spell shuts the follower's gate, which stops every runner. A removal
@@ -38,9 +36,6 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 /** How long the daemon asks the service nothing after it was refused as below its floor, before it tries again. */
 const QUIET = Duration.minutes(5);
 
-/** How long after the first answer saying the host was removed a register or beat must say it again to settle the removal: a few beats. */
-const CONFIRM = Duration.minutes(1);
-
 /** What the daemon says once the service first took its register, which a person following its log reads as the box connected. */
 const HOST_CONNECTED_REPORT = `${PRODUCT_NAME} host: Connected to ${PRODUCT_NAME}.`;
 
@@ -50,7 +45,7 @@ const HOST_STANDING = {
   STANDING: "standing",
   /** The service refused its version as below its floor. */
   UPGRADE_NEEDED: "upgrade-needed",
-  /** The service refused its device secret, and said so again: the host was removed, or enrolled again elsewhere. */
+  /** The service refused its device secret: the host was removed, or enrolled again elsewhere. */
   SECRET_REFUSED: "secret-refused",
 } as const;
 
@@ -103,8 +98,6 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
     kind: HOST_STANDING.STANDING,
     until: 0,
   });
-  /** When register or beat first said the host was removed since the service last took a call. */
-  const removedSince = yield* Ref.make<number | undefined>(undefined);
   /** Whether a 401 that settled nothing was said since the service last took a call. */
   const callsRefused = yield* Ref.make(false);
   const connected = yield* Ref.make(false);
@@ -117,20 +110,8 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
   const ownCall = (request: HttpClientRequest.HttpClientRequest) =>
     request.method === HTTP_METHOD.POST && (request.url === registerUrl || request.url === beatUrl);
 
-  /** Whether a 401 settles the host as removed: its own register or beat said so, and said so first at least `CONFIRM` ago. */
-  const removalSettled = (now: number, own: boolean, removedSaid: boolean) =>
-    Effect.gen(function* () {
-      if (!own || !removedSaid) return false;
-      const since = yield* Ref.updateAndGet(removedSince, (before) => before ?? now);
-      return now - (since ?? now) >= Duration.toMillis(CONFIRM);
-    });
-
-  /** One answer heard: a refusal said once as it starts, a 426 a quiet spell, a settled removal the end; a 2xx after a refusal says the service is reached again. */
-  const heard = (
-    request: HttpClientRequest.HttpClientRequest,
-    status: number,
-    removedSaid: boolean,
-  ) =>
+  /** One answer heard, `removedSaid` where it is the device's own register or beat marked `hostRemoved`: a refusal said once as it starts, a 426 a quiet spell, a removal the end; a 2xx after a refusal says the service is reached again. */
+  const heard = (status: number, removedSaid: boolean) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const before = yield* Ref.get(standing);
@@ -146,7 +127,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
         return;
       }
       if (status === HTTP_STATUS.UNAUTHORIZED) {
-        if (yield* removalSettled(now, ownCall(request), removedSaid)) {
+        if (removedSaid) {
           yield* Ref.set(standing, { kind: HOST_STANDING.SECRET_REFUSED, until: before.until });
           yield* Deferred.succeed(refused, undefined);
           options.report(refusalReport(HOST_STANDING.SECRET_REFUSED, options.serviceOrigin));
@@ -156,7 +137,6 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
         return;
       }
       if (status < 200 || status >= 300) return;
-      yield* Ref.set(removedSince, undefined);
       const callsTaken = yield* Ref.getAndSet(callsRefused, false);
       if (before.kind !== HOST_STANDING.STANDING) {
         yield* Ref.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
@@ -191,12 +171,12 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
   ) =>
     Effect.gen(function* () {
       if (!ownCall(request) || answer.status !== HTTP_STATUS.UNAUTHORIZED) {
-        yield* heard(request, answer.status, false);
+        yield* heard(answer.status, false);
         yield* registered(request, answer.status);
         return answer;
       }
       const text = yield* Effect.orElseSucceed(answer.text, () => "");
-      yield* heard(request, answer.status, Option.isSome(decodeHostRemoved(text)));
+      yield* heard(answer.status, Option.isSome(decodeHostRemoved(text)));
       return HttpClientResponse.fromWeb(
         request,
         new Response(text, { status: answer.status, headers: answer.headers }),

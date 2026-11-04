@@ -46,7 +46,8 @@
  * (`POST /api/device-agents/pairing`) reads no credential, only its
  * daemon's version against the floor (`pairingHostMiddleware`), and is
  * braked per address in this instance, since a start costs little and
- * lapses; it opens a pairing under a fresh code and answers the poll
+ * lapses; it opens a pairing under a fresh code, unavailable where a
+ * standing pairing already shows the one minted, and answers the poll
  * secret, answered this once and kept as a hash, the code, and the link
  * on the origin the request reached that opens it. Its poll
  * (`POST /api/device-agents/pairing/poll`) reads the poll secret as its
@@ -138,9 +139,6 @@ const PAIRING_START_BRAKE = {
   maxTrackedUsers: 10_000,
 };
 
-/** How many fresh codes a start tries, each one a standing pairing already showed, before it is answered unavailable. */
-const USER_CODE_TRIES = 3;
-
 /** The address a request came from as the platform named it, or nothing where it named none that reads as one. */
 function requestAddressOf(request: Request): string | undefined {
   const named =
@@ -155,15 +153,13 @@ function connectUrlOf(request: Request, userCode: string): string {
   return new URL(hostConnectPath(userCode), new URL(request.url).origin).href;
 }
 
-/** A pairing opened under a fresh code, answering the code; another is minted where a standing pairing shows the one tried. */
+/** A pairing opened under a fresh code, answering the code; unavailable where a standing pairing already shows the code minted, and the box starts again. */
 const openedPairing = (opening: Omit<HostPairingOpening, "userCode">) =>
   Effect.gen(function* () {
-    for (let tried = 0; tried < USER_CODE_TRIES; tried += 1) {
-      const userCode = mintHostUserCode();
-      const opened = yield* hostedStoreOrUnavailable(openHostPairing({ ...opening, userCode }));
-      if (Option.isSome(opened)) return userCode;
-    }
-    yield* Effect.logError("no fresh pairing code was free after every try");
+    const userCode = mintHostUserCode();
+    const opened = yield* hostedStoreOrUnavailable(openHostPairing({ ...opening, userCode }));
+    if (Option.isSome(opened)) return userCode;
+    yield* Effect.logError("the pairing code minted was already shown");
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   });
 

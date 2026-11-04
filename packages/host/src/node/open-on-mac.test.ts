@@ -5,7 +5,7 @@ import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
-import { agentWorktreeScript, cloneFolder, WORKTREE_LOCK_BUSY } from "./open-on-mac.js";
+import { agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
 
 /**
  * A local agent's worktree script over real Git and bash, an origin on disk standing
@@ -13,10 +13,8 @@ import { agentWorktreeScript, cloneFolder, WORKTREE_LOCK_BUSY } from "./open-on-
  * detached at its branch's head, which the clone lists; a first clone cut
  * off midway leaves nothing at the clone's place; two launches at once
  * before the clone is made each bring in their own branch, and two agents
- * fetch into the clone at once, none taking the lock from one that took it
- * after the holder it read let go; one waits on a clone another holds while
- * it lives, takes the lock over once it is gone, and gives up, leaving a live
- * holder's lock, once it has waited its bound; a transfer from a remote that
+ * fetch into the clone at once; one waits on a clone another holds while
+ * it lives, and takes the lock over once it is gone; a transfer from a remote that
  * never answers fails rather than hangs; and a make that fails or was cut
  * off leaves nothing that blocks the next.
  */
@@ -258,36 +256,6 @@ test(
 );
 
 test(
-  "a launch gives up waiting on a clone a live holder keeps past its bound, and leaves the holder's lock",
-  async (t) => {
-    const { scratch, origin, shell, state } = await fixture(t);
-    const clone = cloneFolder(state, "acme/app");
-    const lock = `${clone}.lock`;
-    const holder = spawn("sleep", ["60"]);
-    t.onTestFinished(() => void holder.kill());
-    mkdirSync(lock, { recursive: true });
-    writeFileSync(path.join(lock, "pid"), String(holder.pid));
-
-    const ended = runEnded(
-      scratch,
-      shell,
-      agentWorktreeScript({
-        repository: "acme/app",
-        clone,
-        worktree: path.join(scratch, "agents", "agent", "repository"),
-        branch: "agent/fix-relay",
-        remote: origin,
-        seconds: { stall: 60, lockWait: 1 },
-      }),
-    );
-
-    assert.equal(ended.code, WORKTREE_LOCK_BUSY);
-    assert.equal(readFileSync(path.join(lock, "pid"), "utf8"), String(holder.pid));
-  },
-  GIT_DEADLINE,
-);
-
-test(
   "a clone from a remote that never answers fails once its transfer stalls, and the launch ends",
   async (t) => {
     const { scratch, shell, state } = await fixture(t);
@@ -311,7 +279,7 @@ test(
         worktree: path.join(scratch, "agents", "agent", "repository"),
         branch: "agent/fix-relay",
         remote: `http://127.0.0.1:${address.port}/acme/app.git`,
-        seconds: { stall: 1, lockWait: 60 },
+        stallSeconds: 1,
       }),
       { mode: 0o700 },
     );
@@ -331,86 +299,6 @@ test(
 
     assert.equal(code, 1);
     assert.equal(existsSync(`${clone}.lock`), false);
-  },
-  GIT_DEADLINE,
-);
-
-test(
-  "a launch that finds the holder it read gone leaves the lock to the one that took it since",
-  async (t) => {
-    const { scratch, origin, push, shell, state } = await fixture(t);
-    const head = push("first\n");
-    const clone = cloneFolder(state, "acme/app");
-    const own = path.join(scratch, "agents", "agent", "repository");
-    const lock = `${clone}.lock`;
-    // The holder the launch first reads, which has let go and ended, and the one that took the lock after it, alive.
-    const gone = spawnSync("true").pid;
-    const next = spawn("sleep", ["60"]);
-    t.onTestFinished(() => void next.kill());
-    mkdirSync(lock, { recursive: true });
-    writeFileSync(path.join(lock, "pid"), String(next.pid));
-    // Note that the launch's first read of the lock answers the holder before, as a read made just before that holder let go would; every later read is the file's own.
-    const tools = path.join(scratch, "tools");
-    mkdirSync(tools);
-    writeFileSync(
-      path.join(tools, "cat"),
-      [
-        "#!/bin/sh",
-        'if [ "$1" = "$LOCK_PID" ] && [ ! -e "$LOCK_PID_READ" ]; then',
-        '  : > "$LOCK_PID_READ"',
-        '  printf %s "$GONE"',
-        "  exit 0",
-        "fi",
-        'exec /bin/cat "$@"',
-        "",
-      ].join("\n"),
-      { mode: 0o700 },
-    );
-    const file = path.join(scratch, "open.sh");
-    writeFileSync(
-      file,
-      agentWorktreeScript({
-        repository: "acme/app",
-        clone,
-        worktree: own,
-        branch: "agent/fix-relay",
-        remote: origin,
-      }),
-      { mode: 0o700 },
-    );
-    const ended = new Promise<void>((resolve) =>
-      execFile(
-        "/bin/bash",
-        [file],
-        {
-          env: {
-            ...GIT_ENVIRONMENT,
-            PATH: `${tools}:${GIT_ENVIRONMENT.PATH}`,
-            HOME: scratch,
-            SHELL: shell,
-            LOCK_PID: path.join(lock, "pid"),
-            LOCK_PID_READ: path.join(scratch, "lock-pid-read"),
-            GONE: String(gone),
-          },
-        },
-        () => resolve(),
-      ),
-    );
-
-    // Wait for the launch to read the holder, however slow the machine, then give it the time it had to act on what it read.
-    const read = path.join(scratch, "lock-pid-read");
-    for (let waited = 0; !existsSync(read) && waited < 20_000; waited += 100) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    assert.equal(existsSync(read), true);
-    await new Promise((resolve) => setTimeout(resolve, 2_500));
-    assert.equal(existsSync(path.join(clone, ".git")), false);
-    assert.equal(readFileSync(path.join(lock, "pid"), "utf8"), String(next.pid));
-    next.kill();
-    await ended;
-
-    assert.equal(git(own, ["rev-parse", "HEAD"]), head);
-    assert.equal(existsSync(lock), false);
   },
   GIT_DEADLINE,
 );

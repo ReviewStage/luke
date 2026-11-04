@@ -57,9 +57,6 @@ const PNPM_FILE = { RC: "rc", CONFIG: "config.yaml" } as const;
 /** npm's settings in a home. */
 const NPMRC = ".npmrc";
 
-/** Where under a home pnpm keeps a store of its own where its settings name none: under `PNPM_HOME`, as Claude Code's commands and Codex's on Linux find it, and pnpm's own folder on a Mac, as Codex's find it there. */
-const OWN_PNPM_STORES = [`${HOME_FOLDER.PNPM}/store`, "Library/pnpm/store"] as const;
-
 /** gh's files in its config folder: its sign-ins, and its own settings, whose version keeps gh from migrating the sign-ins (`cli/cli`'s `internal/config/migration`). */
 const GH_FILE = { HOSTS: "hosts.yml", CONFIG: "config.yml" } as const;
 
@@ -154,10 +151,6 @@ export interface AgentBox {
  * `.npmrc`, each written only where it stands nowhere, so whatever the
  * agent set there itself is kept. A value is quoted as JSON, which ini and
  * YAML both read, since the state root's path may hold a space.
- * Note that an agent that already keeps a pnpm store of its own goes on
- * with it, because pnpm, with no terminal to ask, refuses to install into
- * a `node_modules` linked from another store; once its folder is cleared,
- * it starts on the box's.
  */
 export const agentFoldersMade = (folder: string, box: AgentBox) =>
   Effect.gen(function* () {
@@ -168,18 +161,13 @@ export const agentFoldersMade = (folder: string, box: AgentBox) =>
     }
     const pnpmStore = JSON.stringify([box.stateRoot, BOX_FOLDER.PNPM_STORE].join("/"));
     const npmCache = JSON.stringify([box.stateRoot, BOX_FOLDER.NPM_CACHE].join("/"));
-    const settings: [string, string][] = [[[folders.home, NPMRC].join("/"), `cache=${npmCache}\n`]];
-    const ownStores = yield* Effect.forEach(OWN_PNPM_STORES, (store) =>
-      fileSystem.exists([folders.home, store].join("/")),
-    );
-    if (!ownStores.includes(true)) {
-      const pnpmConfig = [folders.home, PNPM_CONFIG_FOLDER[box.platform]].join("/");
-      yield* fileSystem.makeDirectory(pnpmConfig, { recursive: true, mode: 0o700 });
-      settings.push(
-        [[pnpmConfig, PNPM_FILE.RC].join("/"), `store-dir=${pnpmStore}\n`],
-        [[pnpmConfig, PNPM_FILE.CONFIG].join("/"), `storeDir: ${pnpmStore}\n`],
-      );
-    }
+    const pnpmConfig = [folders.home, PNPM_CONFIG_FOLDER[box.platform]].join("/");
+    yield* fileSystem.makeDirectory(pnpmConfig, { recursive: true, mode: 0o700 });
+    const settings: [string, string][] = [
+      [[folders.home, NPMRC].join("/"), `cache=${npmCache}\n`],
+      [[pnpmConfig, PNPM_FILE.RC].join("/"), `store-dir=${pnpmStore}\n`],
+      [[pnpmConfig, PNPM_FILE.CONFIG].join("/"), `storeDir: ${pnpmStore}\n`],
+    ];
     for (const [file, contents] of settings) {
       if (!(yield* fileSystem.exists(file))) yield* replaced(file, contents);
     }
