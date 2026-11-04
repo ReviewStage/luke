@@ -1,4 +1,10 @@
-import { AGENT_FAILURE, type AgentFailure } from "./agent-wire.js";
+import {
+  AGENT_FAILURE,
+  AGENT_RUNTIME,
+  type AgentFailure,
+  type NativeAgentRuntime,
+} from "./agent-wire.js";
+import { DEVICE_LAUNCH_STEP, type DeviceLaunchStep } from "./device-agent-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
 /**
@@ -67,6 +73,36 @@ export function ranDirectlyWords(folder: string, starter: string | undefined): s
  */
 export function hostLostWords(host: string): string {
   return `${host} went offline during this turn. Send a message to carry on once it's back.`;
+}
+
+/** What a host's launch was doing as it stopped, by the step it last reported, as "it failed while" goes on. */
+const LAUNCH_STOPPED_WORDS = {
+  [DEVICE_LAUNCH_STEP.PREPARING]: "preparing the agent's folder",
+  [DEVICE_LAUNCH_STEP.FETCHING]: "fetching the repository",
+  [DEVICE_LAUNCH_STEP.STARTING]: "starting the agent",
+} as const satisfies Record<DeviceLaunchStep, string>;
+
+/** The harness a launch stopped starting, by name. */
+const HARNESS_NAMES = {
+  [AGENT_RUNTIME.CLAUDE_CODE]: "Claude Code",
+  [AGENT_RUNTIME.CODEX]: "Codex",
+} as const satisfies Record<NativeAgentRuntime, string>;
+
+/**
+ * Why an agent whose host settled its launch unstarted failed, said whole
+ * in place of a failure's words: the step the host last reported, the
+ * harness by name where it stopped as it started it, and that a message
+ * tries again, since its next message launches it anew.
+ */
+export function launchStoppedWords(
+  step: DeviceLaunchStep,
+  runtime: NativeAgentRuntime | undefined,
+): string {
+  const doing =
+    step === DEVICE_LAUNCH_STEP.STARTING && runtime !== undefined
+      ? `starting ${HARNESS_NAMES[runtime]}`
+      : LAUNCH_STOPPED_WORDS[step];
+  return `The host couldn't start this agent: it failed while ${doing}. Send a message to try again.`;
 }
 
 /** Whether only a new agent goes on past this failure, rather than a message to the agent that failed. */

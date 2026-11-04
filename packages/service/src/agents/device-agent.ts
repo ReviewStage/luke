@@ -44,7 +44,7 @@ import { TURN_ORIGIN } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { heldUntil } from "../http/held-read.js";
 import type { StoreFailure } from "../http/store-failure.js";
-import { RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
+import { launchStoppedDetail, RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 export const DEVICE_AGENT_SERVICE = {
@@ -203,6 +203,8 @@ function refusedTurn(
  * queued by its harness's first event (`native-events/runner-events-app.ts`),
  * so a runner that never started leaves its message awaiting a turn nothing
  * will queue, and the agent reading as running until that line's grace.
+ * Answers whether it queued one, which is whether the launch never opened
+ * its turn.
  */
 export const queuedUnopenedTurn = (
   writer: Pick<StoreWriter, "enqueueTurn">,
@@ -211,14 +213,15 @@ export const queuedUnopenedTurn = (
   launch: { readonly createdAt: Date; readonly stopped: boolean },
 ) =>
   Effect.gen(function* () {
-    if (launch.stopped) return;
+    if (launch.stopped) return false;
     const newest = (yield* latestTurnsOf(userId, [conversationId])).get(conversationId);
-    if (newest !== undefined && newest.queuedAt >= launch.createdAt) return;
+    if (newest !== undefined && newest.queuedAt >= launch.createdAt) return false;
     const turnId = randomUUID();
     yield* writer.enqueueTurn(
       { userId, conversationId },
       { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
     );
+    return true;
   });
 
 /**
@@ -232,10 +235,11 @@ export const queuedUnopenedTurn = (
  * turn its message waits on queued (`queuedUnopenedTurn`), as a launch that
  * failed before its runner is (`coder-host/runner-sessions.ts`'s
  * `launchFailed`), so that turn is settled the same way, whatever the Mac
- * said of why. A launch the Mac settled unstarted
- * with why (`refusal`) settles its turn in the refusal's words, as a session
- * that ended, since the agent can never run there again, so the agent reads
- * as one only a new agent goes on from. A turn the runner ended itself
+ * said of why, and in words naming the step its host last reported where
+ * it reported one (`launchStoppedDetail`). A launch the Mac settled
+ * unstarted with why (`refusal`) settles its turn in the refusal's words,
+ * as a session that ended, since the agent can never run there again, so
+ * the agent reads as one only a new agent goes on from. A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
  *
@@ -268,10 +272,17 @@ export function settledDeviceAgentLine(
     const agent = yield* readAgent(userId, agentId);
     if (Option.isNone(agent)) return true;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    yield* queuedUnopenedTurn(writer, userId, agent.value.conversationId, newest.value);
+    const unopened = yield* queuedUnopenedTurn(
+      writer,
+      userId,
+      agent.value.conversationId,
+      newest.value,
+    );
     const now = yield* Clock.currentTimeMillis;
     if (refusal === undefined) {
-      yield* settleRunnerLostTurns(writer, agent.value.conversationId, now);
+      // Note that a launch whose turn opened is a runner gone however it ended, and one that never opened its turn is worded by the step it stopped at.
+      const detail = unopened ? launchStoppedDetail(newest.value.step) : undefined;
+      yield* settleRunnerLostTurns(writer, agent.value.conversationId, now, detail);
       return true;
     }
     const { detail, failure } = refusedTurn(

@@ -22,6 +22,7 @@ import {
   deviceAgentRequestsWaiting,
   queueDeviceAgentRequest,
   settleDeviceAgentLine,
+  stepDeviceAgentLaunch,
   withdrawDeviceAgentRequest,
   withdrawExpiredDeviceAgentRows,
 } from "@repo/database/models/device-agent-store";
@@ -37,7 +38,9 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_LAUNCH_REFUSAL,
+  DEVICE_LAUNCH_STEP,
   type DeviceLaunchRefusal,
+  type DeviceLaunchStep,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
 } from "@repo/features/device-agent-wire";
@@ -63,7 +66,12 @@ import {
   cloneAgentRepository,
   deepenCheckoutWith,
 } from "../coder-host/checkout.js";
-import { agentFailureOf, hostLostOf, ranDirectlyFolderOf } from "../coder-host/status.js";
+import {
+  agentFailureOf,
+  hostLostOf,
+  launchStoppedOf,
+  ranDirectlyFolderOf,
+} from "../coder-host/status.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentLinesFor,
@@ -423,17 +431,20 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
 
     /**
      * A local agent's launch claimed, then settled unstarted by its device,
-     * with the refusal given where one is: the agent, and its turn as the
-     * store reads it after. No turn is queued first, because a native turn is
-     * queued by its harness's first event, which a runner that never started
-     * never posts.
+     * past the step it reported and with the refusal given where either is:
+     * the agent, and its turn as the store reads it after. No turn is queued
+     * first, because a native turn is queued by its harness's first event,
+     * which a runner that never started never posts.
      */
-    const unstartedTurn = (refusal?: DeviceLaunchRefusal) =>
+    const unstartedTurn = (refusal?: DeviceLaunchRefusal, step?: DeviceLaunchStep) =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
         const { userId, deviceId, agent } = opened;
         const launch = yield* launched(opened);
         yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+        if (step !== undefined) {
+          yield* stepDeviceAgentLaunch(userId, deviceId, launch.handle.command, step);
+        }
         yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, refusal);
         const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
           agent.conversationId,
@@ -442,7 +453,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       });
 
     it.effect(
-      "a launch its Mac settled unstarted with no refusal fails the agent's turn as a lost runner's, though its runner never opened one",
+      "a launch its Mac settled unstarted with no refusal and no step reported fails the agent's turn as a lost runner's, though its runner never opened one",
       () =>
         Effect.gen(function* () {
           const { turn } = yield* unstartedTurn();
@@ -450,6 +461,18 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, TURN_FAILURE.MODEL);
           assert.equal(turn?.failureDetail, RUNNER_LOST_DETAIL);
+        }),
+    );
+
+    it.effect(
+      "a launch its Mac settled unstarted past a step it reported fails the agent's turn naming that step, read as a failure with no word of its own",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* unstartedTurn(undefined, DEVICE_LAUNCH_STEP.FETCHING);
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(launchStoppedOf(turn), DEVICE_LAUNCH_STEP.FETCHING);
+          assert.equal(agentFailureOf(turn), AGENT_FAILURE.OTHER);
         }),
     );
 

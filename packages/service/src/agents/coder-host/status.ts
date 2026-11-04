@@ -33,6 +33,7 @@ import {
   type NativeAgentRuntime,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
+import { DEVICE_LAUNCH_STEPS, type DeviceLaunchStep } from "@repo/features/device-agent-wire";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -175,14 +176,22 @@ export function hostAwayDetail(hostName: string): string {
 }
 
 /**
+ * What the turn a launch waited on records when its host settled the
+ * launch unstarted after reporting a step (`DEVICE_LAUNCH_STEP`): these
+ * words, then the step as the wire spells it, and nothing the host printed.
+ */
+const LAUNCH_STOPPED_DETAIL = "the agent's host settled its launch unstarted at the step ";
+
+/**
  * The host's refusal sentences, a provider's words for a prompt past the
- * window, and the words of a run its host lost, a failed turn's detail may
- * carry, by the word the wire says for each. Note that a host lost reads as
- * `other` rather than a word of its own, because a window reads
- * `failureReason` as one of the words it knows and an older build would
- * refuse the whole page over a new one: `other` reads there as a run that
- * ended without saying why, rather than as the model's failure, and a newer
- * window names the host from the page's `hostLost`.
+ * window, and the words of a run its host lost or a launch it settled
+ * unstarted, a failed turn's detail may carry, by the word the wire says for
+ * each. Note that those last two read as `other` rather than words of their
+ * own, because a window reads `failureReason` as one of the words it knows
+ * and an older build would refuse the whole page over a new one: `other`
+ * reads there as a run that ended without saying why, rather than as the
+ * model's failure, and a newer window names the host from the page's
+ * `hostLost`, or the step from its `launch`.
  */
 export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]])[] = [
   [
@@ -213,7 +222,7 @@ export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]]
       REPOSITORY_REFUSAL.CHECKOUT_FAILED,
     ],
   ],
-  [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL]],
+  [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL, LAUNCH_STOPPED_DETAIL]],
 ];
 
 /** What a failed turn's detail opens with when its Mac refused an agent that ran directly on it; the folder of its checkout follows. */
@@ -242,6 +251,24 @@ export function hostLostOf(
   if (!detail.endsWith(HOST_AWAY_DETAIL)) return undefined;
   const host = detail.slice(0, -HOST_AWAY_DETAIL.length);
   return host.length > 0 ? { host } : undefined;
+}
+
+/** What the turn of a launch its host settled unstarted records, by the step the line last held; nothing where it held none this build knows, which leaves a runner gone's words. */
+export function launchStoppedDetail(step: string | null): string | undefined {
+  const known = DEVICE_LAUNCH_STEPS.find((each) => each === step);
+  return known === undefined ? undefined : `${LAUNCH_STOPPED_DETAIL}${known}`;
+}
+
+/** The step a launch its host settled unstarted stopped at, as its failed turn records it; nothing for any other turn. */
+export function launchStoppedOf(
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): DeviceLaunchStep | undefined {
+  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
+  if (turn.failure !== TURN_FAILURE.MODEL) return undefined;
+  const detail = turn.failureDetail ?? "";
+  if (!detail.startsWith(LAUNCH_STOPPED_DETAIL)) return undefined;
+  const step = detail.slice(LAUNCH_STOPPED_DETAIL.length);
+  return DEVICE_LAUNCH_STEPS.find((each) => each === step);
 }
 
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */

@@ -2453,10 +2453,12 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * Where the launch the agent waits on stands, on the agent's own
    * transcript while it runs on a device and that launch's turn has not
    * opened: waiting while no host has taken it, then the step the host
-   * reported, which the working line words in place of "Starting…". Absent
-   * on a worker's page, for an agent in the cloud, where the host that took
-   * the launch reported no step, once the launch's turn has opened, and
-   * from a service older than it.
+   * reported, which the working line words in place of "Starting…". Once
+   * the agent failed, the step a launch its host settled unstarted stopped
+   * at, which its end line words. Absent on a worker's page, for an agent
+   * in the cloud, where the host that took the launch reported no step,
+   * once the launch's turn has opened, for any other failure, and from a
+   * service older than it.
    */
   launch: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_LAUNCH))),
   /**

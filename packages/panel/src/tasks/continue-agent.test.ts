@@ -5,10 +5,13 @@ import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
+  AGENT_LAUNCH,
   AGENT_PAYER,
+  AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentAttachment,
   type AgentFailure,
+  type AgentLaunch,
   type AgentMessagesAnswer,
   type AgentStatus,
   type AgentSummary,
@@ -174,6 +177,8 @@ async function drawnTab(input: {
   drafts?: boolean;
   /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<AgentMessagesAnswer, "usage" | "turnUsage">;
+  /** Where the first page says the agent's launch stands, or stopped once it failed. */
+  launch?: AgentLaunch;
   /** Where the end line's key press turns, by the provider it names. */
   onOpenApiKeys?: (provider: ModelProvider | undefined) => void;
 }) {
@@ -197,6 +202,7 @@ async function drawnTab(input: {
       status: input.status,
       title: null,
       ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
+      ...(input.launch === undefined ? undefined : { launch: input.launch }),
       ...input.usage,
     },
   ]);
@@ -349,6 +355,21 @@ test("the end line's words and whether it tells of a failure come apart, and nam
   for (const status of [AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING, AGENT_STATUS.COMPLETED]) {
     assert.equal(endLineParts(status, undefined), undefined, status);
   }
+});
+
+test("a failed agent whose host settled its launch unstarted ends on the step it stopped at, naming the harness where it stopped starting it", async () => {
+  const tab = await drawnTab({
+    status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.OTHER,
+    launch: AGENT_LAUNCH.STARTING,
+    source: { runtime: AGENT_RUNTIME.CODEX },
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  assert.match(
+    line.textContent ?? "",
+    /The host couldn't start this agent: it failed while starting Codex\. Send a message to try again\./,
+  );
+  assert.doesNotMatch(line.textContent ?? "", /Failed:/);
 });
 
 test("a failed turn's end line names no price, even from a service that sent the turn's, while the model menu's foot still says the whole run's", async () => {
