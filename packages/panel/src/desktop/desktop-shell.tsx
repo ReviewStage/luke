@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
 import type { Task } from "@repo/features/task-wire";
-import { readingWords } from "@repo/features/words";
+import { readingWords, type SignInFailure } from "@repo/features/words";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -361,7 +361,7 @@ export interface DesktopGates {
   accountRequired: boolean;
   /** Whose sign-in the gate is waiting on in the browser. */
   signInWait?: AccountProvider | undefined;
-  signInFailure?: string | undefined;
+  signInFailure?: SignInFailure | undefined;
   /** The provider this Mac last signed in with, which the gate marks. */
   lastSignIn?: AccountProvider | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;

@@ -1,7 +1,8 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SIGN_IN_FAILURE_WORDS, type SignInFailure } from "@repo/features/words";
 import {
   ANNOUNCE,
   AuthPage,
@@ -47,7 +48,7 @@ export function SignInGate({
   /** Whose sign-in the gate is waiting on; absent while none was begun here. */
   waiting?: AccountProvider;
   /** Why the last attempt ended without landing, from the flow's owner. */
-  failure?: string;
+  failure?: SignInFailure;
   /** The provider this Mac last signed in with; absent while none is kept. */
   lastUsed?: AccountProvider;
   /** The link that opens the Mac app instead, which a shell that is not the Mac app offers; absent in the Mac app. */
@@ -68,10 +69,11 @@ export function SignInGate({
         failure === undefined
           ? undefined
           : {
-              words: failure,
+              words: SIGN_IN_FAILURE_WORDS[failure],
+              // Note that the answer's key is the report's code, so a failed sign-in says why in Sentry.
               failure: failureShown({
                 surface: FAILURE_SURFACE.ACCOUNT_SIGN_IN,
-                cause: FAILURE_CONDITION.REFUSED,
+                cause: { failure },
                 refused: true,
               }),
             }
