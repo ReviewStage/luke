@@ -1367,7 +1367,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch's end that left a message untaken keeps the sandbox up, and the launch that hands it on reads it",
+    "a launch's end that left a message untaken keeps the sandbox up less the swap only its runner sent, and the launch that hands it on reads it on a swap of its own",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1389,9 +1389,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 8,
           reason: RUNNER_END.TURN_ENDED,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
         assert.equal(ended, RUNNER_ENDED.LINES_WAITING);
         assert.equal(api.sandboxes[0]?.status, "running");
+        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
@@ -1399,6 +1400,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(handed, true);
         assert.equal(api.commands.length, 2);
+        const placeholder = api.commands[1]?.env[RUNNER_ENV.CLAUDE_TOKEN];
+        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), [
+          { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
+        ]);
         const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.firstSequence, 9);

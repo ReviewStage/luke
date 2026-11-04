@@ -30,8 +30,9 @@
  * or a record. A credential the harness holds at the place's firewall
  * (`HarnessLaunch`'s `held`) is set there before the runner starts, its
  * placeholder in the environment in its place, and is taken off with every
- * other at the place's stop, or alone at a launch's end a Terminal keeps the
- * place up through. The config line and the first message are its first lines.
+ * other at the place's stop, or alone at a launch's end that leaves the place
+ * up, for a Terminal or for the launch that hands its lines on. The config
+ * line and the first message are its first lines.
  * The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
@@ -2036,6 +2037,12 @@ const linesWaitAt = (userId: string, agentId: string) =>
     );
   });
 
+/** The credentials only a runner sent (`RUNNER_SLOTS`) taken off a place its end leaves up. */
+const runnerSlotsWithdrawn = (machine: MachineLifecycle, running: MachinePlace, userId: string) =>
+  Effect.forEach(RUNNER_SLOTS, (slot) => machine.firewall.withdraw(running, userId, slot), {
+    discard: true,
+  });
+
 /** The stop `runnerEnded` decides, on the place as it stands when read here. */
 const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   machine: MachineLifecycle,
@@ -2053,16 +2060,19 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     ending.reason !== RUNNER_END.FAILED &&
     (yield* linesWaitAt(ending.target.userId, agentId))
   ) {
+    // Note that credentials that would not come off are said and passed over, because the launch that
+    // hands the lines on sets its own in their slots, and an END that failed would hand nothing on.
+    yield* runnerSlotsWithdrawn(machine, running, ending.target.userId).pipe(
+      Effect.catch(() =>
+        Effect.logWarning("an ended runner's credentials stayed on a place left up for its lines"),
+      ),
+    );
     return RUNNER_ENDED.LINES_WAITING;
   }
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place,
   // less the credentials only the ended runner sent.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
-    yield* Effect.forEach(
-      RUNNER_SLOTS,
-      (slot) => machine.firewall.withdraw(running, ending.target.userId, slot),
-      { discard: true },
-    );
+    yield* runnerSlotsWithdrawn(machine, running, ending.target.userId);
     return RUNNER_ENDED.HELD;
   }
   // Every credential comes off first, and a place they would not come off is left up rather than
