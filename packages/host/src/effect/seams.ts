@@ -10,7 +10,6 @@ import type { ProductClientPlatform } from "@repo/features/analytics";
 import type {
   DeviceArch,
   DeviceCapability,
-  DeviceIsolation,
   DeviceMachine,
   DevicePlatform,
 } from "@repo/features/device-agent-wire";
@@ -211,8 +210,6 @@ export interface LocalAgentPlatformSeam {
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
-  /** How the launcher runs each agent, which the device registers as: straight on the box (`DEVICE_ISOLATION.DIRECT`), as every host's does. */
-  readonly deviceIsolation: DeviceIsolation;
   /**
    * The lines beyond the first the device registers it takes
    * (`DEVICE_CAPABILITY`). The follower takes every one, but a device names

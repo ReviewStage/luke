@@ -2,22 +2,19 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
-import {
-  DEVICE_ISOLATION,
-  type DeviceAgentAnswer,
-  type DeviceAgentLaunchSecrets,
-  type DeviceAgentLine,
-  type DeviceAgentRelease,
-  type DeviceAgentRequest,
-  type DeviceArch,
-  type DeviceCapability,
-  type DeviceIsolation,
-  type DeviceLaunchStep,
-  type DeviceMachine,
-  type DevicePlatform,
-  type DeviceSetup,
-  type DeviceSignedIn,
-  type HostUpdate,
+import type {
+  DeviceAgentAnswer,
+  DeviceAgentLaunchSecrets,
+  DeviceAgentLine,
+  DeviceAgentRelease,
+  DeviceAgentRequest,
+  DeviceArch,
+  DeviceCapability,
+  DeviceLaunchStep,
+  DeviceMachine,
+  DevicePlatform,
+  DeviceSetup,
+  HostUpdate,
 } from "./device-agent-wire.js";
 import {
   type HostPairingPollAnswer,
@@ -82,18 +79,16 @@ export interface DeviceAgentUpdate {
   readonly updateFailure?: string | undefined;
 }
 
-/** What a Mac registers as: its name, its platform and architecture, which machine it is where it read it (`DeviceMachine`), its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
+/** What a Mac registers as: its name, its platform and architecture, which machine it is where it read it (`DeviceMachine`), its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, the lines beyond the first it takes, and where its setup stands until it is ready. */
 export interface DeviceAgentDevice extends DeviceMachine {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
-  readonly isolation: DeviceIsolation;
   readonly home: string;
   /** The folder its own layout puts its agents under (`deviceAgentsFolder`), absolute. */
   readonly agentsFolder: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
-  readonly signedIn: DeviceSignedIn;
   readonly capabilities: readonly DeviceCapability[];
   /** Where its setup stands while it is not ready to take an agent, and why it failed where it did; none once it is ready. */
   readonly setup?: DeviceSetup | undefined;
@@ -299,16 +294,14 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const { codexExecutable, capabilities, isolation, setup, setupFailure, ...rest } = device;
+    const { codexExecutable, capabilities, setup, setupFailure, ...rest } = device;
     // Note that a Mac with no Codex checked names none, which the service reads as no Codex,
     // and one with no capability names no list, which a service from before the field refuses.
-    // Likewise a device running bare names no isolation, so a service from before the field still takes its register.
     const input = {
       deviceId,
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
       ...(capabilities.length === 0 ? undefined : { capabilities }),
-      ...(isolation === DEVICE_ISOLATION.BARE ? undefined : { isolation }),
       // Likewise a device ready to take an agent names no setup, so only one a service from before the field would never list is refused.
       ...(setup === undefined ? undefined : { setup }),
       ...(setup === undefined || setupFailure === undefined ? undefined : { setupFailure }),
@@ -319,16 +312,14 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** That this Mac is here now, which harnesses it is signed in to, and where its update stands while one is under way; the launches the service holds it to and a newer release where it took the beat, and nothing where it did not. */
+  /** That this Mac is here now, and where its update stands while one is under way; the launches the service holds it to and a newer release where it took the beat, and nothing where it did not. */
   beat(
     deviceId: string,
-    signedIn: DeviceSignedIn,
     updating?: DeviceAgentUpdate,
   ): Effect.Effect<DeviceAgentBeat | undefined, never, HttpClient.HttpClient> {
     const failure = updating?.updateFailure;
     const input = {
       deviceId,
-      signedIn,
       // Note that a beat updating nothing names neither key, since a service from before them refuses a key it does not know.
       ...(updating === undefined ? undefined : { update: updating.update }),
       ...(updating === undefined || failure === undefined ? undefined : { updateFailure: failure }),

@@ -1,6 +1,6 @@
 {
   "name": "@repo/host-daemon",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "Vespin's host daemon, `vespin-host`: it runs on a Linux box or an Apple silicon Mac and follows the local agents its member starts there",
