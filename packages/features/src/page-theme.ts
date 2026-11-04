@@ -12,7 +12,7 @@ import { Schema as EffectSchema } from "effect";
  * read and wears whatever the window answers, again each time the window's
  * appearance flips.
  *
- * The page wears the theme as `--vespin-*` variables and a `color-scheme` on
+ * The page wears the theme as `--app-*` variables and a `color-scheme` on
  * its root, in a sheet of its own placed ahead of the page's own styles, so a
  * page that sets either itself keeps its own. A page that paints no ground of
  * its own reads on the ground it is drawn over, the transcript's or the tab's,
@@ -35,7 +35,14 @@ const PAGE_THEME_ASK_TYPE = "app-page-theme-ask";
 const PAGE_THEME_TYPE = "app-page-theme";
 
 /** The class a page gives an element, or its body, to stand across the frame rather than at reading width. */
-export const PAGE_WIDE_CLASS = "vespin-wide";
+export const PAGE_WIDE_CLASS = "page-wide";
+
+/**
+ * The prefix the variables were first handed under, before they took a name
+ * that leaves the product out. Pages shown then are stored as written, so the
+ * script hands each variable under this prefix as well, and no agent is told it.
+ */
+const PAGE_THEME_LEGACY_PREFIX = "--vespin-";
 
 /** The scheme a page is drawn in, as the window draws. */
 export const PAGE_THEME_SCHEME = {
@@ -50,29 +57,29 @@ export type PageThemeScheme = (typeof PAGE_THEME_SCHEME)[keyof typeof PAGE_THEME
  * what each is for, which an agent writing a page is told.
  */
 export const PAGE_THEME_VARIABLE = {
-  BACKGROUND: "--vespin-background",
-  FOREGROUND: "--vespin-foreground",
-  MUTED_FOREGROUND: "--vespin-muted-foreground",
-  SURFACE: "--vespin-surface",
-  WELL: "--vespin-well",
-  BORDER: "--vespin-border",
-  BORDER_STRONG: "--vespin-border-strong",
-  ACCENT: "--vespin-accent",
-  ACCENT_TEXT: "--vespin-accent-text",
-  SUCCESS: "--vespin-success",
-  WARNING: "--vespin-warning",
-  DANGER: "--vespin-danger",
-  CHART_1: "--vespin-chart-1",
-  CHART_2: "--vespin-chart-2",
-  CHART_3: "--vespin-chart-3",
-  CHART_4: "--vespin-chart-4",
-  CHART_5: "--vespin-chart-5",
-  FONT_SANS: "--vespin-font-sans",
-  FONT_MONO: "--vespin-font-mono",
-  TEXT_SIZE: "--vespin-text-size",
-  TEXT_LEADING: "--vespin-text-leading",
-  RADIUS: "--vespin-radius",
-  READING_WIDTH: "--vespin-reading-width",
+  BACKGROUND: "--app-background",
+  FOREGROUND: "--app-foreground",
+  MUTED_FOREGROUND: "--app-muted-foreground",
+  SURFACE: "--app-surface",
+  WELL: "--app-well",
+  BORDER: "--app-border",
+  BORDER_STRONG: "--app-border-strong",
+  ACCENT: "--app-accent",
+  ACCENT_TEXT: "--app-accent-text",
+  SUCCESS: "--app-success",
+  WARNING: "--app-warning",
+  DANGER: "--app-danger",
+  CHART_1: "--app-chart-1",
+  CHART_2: "--app-chart-2",
+  CHART_3: "--app-chart-3",
+  CHART_4: "--app-chart-4",
+  CHART_5: "--app-chart-5",
+  FONT_SANS: "--app-font-sans",
+  FONT_MONO: "--app-font-mono",
+  TEXT_SIZE: "--app-text-size",
+  TEXT_LEADING: "--app-text-leading",
+  RADIUS: "--app-radius",
+  READING_WIDTH: "--app-reading-width",
 } as const;
 
 export type PageThemeVariable = (typeof PAGE_THEME_VARIABLE)[keyof typeof PAGE_THEME_VARIABLE];
@@ -113,7 +120,7 @@ export function pageThemeMessage(theme: PageTheme): {
  * The script the frame runs, ahead of the page's own. It is plain JavaScript
  * in a string because it runs in the page, apart from every bundle of ours.
  * It asks the window for the theme as the page is read and wears each answer
- * from the window alone, taking only `--vespin-*` names and values that
+ * from the window alone, taking only `--app-*` names and values that
  * cannot close the rule they stand in, in a sheet it places first in the
  * page's head, so the page's own rules come after it and win. The inset is
  * the root's padding by the `html` element's name, which a page's own `*`
@@ -132,7 +139,9 @@ export const PAGE_THEME_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_THEME_TYPE)};
   const ASK = ${JSON.stringify(PAGE_THEME_ASK_TYPE)};
-  const NAME = /^--vespin-[a-z0-9-]+$/;
+  const PREFIX = "--app-";
+  const LEGACY = ${JSON.stringify(PAGE_THEME_LEGACY_PREFIX)};
+  const NAME = /^--app-[a-z0-9-]+$/;
   const VALUE = /^[^;{}<>\\\\]*$/;
   const WIDE = ${JSON.stringify(PAGE_WIDE_CLASS)};
   const READING =
@@ -147,7 +156,8 @@ export const PAGE_THEME_SCRIPT = `(() => {
     let rules = "color-scheme:" + (scheme === "dark" ? "dark" : "light") + ";";
     for (const name of Object.keys(variables)) {
       const value = variables[name];
-      if (NAME.test(name) && typeof value === "string" && VALUE.test(value)) rules += name + ":" + value + ";";
+      if (!NAME.test(name) || typeof value !== "string" || !VALUE.test(value)) continue;
+      rules += name + ":" + value + ";" + LEGACY + name.slice(PREFIX.length) + ":" + value + ";";
     }
     if (sheet === null) {
       sheet = document.createElement("style");

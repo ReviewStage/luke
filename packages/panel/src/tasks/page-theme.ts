@@ -13,7 +13,7 @@ import { type RefObject, useEffect } from "react";
 /**
  * page-theme.ts -- the window's theme handed to a page it frames, with the room kept around it where it stands: answered when the page asks, and sent again each time the window's appearance flips.
  *
- * A page wears the theme as `--vespin-*` variables (`@repo/features/page-theme`),
+ * A page wears the theme as `--app-*` variables (`@repo/features/page-theme`),
  * each the value of one of the window's own roles as its root holds it now,
  * and the scheme the window is drawn in. A role the desktop writes as
  * `light-dark()` is handed as written, so the page reads it in the scheme it
