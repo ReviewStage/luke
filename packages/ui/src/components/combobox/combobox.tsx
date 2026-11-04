@@ -509,6 +509,8 @@ export function Combobox({
         placeholder={placeholder}
         disabled={disabled}
         maxLength={maxLength}
+        autoCorrect="off"
+        autoCapitalize="off"
         spellCheck={spellCheck}
         value={value}
         onChange={(event) => onChange(event.target.value)}
