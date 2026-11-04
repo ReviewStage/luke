@@ -1,6 +1,7 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { LINK_HOME } from "@repo/features/link-home";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
@@ -76,6 +77,7 @@ import {
   wholeWordsHint,
 } from "@repo/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
+import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
 import {
   CrownIcon,
   ExternalLinkIcon,
@@ -104,6 +106,7 @@ import { confirmFailure, failureShown, refusedShown, unreadShown } from "../fail
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
+import { useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { MenuRow } from "./menu-row.js";
@@ -616,29 +619,14 @@ function MemberRow({
 
 /**
  * The automations the reader made in the workspace, by name, which a leave
- * stops, read afresh each time the leave is asked, since one made in
- * another window meanwhile stops too; undefined until that read lands, and
- * where the service does not say whose they are, which the dialog says
- * without names.
+ * stops, held while the leave is asked, so one made in another window
+ * meanwhile is named too; undefined until the list is read, and where the
+ * service does not say whose they are, which the dialog says without names.
  */
-function useOwnAutomations(workspaceId: string) {
-  const { act } = useAct();
-  const [names, setNames] = useState<readonly string[] | undefined>(undefined);
-  // Note that only the read asked last is shown, because two leaves asked in turn can answer out of order.
-  const latest = useRef(0);
-  const read = () => {
-    const asked = ++latest.current;
-    setNames(undefined);
-    act(ACT_KIND.AUTOMATIONS_LIST, { workspaceId }).then(
-      (view) => {
-        if (asked !== latest.current || "failure" in view) return;
-        if (view.automations.some((each) => each.mine === undefined)) return;
-        setNames(view.automations.filter((each) => each.mine === true).map((each) => each.name));
-      },
-      () => undefined,
-    );
-  };
-  return { names, read };
+function useOwnAutomations(workspaceId: string, asked: boolean): readonly string[] | undefined {
+  const { rows } = useHostRead(LIVE_READ.AUTOMATIONS, asked ? workspaceId : undefined);
+  if (rows === undefined || rows.some((each) => each.mine === undefined)) return undefined;
+  return rows.filter((each) => each.mine === true).map((each) => each.name);
 }
 
 /**
@@ -661,7 +649,6 @@ function MemberLeave({
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
-  const automations = useOwnAutomations(workspaceId);
   const leave = useConfirmDialog(
     { subject: true, surfaceOpen: true },
     () =>
@@ -671,12 +658,13 @@ function MemberLeave({
       }, refusedWith),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_LEAVE),
   );
+  const ownAutomations = useOwnAutomations(workspaceId, leave.stage !== CONFIRM_STAGE.RESTING);
   const automationsLine =
-    automations.names === undefined
+    ownAutomations === undefined
       ? LEAVE_WORDS.AUTOMATIONS
-      : automations.names.length === 0
+      : ownAutomations.length === 0
         ? undefined
-        : LEAVE_WORDS.AUTOMATIONS_NAMED(automations.names);
+        : LEAVE_WORDS.AUTOMATIONS_NAMED(ownAutomations);
   return (
     <>
       <SettingsRow label={`Leave ${workspace.name}`} description={LEAVE_WORDS.LINE}>
@@ -685,10 +673,7 @@ function MemberLeave({
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
             busy={leave.busy}
             busyLabel={LEAVE_WORDS.RUNNING}
-            onClick={() => {
-              automations.read();
-              leave.ask();
-            }}
+            onClick={leave.ask}
           >
             Leave
           </Button>

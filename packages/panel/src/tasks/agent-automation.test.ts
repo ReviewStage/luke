@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -20,6 +21,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdAutomations } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentActor } from "./agent-model.js";
@@ -84,21 +86,15 @@ const AGENT: AgentSummary = {
 };
 
 let root: Root | undefined;
-/** Every workspace whose automations were read, in order. */
-let listed: string[] = [];
-/** The workspace's automations, as a read of the list answers them. */
+/** The workspace's automations, as the host lays them once read. */
 let automations: readonly AutomationSummary[] = [TRIAGE];
 
 beforeEach(() => {
-  listed = [];
   automations = [TRIAGE];
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
-    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
-      listed.push(payload.workspaceId ?? "");
-      return Promise.resolve({ automations });
-    },
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: automations }),
   });
 });
 
@@ -118,8 +114,8 @@ function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".ui-tooltip-card:not([data-leaving])")];
 }
 
-/** The agent named in a place of the workspace as Dean reads it, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */
-async function agentCard(nested = false) {
+/** The agent named in a place of the workspace as Dean reads it, its card hung, and every automation page opened. */
+async function agentCard() {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Triage", NOTHING_HELD, false, {
     me: DEAN.userId,
@@ -132,17 +128,15 @@ async function agentCard(nested = false) {
     glyph: undefined,
     label: "Triage",
   });
-  const directory = (children: ReturnType<typeof createElement>) =>
-    createElement(AutomationDirectory, {
-      workspace: WORKSPACE,
-      wanted: true,
-      onOpen: (automationId: string) => opened.push(automationId),
-      children,
-    });
   const place = createElement(MemberDirectory, {
     workspace: WORKSPACE,
     readerId: DEAN.userId,
-    children: nested ? directory(directory(named)) : directory(named),
+    children: createElement(AutomationDirectory, {
+      workspace: WORKSPACE,
+      wanted: true,
+      onOpen: (automationId: string) => opened.push(automationId),
+      children: named,
+    }),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -204,15 +198,6 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   );
   act(() => card.querySelector<HTMLElement>(".ui-hover-card-row [data-actor-ref]")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
-});
-
-test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
-  const { card } = await agentCard(true);
-  assert.equal(
-    card.querySelector(".ui-hover-card-row [data-actor-ref]")?.textContent,
-    "Morning Sentry triage",
-  );
-  assert.deepEqual(listed, [WORKSPACE.id]);
 });
 
 test("an automation a GitHub event fires says where on its card, as its row in the list does", async () => {

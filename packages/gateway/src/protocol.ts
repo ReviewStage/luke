@@ -255,23 +255,24 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
-  AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
-  AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   /**
-   * A workspace's automations, or an automation's runs, followed from now
-   * until let go or signed out, on the service's live read. What it holds
-   * is heard as `AUTOMATIONS_CHANGED` events, never answered; following
-   * again starts over, from the list or history as it stands.
+   * A workspace's automations, a workspace's runs, or an automation's runs
+   * held followed for the windows from now until let go, and a while after
+   * among those let go lately, on the service's live read. What they hold
+   * is heard as `AUTOMATIONS_CHANGED`, never answered; holding again holds
+   * nothing anew.
    */
   AUTOMATIONS_FOLLOW: "automations.follow",
-  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  /** A held list or history let go, kept followed a while among those let go lately. */
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
+  /** A held list or history read again at once, as Try again asks. */
+  AUTOMATIONS_RETRY: "automations.retry",
   /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
   INSTALLED_SKILLS_LIST: "installedSkills.list",
   /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
@@ -568,7 +569,7 @@ export const GATEWAY_EVENT = {
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
-  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",

@@ -5,20 +5,13 @@
  * signed in (`settings-fixture.ts`) holds three automations in the listed
  * workspace, one on a schedule, one on its pull requests, and one called by
  * a webhook, each with a history of runs, the webhook's newest run failed. The window opens on their list, on the first one's editor, or on
- * the failed one's with that run marked. Each follow their pages hold is
- * answered here, through the act door (`act.ts`), with the list or the runs
- * as they stand; nothing moves after. Every name, repository, and prompt
- * here is invented; nothing is read from an account.
+ * the failed one's with that run marked. Each read their pages hold is
+ * laid here on main's document (`use-app-state.ts`), the list and the runs
+ * as they stand, as the host lays them; nothing moves after. Every name,
+ * repository, and prompt here is invented; nothing is read from an account.
  */
 
 import { AGENT_STATUS } from "@repo/features/agent-wire";
-import {
-  AUTOMATION_CALL_FAILURE,
-  AUTOMATION_FOLLOW,
-  type AutomationListView,
-  type AutomationRunsView,
-  type AutomationWorkspaceRunsView,
-} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,9 +26,8 @@ import {
   type AutomationWorkspaceRun,
   GITHUB_TRIGGER_EVENT,
 } from "@repo/features/automation-wire";
-import { ACT_KIND } from "@repo/host/acts";
-import { RUN_PROFILE } from "@repo/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { type AppAutomationReads, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "./use-tasks-tab.js";
 
 /** When the fixture stands, from which every instant here is counted: a fixed one, never the clock. */
@@ -293,9 +285,6 @@ function workspaceRuns(workspaceId: string): readonly AutomationWorkspaceRun[] {
     .toSorted((one, other) => other.firedAt - one.firedAt);
 }
 
-/** What a follow of the fixture pushes. */
-type FollowedView = AutomationListView | AutomationRunsView | AutomationWorkspaceRunsView;
-
 /** The page each Automations profile opens on. */
 const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string, AutomationsPlace>(
   [
@@ -311,37 +300,83 @@ const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string
   ],
 );
 
-/** A follow that pushes what stands once, as the host's does on opening, and nothing after, since nothing here moves. */
-async function* pushedOnce(view: FollowedView): AsyncGenerator<FollowedView> {
-  yield view;
-}
-
-/** What one follow pushes: a workspace's automations or its runs, or one automation's runs, which an id none of them has answers as gone. */
-function followed(payload: PortActPayload<typeof ACT_KIND.AUTOMATIONS_FOLLOW>): FollowedView {
-  if (payload.kind === AUTOMATION_FOLLOW.WORKSPACE) return { automations: automations(payload.id) };
-  if (payload.kind === AUTOMATION_FOLLOW.WORKSPACE_RUNS) return { runs: workspaceRuns(payload.id) };
-  const runs = RUNS.get(payload.id);
-  return runs === undefined ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } : { runs };
-}
-
 /** The page an Automations profile opens at launch; none under any other. */
 export function automationsLaunchPlace(profile: string): AutomationsPlace | undefined {
   return AUTOMATIONS_PLACES.get(profile);
 }
 
+/** Each of `workspaceIds`' automations and runs, and each automation's runs, as the host lays them once read. */
+function stagedReads(workspaceIds: readonly string[]): AppAutomationReads {
+  const ofEach = <Rows>(ids: readonly string[], rows: (id: string) => Rows) =>
+    Object.fromEntries(ids.map((id) => [id, { rows: rows(id) }]));
+  return {
+    [LIVE_READ.AUTOMATIONS]: ofEach(workspaceIds, automations),
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: ofEach(workspaceIds, workspaceRuns),
+    [LIVE_READ.AUTOMATION_RUNS]: ofEach([...RUNS.keys()], (id) => RUNS.get(id) ?? []),
+  };
+}
+
+/** The staged reads, one object for each list of workspaces, so a delivery that moves none of them draws none again. */
+const STAGED_READS = new WeakMap<readonly string[], AppAutomationReads>();
+
 /**
- * What an Automations profile answers an act with, in place of main, held in
- * a box so an act that answers nothing is told from one left to main: its
- * follows, and nothing else, which the account's own reads answer
- * (`settings-fixture.ts`) or main does.
+ * Main's held reads with the staged ones laid over them, by the read and
+ * then main's own, one object for each of main's. Note that each read has
+ * its own, since main's reads may each be the one empty value.
  */
-export function automationsActAnswer(
-  profile: string,
-  kind: PortActKind,
-  payload: PortActPayload<PortActKind>,
-): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (!AUTOMATIONS_PLACES.has(profile) || kind !== ACT_KIND.AUTOMATIONS_FOLLOW) return undefined;
-  // SAFETY: the kind is the follow's, so its payload is a follow's and the stream its answer.
-  const follow = payload as PortActPayload<typeof ACT_KIND.AUTOMATIONS_FOLLOW>;
-  return { answer: pushedOnce(followed(follow)) as PortActResult<PortActKind> };
+const LAID_OVER = {
+  [LIVE_READ.AUTOMATIONS]: new WeakMap<object, object>(),
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: new WeakMap<object, object>(),
+  [LIVE_READ.AUTOMATION_RUNS]: new WeakMap<object, object>(),
+} as const satisfies Record<keyof AppAutomationReads, WeakMap<object, object>>;
+
+/** Main's `read` with its staged one laid over it, one object for each of main's. */
+function laidOver<Read extends keyof AppAutomationReads>(
+  read: Read,
+  held: AppAutomationReads[Read],
+  staged: AppAutomationReads[Read],
+): AppAutomationReads[Read] {
+  const kept = LAID_OVER[read];
+  const laid = kept.get(held);
+  // SAFETY: what is kept for `held` is `held` with its own staged reads laid over it.
+  if (laid !== undefined) return laid as AppAutomationReads[Read];
+  const next = { ...held, ...staged };
+  kept.set(held, next);
+  return next;
+}
+
+/**
+ * Main's document as an Automations profile draws it: each of
+ * `workspaceIds`' automations and runs, and each automation's runs, held
+ * as the windows' reads of them hold them (`LIVE_READ.AUTOMATIONS` and its
+ * runs). The same document, the very object, under any other profile.
+ */
+export function automationsAppState(
+  state: AppStateSnapshot,
+  workspaceIds: readonly string[],
+): AppStateSnapshot {
+  if (!AUTOMATIONS_PLACES.has(state.run.profile)) return state;
+  let staged = STAGED_READS.get(workspaceIds);
+  if (staged === undefined) {
+    staged = stagedReads(workspaceIds);
+    STAGED_READS.set(workspaceIds, staged);
+  }
+  return {
+    ...state,
+    [LIVE_READ.AUTOMATIONS]: laidOver(
+      LIVE_READ.AUTOMATIONS,
+      state[LIVE_READ.AUTOMATIONS],
+      staged[LIVE_READ.AUTOMATIONS],
+    ),
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: laidOver(
+      LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+      state[LIVE_READ.AUTOMATION_WORKSPACE_RUNS],
+      staged[LIVE_READ.AUTOMATION_WORKSPACE_RUNS],
+    ),
+    [LIVE_READ.AUTOMATION_RUNS]: laidOver(
+      LIVE_READ.AUTOMATION_RUNS,
+      state[LIVE_READ.AUTOMATION_RUNS],
+      staged[LIVE_READ.AUTOMATION_RUNS],
+    ),
+  };
 }

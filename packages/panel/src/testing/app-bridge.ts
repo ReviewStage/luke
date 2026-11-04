@@ -3,7 +3,6 @@
  */
 
 import { ORPCError } from "@orpc/client";
-import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { AppBridge } from "@repo/host/bridge";
 import {
   ACT_ERROR,
@@ -36,73 +35,29 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** What a follow of the automations pushes: a workspace's list, or an automation's runs. */
-type FollowedView =
-  PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW> extends AsyncIteratorObject<
-    infer View,
-    unknown,
-    unknown
-  >
-    ? View
-    : never;
-
-/** A stream that hands what `first` answers and then stands open, as the host's follow does while nothing moves, until the window closes it. */
-function heldOpen(
-  first: Promise<FollowedView>,
-): AsyncIteratorObject<FollowedView, undefined, unknown> {
-  let handed = false;
-  const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
-  const closed = ended.promise;
-  const close = () => ended.resolve({ done: true, value: undefined });
-  const stream: AsyncIteratorObject<FollowedView, undefined, unknown> = {
-    next: async () => {
-      if (handed) return closed;
-      handed = true;
-      return { done: false, value: await first };
-    },
-    return: async () => {
-      close();
-      return { done: true, value: undefined };
-    },
-    [Symbol.asyncIterator]: () => stream,
-    [Symbol.asyncDispose]: async () => {
-      close();
-    },
-  };
-  return stream;
-}
-
-/**
- * A follow of the automations a test does not answer itself, answered from
- * the one-shot read it does answer: a workspace's list, or an automation's
- * runs, pushed once and held open.
- */
-function followedFromReads(
-  read: (scope: AutomationFollow) => Promise<FollowedView>,
-): (
-  scope: AutomationFollow,
-) => Promise<PortActResult<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW>> {
-  // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-  return (scope) =>
-    Promise.resolve(
-      heldOpen(read(scope)) as unknown as PortActResult<
-        typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
-      >,
-    );
-}
-
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, and an agent's own tools. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, an agent's own tools, and the automations' lists and histories. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
-  | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW;
+  | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
+  | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW;
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
+  return heldUntilClosed<Kind>(() => undefined);
+}
+
+/** A hold as the host answers it, as `quietHold`, telling `closed` as the window closes it. */
+export function heldUntilClosed<Kind extends HoldKind>(
+  closed: () => void,
+): Promise<PortActResult<Kind>> {
   const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
-  const close = () => ended.resolve({ done: true, value: undefined });
+  const close = () => {
+    closed();
+    ended.resolve({ done: true, value: undefined });
+  };
   const stream: AsyncIteratorObject<never, undefined, unknown> = {
     next: () => ended.promise,
     return: async () => {
@@ -120,39 +75,24 @@ export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>>
 
 /**
  * Installs an act port answering only the procedures given, each by its
- * kind, as a test's window calls them. A follow of the automations it does
- * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold it does not answer, on a task's or an agent's inbox or
- * pages, a pull request's chapters, the account's beats, or an agent's own
- * tools, is held quietly, since what the hold reads reaches the window on
- * app state.
+ * kind, as a test's window calls them. A hold it does not answer, on a
+ * task's or an agent's inbox or pages, a pull request's chapters, the
+ * account's beats, an agent's own tools, or the automations' lists and
+ * histories, is held quietly, and an automations' Try again taken, since
+ * what the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
-  const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
-  const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
-  const held: Partial<FakeActPort> = {
+  const answered: Partial<FakeActPort> = {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: quietHold,
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: quietHold,
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: () => Promise.resolve(),
     ...procedures,
   };
-  const answered: Partial<FakeActPort> =
-    held[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW] !== undefined ||
-    (list === undefined && runs === undefined)
-      ? held
-      : {
-          ...held,
-          [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: followedFromReads((scope) => {
-            const read =
-              scope.kind === AUTOMATION_FOLLOW.WORKSPACE
-                ? list?.({ workspaceId: scope.id })
-                : runs?.({ automationId: scope.id });
-            return read ?? Promise.reject(new Error("Not in this test."));
-          }),
-        };
   answeringPort = answered;
   // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
   installActPortClient(answered as ActPortClient);
@@ -276,16 +216,6 @@ export function fakeActs(
   };
   const answered = async (request: PortAct): Promise<PortActResult<PortActKind>> =>
     settled(request.kind, await answer(request));
-  // A follow of the automations the switch does not answer, or refuses as one not in its test, is answered from its list's or runs' read.
-  const followed = followedFromReads(
-    (scope) =>
-      // SAFETY: a list's read answers a workspace's list, and a runs' read an automation's runs.
-      answered(
-        scope.kind === AUTOMATION_FOLLOW.WORKSPACE
-          ? { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_LIST, payload: { workspaceId: scope.id } }
-          : { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS, payload: { automationId: scope.id } },
-      ) as Promise<FollowedView>,
-  );
   // SAFETY: the contract's keys are exactly its kinds.
   for (const kind of Object.keys(actContract) as PortActKind[]) {
     // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
@@ -294,9 +224,10 @@ export function fakeActs(
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
         if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
+        // A hold on the automations the switch does not answer is held quietly, as the host holds one, its read laid on app state.
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
-        return followed(request.payload);
+        return quietHold<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW>();
       },
     });
   }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -60,7 +61,12 @@ import {
   refusedOnPort,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handHostReads,
+  holdAutomations,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -549,12 +555,13 @@ beforeEach(() => {
       // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
       return Promise.resolve(stream.iterator as InvitationsStream);
     },
-    [ACT_KIND.AUTOMATIONS_LIST]: () =>
-      automations === undefined
-        ? Promise.reject(new Error("Not in this test."))
-        : Promise.resolve({ automations: automations.map(automationOf) }),
   });
   handCapabilities(DESKTOP_CAPABILITIES);
+  // Note that a workspace's automations are laid as the leave holds them, where the test names any.
+  holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () =>
+      automations === undefined ? undefined : { rows: automations.map(automationOf) },
+  });
 });
 
 afterEach(() => {
@@ -1394,32 +1401,6 @@ test("the leave names the automations the reader made where the service says who
     false,
   );
   assert.equal(unsaid[2], "Automations you created stop running.");
-});
-
-test("an automation made after the page opened is named when the leave is next asked, since the list is read as the leave is", async () => {
-  automations = [];
-  const { page } = await mount(ACME);
-  const leave = () => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave");
-  /** The leave dialog's lines, once its read of the automations landed. */
-  const asked = async () => {
-    act(() => leave().click());
-    await settle();
-    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
-      (li) => li.textContent,
-    );
-    act(() => button(dialog(), "Cancel").click());
-    return lines;
-  };
-
-  const before = await asked();
-  automations = [{ name: "Morning sweep", mine: true }];
-  const after = await asked();
-
-  assert.equal(
-    before.some((line) => line?.includes("automation")),
-    false,
-  );
-  assert.equal(after.includes("An automation you created stops running: Morning sweep."), true);
 });
 
 test("the members the host streams are drawn with nothing read again, so an admin who joined meanwhile may be handed the workspace", async () => {
@@ -2549,15 +2530,9 @@ test("an admin connects the Slack bot, which then names its team, and disconnect
     "Slack bot",
     "Not connected. Connect Vespin's bot to message members in Slack.",
   ]);
-  assert.deepEqual(connected, [
-    "Slack bot",
-    "Connected to Acme Slack",
-  ]);
+  assert.deepEqual(connected, ["Slack bot", "Connected to Acme Slack"]);
   assert.deepEqual(after, before);
-  assert.deepEqual(rowWords(memberRow), [
-    "Slack bot",
-    "Connected to Acme Slack",
-  ]);
+  assert.deepEqual(rowWords(memberRow), ["Slack bot", "Connected to Acme Slack"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 

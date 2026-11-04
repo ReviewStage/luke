@@ -47,7 +47,8 @@ function laidOver(tasks: TasksModule, inbox: InboxModule): TasksFixture {
     fixtureActAnswer: (run, kind, payload) =>
       inbox.inboxActAnswer(run.profile, kind, payload) ??
       tasks.fixtureActAnswer(run, kind, payload),
-    fixtureAppState: (state) => inbox.inboxAppState(tasks.fixtureAppState(state)),
+    fixtureAppState: (state) =>
+      inbox.inboxAppState(tasks.fixtureAppState(state), tasks.FIXTURE_WORKSPACE_IDS),
     fixtureReader: (run) => inbox.inboxReader(run.profile),
   };
 }

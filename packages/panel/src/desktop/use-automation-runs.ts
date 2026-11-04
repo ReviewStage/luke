@@ -1,18 +1,19 @@
 import { AUTOMATION_CALL_FAILURE, type AutomationRunView } from "@repo/features/automation-view";
 import type { AutomationRunSummary, AutomationWorkspaceRun } from "@repo/features/automation-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useAct } from "../act.js";
-import { useFollowedRuns, useFollowedWorkspaceRuns } from "./use-followed-automations.js";
+import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 
 /**
- * use-automation-runs.ts -- one automation's runs as its page's panel draws them, pushed while the page stands, and its Run now; and a workspace's runs as the Runs tab draws them.
+ * use-automation-runs.ts -- one automation's runs as its page's panel draws them, held while the page stands, and its Run now; and a workspace's runs as the Runs tab draws them.
  *
- * The runs are followed while the page stands (`use-followed-automations.ts`),
- * so a run's agent moving on, and the run a Run now made, reach it without a
- * clock here or a read after the press. A push that fails keeps the runs it
- * would have replaced, as the list does, and only a failure with nothing
- * held yet is said as one.
+ * The runs are a read the host holds while a page holds it and a while
+ * after (`useHostRead`), so a run's agent moving on, and the run a Run now
+ * made, reach it without a clock here or a read after the press. A read
+ * that fails once it has answered keeps the runs it held, as the list
+ * does, and only a failure with nothing held yet is said as one.
  */
 
 /** The runs as the panel draws them: read, failed, or not yet read. */
@@ -25,23 +26,25 @@ const RUNS_FAILED = { failed: true } as const;
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** One automation's runs, none asked for before it exists, with its Run now. */
+/** A held read of runs as the panel draws them, none while it names nothing, with its Try again. */
+function useRunsRead<Run>(id: string | undefined, held: HostRead<readonly Run[]>) {
+  const rows = held.rows;
+  const read = useMemo((): { readonly runs: readonly Run[] } | typeof RUNS_FAILED | undefined => {
+    if (id === undefined) return undefined;
+    if (rows !== undefined) return { runs: rows };
+    return held.status === HOST_READ_STATUS.FAILED ? RUNS_FAILED : undefined;
+  }, [id, rows, held.status]);
+  return { read, reload: held.retry };
+}
+
+/** One automation's runs, none held before it exists, with its Run now. */
 export function useAutomationRuns(automationId: string | undefined) {
   const { act } = useAct();
-  const [held, setHeld] = useState<{ automationId: string; read: RunsRead } | undefined>(undefined);
-  const reload = useFollowedRuns(automationId, (answer) => {
-    if (automationId === undefined) return;
-    const read: RunsRead = "failure" in answer ? RUNS_FAILED : { runs: answer.runs };
-    setHeld((was) =>
-      "failed" in read &&
-      was?.automationId === automationId &&
-      was.read !== undefined &&
-      "runs" in was.read
-        ? was
-        : { automationId, read },
-    );
-  });
-  /** Runs it now under a key of the press's own; the run it made is pushed as it lands. */
+  const { read, reload } = useRunsRead(
+    automationId,
+    useHostRead(LIVE_READ.AUTOMATION_RUNS, automationId),
+  );
+  /** Runs it now under a key of the press's own; the run it made is laid on the held runs as it lands. */
   const runNow = useCallback((): Promise<AutomationRunView> => {
     if (automationId === undefined) return Promise.resolve(UNANSWERED);
     return act(ACT_KIND.AUTOMATIONS_RUN, {
@@ -49,8 +52,7 @@ export function useAutomationRuns(automationId: string | undefined) {
       idempotencyKey: crypto.randomUUID(),
     }).catch((): AutomationRunView => UNANSWERED);
   }, [act, automationId]);
-  const read = held?.automationId === automationId ? held?.read : undefined;
-  return { read, reload, runNow };
+  return { read: read satisfies RunsRead, reload, runNow };
 }
 
 /** A workspace's runs as the Runs tab draws them: read, failed, or not yet read. */
@@ -59,24 +61,11 @@ export type WorkspaceRunsRead =
   | { readonly failed: true }
   | undefined;
 
-/** Every run of a workspace's automations the account reads, followed while the Runs tab stands, with Try again. */
+/** Every run of a workspace's automations the account reads, held while the Runs tab stands, with Try again. */
 export function useWorkspaceRuns(workspaceId: string | undefined) {
-  const [held, setHeld] = useState<{ workspaceId: string; read: WorkspaceRunsRead } | undefined>(
-    undefined,
+  const { read, reload } = useRunsRead(
+    workspaceId,
+    useHostRead(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, workspaceId),
   );
-  const reload = useFollowedWorkspaceRuns(workspaceId, (answer) => {
-    if (workspaceId === undefined) return;
-    const read: WorkspaceRunsRead = "failure" in answer ? RUNS_FAILED : { runs: answer.runs };
-    // A push that fails keeps the runs it would have replaced, as an automation's runs do.
-    setHeld((was) =>
-      "failed" in read &&
-      was?.workspaceId === workspaceId &&
-      was.read !== undefined &&
-      "runs" in was.read
-        ? was
-        : { workspaceId, read },
-    );
-  });
-  const read = held?.workspaceId === workspaceId ? held?.read : undefined;
-  return { read, reload };
+  return { read: read satisfies WorkspaceRunsRead, reload };
 }

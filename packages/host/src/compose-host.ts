@@ -289,6 +289,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* account.refreshAccess;
         yield* tasks.open;
         yield* agents.open;
+        yield* automations.open;
       }
       yield* settings.emitSettings();
     });

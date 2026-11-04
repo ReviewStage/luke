@@ -3,12 +3,8 @@ import type {
   AutomationCreateParams,
   AutomationDeletedView,
   AutomationFollow,
-  AutomationFollowed,
   AutomationIdParams,
-  AutomationListParams,
-  AutomationListView,
   AutomationRunParams,
-  AutomationRunsView,
   AutomationRunView,
   AutomationView,
 } from "@repo/features/automation-view";
@@ -22,24 +18,25 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  *
  * The one check these procedures make is who asked: only a panel draws the
  * Automations pages, so every one refuses the takeover, in its own sentence. What the service answers comes back as the
- * panel's own answer, or why there is none. A follow is a stream the panel
- * holds open while it draws a workspace's automations or an automation's
- * runs: the host follows it from the first stream of it to the last, and
- * every change reaches every stream of it. Nothing else is held here.
+ * panel's own answer, or why there is none. A hold is a stream the panel
+ * holds open while it draws a workspace's automations, its runs, or an
+ * automation's runs: the host holds the read from the first stream of it
+ * and lets it go with the last, and what it holds reaches every panel on
+ * app state, never down the stream, which carries nothing. How many
+ * streams stand open of each is all else held here.
  */
 export interface AutomationProceduresDependencies {
   host: {
-    automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
     automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
     automationChange(params: AutomationChangeParams): Effect.Effect<AutomationView>;
     automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
     automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
-    automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
     automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
-    /** What a panel draws followed from now, as it stands and each time it moves, heard through `onAutomationsChanged`; following again starts over. */
+    /** A list or history held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
     automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
-    onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
+    /** A held list or history read again at once, as Try again asks. */
+    automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
   };
 }
 
@@ -51,17 +48,11 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function automationProcedures(dependencies: AutomationProceduresDependencies) {
   const { host } = dependencies;
   /** How many streams stand open of each list or history, so the host lets one go only with the last. */
-  const openFollows: OpenFollows<
-    AutomationFollowed["view"],
+  const openHolds: OpenFollows<
+    never,
     Pick<AutomationFollow, "kind" | "id">
   > = MutableHashMap.empty();
   return {
-    [AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]: actPort[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.automationList(input);
-      },
-    ),
     [AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE]: actPort[
       AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE
     ].effect(function* ({ input, context, errors }) {
@@ -86,12 +77,6 @@ export function automationProcedures(dependencies: AutomationProceduresDependenc
         return yield* host.automationRun(input);
       },
     ),
-    [AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS]: actPort[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.automationRuns(input);
-      },
-    ),
     [AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: actPort[
       AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET
     ].effect(function* ({ input, context, errors }) {
@@ -102,21 +87,25 @@ export function automationProcedures(dependencies: AutomationProceduresDependenc
       AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const views = followedStream(
+      // Note that nothing is heard down the hold, since the held read reaches the panel on app state.
+      const hold = followedStream(
         {
           keyOf: (scope: AutomationFollow) => ({ kind: scope.kind, id: scope.id }),
           follow: host.automationsFollow,
           unfollow: host.automationsUnfollow,
-          onChanged: host.onAutomationsChanged,
-          valueOf: (changed: AutomationFollowed, scope: AutomationFollow) =>
-            changed.scope.kind === scope.kind && changed.scope.id === scope.id
-              ? Option.some(changed.view)
-              : Option.none(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
         },
-        openFollows,
+        openHolds,
         input,
       );
-      return streamed(yield* Stream.toAsyncIterableEffect(views));
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
     }),
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: actPort[AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.automationsRetry(input);
+      },
+    ),
   };
 }

@@ -7,25 +7,26 @@ import {
   type AutomationView,
 } from "@repo/features/automation-view";
 import type { AutomationSummary } from "@repo/features/automation-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { unreachedAs, useAct } from "../act.js";
-import { useFollowedAutomations } from "./use-followed-automations.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
- * use-automations.ts -- the Automations pages' list: one workspace's automations, pushed while a page stands, and the writes that make, change, and delete one.
+ * use-automations.ts -- the Automations pages' list: one workspace's automations, held while a page stands, and the writes that make, change, and delete one.
  *
- * Nothing is held past the pages. The list is followed while they stand
- * (`use-followed-automations.ts`), so a schedule's next run, a run's agent,
- * and what changed elsewhere reach it without a press or a clock here. A
- * write is drawn on the list the host pushes (`@repo/host`'s
- * `automation-collections.ts`), a change or a deletion the moment it is
- * asked and a new automation once the service made it, and pushed before
- * the write answers, so nothing here holds a write's answer over the list.
- * A push that fails keeps the list it would have replaced, so nothing drawn
- * from it is taken down, and is told as `refreshFailed` until a push lands.
- * A failure is kept to be said rather than thrown, since every caller does
- * the same with one: says it, and offers to try again.
+ * The list is a read the host holds while a page holds it and a while
+ * after (`useHostRead`), so a schedule's next run, a run's agent, and what
+ * changed elsewhere reach it without a press or a clock here, and a page
+ * drawn again draws it at once. A write is drawn on the list the host
+ * holds (`@repo/host`'s `automation-collections.ts`), a change or a
+ * deletion the moment it is asked and a new automation once the service
+ * made it, and laid before the write answers, so nothing here holds a
+ * write's answer over the list. A read that fails once it has answered
+ * keeps the list it held, as every held read does, so nothing drawn from
+ * it is taken down. A failure is kept to be said rather than thrown, since
+ * every caller does the same with one: says it, and offers to try again.
  */
 
 /** The list as the pages draw it: read, failed, or not yet read. */
@@ -36,34 +37,19 @@ type AutomationsRead =
 
 const unreached = unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED);
 
-/** A read held with the workspace it is of, so another workspace's list is never drawn as this one's, and whether the push after it failed. */
-interface HeldRead {
-  readonly workspaceId: string;
-  readonly read: AutomationsRead;
-  readonly refreshFailed: boolean;
-}
+const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** One workspace's automations, none asked for while no workspace is listed, with the writes that make, change, and delete one. */
+/** One workspace's automations, none held while no workspace is listed, with the writes that make, change, and delete one. */
 export function useAutomations(workspaceId: string | undefined) {
   const { act } = useAct();
-  const [held, setHeld] = useState<HeldRead | undefined>(undefined);
-  // Note that a push that fails keeps the list it would have replaced, so a
-  // page drawn from it, an editor's draft among them, stands; the failure is
-  // kept beside it as `refreshFailed`, which the list says, and only a failure
-  // with nothing held yet is said as a read that failed.
-  const reload = useFollowedAutomations(workspaceId, (read) => {
-    if (workspaceId === undefined) return;
-    setHeld((was) =>
-      "failure" in read &&
-      was?.workspaceId === workspaceId &&
-      was.read !== undefined &&
-      "automations" in was.read
-        ? was.refreshFailed
-          ? was
-          : { ...was, refreshFailed: true }
-        : { workspaceId, read, refreshFailed: false },
-    );
-  });
+  const held = useHostRead(LIVE_READ.AUTOMATIONS, workspaceId);
+  // Note that the read keeps one identity while its rows do, so a page memoized on it draws again only as they move.
+  const rows = held.rows;
+  const read = useMemo<AutomationsRead>(() => {
+    if (workspaceId === undefined) return undefined;
+    if (rows !== undefined) return { automations: rows };
+    return held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined;
+  }, [workspaceId, rows, held.status]);
   const create = useCallback(
     (params: AutomationCreateParams): Promise<AutomationView> =>
       act(ACT_KIND.AUTOMATIONS_CREATE, params).catch(unreached),
@@ -90,8 +76,5 @@ export function useAutomations(workspaceId: string | undefined) {
       act(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(unreached),
     [act],
   );
-  const current = held?.workspaceId === workspaceId ? held : undefined;
-  const read = current?.read;
-  const refreshFailed = current?.refreshFailed === true;
-  return { read, refreshFailed, reload, create, change, toggle, remove, newWebhookSecret };
+  return { read, reload: held.retry, create, change, toggle, remove, newWebhookSecret };
 }

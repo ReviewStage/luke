@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { AutomationRunsLiveAnswer, AutomationsLiveRows } from "@repo/features/automation-live";
+import { STARTING_GRACE_MILLIS } from "@repo/features/agent-status";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import type {
+  AutomationRunsLiveAnswer,
+  AutomationRunsLiveRows,
+  AutomationsLiveRows,
+} from "@repo/features/automation-live";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -15,9 +21,8 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
-  type AutomationSummary,
 } from "@repo/features/automation-wire";
-import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import { LIVE_POLL_URL, LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -31,6 +36,7 @@ import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
+import type { AppAutomationReads } from "./app-state.js";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 
@@ -38,9 +44,10 @@ import { type PolledLive, polledLive } from "./testing/polled-live.js";
  * The automations concern: behind a closed gate nothing is asked of the
  * service, a write's params reach the service as the window named them,
  * the window hears the service's answer whole, and params of the wrong
- * shape are refused before anything travels. What a window follows is
- * emitted as it stands and each time it moves, for the account signed in as
- * it started, until let go or signed out. Synthetic ids and words.
+ * shape are refused before anything travels. What a window holds is laid
+ * on its app-state slice as it stands and each time it moves, for the
+ * account signed in as it started, until let go for good or signed out.
+ * Synthetic ids and words.
  */
 
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
@@ -136,6 +143,28 @@ const ROW: AutomationsLiveRows["automations"][number] = {
   failureWord: null,
 };
 
+/** A run whose agent started at the clock's first instant and has taken no turn yet, as the runs' statement answers it. */
+const STARTING_RUN: AutomationRunsLiveRows["runs"][number] = {
+  id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8e",
+  firing: { kind: AUTOMATION_FIRING.MANUAL, userId: ACCOUNT_ID },
+  status: AUTOMATION_RUN_STATUS.STARTED,
+  reason: null,
+  firedAt: 0,
+  settledAt: 0,
+  agentId: "agent-1",
+  agentTitle: null,
+  agentCreatedAt: 0,
+  ownKey: false,
+  turnId: null,
+  turnStatus: null,
+  cancelRequested: null,
+  turnQueuedAt: null,
+  turnSettledAt: null,
+  turnSessionEnded: null,
+  awaitingLineAt: null,
+  failureWord: null,
+};
+
 /** A run "Run now" made, as the service answers it. */
 const RUN = {
   id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
@@ -190,12 +219,10 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
         return value();
       });
   const client: AutomationsClient = {
-    list: answer("list", () => ({ automations: [SUMMARY] })),
     create: answer("create", () => replies.create),
     change: answer("change", () => replies.change),
     remove: answer("remove", () => ({ deleted: true }) as const),
     runNow: answer("run", () => replies.run),
-    runs: answer("runs", () => ({ runs: [] })),
     replaceWebhookSecret: answer("replace", () =>
       options.replaceRefused === true
         ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
@@ -246,43 +273,54 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** What the follows told the windows, in order. */
-    const changed = () =>
+    /** What the held reads told the windows' app state, in order. */
+    const told = () =>
       emitted
         .filter((each) => each.kind === GATEWAY_EVENT.AUTOMATIONS_CHANGED)
-        .map((each) => each.payload);
-    /** The workspace's list as the follows last told it, by its automations' names and whether each is on. */
-    const listed = () => {
-      const lists = changed().flatMap((payload) => {
-        const told = payload as { view: { automations?: readonly AutomationSummary[] } };
-        return told.view.automations === undefined ? [] : [told.view.automations];
+        .map((each) => each.payload as Partial<AppAutomationReads>);
+    /** Each time `read`'s slice was told, in order. */
+    const toldOf = <Read extends keyof AppAutomationReads>(read: Read) =>
+      told().flatMap((held) => {
+        const slice = held[read];
+        return slice === undefined ? [] : [slice as AppAutomationReads[Read]];
       });
-      return lists.map((automations) => automations.map(({ id, enabled }) => ({ id, enabled })));
-    };
+    /** The workspace's list as each tell laid it, by its automations' ids and whether each is on, where it held rows. */
+    const listed = () =>
+      toldOf(LIVE_READ.AUTOMATIONS).flatMap((held) => {
+        const automations = held[WORKSPACE_ID]?.rows;
+        return automations === undefined
+          ? []
+          : [automations.map(({ id, enabled }) => ({ id, enabled }))];
+      });
     return {
       call,
       asked: service.asked,
       live: service.live,
       replies: service.replies,
-      changed,
+      told,
+      toldOf,
       listed,
+      open: composer.open,
       reset: composer.reset,
       options,
     };
   });
 }
 
+const WORKSPACE = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID } as const;
+const RUNS = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID } as const;
+
 it.effect("behind a closed account gate, or on a run that sends nothing, nothing is asked", () =>
   Effect.gen(function* () {
     for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
-      const { call, asked } = yield* subject(options);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_LIST), {
-        failure: AUTOMATION_CALL_FAILURE.UNANSWERED,
-      });
+      const { call, asked, told } = yield* subject(options);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE), {});
+      yield* settled;
       assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE), {
         failure: AUTOMATION_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(asked, []);
+      assert.deepEqual(told(), []);
     }
   }),
 );
@@ -295,24 +333,19 @@ it.effect(
       const named = { automationId: AUTOMATION_ID };
       const change = { ...named, change: { enabled: false } };
 
-      const listed = yield* call(GATEWAY_METHOD.AUTOMATIONS_LIST, { workspaceId: WORKSPACE_ID });
       const made = yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE);
       const changed = yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change);
       const ran = yield* call(GATEWAY_METHOD.AUTOMATIONS_RUN, {
         ...named,
         idempotencyKey: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
       });
-      const runs = yield* call(GATEWAY_METHOD.AUTOMATIONS_RUNS, named);
       const deleted = yield* call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named);
 
-      assert.deepEqual(listed, { automations: [SUMMARY] });
       assert.deepEqual(made, { automation: SUMMARY });
       assert.deepEqual(changed, { automation: SUMMARY });
       assert.deepEqual(ran, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(runs, { runs: [] });
       assert.deepEqual(deleted, { deleted: true });
-      assert.deepEqual(asked.slice(0, 3), [
-        ["list", { workspaceId: WORKSPACE_ID }],
+      assert.deepEqual(asked.slice(0, 2), [
         ["create", CREATE],
         ["change", change],
       ]);
@@ -333,14 +366,31 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
 );
 
 it.effect(
-  "a new webhook secret is minted here, only its hash is sent to the service, and the secret is answered to the window that asked; a refused replacement answers no secret",
+  "a new webhook secret is minted here, only its hash is sent to the service, and the secret is answered to the window that asked, as a webhook's made or changed to is, never on app state; a refused replacement answers no secret",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { call, asked, live, replies, told } = yield* subject();
       const refusing = yield* subject({ replaceRefused: true });
       const closed = yield* subject({ signedIn: false });
       const named = { automationId: AUTOMATION_ID };
+      const webhook = { ...SUMMARY, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } } as const;
+      live.list.set({ automations: [ROW] });
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+      yield* settled;
+      replies.create = {
+        automation: { ...webhook, id: "6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d9e" },
+        webhookSecret: "secret-the-service-made",
+      };
+      replies.change = { automation: webhook, webhookSecret: "secret-a-change-made" };
 
+      const created = yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, {
+        ...CREATE,
+        trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+      });
+      const changed = yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, {
+        ...named,
+        change: { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+      });
       const made = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
       const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
       const unasked = yield* closed.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
@@ -356,13 +406,22 @@ it.effect(
         "a secret of 32 random bytes is answered as unpadded base64url",
       );
       assert.deepEqual(made, { automation: SUMMARY, webhookSecret: secret });
-      assert.deepEqual(asked, [
+      assert.deepEqual(created, replies.create);
+      assert.deepEqual(changed, replies.change);
+      assert.deepEqual(
+        asked.filter((each) => Array.isArray(each) && each[0] === "replace"),
         [
-          "replace",
-          { ...named, webhookSecretHash: createHash("sha256").update(secret).digest("hex") },
+          [
+            "replace",
+            { ...named, webhookSecretHash: createHash("sha256").update(secret).digest("hex") },
+          ],
         ],
-      ]);
+      );
       assert.ok(!JSON.stringify(asked).includes(secret), "the service is sent the hash alone");
+      assert.ok(told().length > 1, "the writes were drawn on the held list");
+      for (const minted of [secret, "secret-the-service-made", "secret-a-change-made"]) {
+        assert.ok(!JSON.stringify(told()).includes(minted), "no window's app state holds a secret");
+      }
       assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED });
       assert.deepEqual(unasked, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(closed.asked, []);
@@ -388,72 +447,97 @@ it.effect(
 );
 
 it.effect(
-  "a followed list is told as it stands for the account signed in, a gone automation's runs are told not found, and a sign-out ends the follows",
+  "a held list is laid as it stands for the account signed in, a gone automation's runs are laid failed, and a sign-out lets every follow go and lays none",
   () =>
     Effect.gen(function* () {
-      const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
-      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
-      const { call, asked, changed, reset } = yield* subject();
+      const { call, asked, toldOf, reset } = yield* subject();
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace), {});
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE), {});
       yield* settled;
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs), {});
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS), {});
       yield* settled;
-      assert.deepEqual(changed(), [
-        { scope: workspace, view: { automations: [] } },
-        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
-      ]);
+      assert.deepEqual(toldOf(LIVE_READ.AUTOMATIONS).at(-1), { [WORKSPACE_ID]: { rows: [] } });
+      assert.deepEqual(toldOf(LIVE_READ.AUTOMATION_RUNS).at(-1), {
+        [AUTOMATION_ID]: { failed: true },
+      });
       assert.deepEqual(asked, [
         ["list-live", WORKSPACE_ID, ACCOUNT_ID],
         ["runs-live", AUTOMATION_ID, ACCOUNT_ID],
       ]);
 
-      // Following again starts over, so a second window hears the list at once.
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
-      yield* settled;
-      assert.equal(changed().length, 3);
-
       yield* reset;
       yield* settled;
-      assert.equal(changed().length, 3);
+      assert.deepEqual(toldOf(LIVE_READ.AUTOMATIONS).at(-1), {});
+      assert.deepEqual(toldOf(LIVE_READ.AUTOMATION_RUNS).at(-1), {});
 
       const signedOut = yield* subject();
       signedOut.live.list.refuse(LIVE_SIGNED_OUT);
-      yield* signedOut.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* signedOut.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
-      assert.deepEqual(signedOut.changed(), []);
+      assert.deepEqual(signedOut.told(), []);
       assert.equal(signedOut.asked.length, 1);
     }),
 );
 
+it.effect("two holds of a list and a remount read it once", () =>
+  Effect.gen(function* () {
+    const { call, asked, listed } = yield* subject();
+
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+    yield* settled;
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, WORKSPACE);
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+    yield* settled;
+
+    assert.deepEqual(asked, [["list-live", WORKSPACE_ID, ACCOUNT_ID]]);
+    assert.deepEqual(listed(), [[]]);
+  }),
+);
+
 it.effect(
-  "an automation deleted while its runs are followed is told not found at once, and the follow ends",
+  "an automation deleted while its runs are held keeps them laid as they stood, and the follow ends without asking again",
   () =>
     Effect.gen(function* () {
-      const runs = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID };
-      const { call, asked, changed, live } = yield* subject();
+      const { call, asked, toldOf, live } = yield* subject();
       live.runs = POLLED_RUNS;
       live.runsPolled = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
 
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, runs);
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS);
       yield* settled;
 
-      assert.deepEqual(changed(), [
-        { scope: runs, view: { runs: [] } },
-        { scope: runs, view: { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } },
-      ]);
+      assert.deepEqual(toldOf(LIVE_READ.AUTOMATION_RUNS), [{ [AUTOMATION_ID]: { rows: [] } }]);
       assert.deepEqual(asked, [["runs-live", AUTOMATION_ID, ACCOUNT_ID]], "nothing asks again");
     }),
 );
 
+it.effect("a run's agent passing its grace with no row moving is redrawn on the held runs", () =>
+  Effect.gen(function* () {
+    const { call, toldOf, live } = yield* subject();
+    const rows = POLLED_RUNS.queries.runs;
+    live.runs = { ...POLLED_RUNS, queries: { runs: { ...rows, rows: [STARTING_RUN] } } };
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS);
+    yield* settled;
+    const statuses = () =>
+      toldOf(LIVE_READ.AUTOMATION_RUNS).map((held) =>
+        held[AUTOMATION_ID]?.rows?.map((run) => run.agent?.status),
+      );
+    assert.deepEqual(statuses(), [[AGENT_STATUS.STARTING]]);
+
+    yield* TestClock.adjust(Duration.millis(STARTING_GRACE_MILLIS + 1));
+    yield* settled;
+
+    assert.deepEqual(statuses(), [[AGENT_STATUS.STARTING], [AGENT_STATUS.FAILED]]);
+  }),
+);
+
 it.effect(
-  "a switch turned stands from the press until the followed list carries its transaction, through an answer from before it, and a refused one is put back",
+  "a switch turned stands from the press until the held list carries its transaction, through an answer from before it, and a refused one is put back",
   () =>
     Effect.gen(function* () {
-      const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
       const { call, live, replies, listed } = yield* subject();
       live.list.set({ automations: [ROW] });
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
       // An answer Sync woke hands the follow its wait for a write's transaction.
       live.list.set({ automations: [ROW] }, ["1"]);
@@ -497,12 +581,11 @@ it.effect(
 );
 
 it.effect(
-  "a new automation stands on its followed list as its create answers, before Vespin Sync hands the list a wait",
+  "a new automation stands on its held list as its create answers, before Vespin Sync hands the list a wait",
   () =>
     Effect.gen(function* () {
-      const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
       const { call, listed } = yield* subject();
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
+      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
 
       yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE);
@@ -511,14 +594,11 @@ it.effect(
     }),
 );
 
-it.effect("a Run now answers once its workspace's followed runs carry it, as its list does", () =>
+it.effect("a Run now answers once its workspace's held runs carry it, as its list does", () =>
   Effect.gen(function* () {
     const { call, live, replies } = yield* subject();
     live.list.set({ automations: [ROW] });
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
-      kind: AUTOMATION_FOLLOW.WORKSPACE,
-      id: WORKSPACE_ID,
-    });
+    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
     yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
       kind: AUTOMATION_FOLLOW.WORKSPACE_RUNS,
       id: WORKSPACE_ID,

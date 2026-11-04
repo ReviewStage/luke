@@ -76,14 +76,7 @@ import {
 } from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { TERMINAL_ASK } from "@repo/features/terminal-entry";
-import {
-  noMatchWords,
-  REFRESH_FAILED_WORDS,
-  readFailedWords,
-  readingWords,
-  TERM,
-  VERB,
-} from "@repo/features/words";
+import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@repo/features/words";
 import { taskKey } from "@repo/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
@@ -637,21 +630,19 @@ function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
     : undefined;
 }
 
-/** What the Automations filter says while the listed workspace, or its automations, have not been read, or a push did not land, a later one under the rows it kept as the Automations page says it; nothing once they are, as People says of its members. */
+/** What the Automations filter says while the listed workspace, or its automations, have not been read, or their read did not land; nothing once they are, as People says of its members. */
 function automationsNotice(
   tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
-  automations: Pick<ReturnType<typeof useAutomations>, "read" | "refreshFailed" | "reload">,
+  automations: Pick<ReturnType<typeof useAutomations>, "read" | "reload">,
 ): PaletteNotice | undefined {
-  const { read, refreshFailed, reload: onRetry } = automations;
+  const { read, reload: onRetry } = automations;
   if (tasks.workspace === undefined) {
     const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
     return coming ? { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS } : undefined;
   }
   if (read === undefined) return { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS };
-  if ("failure" in read)
-    return { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry };
-  return refreshFailed
-    ? { kind: PALETTE_NOTICE.FAILED, line: REFRESH_FAILED_WORDS, onRetry }
+  return "failure" in read
+    ? { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry }
     : undefined;
 }
 
@@ -2104,7 +2095,7 @@ export function CommandPalette({
       inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
     [inboxAsked, inboxSearch.items],
   );
-  // Note that the automations are followed the first time they are searched, on the Inbox's terms.
+  // Note that the automations are held the first time they are searched, on the Inbox's terms.
   const automationsAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.AUTOMATIONS || tokens.length > 0);
   const automations = useAutomations(automationsAsked ? tasks.workspace?.id : undefined);

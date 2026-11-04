@@ -857,6 +857,12 @@ export const LIVE_READ = {
   DEVICE_PRESENCE: "devicePresence",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
+  /** One workspace's automations, by the workspace: the service's `automations` query, held for the windows that draw them and a few they drew lately. */
+  AUTOMATIONS: "automations",
+  /** Every run of one workspace's automations the account reads, by the workspace: the service's `automationWorkspaceRuns` query, held as the automations are. */
+  AUTOMATION_WORKSPACE_RUNS: "automationWorkspaceRuns",
+  /** One automation's runs, by the automation: the service's `automationRuns` query, held as the automations are. */
+  AUTOMATION_RUNS: "automationRuns",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

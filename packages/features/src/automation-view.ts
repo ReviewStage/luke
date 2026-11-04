@@ -7,7 +7,6 @@ import {
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
   automationSummarySchema,
-  automationWorkspaceRunsAnswerSchema,
 } from "./automation-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
@@ -122,15 +121,7 @@ export const automationRunsViewSchema = EffectSchema.Union([automationRunsAnswer
 
 export type AutomationRunsView = typeof automationRunsViewSchema.Type;
 
-/** A workspace's runs, as the window hears them. */
-export const automationWorkspaceRunsViewSchema = EffectSchema.Union([
-  automationWorkspaceRunsAnswerSchema,
-  failed,
-]);
-
-export type AutomationWorkspaceRunsView = typeof automationWorkspaceRunsViewSchema.Type;
-
-/** What a window follows of the automations: one workspace's list, one automation's runs, or every run of one workspace's automations. */
+/** What a window holds of the automations: one workspace's list, one automation's runs, or every run of one workspace's automations. */
 export const AUTOMATION_FOLLOW = {
   WORKSPACE: "workspace",
   RUNS: "runs",
@@ -152,7 +143,7 @@ const workspaceRunsFollowSchema = EffectSchema.Struct({
   id: EffectSchema.NonEmptyString,
 });
 
-/** One followed list or history, by what it is of. */
+/** One held list or history, by what it is of. */
 export const automationFollowSchema = EffectSchema.Union([
   workspaceFollowSchema,
   runsFollowSchema,
@@ -160,19 +151,3 @@ export const automationFollowSchema = EffectSchema.Union([
 ]);
 
 export type AutomationFollow = typeof automationFollowSchema.Type;
-
-/**
- * A followed list or history as it now stands, told to the windows that
- * follow it each time it moves: a workspace's automations, an automation's
- * runs, or a workspace's runs, or why there are none.
- */
-export const automationFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ scope: workspaceFollowSchema, view: automationListViewSchema }),
-  EffectSchema.Struct({ scope: runsFollowSchema, view: automationRunsViewSchema }),
-  EffectSchema.Struct({
-    scope: workspaceRunsFollowSchema,
-    view: automationWorkspaceRunsViewSchema,
-  }),
-]);
-
-export type AutomationFollowed = typeof automationFollowedSchema.Type;

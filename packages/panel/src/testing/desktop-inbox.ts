@@ -18,6 +18,7 @@ import {
   INBOX_SCOPE_KIND,
 } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import type { AutomationSummary } from "@repo/features/automation-wire";
 import {
   INBOX_ASK,
@@ -83,7 +84,7 @@ import {
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
-import { handHostReads, holdPages } from "./app-state.js";
+import { handHostReads, holdAutomations, holdPages } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -583,12 +584,6 @@ beforeEach(() => {
         deliverFeed();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value: { automations: world.automations },
-        });
-      }
       if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: [] });
       }
@@ -777,6 +772,10 @@ export function mount(
   });
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
+  // Note that a workspace's automations are laid on the document as the window holds them, as the host lays them.
+  holdAutomations(reads.deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: world.automations }),
+  });
   // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
   holdPages(reads.deliverPages, (place) => ({
     rows:

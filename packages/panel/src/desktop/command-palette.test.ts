@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -18,6 +19,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
@@ -61,8 +63,10 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
+  handHostReads,
   handInboxItems,
   handState,
+  holdAutomations,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
@@ -856,13 +860,10 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     lastRun: null,
     createdAt: 1,
   } as const;
-  const listed: (string | undefined)[] = [];
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
-      listed.push(payload.workspaceId);
-      return Promise.resolve({ automations: [automation] });
-    },
+  fakeActPort({});
+  const { holds } = holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: [automation] }),
   });
   const tasks = tasksControl({
     activeTaskId: "plan-1",
@@ -921,7 +922,14 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
     });
-    act(() => root.render(createElement(ListedAutomations, { tasks, children: palette })));
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(ListedAutomations, { tasks, children: palette }),
+        ),
+      ),
+    );
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
@@ -943,7 +951,10 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   };
 
   assert.equal(await startedBy(), "Morning Sentry triage");
-  assert.deepEqual(listed, ["workspace-acme"]);
+  assert.deepEqual(
+    holds.map(({ held }) => held),
+    [{ kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-acme" }],
+  );
 });
 
 test("an agent's Pull request row is named as its tab is, by its pull request's number and title, with the agent beside it, and is found by that number, that title, and the agent's name", () => {
@@ -2094,17 +2105,18 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     ],
   });
-  fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations: [] }),
-  });
+  handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
       new Promise((resolve) => {
         answer = resolve;
       }),
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.TASKS,
+    AtomRegistry.make(),
   );
   await settle();
   type("zqx");
@@ -2772,10 +2784,8 @@ test("⌘K's Automations lists the workspace's automations by name and what fire
     lastRun: null,
     createdAt: 1,
   } as const;
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations: [automation] }),
-  });
-  handState({});
+  fakeActPort({});
+  handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [automation] } } });
   const opened: (AutomationsPlace | undefined)[] = [];
   const base = tasksControl({ workspace: ACME });
   await paletteUnderState(

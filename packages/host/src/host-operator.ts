@@ -123,18 +123,11 @@ import {
   type AutomationCreateParams,
   type AutomationDeletedView,
   type AutomationFollow,
-  type AutomationFollowed,
   type AutomationIdParams,
-  type AutomationListParams,
-  type AutomationListView,
   type AutomationRunParams,
-  type AutomationRunsView,
   type AutomationRunView,
   type AutomationView,
   automationDeletedViewSchema,
-  automationFollowedSchema,
-  automationListViewSchema,
-  automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
 } from "@repo/features/automation-view";
@@ -383,6 +376,7 @@ import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Resu
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
+  AppAutomationReads,
   AppChapters,
   AppDevicePresences,
   AppHolderInboxes,
@@ -715,8 +709,6 @@ export interface HostOperator {
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
-  /** The account's automations, or one task's or one workspace's; or why there are none. */
-  automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
   automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
   /** One automation changed; the automation as it then stands, or why it is unchanged. */
@@ -725,16 +717,16 @@ export interface HostOperator {
   automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
   /** One automation run now under the window's key; the run as it came out, or why there is none. */
   automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
-  /** One automation's runs, newest first; or why there are none. */
-  automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
-  /** A workspace's automations, or an automation's runs, followed from now until let go or signed out, heard through `onAutomationsChanged`; following again starts over. */
+  /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
   automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A followed list or history let go: nothing more is heard of it until it is followed again. */
+  /** A held list or history let go, kept followed a while among those let go lately. */
   automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A followed list or history as it now stands, each time it moves while followed. */
-  onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
+  /** A held list or history read again at once, as Try again asks. */
+  automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
+  /** One of the automations' held reads, whole, by its name, each time any of its keys moves. */
+  onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
@@ -1890,11 +1882,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    automationList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, params),
-        answerOf(automationListViewSchema, AUTOMATION_UNANSWERED),
-      ),
     automationCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
@@ -1915,11 +1902,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
         answerOf(automationRunViewSchema, AUTOMATION_UNANSWERED),
       ),
-    automationRuns: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, params),
-        answerOf(automationRunsViewSchema, AUTOMATION_UNANSWERED),
-      ),
     automationNewWebhookSecret: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
@@ -1927,13 +1909,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
     automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
+    automationsRetry: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_RETRY, scope)),
     onAutomationsChanged: (listener) =>
       on(
         GATEWAY_EVENT.AUTOMATIONS_CHANGED,
+        // Note that the held reads are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) =>
-          Result.getOrUndefined(
-            readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+          isRecord(payload) ? answered<Partial<AppAutomationReads>>(payload) : undefined,
         listener,
       ),
     agentPullRequest: (params) =>
