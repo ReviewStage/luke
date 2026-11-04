@@ -270,12 +270,10 @@ test("an account that is no admin and links no provider says neither", async () 
   expect(page.textContent).toContain("Joined Jan 5, 2026");
 });
 
-test("the account's daily use and volume stand under their own headings", async () => {
+test("the account's hosted-tier use stands last, under a retired heading", async () => {
   const { page } = await openAccount(answer(detail()));
 
-  expect(headings(page, "h2")).toEqual(
-    expect.arrayContaining(["Daily use · hosted tier", "Volume"]),
-  );
+  expect(headings(page, "h2").at(-1)).toBe("Hosted tier · retired");
   expect(page.textContent).toContain("Active days · 30 days12of 30 window days");
   expect(page.textContent).toContain("Current streak1 day");
   expect(page.textContent).toContain("Last activeOct 14first active Jan 6");

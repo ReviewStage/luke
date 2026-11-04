@@ -148,7 +148,10 @@ test("a loaded day names itself and states its totals and accounts under their h
 
   expect(current(page)).toBe("October 12, 2026");
   expect(page.textContent).not.toContain("so far today");
-  expect(headings(page, "h2")).toEqual(["Hosted tier · this day", "Accounts active this day"]);
+  expect(headings(page, "h2")).toEqual([
+    "Hosted tier · this day · retired",
+    "Hosted-tier accounts this day · retired",
+  ]);
   expect(page.textContent).toContain("Active accounts3");
   expect(page.textContent).toContain("Hosted calls1,250");
 });

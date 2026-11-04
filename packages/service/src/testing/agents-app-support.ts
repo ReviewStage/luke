@@ -81,6 +81,7 @@ import type { AfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
 import type { postInboxThread } from "../inbox/inbox-store.js";
+import { type MemberMcpAuth, memberMcpApp } from "../member-mcp/app.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
@@ -477,6 +478,11 @@ export const standing = (
       plans: tasksProcedures(seams),
     });
     yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
+    const memberMcp = HttpRouter.toWebHandler(
+      memberMcpApp(memberMcpBearers(bearers)).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => memberMcp.dispose()));
     /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, a task's Stop, an agent's transcript, its Pull request tab, and the inbox land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
@@ -517,8 +523,27 @@ export const standing = (
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
-    return { ask, fetch };
+    /** The member MCP server as an outside MCP client's `fetch` reaches it, its token a bearer's. */
+    const mcpFetch = (input: string | URL | Request, init?: RequestInit) =>
+      memberMcp.handler(new Request(input, init));
+    return { ask, fetch, mcpFetch };
   });
+
+/** The OAuth client the member MCP server's tokens here name, which nothing else reads. */
+const MEMBER_MCP_CLIENT_ID = "member-mcp-test";
+
+/** The member MCP server's admission over the bearers alone: a bearer's account is its token's subject, minted to the test's client; any other is refused. */
+function memberMcpBearers(bearers: ReadonlyMap<string, string>): MemberMcpAuth {
+  return {
+    verify: (incoming) => {
+      const sub = bearers.get(incoming.headers.get("authorization") ?? "");
+      return sub === undefined
+        ? Promise.reject(new Error("the member MCP server's test admits no such bearer"))
+        : Promise.resolve({ sub, client_id: MEMBER_MCP_CLIENT_ID });
+    },
+    metadata: () => Promise.resolve({}),
+  };
+}
 
 /** Where a path the hosted oRPC router answers names its id. */
 const ID_SEGMENT = "{id}";
@@ -664,7 +689,7 @@ export const openTask = (
     ]);
     const github = githubReaching([installation], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
-    const { ask, fetch } = yield* standing(
+    const { ask, fetch, mcpFetch } = yield* standing(
       bearers,
       github,
       eve,
@@ -673,7 +698,7 @@ export const openTask = (
       options.titleModel,
       options.afterResponse,
     );
-    return { owner, other, task, installation, eve, github, ask, fetch };
+    return { owner, other, task, installation, eve, github, ask, fetch, mcpFetch };
   });
 
 /** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */

@@ -56,6 +56,13 @@ import {
   githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
 } from "@repo/features/github-repositories-wire";
+import {
+  INBOX_ASK,
+  INBOX_BOUNDS,
+  INBOX_REPLY,
+  INBOX_STATUS,
+  inboxAnswersSchema,
+} from "@repo/features/inbox-wire";
 import { agentName } from "@repo/features/model-label";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { planNotesSchema } from "@repo/features/plan-template";
@@ -145,6 +152,13 @@ import type { HostedRefusal } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
+import {
+  answerAskAsMember,
+  closeThreadAsMember,
+  MEMBER_INBOX_TOOL,
+  readMemberInbox,
+  replyAsMember,
+} from "./inbox.js";
 
 /** What a tool's effect runs against: the store, GitHub through the App, the model catalog, the deployment's environment a start's summary model reads, and the member the call acts for. */
 export type MemberMcpServices =
@@ -193,6 +207,10 @@ export const MEMBER_MCP_TOOL = {
   MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   STOP_AGENT: AGENT_TOOL.STOP_AGENT,
   UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
+  READ_INBOX: MEMBER_INBOX_TOOL.READ,
+  ANSWER_ASK: MEMBER_INBOX_TOOL.ANSWER,
+  REPLY_TO_THREAD: MEMBER_INBOX_TOOL.REPLY,
+  CLOSE_THREAD: MEMBER_INBOX_TOOL.CLOSE,
   AGENT_PULL_REQUEST_ACTION: "agent_pull_request_action",
 } as const;
 
@@ -948,6 +966,186 @@ const MEMBER_UPDATE_AGENT_TOOL = memberMcpTool({
     ),
 });
 
+// The member's inbox (`inbox.ts`): the threads their agents ask them things on, read and worked as theirs.
+
+/** How an answer or a message tells the agent what the thread's agent hears. */
+const HANDED_WORDS =
+  "It is written on the thread as the member's own and handed at once to the thread's agent, " +
+  "which takes it up in its next turn, starting one where it was idle.";
+
+/** A thread by its id, as the inbox read names it. */
+const THREAD_ID = describeWire(
+  wireUuidSchema,
+  `The thread's id, as ${MEMBER_MCP_TOOL.READ_INBOX} answered it.`,
+);
+
+/** A read of the inbox names its workspace, as a list does. */
+const ReadInboxInputSchema = Schema.Struct({ workspace: WORKSPACE_INPUT });
+
+const READ_INBOX_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.READ_INBOX,
+  description:
+    "Read what waits on the member you act for in a workspace's inbox, where its coding agents " +
+    "ask them things in threads: every thread they may read, whichever member's agent posted " +
+    "it, those whose ask waits on the member first, then every other open ask, then the notices " +
+    `still open, then the latest ${INBOX_BOUNDS.MAX_SETTLED_TOLD} settled, each the latest ` +
+    "changed first. Each thread has its id, which the other inbox tools take, its title, where " +
+    `it stands (${Object.values(INBOX_STATUS).join(", ")}) and its revision, the agent that ` +
+    "posted it (agentId), who it waits on by name and whether that is the member " +
+    "(waitsOnMember), whether it is unread for them, its mention, the `[@title](link)` to name " +
+    "it by in your words, and its messages in order: who wrote each (agent, `you` for the " +
+    "member, or another member by name), its words, its files by name, the ask it ends with " +
+    "and where that stands, and the answer a member's message carries. An open ask reads " +
+    `whole: a ${INBOX_ASK.DECIDE}'s options, those recommended, and whether several may be ` +
+    `picked; a ${INBOX_ASK.DO}'s steps, which the member does by hand; or an ` +
+    `${INBOX_ASK.ANSWER}'s fields, or none where words are the answer; and the thread's askId ` +
+    `names the message it stands on, which ${MEMBER_MCP_TOOL.ANSWER_ASK} takes. A thread ` +
+    `longer than ${INBOX_BOUNDS.MAX_MESSAGES_READ} messages reads its first, its open ask, and ` +
+    "its latest; a settled one reads its latest messages and its latest ask and answer, with " +
+    `how many earlier it leaves out. ${WORKSPACE_WORDS}`,
+  input: ReadInboxInputSchema,
+  annotations: READ_ONLY,
+  run: ({ workspace }) =>
+    Effect.gen(function* () {
+      const member = yield* AdmittedMember;
+      const listed = yield* listedWorkspace(member.userId, workspace);
+      if (Result.isFailure(listed)) return agentToolRejected(listed.failure);
+      return yield* readMemberInbox(member.userId, listed.success);
+    }),
+});
+
+/** The answers an ask takes: a pick or words for a decide, done or not for a do, and fields or words for an answer. */
+const ANSWER_REPLIES = [
+  INBOX_REPLY.CHOSE,
+  INBOX_REPLY.ANSWERED,
+  INBOX_REPLY.SUBMITTED,
+  INBOX_REPLY.DONE,
+  INBOX_REPLY.NOT_DONE,
+] as const;
+
+/** An answer names its thread and the ask it answers, how the member answers, and what goes with it, as the window's answer carries them. */
+const AnswerAskInputSchema = Schema.Struct({
+  threadId: THREAD_ID,
+  askId: describeWire(
+    wireUuidSchema,
+    `The id of the message whose ask you answer: the thread's askId, as ` +
+      `${MEMBER_MCP_TOOL.READ_INBOX} answered it.`,
+  ),
+  reply: describeWire(
+    Schema.Literals(ANSWER_REPLIES),
+    `How the member answers: ${INBOX_REPLY.CHOSE}, with choices, for a ${INBOX_ASK.DECIDE}; ` +
+      `${INBOX_REPLY.ANSWERED}, with their words in note, where no option of a ` +
+      `${INBOX_ASK.DECIDE} fits or an ${INBOX_ASK.ANSWER} asks no fields; ` +
+      `${INBOX_REPLY.SUBMITTED}, with values, for an ${INBOX_ASK.ANSWER}'s fields; and ` +
+      `${INBOX_REPLY.DONE} or ${INBOX_REPLY.NOT_DONE} for a ${INBOX_ASK.DO}.`,
+  ),
+  choices: Schema.optionalKey(
+    describeWire(
+      inboxAnswersSchema.fields.choices.schema,
+      `The labels of the options the member picks, for ${INBOX_REPLY.CHOSE}: one, or several ` +
+        "where the ask lets several be picked.",
+    ),
+  ),
+  values: Schema.optionalKey(
+    describeWire(
+      inboxAnswersSchema.fields.values.schema,
+      `The fields the member fills, for ${INBOX_REPLY.SUBMITTED}: each by its field's label, ` +
+        "with words, a number, one of a select's options, or true or false, as its type asks; " +
+        "every required field filled.",
+    ),
+  ),
+  steps: Schema.optionalKey(
+    describeWire(
+      inboxAnswersSchema.fields.steps.schema,
+      `The steps of a ${INBOX_ASK.DO} the member did, by their places from 0: every one for ` +
+        `${INBOX_REPLY.DONE}.`,
+    ),
+  ),
+  note: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
+      `The member's words with the answer, in Markdown: the answer itself for ` +
+        `${INBOX_REPLY.ANSWERED}, and otherwise anything they add.`,
+    ),
+  ),
+});
+
+const ANSWER_ASK_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.ANSWER_ASK,
+  description:
+    "Answer the open ask of a thread in the member's inbox as the member, as they would in the " +
+    `window. ${HANDED_WORDS} Name the thread and its askId as ` +
+    `${MEMBER_MCP_TOOL.READ_INBOX} answered them, and the member's answer. A ` +
+    `${INBOX_ASK.DO}'s steps are things the member does by hand, such as a setting on GitHub ` +
+    `or a secret: answer ${INBOX_REPLY.DONE}, with every step's place, only once every step is ` +
+    `really done, and ${INBOX_REPLY.NOT_DONE} where they could not or would not; never mark one ` +
+    "done to clear it away. Answer only what the member decided or told you to, and ask them " +
+    "where you do not know their answer. Answers `accepted` with the thread as it then stands, " +
+    "or `rejected` and why nothing was written, such as an ask no longer open or an answer " +
+    "that does not fit it.",
+  input: AnswerAskInputSchema,
+  annotations: IDEMPOTENT_CHANGE,
+  run: ({ threadId, askId, reply, choices, values, steps, note }) =>
+    Effect.flatMap(AdmittedMember, (member) =>
+      answerAskAsMember(member.userId, {
+        threadId,
+        note: note ?? "",
+        answers: {
+          ask: askId,
+          reply,
+          ...(choices === undefined ? undefined : { choices }),
+          ...(values === undefined ? undefined : { values }),
+          ...(steps === undefined ? undefined : { steps }),
+        },
+      }),
+    ),
+});
+
+/** A message names its thread and its words. */
+const ReplyToThreadInputSchema = Schema.Struct({
+  threadId: THREAD_ID,
+  text: describeWire(
+    Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
+    "The member's message, in Markdown, short and complete.",
+  ),
+});
+
+const REPLY_TO_THREAD_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.REPLY_TO_THREAD,
+  description:
+    "Write a message on a thread in the member's inbox as the member, open or settled. " +
+    `${HANDED_WORDS} It answers no ask, even one standing open: answer that with ` +
+    `${MEMBER_MCP_TOOL.ANSWER_ASK}. Answers \`accepted\` with the thread as it then stands, ` +
+    "or `rejected` and why nothing was written.",
+  input: ReplyToThreadInputSchema,
+  annotations: ADDITIVE,
+  run: (asked) => Effect.flatMap(AdmittedMember, (member) => replyAsMember(member.userId, asked)),
+});
+
+/** A close names its thread and the revision it was read at. */
+const CloseThreadInputSchema = Schema.Struct({
+  threadId: THREAD_ID,
+  revision: describeWire(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    `The thread's revision, as ${MEMBER_MCP_TOOL.READ_INBOX} answered it.`,
+  ),
+});
+
+const CLOSE_THREAD_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.CLOSE_THREAD,
+  description:
+    "Close an open thread in the member's inbox without answering it, as the member, at the " +
+    `revision ${MEMBER_MCP_TOOL.READ_INBOX} answered, so a thread its agent changed since is ` +
+    "not closed unseen. An agent waiting on its answer is told at once that the member closed " +
+    "it, which it takes as their not wanting what it asked; any other reads the close in its " +
+    "own time. Close only what the member does not want. Answers `accepted` with the thread as " +
+    "it then stands, or `rejected` and why it was not closed.",
+  input: CloseThreadInputSchema,
+  annotations: DESTRUCTIVE,
+  run: (asked) =>
+    Effect.flatMap(AdmittedMember, (member) => closeThreadAsMember(member.userId, asked)),
+});
+
 /**
  * The kept published answers of this function's instance, made on its first
  * change: the server is a function of its own, so a change lets go of what
@@ -1083,5 +1281,9 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   MEMBER_MESSAGE_AGENT_TOOL,
   MEMBER_STOP_AGENT_TOOL,
   MEMBER_UPDATE_AGENT_TOOL,
+  READ_INBOX_TOOL,
+  ANSWER_ASK_TOOL,
+  REPLY_TO_THREAD_TOOL,
+  CLOSE_THREAD_TOOL,
   AGENT_PULL_REQUEST_ACTION_TOOL,
 ];

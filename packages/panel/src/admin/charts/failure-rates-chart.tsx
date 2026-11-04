@@ -17,13 +17,18 @@ import {
 } from "@repo/ui/chart";
 import { partialDayKey } from "@repo/ui/daily-series";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { retiredTitle } from "../chrome/notes.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
-/** The three rates, in the order the legend names them. */
+/**
+ * The three rates, in the order the legend names them: the live kinds of
+ * work first, and the app's own turns last, retired since every conversation
+ * the service starts is an agent's.
+ */
 const FAILURE_RATES_CHART = {
-  appTurns: { label: `${PRODUCT_NAME} turns`, color: "var(--ui-color-chart-1)" },
   agentRuns: { label: "Agent runs", color: "var(--ui-color-chart-2)" },
   automationRuns: { label: "Automation runs", color: "var(--ui-color-chart-3)" },
+  appTurns: { label: retiredTitle(`${PRODUCT_NAME} turns`), color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 type FailureSeries = keyof typeof FAILURE_RATES_CHART;
