@@ -53,7 +53,6 @@ const NONE_ROW = "none";
 /** What the rows say. */
 const WORDS = {
   DEFAULT_LABEL: "Default repository",
-  DEFAULT_DETAIL: "Used unless the message or its channel names another.",
   NONE: "None",
   DEFAULT: "Default",
   REPOSITORY_SEARCH: "Search repositories",
@@ -162,7 +161,6 @@ function DefaultRepositoryRow({
     <PickerRow
       indent={SETTINGS_ROW_INDENT.MARK}
       label={WORDS.DEFAULT_LABEL}
-      detail={WORDS.DEFAULT_DETAIL}
       value={chosen ?? NONE_ROW}
       valueLabel={chosen ?? WORDS.NONE}
       valueIcon={

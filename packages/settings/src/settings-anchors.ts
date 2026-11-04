@@ -43,7 +43,7 @@ export const SETTINGS_SEARCH_ROW = {
   ADD_HOSTS: "add-hosts",
   /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
   WORKSPACE_RENAME: "workspace-rename",
-  /** The Workspace page's link row, where the owner changes the workspace's slug. */
+  /** The Workspace page's identity row, whose ⋯ holds the owner's Change slug. */
   WORKSPACE_SLUG: "workspace-slug",
 } as const;
 
