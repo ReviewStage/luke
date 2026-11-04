@@ -189,6 +189,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.syncLog.push(now);
         return 5;
       }),
+    purgeStaleFirewalls: () => Effect.succeed(0),
     ...overrides,
   };
   return { options, recorded };

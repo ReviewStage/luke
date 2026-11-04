@@ -144,7 +144,7 @@ import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The agent's sandbox as the shells reach it: Vercel's in production, a script's in a test. */
-  readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient>;
+  readonly sandbox: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient | DatabaseServices>;
   /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
   summaryModel?: SummaryModelOf;
 }

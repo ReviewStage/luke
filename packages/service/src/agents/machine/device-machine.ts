@@ -27,7 +27,7 @@
  * holds (`../coder-host/runner-sessions.ts`), because the lines' order is
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
- * has no firewall we set, so `setCredential` does nothing, and nothing
+ * has no firewall we set, so its `firewall` does nothing, and nothing
  * to stop, resume, or throw away, since a warm runner is retired by the service
  * under its lease, settling its line: past its window by the sweep
  * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it,
@@ -435,7 +435,7 @@ function deviceMachineOver(
         yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.STOP, payload: {} });
       }),
 
-    setCredential: () => Effect.void,
+    firewall: { set: () => Effect.void, withdraw: () => Effect.void, clear: () => Effect.void },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>

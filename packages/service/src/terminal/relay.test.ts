@@ -134,12 +134,13 @@ function world(options: {
             }
           : { state };
       }),
-    setCredential: (sandboxSessionId) =>
+    setCredential: ({ sandboxSessionId }) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
-    withdrawCredential: (sandboxSessionId) =>
+    withdrawCredential: ({ sandboxSessionId }) =>
       Effect.sync(() => void asked.withdrawn.push(sandboxSessionId)),
   };
   const agent: RelayAgent = {
+    userId: "user-relay",
     conversationId: CONVERSATION,
     sessionId: "wrun_1",
     repositoryCredential: Effect.suspend(() => {
@@ -200,6 +201,7 @@ it.effect(
       const unreached = world({ agent: Option.none(), pty });
       const unopened = world({
         agent: Option.some({
+          userId: "user-relay",
           conversationId: CONVERSATION,
           sessionId: undefined,
           repositoryCredential: Effect.die("no token"),

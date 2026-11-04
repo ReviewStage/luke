@@ -12,29 +12,35 @@
  * where the sandbox stands instead.
  *
  * The GitHub credential the firewall carries for the agent is set here in
- * one of two shapes, for the terminal, the agent's own session, and a copy
- * of its work alike: an installation token on GitHub's two hosts, as eve's
- * own `authenticateGitHub` sets it, or a member's own classic token on the
- * agent's one repository's git and REST paths alone, which is taken off
- * again whenever nobody is using it.
+ * the agent's own GitHub slot, in the shape its own session and a copy of
+ * its work set it (`../sandbox-firewall.ts`'s `githubEntry`): an
+ * installation token on GitHub's two hosts, or a member's own classic token
+ * on the agent's one repository's git and REST paths alone, which is taken
+ * off again whenever nobody is using it. Whatever else stands at the
+ * firewall stays, since every write composes the session's whole policy.
  */
 
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   SANDBOX_STATE,
   type SandboxState,
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@repo/features/terminal-wire";
-import { Context, Effect, Layer, Redacted, Result } from "effect";
+import { Context, Effect, Layer, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import type { GitHubTokenAccess } from "../../github/github-app.js";
+import {
+  FIREWALL_SLOT,
+  type FirewallSession,
+  githubEntry,
+  type RepositoryCredential,
+  sandboxFirewall,
+} from "../sandbox-firewall.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
   type InteractiveShell,
   type ListedSandbox,
-  OPEN_INTERNET_POLICY,
   SANDBOX_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
@@ -83,30 +89,6 @@ type SandboxAttach =
   | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING }
   | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly gone: true };
 
-/** GitHub's two hosts a credential is set on at the firewall: git's, and the REST API's. */
-const GITHUB_HOST = { GIT: "github.com", API: "api.github.com" } as const;
-
-/** A repository's credential as the firewall carries it: the token, the repository as GitHub spells it, and whose the token is. */
-export interface RepositoryCredential {
-  readonly token: Redacted.Redacted;
-  readonly fullName: string;
-  readonly access: GitHubTokenAccess;
-}
-
-/** Where a rule sets its header: on every request to its host, or on those whose path matches. */
-type PathMatch = { readonly startsWith: string } | { readonly exact: string };
-
-/** One rule of a policy that carries a credential: the authorization header set on the requests it matches. */
-interface CredentialRule {
-  readonly match?: { readonly path: PathMatch };
-  readonly transform: { readonly headers: { readonly authorization: string } }[];
-}
-
-/** A firewall policy that carries a credential: every host open, and on the hosts named, the rules that set it. */
-export interface CredentialPolicy {
-  readonly allow: Record<string, CredentialRule[]>;
-}
-
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
@@ -128,17 +110,19 @@ export interface AgentSandboxService {
     terminalId: string,
   ) => Effect.Effect<SandboxAttach, SandboxUnavailable>;
   /**
-   * A fresh credential set at the running sandbox session's firewall, in
-   * the shape the agent's own session sets it (`credentialPolicy`), so the
-   * shell reaches GitHub as the agent does and never holds the token's bytes.
+   * A fresh credential set in the GitHub slot of the running sandbox
+   * session's firewall, in the shape the agent's own session sets it
+   * (`githubEntry`), so the shell reaches GitHub as the agent does and never
+   * holds the token's bytes; the session is named with the account whose
+   * agent it is.
    */
   readonly setCredential: (
-    sandboxSessionId: string,
+    session: FirewallSession,
     credential: RepositoryCredential,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** Every credential taken off the running sandbox session's firewall, which is left the open internet. */
+  /** The GitHub credential taken off the running sandbox session's firewall, whatever else stands there staying. */
   readonly withdrawCredential: (
-    sandboxSessionId: string,
+    session: FirewallSession,
   ) => Effect.Effect<void, SandboxUnavailable>;
 }
 
@@ -146,70 +130,18 @@ export class AgentSandbox extends Context.Service<AgentSandbox, AgentSandboxServ
   "AgentSandbox",
 ) {}
 
-/** The firewall policy that sets the GitHub token on GitHub's hosts, as eve's own `authenticateGitHub` sets it, and leaves every other host open. */
-function githubTokenPolicy(token: Redacted.Redacted): CredentialPolicy {
-  const authorization = `Basic ${Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64")}`;
-  return {
-    allow: {
-      "*": [],
-      [GITHUB_HOST.GIT]: [{ transform: [{ headers: { authorization } }] }],
-      [GITHUB_HOST.API]: [{ transform: [{ headers: { authorization } }] }],
-    },
-  };
-}
-
-/** A rule that sets the authorization header on the requests whose path matches. */
-function onPath(path: PathMatch, authorization: string): CredentialRule {
-  return { match: { path }, transform: [{ headers: { authorization } }] };
-}
-
-/**
- * The firewall policy for a member's own classic token: the token on the
- * one repository's paths alone, and nothing on any other path of GitHub's,
- * GraphQL and every other repository among them, or on any other host. Git
- * over HTTPS takes the member's login and the token as its Basic
- * credentials
- * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls),
- * and the REST API the token as a bearer
- * (https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api).
- * Note that the REST rules match the repository's own path and the paths
- * under it, never the name as a prefix, so `owner/name-other` carries
- * nothing.
- */
-function memberTokenPolicy(
-  fullName: string,
-  token: Redacted.Redacted,
-  githubLogin: string,
-): CredentialPolicy {
-  const basic = Buffer.from(`${githubLogin}:${Redacted.value(token)}`).toString("base64");
-  const bearer = `Bearer ${Redacted.value(token)}`;
-  return {
-    allow: {
-      "*": [],
-      [GITHUB_HOST.GIT]: [onPath({ startsWith: `/${fullName}.git/` }, `Basic ${basic}`)],
-      [GITHUB_HOST.API]: [
-        onPath({ exact: `/repos/${fullName}` }, bearer),
-        onPath({ startsWith: `/repos/${fullName}/` }, bearer),
-      ],
-    },
-  };
-}
-
-/** The firewall policy that carries the credential: an installation token on GitHub's two hosts, a member's own on its repository's paths alone. */
-export function credentialPolicy(credential: RepositoryCredential): CredentialPolicy {
-  return credential.access.kind === GITHUB_ACCESS.TOKEN
-    ? memberTokenPolicy(credential.fullName, credential.token, credential.access.githubLogin)
-    : githubTokenPolicy(credential.token);
-}
-
 /** Where a listed sandbox stands; none listed is one the agent has not opened yet. */
 function stateOf(sandbox: ListedSandbox | undefined): SandboxState {
   if (sandbox === undefined) return SANDBOX_STATE.STARTING;
   return STATE_OF_STATUS.get(sandbox.status ?? "") ?? SANDBOX_STATE.STOPPED;
 }
 
-/** The service over the REST calls the API makes. */
-function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
+/** The service over the REST calls the API makes, and the store its firewall's record is kept in. */
+function agentSandboxOver(
+  api: VercelSandboxApi,
+  context: Context.Context<DatabaseServices>,
+): AgentSandboxService {
+  const firewall = sandboxFirewall(api);
   /** The session's sandbox, where it stands, and the running session a command goes to while it is up. */
   const standing = (sessionId: string) =>
     Effect.map(api.listTagged(sessionId), (sandboxes) => {
@@ -286,10 +218,13 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
         const shell = yield* api.openInteractive(running);
         return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
       }),
-    setCredential: (sandboxSessionId, credential) =>
-      api.updateNetworkPolicy(sandboxSessionId, credentialPolicy(credential)),
-    withdrawCredential: (sandboxSessionId) =>
-      api.updateNetworkPolicy(sandboxSessionId, OPEN_INTERNET_POLICY),
+    setCredential: (session, credential) =>
+      Effect.provideContext(
+        firewall.set(session, FIREWALL_SLOT.GITHUB, githubEntry(credential)),
+        context,
+      ),
+    withdrawCredential: (session) =>
+      Effect.provideContext(firewall.withdraw(session, FIREWALL_SLOT.GITHUB), context),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);
@@ -302,5 +237,14 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
 }
 
 /** The service as the deployment runs it, on the function's own OIDC token. */
-export const agentSandboxLayer: Layer.Layer<AgentSandbox, never, HttpClient.HttpClient> =
-  Layer.effect(AgentSandbox, Effect.map(vercelSandboxApi(deploymentOidcToken), agentSandboxOver));
+export const agentSandboxLayer: Layer.Layer<
+  AgentSandbox,
+  never,
+  HttpClient.HttpClient | DatabaseServices
+> = Layer.effect(
+  AgentSandbox,
+  Effect.gen(function* () {
+    const api = yield* vercelSandboxApi(deploymentOidcToken);
+    return agentSandboxOver(api, yield* Effect.context<DatabaseServices>());
+  }),
+);

@@ -11,6 +11,7 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import type { RunnerConfig } from "@repo/agent-runner/protocol";
@@ -181,6 +182,9 @@ export function runnerSandboxApi() {
     next += 1;
     return `${prefix}_${next}`;
   };
+  /** A sandbox session's id, unique beyond this fake as Vercel's are, since a firewall's record in the suite's database is kept by it. */
+  const sessionIds = randomUUID().slice(0, 8);
+  const mintSession = () => id(`sbs_${sessionIds}`);
   const listed = (sandbox: FakeSandbox) => ({
     name: sandbox.name,
     status: sandbox.status,
@@ -215,7 +219,7 @@ export function runnerSandboxApi() {
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
-        currentSessionId: id("sbs"),
+        currentSessionId: mintSession(),
         tags: asked.tags,
         snapshotId: asked.source.snapshotId,
         deleted: false,
@@ -275,7 +279,7 @@ export function runnerSandboxApi() {
       // `@vercel/sandbox`'s `withResume` relies on.
       if (resuming && (sandbox.status === "stopped" || sandbox.status === "stopping")) {
         sandbox.status = "running";
-        sandbox.currentSessionId = id("sbs");
+        sandbox.currentSessionId = mintSession();
         sandbox.resumedWith.push(sandbox.timeout);
       }
       return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });

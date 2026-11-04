@@ -163,7 +163,7 @@ import {
 import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
+import { FIREWALL_SLOT, githubEntry } from "../sandbox-firewall.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -651,12 +651,12 @@ export const runnerSessions = <
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
         const minted = yield* agentRepositoryToken(target, agent);
-        const credential: RepositoryCredential = {
+        const entry = githubEntry({
           token: minted.token,
           fullName: minted.fullName,
           access: minted.access,
-        };
-        yield* machine.setCredential(place, credential);
+        });
+        yield* machine.firewall.set(place, agent.userId, FIREWALL_SLOT.GITHUB, entry);
       });
 
     /**
@@ -2009,9 +2009,9 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate))
     return RUNNER_ENDED.HELD;
-  // The credential comes off first, and a place it would not come off is left up rather than
-  // stopped with it: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
-  yield* machine.setCredential(running, undefined);
+  // Every credential comes off first, and a place they would not come off is left up rather than
+  // stopped with them: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
+  yield* machine.firewall.clear(running);
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });

@@ -11,12 +11,13 @@
  * entry may no longer be running by the time it is read.
  */
 
+import type { DatabaseServices } from "@repo/database/core/query";
 import { Effect, Result } from "effect";
+import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   LIST_ORDER,
   type ListedSandbox,
   type ListOrder,
-  OPEN_INTERNET_POLICY,
   type VercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
 
@@ -112,16 +113,13 @@ export const stopWithinBudget = (
   running: string,
   budget: StopBudget,
   named: string,
-): Effect.Effect<BudgetedStop> =>
+): Effect.Effect<BudgetedStop, never, DatabaseServices> =>
   Effect.gen(function* () {
     if (budget.remaining <= 0) return BUDGETED_STOP.DEFERRED;
     budget.remaining -= 1;
-    // The credential comes off first, and a sandbox it would not come off is left up for the next sweep rather than stopped with it.
+    // The credentials come off first, and a sandbox they would not come off is left up for the next sweep rather than stopped with them.
     const stopped = yield* Effect.result(
-      Effect.andThen(
-        api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY),
-        api.stopSession(running),
-      ),
+      Effect.andThen(sandboxFirewall(api).clear(running), api.stopSession(running)),
     );
     if (Result.isFailure(stopped)) {
       yield* Effect.logWarning(`${named} was not stopped: ${stopped.failure.message}`);

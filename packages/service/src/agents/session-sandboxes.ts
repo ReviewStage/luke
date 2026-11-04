@@ -53,11 +53,11 @@ import {
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { discardedOrLogged } from "./device-discard.js";
+import { sandboxFirewall } from "./sandbox-firewall.js";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import { boundSnapshotRetention, shortenSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
-  OPEN_INTERNET_POLICY,
   SANDBOX_STATUS,
   SandboxUnavailable,
   UP_STATUSES,
@@ -100,11 +100,13 @@ export interface SessionSandboxesService {
    * expiry is named, the snapshot each stop writes is kept that long after
    * its last use rather than the bound's, set on the sandbox just before
    * where the snapshot it resumes from survives that (`sandbox-retention.ts`).
+   * Every credential at its firewall comes off first, its record with it
+   * (`sandbox-firewall.ts`).
    */
   readonly stopFor: (
     sessionId: string,
     snapshotExpiry?: Duration.Duration,
-  ) => Effect.Effect<number, SandboxUnavailable>;
+  ) => Effect.Effect<number, SandboxUnavailable, DatabaseServices>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
@@ -152,9 +154,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           // The stop goes on however the retention ended, since the stop is what an archive must not miss.
           if (snapshotExpiry !== undefined)
             yield* shortenSnapshotRetention(api, sandbox, snapshotExpiry);
-          // The credential comes off first, as at a launch's end and in the sweeps, because a stopped
+          // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
           // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
-          yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
+          yield* sandboxFirewall(api).clear(running);
           yield* api.stopSession(running);
           stopped += 1;
         }

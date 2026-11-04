@@ -21,7 +21,7 @@ import {
 } from "@repo/features/automation-wire";
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Effect, Option, Redacted } from "effect";
+import { Effect, Option } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
   connectWorkspaceGitHub,
@@ -38,7 +38,6 @@ import {
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
-import { credentialPolicy } from "../terminal/agent-sandbox.js";
 import {
   agentCoAuthor,
   agentDeepenPlan,
@@ -258,12 +257,21 @@ const checkOutAndDeepen = (
     return sandbox.policies.at(-1);
   });
 
-/** The App's installation token for the repository, as the session's firewall carries it. */
-const APP_CREDENTIAL = credentialPolicy({
-  token: Redacted.make(GITHUB_FIXTURE_INSTALLATION_TOKEN),
-  fullName: RELAY_FULL_NAME,
-  access: { kind: GITHUB_ACCESS.APP },
-});
+/** A rule that sets the authorization given, on every request to its host or on those whose path matches. */
+const authorizing = (authorization: string, path?: object) =>
+  path === undefined
+    ? { transform: [{ headers: { authorization } }] }
+    : { match: { path }, transform: [{ headers: { authorization } }] };
+
+/** The App's installation token for the repository, as the session's firewall carries it: on GitHub's two hosts, as Basic credentials, every other host open. */
+const APP_AUTHORIZATION = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
+const APP_CREDENTIAL = {
+  allow: {
+    "*": [],
+    "github.com": [authorizing(APP_AUTHORIZATION)],
+    "api.github.com": [authorizing(APP_AUTHORIZATION)],
+  },
+};
 
 /** The mints sent to GitHub for one repository, by the permissions each asked for. */
 const repositoryMints = (sent: readonly SentToGitHub[]) =>
@@ -292,7 +300,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         ]);
         assert.equal(sandbox.checkedOut, RELAY_FULL_NAME);
         assert.equal(sandbox.shallow, true);
-        assert.equal(sandbox.policies.at(-1), "allow-all");
+        assert.deepEqual(sandbox.policies.at(-1), { mode: "allow-all" });
         assert.deepEqual(sandbox.identities, []);
         assert.deepEqual(repositoryMints(github.sent), [
           { repositories: [RELAY.name], permissions: { contents: "read" } },
@@ -429,19 +437,18 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
 
         // The member's own token, on the repository's own paths, as theirs.
-        assert.deepEqual(
-          standing,
-          credentialPolicy({
-            token: Redacted.make(GITHUB_FIXTURE_MEMBER.TOKEN),
-            fullName: RELAY_FULL_NAME,
-            access: {
-              kind: GITHUB_ACCESS.TOKEN,
-              githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
-              githubUserId: GITHUB_FIXTURE_MEMBER.ID,
-              markInvalid: Effect.void,
-            },
-          }),
-        );
+        const basic = `Basic ${Buffer.from(`${GITHUB_FIXTURE_MEMBER.LOGIN}:${GITHUB_FIXTURE_MEMBER.TOKEN}`).toString("base64")}`;
+        const bearer = `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
+        assert.deepEqual(standing, {
+          allow: {
+            "*": [],
+            "github.com": [authorizing(basic, { startsWith: `/${RELAY_FULL_NAME}.git/` })],
+            "api.github.com": [
+              authorizing(bearer, { exact: `/repos/${RELAY_FULL_NAME}` }),
+              authorizing(bearer, { startsWith: `/repos/${RELAY_FULL_NAME}/` }),
+            ],
+          },
+        });
         assert.deepEqual(sandbox.identities, [
           {
             name: MEMBER.name,

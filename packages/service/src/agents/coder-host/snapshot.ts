@@ -12,8 +12,9 @@
  * temporary directory, so the source's own index and working tree are never
  * touched, and the source may be idle or mid-turn: nothing here writes to it
  * but git's objects, and a push. The push goes through the repository's
- * write credential, set at the sandbox's firewall in the shape the agent's
- * own session and the Terminal tab set it (`credentialPolicy`), so no token
+ * write credential, set in the GitHub slot of the sandbox's firewall, in the
+ * shape the agent's own session and the Terminal tab set it (`githubEntry`),
+ * beside whatever else stands there (`../sandbox-firewall.ts`), so no token
  * enters the sandbox's files or a command's words; a member's own token is
  * taken off again once the push is done, unless a terminal or a turn of the
  * source still uses the sandbox. A sandbox this step woke is stopped
@@ -44,12 +45,17 @@ import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import {
+  FIREWALL_SLOT,
+  type FirewallSession,
+  githubEntry,
+  type RepositoryCredential,
+  sandboxFirewall,
+} from "../sandbox-firewall.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  OPEN_INTERNET_POLICY,
   SANDBOX_STATUS,
   UP_STATUSES,
   type VercelSandboxApi,
@@ -92,6 +98,8 @@ export type SnapshotOutcome =
 
 /** What a copy is asked: whose sandbox, the branch and the commit's message, the credential the push goes through, and whether the sandbox is in use and must be left up. */
 export interface SnapshotAsk<R> {
+  /** The account whose agent the source is, under which its sandbox's firewall record is kept. */
+  readonly userId: string;
   /** The eve session the source's sandbox is tagged with. */
   readonly sessionId: string;
   readonly branch: string;
@@ -236,10 +244,14 @@ const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
  * sandbox, which keeps it standing for them; within the stop's bound, and
  * a withdrawal that fails is logged, since the copy's outcome stands.
  */
-const withdrawUnlessInUse = <R>(api: VercelSandboxApi, session: string, ask: SnapshotAsk<R>) =>
+const withdrawUnlessInUse = <R>(
+  api: VercelSandboxApi,
+  session: FirewallSession,
+  ask: SnapshotAsk<R>,
+) =>
   Effect.gen(function* () {
     if (yield* ask.keepUp) return;
-    yield* api.updateNetworkPolicy(session, OPEN_INTERNET_POLICY);
+    yield* sandboxFirewall(api).withdraw(session, FIREWALL_SLOT.GITHUB);
   }).pipe(
     // Note that a finalizer runs uninterruptibly, so the bound can cut the withdrawal off only once it is made interruptible.
     Effect.interruptible,
@@ -264,12 +276,13 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     // Lowered ahead of a wake, so a woken session a terminal or a turn keeps up lives the timeout, not an old sandbox's day.
     if (!up) yield* capSandboxTimeout(api, sandbox);
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
+    const owner = { userId: ask.userId, sandboxSessionId: session };
     const credential = yield* ask.credential;
     // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
     if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
-      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, session, ask));
+      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, owner, ask));
     }
-    yield* api.updateNetworkPolicy(session, credentialPolicy(credential));
+    yield* sandboxFirewall(api).set(owner, FIREWALL_SLOT.GITHUB, githubEntry(credential));
     const ran = yield* api.run(session, {
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
@@ -298,7 +311,7 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
 export const snapshotSource = /* @__PURE__ */ Effect.fn("web/snapshotSource")(function* <R>(
   api: VercelSandboxApi,
   ask: SnapshotAsk<R>,
-): Effect.fn.Return<SnapshotOutcome, never, R> {
+): Effect.fn.Return<SnapshotOutcome, never, R | DatabaseServices> {
   const outcome = yield* Effect.scoped(copyIn(api, ask)).pipe(
     Effect.timeoutOption(SNAPSHOT.TIMEOUT),
     Effect.catch((failure) =>
@@ -385,6 +398,7 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
       return yield* agentTurnUnderWay(source.conversationId);
     });
     return yield* snapshotSource(api, {
+      userId: source.userId,
       sessionId: session.sessionId,
       branch: snapshotBranch(source, forked, idempotencyKey),
       message: `Snapshot of ${source.title ?? source.model} for ${forked ? TAKEN_UP.FORKED : TAKEN_UP.CONTINUED} agent`,

@@ -6,15 +6,24 @@
  * sandbox (`REPOSITORY_SANDBOX_CONTRACT`), keeping the one thing a sandbox
  * keeps between calls, which repository stands checked out and whether it
  * is shallow, and writing
- * down every run and every firewall policy in the order they came. A clone
+ * down every run and every firewall policy in the order they came, each
+ * composed from the entries standing at its firewall as the service
+ * composes them (`sandbox-firewall.ts`). A clone
  * is answered as the test scripts it, and a command from the test's own
  * table. Nothing here runs a shell. Synthetic throughout.
  */
 
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
-import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
+import { Effect } from "effect";
+import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import type { RepositorySandbox } from "../agents/repository-shell.js";
+import {
+  composePolicy,
+  type FirewallEntry,
+  type FirewallSlot,
+} from "../agents/sandbox-firewall.js";
+import { type NetworkPolicy, OPEN_INTERNET_POLICY } from "../agents/vercel-sandbox-api.js";
 
 /** One run as the sandbox saw it. */
 interface SandboxRun {
@@ -33,11 +42,11 @@ export interface SandboxDouble extends RepositorySandbox {
   /** Every run, in order. */
   readonly runs: SandboxRun[];
   /** Every firewall policy set, in order. */
-  readonly policies: SandboxNetworkPolicy[];
+  readonly policies: NetworkPolicy[];
   /** The policy that stood while each clone ran, in order. */
-  readonly policiesDuringClone: SandboxNetworkPolicy[];
+  readonly policiesDuringClone: NetworkPolicy[];
   /** The policy that stood while each deepen's fetch ran, in order. */
-  readonly policiesDuringFetch: SandboxNetworkPolicy[];
+  readonly policiesDuringFetch: NetworkPolicy[];
   /** Whether the checkout standing is shallow: cloned at a depth and not deepened since. */
   shallow: boolean;
   /** How many fetches found the checkout shallow and deepened it. */
@@ -59,8 +68,6 @@ export type CommandTable = (command: string) => SandboxCommandResult | undefined
 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
-const OPEN_INTERNET: SandboxNetworkPolicy = "allow-all";
-
 function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResult {
   return { exitCode, stdout, stderr };
 }
@@ -71,7 +78,14 @@ export function sandboxDouble(
   options: { readonly firewall?: boolean } = {},
 ): SandboxDouble {
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
-  let policy: SandboxNetworkPolicy = OPEN_INTERNET;
+  let policy: NetworkPolicy = OPEN_INTERNET_POLICY;
+  const standing = new Map<FirewallSlot, FirewallEntry>();
+  /** The policy what stands composes, set and recorded. */
+  const composed = () =>
+    Effect.sync(() => {
+      policy = composePolicy(standing);
+      double.policies.push(policy);
+    });
   const double: SandboxDouble = {
     runs: [],
     policies: [],
@@ -143,10 +157,17 @@ export function sandboxDouble(
     ...(options.firewall === false
       ? undefined
       : {
-          setNetworkPolicy: (next: SandboxNetworkPolicy) => {
-            policy = next;
-            double.policies.push(next);
-            return Promise.resolve();
+          firewall: {
+            set: (slot: FirewallSlot, entry: FirewallEntry) =>
+              Effect.andThen(
+                Effect.sync(() => standing.set(slot, entry)),
+                composed(),
+              ),
+            withdraw: (slot: FirewallSlot) =>
+              Effect.andThen(
+                Effect.sync(() => standing.delete(slot)),
+                composed(),
+              ),
           },
         }),
   };

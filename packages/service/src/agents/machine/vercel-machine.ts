@@ -40,7 +40,8 @@
  * A place is found again by the session's tag, and its runner by the tags a
  * launch writes beside it: the command, the sandbox session it runs in, and
  * the launch's first event number and fingerprint (`RUNNER_TAG`). The
- * firewall is the sandbox's network policy, a stop is the session's, and a
+ * firewall is the sandbox session's network policy, composed whole from
+ * what stands at it (`../sandbox-firewall.ts`), a stop is the session's, and a
  * resume opens the sandbox's last snapshot, its timeout lowered first, so
  * the session it opens lives a launch's timeout and not an old sandbox's
  * day; a snapshot expired is a place gone for good.
@@ -54,11 +55,12 @@ import {
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
   SHARED_FILES_DIRECTORY,
 } from "@repo/agent-runner/pins";
+import type { DatabaseServices } from "@repo/database/core/query";
 import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, Duration, Effect, Layer, Option, Result } from "effect";
+import { Brand, type Context, Duration, Effect, Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
@@ -80,7 +82,7 @@ import {
 } from "../coder-host/checkout.js";
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
 import { RunnerBundle } from "../coder-host/runner-bundle.js";
-import type { RepositorySandbox } from "../repository-shell.js";
+import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
   buildRepositorySnapshot,
   forgetRepositorySnapshot,
@@ -89,14 +91,12 @@ import {
   readRepositorySnapshot,
 } from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { type FirewallSession, sandboxFirewall } from "../sandbox-firewall.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import { credentialPolicy } from "../terminal/agent-sandbox.js";
 import {
   type ListedSandbox,
-  type NetworkPolicy,
   NOT_FOUND_STATUS,
   type OidcTokenRead,
-  OPEN_INTERNET_POLICY,
   SANDBOX_STATUS,
   SandboxUnavailable,
   SESSION_TAG,
@@ -446,23 +446,25 @@ const diedAtStart = (
     );
   });
 
-/** The eve-shaped policy the checkout sets, as Vercel's API takes it. */
-function apiPolicy(
-  policy: Parameters<NonNullable<RepositorySandbox["setNetworkPolicy"]>>[0],
-): NetworkPolicy | undefined {
-  if (policy === "allow-all") return OPEN_INTERNET_POLICY;
-  if (typeof policy === "object" && "allow" in policy && !Array.isArray(policy.allow)) {
-    // SAFETY: an allow-list of headers per host is the API's own shape, which the SDK sends as it stands.
-    return policy as NetworkPolicy;
-  }
-  return undefined;
+/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account, over the store the machine was made on. */
+function repositoryFirewallOver(
+  api: VercelSandboxApi,
+  context: Context.Context<DatabaseServices>,
+  session: FirewallSession,
+): RepositoryFirewall {
+  const firewall = sandboxFirewall(api);
+  return {
+    set: (slot, entry) => Effect.provideContext(firewall.set(session, slot, entry), context),
+    withdraw: (slot) => Effect.provideContext(firewall.withdraw(session, slot), context),
+  };
 }
 
-/** The sandbox session as the checkout reaches it, through the edge's runner. */
+/** The sandbox session as the checkout reaches it, through the edge's runner, its firewall the account's given. */
 function repositorySandboxOver(
   api: VercelSandboxApi,
   running: string,
   run: SandboxRunner,
+  firewall: RepositoryFirewall,
 ): RepositorySandbox {
   return {
     run: (ask) =>
@@ -477,12 +479,7 @@ function repositorySandboxOver(
           (ran) => ({ exitCode: ran.exitCode, stdout: ran.stdout, stderr: ran.stderr }),
         ),
       ),
-    setNetworkPolicy: (policy) => {
-      const asked = apiPolicy(policy);
-      return asked === undefined
-        ? Promise.reject(new Error("a network policy the sandbox's API does not take"))
-        : run(api.updateNetworkPolicy(running, asked));
-    },
+    firewall,
   };
 }
 
@@ -508,6 +505,7 @@ function readFileCommand(path: string, maxBytes: number) {
  * no edge's runner to hand the checkout, as a launch's end, still reaches it.
  */
 export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
+  const firewall = sandboxFirewall(api);
   /** The running session of the sandbox tagged with the session; unavailable where none is up. */
   const runningSession = (sessionId: string) =>
     Effect.gen(function* () {
@@ -528,11 +526,13 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
     recordRunner: (place, record) =>
       api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
 
-    setCredential: (place, credential) =>
-      api.updateNetworkPolicy(
-        place.running,
-        credential === undefined ? OPEN_INTERNET_POLICY : credentialPolicy(credential),
-      ),
+    firewall: {
+      set: (place, userId, slot, entry) =>
+        firewall.set({ userId, sandboxSessionId: place.running }, slot, entry),
+      withdraw: (place, userId, slot) =>
+        firewall.withdraw({ userId, sandboxSessionId: place.running }, slot),
+      clear: (place) => firewall.clear(place.running),
+    },
 
     // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
     resume: (found) =>
@@ -575,6 +575,25 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
+  /** The sandbox session as the checkout reaches it, its firewall the account's given, its record kept in the store given. */
+  const checkoutOver = (
+    context: Context.Context<DatabaseServices>,
+    running: string,
+    userId: string,
+  ) =>
+    repositorySandboxOver(
+      api,
+      running,
+      run,
+      repositoryFirewallOver(api, context, { userId, sandboxSessionId: running }),
+    );
+
+  /** The same, its record kept in the caller's store. */
+  const checkoutIn = (running: string, userId: string) =>
+    Effect.map(Effect.context<DatabaseServices>(), (context) =>
+      checkoutOver(context, running, userId),
+    );
+
   /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
   const createdFrom = (agent: Agent, sessionId: string, snapshotId: string) =>
     api.create({
@@ -626,13 +645,15 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * no request's answer is being kept, as for a relaunch a message makes,
    * which leaves the build to the next Start.
    */
-  const buildInBackground = (of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
+  const buildInBackground = (agent: Agent, of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
     Effect.gen(function* () {
       if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
       yield* afterResponse(
         "A repository snapshot's build",
-        buildRepositorySnapshot(api, of, read, (running) =>
-          repositorySandboxOver(api, running, run),
+        Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
+          buildRepositorySnapshot(api, of, read, (running) =>
+            checkoutOver(context, running, agent.userId),
+          ),
         ),
       );
     });
@@ -657,7 +678,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       const opened = yield* Effect.flatMap(createdFrom(agent, sessionId, snapshotId), runningOf);
       yield* refreshAgentCheckout(
         agent,
-        repositorySandboxOver(api, opened.running, run),
+        yield* checkoutIn(opened.running, agent.userId),
         read,
       ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
       return Option.some(opened);
@@ -732,12 +753,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           if (Option.isSome(fromSnapshot)) return fromSnapshot.value;
         }
         // The build reads the snapshot again and leaves one ready or being built be.
-        if (Option.isSome(found)) yield* buildInBackground(of.value, read);
+        if (Option.isSome(found)) yield* buildInBackground(agent, of.value, read);
       }
       const opened = yield* openedFromImage(image, agent, sessionId, imageSnapshotId);
       yield* cloneAgentRepository(
         agent,
-        repositorySandboxOver(api, opened.running, run),
+        yield* checkoutIn(opened.running, agent.userId),
         read,
         CHECKOUT_DEPTH.WHOLE,
       ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
@@ -802,7 +823,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           ],
           { concurrency: "unbounded" },
         );
-        const repositorySandbox = repositorySandboxOver(api, running, run);
+        const repositorySandbox = yield* checkoutIn(running, ask.agent.userId);
         const finishCheckout = Effect.flatMap(deepen, (plan) =>
           plan === undefined
             ? openWorkingFolder(repositorySandbox)

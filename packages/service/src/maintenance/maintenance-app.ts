@@ -3,11 +3,13 @@ import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/
 import { sweepHostPairings } from "@repo/database/models/host-pairing-store";
 import { hostedStore } from "@repo/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@repo/database/models/plan-attachments";
+import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
@@ -44,6 +46,9 @@ const SWEEP_MONITOR: CronMonitor = {
 
 /** How long a picture pasted into a plan waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
 const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
+
+/** How long a sandbox firewall's record outlives its last write before the sweep drops it: an hour past the longest a session runs, so its session has surely ended. */
+const FIREWALL_RECORD_KEEP_MS = CODER.SANDBOX_MAX_LIFETIME_MS + 60 * 60 * 1_000;
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's
@@ -122,6 +127,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
+    purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
   });
 });
 
