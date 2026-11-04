@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PRODUCT_NAME } from "../../features/src/product-name.ts";
+import { bayerAt } from "../src/dither.ts";
 import { BRAND } from "./brand-palette.mjs";
 import { DMG_WINDOW } from "./dmg-window.mjs";
 
@@ -361,14 +362,8 @@ for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
 // ellipse round the lockup and growing in past it, so it frames the name
 // rather than boxing it. 9:2 is left out: its lockup all but fills it.
 //
-// Note that the map is the landing's own (landing-paint.ts), so a banner and
-// the site dither alike.
-const BAYER_8 = [
-  0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28,
-  52, 20, 62, 30, 54, 22, 3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7,
-  39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21,
-].map((rank) => (rank + 0.5) / 64);
-const bayerAt = (i, j) => BAYER_8[(j % 8) * 8 + (i % 8)];
+// Note that the map is the landing's own (`bayerAt` in src/dither.ts), so a
+// banner and the site dither alike.
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 

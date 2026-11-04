@@ -1,6 +1,6 @@
-import { WORDMARK_ART } from "@repo/brand";
+import { bayerAt, WORDMARK_ART } from "@repo/brand";
 import { useEffect, useRef } from "react";
-import { bayerAt, fitCanvas, heldStill, paintLoop, roleChannels } from "./landing-paint.js";
+import { fitCanvas, heldStill, paintLoop, roleChannels } from "./landing-paint.js";
 
 /**
  * landing-wordmark.tsx -- the product's wordmark, or the 404's numerals, set in copper dots, a band of light passing through it, and a pointer's trail that turns the dots it crosses to chrome for a moment.

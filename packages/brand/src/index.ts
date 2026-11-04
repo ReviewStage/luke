@@ -1,3 +1,4 @@
+export { bayerAt } from "./dither.js";
 export { BRAND_PALETTE } from "./generated/brand-palette.js";
 export { MARK_ART, WORDMARK_ART } from "./generated/mark-art.js";
 export { MOTION_DELAY_MS, MOTION_DURATION_MS } from "./generated/motion-tokens.js";
