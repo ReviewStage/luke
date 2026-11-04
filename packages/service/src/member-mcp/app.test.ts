@@ -9,6 +9,11 @@ import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
 import { readAgent } from "@repo/database/models/agent-store";
+import {
+  createAutomation,
+  listAutomationRuns,
+  readAutomation,
+} from "@repo/database/models/automation-store";
 import { listRevisions } from "@repo/database/models/plan-revisions";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
@@ -23,6 +28,12 @@ import {
   sqlClientOverPglite,
 } from "@repo/database/testing";
 import { AGENT_ARCHIVER } from "@repo/features/agent-wire";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_TRIGGER,
+} from "@repo/features/automation-wire";
 import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { NOTE_KIND } from "@repo/features/plan-template";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
@@ -56,6 +67,7 @@ import { modelCatalogOf } from "../providers/model-catalog.js";
 import { fakeEve, openAskOf, openTask, startedAgent } from "../testing/agents-app-support.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
 import { harnessFor } from "../testing/native-harness-fake.js";
+import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpApp, memberMcpAuth, memberMcpIssuer } from "./app.js";
 import {
   MEMBER_MCP_PATH,
@@ -178,6 +190,16 @@ const decodeListed = Schema.decodeUnknownSync(
 const decodeMade = Schema.decodeUnknownSync(
   Schema.Struct({ task: Schema.Struct({ id: Schema.String }) }),
 );
+const decodeAutomation = Schema.decodeUnknownSync(
+  Schema.Struct({ automation: Schema.Struct({ id: Schema.String }) }),
+);
+
+/** A weekly schedule, as an automation's trigger. */
+const WEEKLY = {
+  kind: AUTOMATION_TRIGGER.SCHEDULE,
+  cron: "0 9 * * 1",
+  timezone: "Europe/London",
+} as const;
 
 /** The JSON Schema goldens of the server's tools, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(
@@ -238,6 +260,7 @@ const standing = Effect.gen(function* () {
     NO_GITHUB,
     modelCatalogOf([]),
     Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+    Layer.succeed(SentryApp, sentryAppService(undefined, [])),
   );
   yield* seedRows.pipe(Effect.provide(services));
   // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
@@ -624,7 +647,7 @@ it.effect(
 );
 
 it.effect(
-  "a member makes, starts, messages, stops, changes, and plans nothing in a workspace they are not in",
+  "a member makes, starts, messages, stops, changes, plans, and runs nothing in a workspace they are not in",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -644,10 +667,20 @@ it.effect(
           workspaceId: elsewhere,
           title: "A stranger's section",
         });
+        const automation = yield* createAutomation(stranger.userId, {
+          organizationId: elsewhere,
+          name: "A stranger's automation",
+          trigger: WEEKLY,
+          action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Sweep." },
+          guards: AUTOMATION_DEFAULT_GUARDS,
+          nextRunAt: null,
+          webhookSecretHash: null,
+        });
         return {
           elsewhere,
           taskId: task.id,
           sectionId,
+          automationId: Option.getOrThrow(automation).id,
           agentId: yield* openTaskAgent(stranger.userId, elsewhere, task.id),
         };
       }).pipe(Effect.provide(services));
@@ -660,7 +693,7 @@ it.effect(
       );
       const { client } = yield* connected(fetch, token, REVISION.MODERN);
       const workspace = `workspace-${rows.elsewhere}`;
-      const { taskId, agentId } = rows;
+      const { taskId, agentId, automationId } = rows;
 
       const answers = yield* Effect.forEach(
         [
@@ -678,6 +711,15 @@ it.effect(
           [MEMBER_MCP_TOOL.MESSAGE_AGENT, { agentId, text: "Hello." }],
           [MEMBER_MCP_TOOL.STOP_AGENT, { agentId }],
           [MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true }],
+          [MEMBER_MCP_TOOL.LIST_AUTOMATIONS, { workspace }],
+          [MEMBER_MCP_TOOL.LIST_AUTOMATIONS, { automationId }],
+          [
+            MEMBER_MCP_TOOL.CREATE_AUTOMATION,
+            { workspace, name: "Planted", prompt: "Go.", trigger: WEEKLY },
+          ],
+          [MEMBER_MCP_TOOL.UPDATE_AUTOMATION, { automationId, name: "Renamed" }],
+          [MEMBER_MCP_TOOL.RUN_AUTOMATION, { automationId }],
+          [MEMBER_MCP_TOOL.DELETE_AUTOMATION, { automationId }],
         ] as const,
         ([name, args]) =>
           Effect.promise(async () => {
@@ -691,6 +733,8 @@ it.effect(
           task: yield* readTask(stranger.userId, taskId),
           sections: yield* listTaskSections(stranger.userId),
           agent: yield* readAgent(stranger.userId, agentId),
+          automation: yield* readAutomation(stranger.userId, automationId),
+          runs: yield* listAutomationRuns(stranger.userId, automationId),
         };
       }).pipe(Effect.provide(services));
 
@@ -706,11 +750,13 @@ it.effect(
         [rows.sectionId],
       );
       assert.equal(Option.getOrThrow(after.agent).archivedAt, null);
+      assert.equal(Option.getOrThrow(after.automation).name, "A stranger's automation");
+      assert.deepEqual(after.runs, []);
     }),
 );
 
 it.effect(
-  "a task a member makes, its plan's notes, and an agent they archive are the member's own, as the desktop shows them",
+  "a task a member makes, its plan's notes, an agent they archive, and an automation they make, change, run, and delete are the member's own, as the desktop shows them",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -747,12 +793,29 @@ it.effect(
       });
       yield* call(MEMBER_MCP_TOOL.UPDATE_TASK, { taskId, status: TASK_STATUS.IN_PROGRESS });
       yield* call(MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true, reason: "Done." });
+      const automationId = decodeAutomation(
+        yield* call(MEMBER_MCP_TOOL.CREATE_AUTOMATION, {
+          name: "Weekly sweep",
+          prompt: "Sweep.",
+          trigger: WEEKLY,
+        }),
+      ).automation.id;
+      yield* call(MEMBER_MCP_TOOL.UPDATE_AUTOMATION, { automationId, name: "Monday sweep" });
+      yield* call(MEMBER_MCP_TOOL.RUN_AUTOMATION, { automationId });
+      const automations = yield* Effect.gen(function* () {
+        return {
+          made: Option.getOrThrow(yield* readAutomation(member.userId, automationId)),
+          runs: yield* listAutomationRuns(member.userId, automationId),
+        };
+      }).pipe(Effect.provide(services));
+      yield* call(MEMBER_MCP_TOOL.DELETE_AUTOMATION, { automationId });
       yield* Effect.promise(() => client.close());
       const after = yield* Effect.gen(function* () {
         return {
           task: Option.getOrThrow(yield* readTask(member.userId, taskId)),
           revisions: yield* listRevisions(member.userId, taskId),
           agent: Option.getOrThrow(yield* readAgent(member.userId, agentId)),
+          automation: yield* readAutomation(member.userId, automationId),
         };
       }).pipe(Effect.provide(services));
 
@@ -769,6 +832,16 @@ it.effect(
         userId: member.userId,
         reason: "Done.",
       });
+      // The automation is the member's, in no repository since they work in none, and its run is their Run now.
+      assert.deepEqual(
+        [automations.made.userId, automations.made.name, automations.made.repositories],
+        [member.userId, "Monday sweep", []],
+      );
+      assert.deepEqual(
+        automations.runs.map(({ firing }) => firing),
+        [{ kind: AUTOMATION_FIRING.MANUAL, userId: member.userId }],
+      );
+      assert.ok(Option.isNone(after.automation));
     }),
 );
 

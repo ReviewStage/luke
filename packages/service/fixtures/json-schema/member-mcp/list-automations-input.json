@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace to list, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "automationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "One automation to read whole, its prompt in full and its newest runs, by the id this tool answered; leave it out to list them all."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
