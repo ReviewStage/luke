@@ -1342,7 +1342,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task with no repository runs only in the local demo, on its starter's host, whose launch line names no repository; with no flag, with the flag beside a Vercel variable or a database off this machine, and in the cloud in the demo, it is refused as naming no repository, as ever, and leaves no agent",
+      "a Start handed the plan of a task with no repository runs only in the local demo, on its starter's host, whose launch line names no repository; with no flag, with the flag beside a Vercel variable or a database off this machine, and in the cloud in the demo, it is refused as naming no repository, as ever, and leaves no agent",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(false);
@@ -1394,7 +1394,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
           for (const each of cases) {
             const { eve } = runtimes();
-            const ask = startOn(each.task.id, "anthropic/claude-opus-5.5");
+            const ask = {
+              ...startOn(each.task.id, "anthropic/claude-opus-5.5"),
+              prompt: undefined,
+            };
             const started = yield* Effect.result(
               startAgent(routedSessions(owner), owner, ask).pipe(
                 Effect.provide(
@@ -1436,6 +1439,33 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             assert.deepEqual([payload.repository, payload.identity], [null, undefined]);
           }
+        }),
+    );
+
+    it.effect(
+      "a Start handed words on a task with no repository runs in the cloud with no checkout, as one on no task does",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(true);
+          const task = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Release notes",
+            repository: null,
+          });
+          const { native } = runtimes();
+          const ask = startOn(task.id, "anthropic/claude-opus-5.5");
+
+          const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
+            Effect.provide(Layer.mergeAll(CATALOG, environment(), native)),
+            Effect.result,
+          );
+
+          assert.ok(Result.isSuccess(started));
+          assert.deepEqual(
+            [started.success.agent.taskId, started.success.agent.repository],
+            [task.id, null],
+          );
+          assert.equal(started.success.agent.machine, AGENT_MACHINE.VERCEL);
         }),
     );
 

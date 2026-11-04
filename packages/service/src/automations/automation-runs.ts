@@ -670,7 +670,7 @@ function runStartWords(automation: Automation, firedAt: Date): string {
 const runTaskOf = Effect.fnUntraced(function* (
   automation: Automation,
   run: ActedRun,
-  repository: string,
+  repository: string | null,
   standing: boolean,
 ) {
   const { userId } = automation;
@@ -704,8 +704,8 @@ const runTaskOf = Effect.fnUntraced(function* (
  * A claimed run's agent started, the run settled with it, or failed with
  * the start's refusal in one fixed word. The agent starts on the run's
  * task (`runTaskOf`), in the repository a GitHub event named and the first
- * of the automation's repositories otherwise; an automation with no
- * repository starts it in its workspace on no task, in none. Where
+ * of the automation's repositories otherwise, or in none where it has none,
+ * handed the run's prompt as an agent on no task is. Where
  * the run is a same-agent automation's that holds `adopting` (no agent yet,
  * or a gone one), the agent it starts is kept as the automation's from then
  * on, where no other run or edit kept another first, and the run says it
@@ -719,22 +719,14 @@ const startRunAgent = Effect.fnUntraced(function* (
   adopting: Option.Option<string | null>,
 ) {
   const repository = runRepository(automation, run);
-  const { organizationId } = automation;
   // A GitHub event about a repository the automation no longer works in has nowhere to start.
   if (repository === undefined)
     return yield* failedRun(run, AUTOMATION_RUN_REASON.REPOSITORY_CHANGED);
   // Note that a run that starts an agent reads through the workspace's installation alone (`start.ts`).
   const handed = automationStart(automation, run, GITHUB_ACCESS.APP);
-  const taskId =
-    repository === null
-      ? Option.none<string>()
-      : yield* runTaskOf(automation, run, repository, Option.isSome(adopting));
-  if (repository !== null && Option.isNone(taskId)) {
-    return yield* failedRun(run, AUTOMATION_RUN_REASON.CREATOR_LEFT);
-  }
-  const where: StartWhere = Option.isSome(taskId)
-    ? { taskId: taskId.value }
-    : { taskId: null, organizationId, repository: null };
+  const taskId = yield* runTaskOf(automation, run, repository, Option.isSome(adopting));
+  if (Option.isNone(taskId)) return yield* failedRun(run, AUTOMATION_RUN_REASON.CREATOR_LEFT);
+  const where: StartWhere = { taskId: taskId.value };
   const start = yield* Effect.result(
     startAgent(sessionsFor(automation.userId), automation.userId, {
       ...where,
