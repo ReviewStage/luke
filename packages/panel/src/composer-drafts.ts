@@ -249,6 +249,7 @@ const storedDrafts = Schema.fromJsonString(
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
       steps: Schema.optionalKey(Schema.Array(Schema.Number)),
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
+      resolving: Schema.optionalKey(Schema.Literal(true)),
       dropped: Schema.optionalKey(Schema.Array(Schema.String)),
       revision: Schema.optionalKey(Schema.Number),
     }),
@@ -268,6 +269,8 @@ export interface Draft {
   readonly values: readonly InboxFormValue[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
+  /** Whether an inbox card's × staged resolving its item without an answer, which its Send then does, its words going beside it. */
+  readonly resolving?: true | undefined;
   /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
   readonly dropped?: readonly string[] | undefined;
   /** The revision of the inbox item its picks were made on, so they never land on an ask changed since (`draftAt`). */
@@ -305,6 +308,7 @@ function stored(draft: Draft): boolean {
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
     draft.press !== undefined ||
+    draft.resolving === true ||
     (draft.dropped ?? []).length > 0
   );
 }
@@ -326,7 +330,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
     .flatMap(({ place: storedPlace, text, choices = [], values = [], ...rest }) => {
       const read = placeOf(storedPlace);
       if (read === undefined) return [];
-      const { steps, press, dropped } = rest;
+      const { steps, press, resolving, dropped } = rest;
       const revision = rest.revision ?? read.revision;
       return [
         {
@@ -337,6 +341,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
           values,
           ...(steps === undefined ? undefined : { steps }),
           ...(press === undefined ? undefined : { press }),
+          ...(resolving === undefined ? undefined : { resolving }),
           ...(dropped === undefined ? undefined : { dropped }),
           ...(revision === undefined ? undefined : { revision }),
         },
@@ -359,6 +364,7 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.values ?? [], kept.values) &&
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
     entry.press === kept.press &&
+    entry.resolving === kept.resolving &&
     Equal.equals(entry.dropped ?? [], kept.dropped ?? []) &&
     entry.revision === kept.revision
   );
@@ -367,7 +373,7 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
 /** A draft as storage keeps it, a card's picks only where it holds some. */
 function entryOf(
   owner: Owner,
-  { place, text, choices, values, steps = [], press, dropped = [], revision }: KeptDraft,
+  { place, text, choices, values, steps = [], press, resolving, dropped = [], revision }: KeptDraft,
 ): StoredDraft {
   return {
     accountId: owner,
@@ -377,6 +383,7 @@ function entryOf(
     ...(values.length === 0 ? undefined : { values }),
     ...(steps.length === 0 ? undefined : { steps }),
     ...(press === undefined ? undefined : { press }),
+    ...(resolving === undefined ? undefined : { resolving }),
     ...(dropped.length === 0 ? undefined : { dropped }),
     ...(revision === undefined ? undefined : { revision }),
   };
@@ -898,13 +905,16 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
   return kept.place.kind === DRAFT_PLACE.INBOX;
 }
 
-/** Whether a draft holds a pick: an option, a field, a step, or a press. */
-export function holdsPicks(draft: Pick<Draft, "choices" | "values" | "steps" | "press">): boolean {
+/** Whether a draft holds a pick: an option, a field, a step, a press, or a resolve staged, which stands on the ask it was staged on as a pick does. */
+export function holdsPicks(
+  draft: Pick<Draft, "choices" | "values" | "steps" | "press" | "resolving">,
+): boolean {
   return (
     draft.choices.length > 0 ||
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
-    draft.press !== undefined
+    draft.press !== undefined ||
+    draft.resolving === true
   );
 }
 
@@ -916,6 +926,7 @@ export function withoutPicks<D extends Draft>(draft: D): D {
     values: [],
     steps: undefined,
     press: undefined,
+    resolving: undefined,
     revision: undefined,
   };
 }
@@ -975,7 +986,8 @@ export function useInboxItemDraft(
  * never the words themselves, so a list reading every row's draft draws
  * again as a draft comes or goes or a pick moves, never on each word typed.
  */
-export interface InboxRowDraft extends Pick<Draft, "choices" | "values" | "steps" | "press"> {
+export interface InboxRowDraft
+  extends Pick<Draft, "choices" | "values" | "steps" | "press" | "resolving"> {
   readonly itemId: string;
   readonly revision: number | undefined;
   /** Whether it holds words or files, which its row marks with the pencil whatever its picks. */
@@ -995,6 +1007,7 @@ const inboxRowDraftsAtom = Atom.withEquality(
         values: kept.values,
         steps: kept.steps,
         press: kept.press,
+        resolving: kept.resolving,
       })),
   ),
   Equal.equals,

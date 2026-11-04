@@ -100,6 +100,8 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
+  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going beside it as a plain reply. */
+  readonly resolving?: true | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };

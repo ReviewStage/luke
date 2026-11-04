@@ -94,6 +94,7 @@ import {
   AskControls,
   bareKey,
   DraftQuestion,
+  DraftResolving,
   HeldControls,
   hasControls,
   INBOX_ASK_BOX,
@@ -107,7 +108,7 @@ import {
   WithdrawnWhy,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { type InboxCloser, useInboxClose } from "./inbox-close.js";
+import { closeAction, type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
@@ -1159,27 +1160,24 @@ function InboxItemMenu({
 function QuestionClose({
   item,
   closer,
-  shown,
+  onStage,
 }: {
   item: InboxItem;
   closer: InboxCloser | undefined;
-  shown: boolean;
-}): React.JSX.Element {
-  const close = useInboxClose(item, closer, shown);
-  return (
-    <>
-      {close.action === undefined ? null : (
-        <Tooltip label={close.action.label}>
-          <IconButton
-            icon={close.action.icon}
-            label={close.action.label}
-            size={BUTTON_SIZE.COMPACT}
-            onClick={close.action.onSelect}
-          />
-        </Tooltip>
-      )}
-      {close.dialog}
-    </>
+  /** Stages the resolve on the item's draft. */
+  onStage: () => void;
+}): React.JSX.Element | null {
+  // Note that the × asks nothing: it only stages the resolve, which goes with the box's Send, so the menu's own close and its question stand apart.
+  const close = closeAction(item, closer === undefined ? undefined : onStage);
+  return close === undefined ? null : (
+    <Tooltip label={close.label}>
+      <IconButton
+        icon={close.icon}
+        label={close.label}
+        size={BUTTON_SIZE.COMPACT}
+        onClick={close.onSelect}
+      />
+    </Tooltip>
   );
 }
 
@@ -1551,11 +1549,22 @@ export function InboxPane({
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
   // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
+  // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
+  const resolving = open && draft.resolving === true && doors.onClose !== undefined;
   const question =
-    openAsk === undefined || wordsAlone ? undefined : (
+    openAsk === undefined || wordsAlone ? undefined : resolving ? (
+      <DraftResolving onUndo={() => onDraft({ ...draft, resolving: undefined })} />
+    ) : (
       <DraftQuestion
         pane={pane}
-        close={<QuestionClose key={item.id} item={item} closer={doors.onClose} shown={!hidden} />}
+        close={
+          <QuestionClose
+            key={item.id}
+            item={item}
+            closer={doors.onClose}
+            onStage={() => onDraft({ ...draft, resolving: true })}
+          />
+        }
       >
         <AskControls
           ask={openAsk}
@@ -1575,6 +1584,7 @@ export function InboxPane({
           agent={by.subject.agent}
           thread={thread}
           controls={question}
+          resolver={resolving ? doors.onClose : undefined}
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}

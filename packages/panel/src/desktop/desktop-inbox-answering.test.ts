@@ -152,7 +152,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread, Snooze, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Snooze, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -174,17 +174,6 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   act(() => menuItem("Mark as unread").click());
   await settle();
   assert.ok(world.readMarks.includes(`unread:${THRESHOLD.id}`), "the menu marks the item unread");
-  const questionClose =
-    itemPane(page).querySelector<HTMLButtonElement>(
-      '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
-    ) ?? assert.fail("the open question's card offers its ×");
-  act(() => questionClose.click());
-  await settle();
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the × asks first");
-  act(() =>
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-  );
-  await settle();
   act(() => ellipsis().click());
   act(() => menuItem("Resolve without answering").click());
   await settle();
@@ -203,6 +192,49 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
     ["Copy link", "—", "Mark as unreadU"],
     "a settled item offers no Close",
   );
+});
+
+test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send, reading Send & resolve, sends the words as a plain reply, the picks left behind, and then resolves the item", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const closes = takenCloses();
+  const sent = heldMessages(writtenOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000093"));
+  const pane = itemPane(page);
+  const cross = () =>
+    pane.querySelector<HTMLButtonElement>(
+      '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
+    ) ?? assert.fail("the open question's card offers its ×");
+
+  act(() => (openOptions(pane)[1] ?? assert.fail("no second option")).click());
+  act(() => cross().click());
+  await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the × asks nothing");
+  assert.deepEqual(closes, [], "and resolves nothing until Send");
+  assert.equal(sendWords(pane), "Resolve", "Send with nothing written resolves alone");
+  const undo =
+    [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
+      (button) => button.textContent === "Undo",
+    ) ?? assert.fail("the strip offers Undo");
+  act(() => undo.click());
+  assert.deepEqual(
+    checkedOptions(pane),
+    ["Retry once"],
+    "Undo brings the question back, picks and all",
+  );
+
+  act(() => cross().click());
+  typeInComposer(pane, "Hold off until the backfill lands");
+  await settle();
+  assert.equal(sendWords(pane), "Send & resolve");
+  await act(async () => answerSend(pane).click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, answers }) => [text, answers]),
+    [["Hold off until the backfill lands", undefined]],
+    "the words go as a plain reply, never as an answer",
+  );
+  assert.deepEqual(closes, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
 });
 
 test("an open item's row offers Resolve without answering last in its menu, asking first; a settled item's row offers none", async () => {

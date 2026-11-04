@@ -19,7 +19,6 @@ import type { AppInboxItems } from "@repo/host/app-state";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { afterPaint } from "../after-paint.js";
-import { useSendQueue } from "../send-queue.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -33,6 +32,7 @@ import {
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
+import { useSendQueue } from "../send-queue.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { messageFailureWords } from "./agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
@@ -221,8 +221,8 @@ export interface TaskInboxControl {
   ) => void;
   /** Nods to a notice with Got it, settling it at the revision drawn, after every message of the item's on its way; nothing where a nod is out. */
   readonly onAcknowledge: (item: InboxItem) => void;
-  /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is, after every message of the item's on its way; nothing where it holds nothing the service takes or a nod is out. */
-  readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
+  /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is, after every message of the item's on its way; nothing where it holds nothing the service takes or a nod is out. `taken` is called once the service took it, never where it refused it. */
+  readonly onMessage: (item: InboxItem, draft: InboxDraft, taken?: () => void) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
   readonly images: ReadonlyMap<string, InboxImage>;
   /** Asks for an image a card draws, where it is neither held nor on its way. */
@@ -454,6 +454,7 @@ function keptDraft(draft: InboxDraft, revision: number): Draft {
     values: draft.values,
     steps: draft.steps,
     press: draft.press,
+    resolving: draft.resolving,
   };
 }
 
@@ -508,7 +509,8 @@ function holdsNothing(draft: Draft): boolean {
     draft.choices.length === 0 &&
     draft.values.length === 0 &&
     (draft.steps ?? []).length === 0 &&
-    draft.press === undefined
+    draft.press === undefined &&
+    draft.resolving === undefined
   );
 }
 
@@ -788,7 +790,7 @@ export function useHeldTaskInbox(input: {
   );
 
   const onMessage = useCallback(
-    (item: InboxItem, draft: InboxDraft) => {
+    (item: InboxItem, draft: InboxDraft, taken?: () => void) => {
       const message = inboxThreadSend(item.thread ?? [], draft);
       // Note that a nod on its way holds the box, so nothing goes behind it.
       if (message === undefined || out.current.has(item.id)) return;
@@ -870,6 +872,7 @@ export function useHeldTaskInbox(input: {
         );
         // Note that a message reaches the agent as one of the developer's, which may wake it, so the agents are read again.
         latest.current.onRetryList();
+        taken?.();
       });
     },
     [note, refused, taskId, writer, draftsOn, queue, requeue],
@@ -998,6 +1001,7 @@ export function useInboxCardDrafts(
             attachments: kept.attachments,
             steps: kept.steps,
             press: kept.press,
+            resolving: kept.resolving,
           };
     },
     [drafts],
@@ -1016,6 +1020,7 @@ export function useInboxCardDrafts(
         attachments: draft.attachments,
         steps: draft.steps,
         press: draft.press,
+        resolving: draft.resolving,
       })),
     [writer, draftsOn],
   );
