@@ -129,6 +129,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onPlanCommentsChanged((held) => {
         state.update({ [LIVE_READ.PLAN_COMMENTS]: held });
       }),
+      gateway.host.onHistoriesChanged((held) => {
+        state.update({ [LIVE_READ.HISTORY]: held });
+      }),
       gateway.host.onPlanDocumentsChanged((held) => {
         state.update({ [LIVE_READ.PLAN_DOCUMENT]: held });
       }),

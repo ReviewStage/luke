@@ -861,6 +861,8 @@ export const LIVE_READ = {
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
   PLAN_COMMENTS: "taskComments",
+  /** One task's plan history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
+  HISTORY: "taskHistory",
   /** One task's cloud Browser tabs, every one of its agents', or one agent's, by what they are listed for: the service's `taskBrowserTabsLive` or `agentBrowserTabsLive` query, by its kind, held for the windows whose side panel lists them and a few they listed lately. */
   BROWSER_TABS: "browserTabs",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */

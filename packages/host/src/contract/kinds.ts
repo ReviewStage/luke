@@ -411,7 +411,7 @@ export const TASKS_ACT_KIND = {
   TASKS_COLOR_CODE: "tasks.colourCode",
   /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
   TASKS_FIND: "tasks.find",
-  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
+  /** A page of a plan's history, read from the service and answered to the view; an older page is laid on the task's held history too (`LIVE_READ.HISTORY`) where it is held. */
   TASKS_REVISIONS: "tasks.revisions",
   /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
   TASKS_REVISION: "tasks.revision",
@@ -438,11 +438,15 @@ export const TASKS_ACT_KIND = {
   /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
   TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
-   * One plan's newest page of history, followed while the window holds the
-   * stream open for its version history: each time a save lands, over Neon
-   * Realtime, never on the document.
+   * One task's plan history held followed while the window holds the stream
+   * open for its version history, and a while after among those let go
+   * lately: its newest page as each save lands, and the older pages read
+   * past it, reach the panel on app state (`LIVE_READ.HISTORY`), so the
+   * stream carries nothing.
    */
   TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
+  /** A held task's history, which the panel reads on app state, read again at once, as Try again asks. */
+  TASKS_HISTORY_RETRY: "tasks.historyRetry",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -848,6 +852,7 @@ export const PORT_ACT_USE = {
   TASKS_DOCUMENT_FOLLOW: ACT_USE.READ,
   TASKS_DOCUMENT_RETRY: ACT_USE.READ,
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
+  TASKS_HISTORY_RETRY: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,
   TASKS_COMMENTS_FOLLOW: ACT_USE.READ,

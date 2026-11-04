@@ -208,7 +208,6 @@ import {
   type TaskBrowserTabsFollow,
   type TaskDocumentFollow,
   type TaskHistoryFollow,
-  type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TasksBlockAnswer,
   type TasksBlockParams,
@@ -290,7 +289,6 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
-  taskHistoryFollowedSchema,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksChangeRelationAnswerSchema,
@@ -374,6 +372,7 @@ import type {
   AppBrowserTabs,
   AppChapters,
   AppDevicePresences,
+  AppHistories,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
@@ -534,12 +533,14 @@ export interface HostOperator {
   tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
   onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
-  /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
+  /** One task's plan history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
+  /** One task's history let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
-  onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
+  /** One task's held history read again at once, as Try again asks. */
+  tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
+  /** Every task's plan history the host holds for the windows, whole, each time any of them moves. */
+  onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
@@ -1518,16 +1519,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppBrowserTabs>(payload) : undefined),
         listener,
       ),
-    tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),
+    tasksHistoryFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: scope.taskId })),
     tasksHistoryUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, scope)),
-    onTaskHistoryChanged: (listener) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: scope.taskId })),
+    tasksHistoryRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_RETRY, { taskId: scope.taskId })),
+    onHistoriesChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(taskHistoryFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.HISTORIES_CHANGED,
+        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held plans are.
+        (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
         listener,
       ),
     tasksRestore: (params) =>
