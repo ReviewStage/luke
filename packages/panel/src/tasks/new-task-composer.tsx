@@ -30,6 +30,7 @@ import {
 } from "@repo/ui";
 import { workspaceReaches } from "@repo/ui/tasks-model";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAgentDefault } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -308,31 +309,17 @@ function newTaskPlace(workspaceId: string | undefined, purpose: NewTaskPurpose):
 
 /**
  * The model chip's choice: what it shows, the chip's pick over the account's
- * default as read, and the pick alone, which runs this one agent and leaves
- * the default as it stands. Note that a start names only the pick, because
- * a default read as the card opened may be one Settings changed since, and
- * a start naming no model runs on the default stored as it is pressed.
+ * default as the host holds it (`useAgentDefault`), and the pick alone,
+ * which runs this one agent and leaves the default as it stands. Note that a
+ * start names only the pick, because a start naming no model runs on the
+ * default stored as it is pressed, which a default drawn here may trail.
  */
 function useDefaultChoice(
-  newTask: TasksControl["newTask"],
   kept: ModelChoice | undefined,
 ): readonly [ModelChoice | undefined, ModelChoice | undefined, (next: ModelChoice) => void] {
   const [picked, setPicked] = useState<ModelChoice | undefined>(kept);
-  const [read, setRead] = useState<ModelChoice | undefined>(undefined);
-  // Note that the control is read through a ref, because the tab hands a
-  // new one on every render and the default is read once, as the card opens.
-  const latest = useRef(newTask);
-  latest.current = newTask;
-  useEffect(() => {
-    let live = true;
-    latest.current.readDefault().then((answer) => {
-      if (live && !("failure" in answer)) setRead(answer.choice);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-  return [picked ?? read, picked, setPicked];
+  const { choice } = useAgentDefault();
+  return [picked ?? choice, picked, setPicked];
 }
 
 export function NewTaskComposer({
@@ -387,7 +374,7 @@ export function NewTaskComposer({
         ? presetRelation.task.repository
         : newTask.preset?.repository,
   );
-  const [choice, pickedModel, choose] = useDefaultChoice(newTask, refused?.card.choice);
+  const [choice, pickedModel, choose] = useDefaultChoice(refused?.card.choice);
   // The servers the + menu switched off, a refused card's as it was pressed.
   const [disabledServers, setDisabledServers] = useState<readonly string[]>(
     refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,

@@ -28,7 +28,6 @@ import {
   agentMessageParamsSchema,
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
-  agentModelsAnswerSchema,
   agentPageAnswerViewSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
@@ -80,19 +79,24 @@ const shownParamsSchema = EffectSchema.Struct({
 });
 
 export const agentActsContract = {
-  [AGENT_ACT_KIND.AGENTS_MODELS]: actProcedure("Could not read the models on this system.")
+  [AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW]: actProcedure("Could not follow the models on this system.")
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(agentModelsAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actProcedure(
-    "Could not read the default model on this system.",
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: actProcedure(
+    "Could not read the models again on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(agentDefaultAnswerViewSchema)),
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actProcedure(
     "Could not change the default model on this system.",
   )
     .input(exactInput(agentDefaultWriteParamsSchema))
     .output(EffectSchema.flip(agentDefaultAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: actProcedure(
+    "Could not read your preferences again on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held hosts reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.HOSTS_FOLLOW]: actProcedure("Could not follow your hosts on this system.")
     .input(exactInput(EffectSchema.Undefined))

@@ -27,7 +27,6 @@ import {
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
-  type AgentModelsAnswer,
   type AgentPageAnswerView,
   type AgentPageParams,
   type AgentPartParams,
@@ -70,9 +69,12 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
   host: {
-    agentModels(): Effect.Effect<AgentModelsAnswer>;
-    agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
+    /** The models held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    agentModelsFollow(): Effect.Effect<void>;
+    agentModelsUnfollow(): Effect.Effect<void>;
+    agentModelsRetry(): Effect.Effect<void>;
     agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
+    agentPreferencesRetry(): Effect.Effect<void>;
     /** The account's hosts held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     hostsFollow(): Effect.Effect<void>;
     hostsUnfollow(): Effect.Effect<void>;
@@ -233,6 +235,8 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const openOrigins: OpenFollows<never> = MutableHashMap.empty();
   /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
   const openPresence: OpenFollows<never> = MutableHashMap.empty();
+  /** Whether a window holds a stream of the models open, so the host lets them go only with the last. */
+  const openModels: OpenFollows<never> = MutableHashMap.empty();
   /** The account's hosts while a window holds a stream open of them, so the host lets them go only with the last. */
   const openHosts: OpenFollows<never> = MutableHashMap.empty();
   /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
@@ -244,17 +248,28 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       if ("agent" in value) notices.observeAgents([value.agent]);
     });
   return {
-    [AGENT_ACT_KIND.AGENTS_MODELS]: actPort[AGENT_ACT_KIND.AGENTS_MODELS].effect(function* ({
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentModels();
-    }),
-    [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_READ].effect(
+    [AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW]: actPort[AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that nothing is heard down the hold, since the held models reach the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: () => "models",
+            follow: () => host.agentModelsFollow(),
+            unfollow: () => host.agentModelsUnfollow(),
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openModels,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: actPort[AGENT_ACT_KIND.AGENTS_MODELS_RETRY].effect(
       function* ({ context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentDefaultRead();
+        yield* host.agentModelsRetry();
       },
     ),
     [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE].effect(
@@ -263,6 +278,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.agentDefaultWrite(input);
       },
     ),
+    [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: actPort[
+      AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.agentPreferencesRetry();
+    }),
     [AGENT_ACT_KIND.HOSTS_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_FOLLOW].effect(function* ({
       input,
       context,

@@ -93,7 +93,8 @@ import {
 import { inputProblem } from "@repo/ui/reported-failure";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useAccountPreferences } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -1624,27 +1625,14 @@ function ManagedSlackBot({
  * The reader's own Slack notifications, under the bot's row once it is
  * connected: one switch, on until they turn it off, which holds in every
  * workspace whose bot is connected. It is their account's preference, which
- * no row of the workspace carries, so it is read from the service as the
- * row opens rather than from the workspace's held integrations, and drawn
- * only once that read lands; the switch flips at once and stands as its
- * answer says.
+ * no row of the workspace carries, so it draws the account's preferences
+ * row the host holds for the session (`LIVE_READ.ACCOUNT_PREFERENCES`),
+ * drawn once that row is read; the host draws a turn over the row on the
+ * press, and a refusal puts it back.
  */
 function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
   const { act } = useAct();
-  const [on, setOn] = useState<boolean>();
-  useEffect(() => {
-    let live = true;
-    setOn(undefined);
-    act(ACT_KIND.WORKSPACE_SLACK_BOT_READ, { workspaceId }).then(
-      (answer) => {
-        if (live) setOn(answer.notifications);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId]);
+  const on = useAccountPreferences().rows?.slackNotifications;
   if (on === undefined) return null;
   return (
     <SwitchRow
@@ -1654,10 +1642,7 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
       changed={!on}
       onChange={(notifications) =>
         act(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS, { workspaceId, notifications }).then(
-          (now) => {
-            setOn(now.notifications);
-            return ACCEPTED;
-          },
+          () => ACCEPTED,
           refusedWith,
         )
       }

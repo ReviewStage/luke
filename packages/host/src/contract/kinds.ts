@@ -105,7 +105,7 @@ export const AUTOMATION_ACT_KIND = {
 export const AGENT_ACT_KIND = {
   /**
    * A task's coding agents, asked of the service: the models one may run
-   * on, the account's default among them read and written, the task's
+   * on, the account's default among them written, the task's
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
    * runs), one sent a message naming how it reaches a turn under way, one
@@ -114,9 +114,21 @@ export const AGENT_ACT_KIND = {
    * for good (stopped first the same way). The
    * window holds what it draws; nothing here does.
    */
-  AGENTS_MODELS: "agents.models",
-  AGENTS_DEFAULT_READ: "agents.defaultRead",
+  /**
+   * The models a coding agent may run on as the account is offered them,
+   * and its devices, held for the window while it holds the stream open and
+   * a while after among those let go lately, asked again as a window comes
+   * forward, as the provider keys move, and every `MODEL_CATALOG_TTL`: what
+   * it holds reaches the panel on app state (`LIVE_READ.MODELS`), so the
+   * stream carries nothing.
+   */
+  AGENTS_MODELS_FOLLOW: "agents.modelsFollow",
+  /** The held models asked again at once, as Try again asks. */
+  AGENTS_MODELS_RETRY: "agents.modelsRetry",
+  /** The default drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
+  /** The account's preferences row, which the host holds for the session and the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /**
    * The account's hosts as Settings › Hosts reads and changes them: held
    * for the window while it holds the stream open and a while after, read
@@ -262,13 +274,13 @@ export const AGENT_INBOX_ACT_KIND = {
  * again as Try again asks; generated for its head on our own model key when
  * the developer presses Generate, the generation answered once it lands,
  * which may take minutes; and Settings' choice of the Claude model the
- * member's Generate runs on, read and written.
+ * member's Generate runs on, written over the account's preferences, which
+ * reach the panel on app state (`LIVE_READ.ACCOUNT_PREFERENCES`).
  */
 export const CHAPTERS_ACT_KIND = {
   CHAPTERS_FOLLOW: "chapters.follow",
   CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_READ: "chapters.modelRead",
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
@@ -582,7 +594,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
-  WORKSPACE_SLACK_BOT_READ: "workspace.slackBotRead",
   WORKSPACE_SLACK_BOT_CONNECT: "workspace.slackBotConnect",
   WORKSPACE_SLACK_BOT_DISCONNECT: "workspace.slackBotDisconnect",
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
@@ -763,9 +774,10 @@ export const PORT_ACT_USE = {
   MEMORIES_FORGET: ACT_USE.WRITE,
   DICTATION_TRANSCRIBE: ACT_USE.FETCH,
 
-  AGENTS_MODELS: ACT_USE.READ,
-  AGENTS_DEFAULT_READ: ACT_USE.READ,
+  AGENTS_MODELS_FOLLOW: ACT_USE.READ,
+  AGENTS_MODELS_RETRY: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
+  AGENTS_PREFERENCES_RETRY: ACT_USE.READ,
   HOSTS_FOLLOW: ACT_USE.READ,
   HOSTS_RETRY: ACT_USE.READ,
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
@@ -832,7 +844,6 @@ export const PORT_ACT_USE = {
   CHAPTERS_FOLLOW: ACT_USE.READ,
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_READ: ACT_USE.READ,
   CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
   INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
@@ -953,7 +964,6 @@ export const PORT_ACT_USE = {
   WORKSPACE_GITHUB_DISCONNECT: ACT_USE.WRITE,
   WORKSPACE_SENTRY_INSTALL: ACT_USE.WRITE,
   WORKSPACE_SENTRY_DISCONNECT: ACT_USE.WRITE,
-  WORKSPACE_SLACK_BOT_READ: ACT_USE.READ,
   WORKSPACE_SLACK_BOT_CONNECT: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_DISCONNECT: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: ACT_USE.WRITE,

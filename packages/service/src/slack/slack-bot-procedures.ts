@@ -200,11 +200,13 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
       const txid = yield* hostedStoreOrUnavailable(deleteSlackInstallation(workspace.id));
       return withTxid(yield* workspaceSlackBot(workspace, context.userId), txid);
     }),
-    /** The member's own Slack notifications turned on or off, which holds in every workspace. */
+    /** The member's own Slack notifications turned on or off, which holds in every workspace, answered with the transaction it was written in. */
     notifications: resource.notifications.effect(function* ({ input, context }) {
       const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
-      yield* hostedStoreOrUnavailable(writeSlackNotifications(context.userId, input.notifications));
-      return yield* workspaceSlackBot(workspace, context.userId);
+      const txid = yield* hostedStoreOrUnavailable(
+        writeSlackNotifications(context.userId, input.notifications),
+      );
+      return { ...(yield* workspaceSlackBot(workspace, context.userId)), txid };
     }),
     /** The workspace's default repository for Slack starts named, as GitHub spells it, or cleared. */
     repository: resource.repository.effect(function* ({ input, context }) {

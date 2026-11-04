@@ -175,8 +175,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
   /** One of a workspace's Sentry installations disconnected on the service, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands. */
   WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
-  /** Whether the deployment holds our Slack bot, and the reader's own Slack notifications, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_SLACK_BOT: "workspaces.slackBot",
   /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands once the workspace's held integrations carry it. */
   WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
   /** A workspace's Slack bot disconnected on the service by an owner or admin, drawn gone at once over the workspace's held integrations; the bot as it then stands. */
@@ -270,11 +268,21 @@ export const GATEWAY_METHOD = {
   ADMIN_READ: "admin.read",
   /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
   ADMIN_FAVORITE: "admin.favorite",
-  /** The models a coding agent may run on, read from the service's catalog now. */
-  AGENTS_MODELS: "agents.models",
-  /** The account's default model and effort for a coding agent, read from the service now. */
-  AGENTS_DEFAULT_READ: "agents.defaultRead",
-  /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
+  /**
+   * The models a coding agent may run on as the account is offered them, and
+   * its devices, held for a window from now until it is let go, asked of the
+   * service at once, again as a window comes forward, as the account's
+   * provider keys move, and every `MODEL_CATALOG_TTL`, and a while after
+   * among the reads let go lately. What it holds is heard as
+   * `MODELS_CHANGED` events, on the app state every window draws, never
+   * answered.
+   */
+  AGENTS_MODELS_FOLLOW: "agents.modelsFollow",
+  /** The models let go by the window that held them. */
+  AGENTS_MODELS_UNFOLLOW: "agents.modelsUnfollow",
+  /** The held models asked again at once, as Try again asks; answered once the ask has landed. */
+  AGENTS_MODELS_RETRY: "agents.modelsRetry",
+  /** The account's default model and effort for a coding agent, drawn over the account's preferences at once and written to the service; the default as kept, or why it is unchanged. */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts, held for a window from now until it is let go,
@@ -440,9 +448,7 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
   /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
-  /** The Claude model the account's Generate chapters runs on, read from the service now. */
-  CHAPTERS_MODEL_READ: "chapters.modelRead",
-  /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
+  /** The Claude model the account's Generate chapters runs on, drawn over the account's preferences at once and written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /**
    * Our own tools one agent is offered, held for a window from now until it
@@ -600,6 +606,8 @@ export const GATEWAY_METHOD = {
   AGENTS_ACCOUNT_INBOX_UNFOLLOW: "agents.accountInboxUnfollow",
   /** Every inbox item the account reaches, which the host holds for the session, read again at once, as Try again asks; never answered. */
   AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
+  /** The account's preferences row, which the host holds for the session, read again at once, as Try again asks; never answered. */
+  AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -784,6 +792,8 @@ export const GATEWAY_EVENT = {
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
+  /** The account's preferences row, whole, as the host's read of it for the session stands with every write drawn over it, each time it moves. */
+  ACCOUNT_PREFERENCES_CHANGED: "accountPreferences.changed",
   /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
   BROWSER_TABS_CHANGED: "browserTabs.changed",
   /** The skills of every workspace the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -808,6 +818,8 @@ export const GATEWAY_EVENT = {
   MEMORIES_CHANGED: "memories.changed",
   /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
+  /** The models the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  MODELS_CHANGED: "models.changed",
   /** The member's GitHub token the host holds for the windows, whole, as its reads of it stand, each time it moves. */
   GITHUB_TOKEN_CHANGED: "githubToken.changed",
   /** Every workspace's token repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

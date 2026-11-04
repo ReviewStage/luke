@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
+import type { AccountPreferencesLive } from "@repo/features/account-preferences-live";
 import {
   type AgentBrowserTab,
   BROWSER_TABS_PLACE,
@@ -37,6 +38,7 @@ import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -545,6 +547,12 @@ export type AppProviderKeyList = Pick<ProviderKeysAnswer, "keys" | "subscription
 /** The account's provider keys the windows hold, by the account, as the host's read of them stands. */
 export type AppProviderKeys = Readonly<Record<string, AppHostRead<AppProviderKeyList>>>;
 
+/** The models a coding agent may run on as the account is offered them, and its devices, by the account, as the host's read of them stands. */
+export type AppModels = Readonly<Record<string, AppHostRead<ModelsAnswer>>>;
+
+/** The account's preferences row, by the account, as the host's read of it stands with every write drawn over it. */
+export type AppAccountPreferences = Readonly<Record<string, AppHostRead<AccountPreferencesLive>>>;
+
 /** What GitHub holds of the page a link names, as the host last read it: its pull request or its issue, null where GitHub holds no such page. */
 export type AppLinkStanding = GitHubRepositoryPullRequestAnswer | GitHubRepositoryIssueAnswer;
 
@@ -648,6 +656,7 @@ export const NO_PLAN_COMMENTS: AppPlanComments = {
 
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
+  [LIVE_READ.ACCOUNT_PREFERENCES]: AccountPreferencesLive;
   [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
@@ -656,6 +665,7 @@ export interface AppHostReads {
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.LINK_STANDINGS]: AppLinkStanding;
   [LIVE_READ.MEMORIES]: readonly MemorySummary[];
+  [LIVE_READ.MODELS]: ModelsAnswer;
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
   [LIVE_READ.PULL_REQUEST]: AgentOverviewPullRequestAnswerView;
@@ -775,6 +785,8 @@ export interface AppState {
   inbox: AppInboxSlice;
   /** Each agent's origin the windows chose, held while an agent's page holds it and a while after: the run its page says started it. */
   [LIVE_READ.AGENT_ORIGINS]: AppAgentOrigins;
+  /** The account's preferences row, by the account, held for the signed-in session: the default agent, the chapters model, and Slack notifications every surface draws. */
+  [LIVE_READ.ACCOUNT_PREFERENCES]: AppAccountPreferences;
   /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
@@ -789,6 +801,8 @@ export interface AppState {
   [LIVE_READ.LINK_STANDINGS]: AppLinkStandings;
   /** Each workspace's memories the windows chose, by the workspace, held while Settings › Memory shows them and a while after: what that page draws. */
   [LIVE_READ.MEMORIES]: AppMemories;
+  /** The models the account is offered and its devices, by the account, held while a window draws a model or a device and a while after: what every model menu, Settings › Agents, setup, and New task's Runs on read. */
+  [LIVE_READ.MODELS]: AppModels;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
   /** The account's own provider keys, held while a window draws them: what Settings › Agents and Call and Dictate read. */
@@ -954,6 +968,7 @@ interface HostReadSliceEntry {
  * crosses only where it moved.
  */
 export const HOST_READ_SLICE = {
+  [LIVE_READ.ACCOUNT_PREFERENCES]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AGENT_ORIGINS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INBOX_ITEMS]: {
     keys: READ_KEYS.TWO,
@@ -977,6 +992,7 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof MemorySummary,
   },
+  [LIVE_READ.MODELS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.LINK_STANDINGS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },

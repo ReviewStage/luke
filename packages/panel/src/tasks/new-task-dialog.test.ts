@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL_DEFAULT } from "@repo/features/chapters-model-choice";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -99,7 +100,7 @@ const MODELS: readonly CatalogModel[] = [
 /** The models the chip offers in this test, `MODELS` unless it says otherwise. */
 let models: readonly CatalogModel[] = MODELS;
 
-/** The account's default model, as the composer's chip reads it. */
+/** The account's default model, as the host holds it for the composer's chip. */
 const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
 // Landed before any card renders, as the panel lands it after its first paint.
@@ -110,6 +111,16 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  // Note that the chip names the account's default as the host holds it.
+  handHostReads({
+    preferences: {
+      rows: {
+        agent: DEFAULT_CHOICE,
+        chaptersModel: CHAPTERS_MODEL_DEFAULT,
+        slackNotifications: true,
+      },
+    },
+  });
   fakeActPort({});
 });
 
@@ -169,7 +180,6 @@ async function mount(
         preset: reopened ?? preset,
         repositoriesIn: () => repositories,
         models,
-        readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
         start: (
           name: string,
           repository: string | null,

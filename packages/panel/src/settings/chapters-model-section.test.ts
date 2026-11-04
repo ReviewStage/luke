@@ -6,29 +6,40 @@ import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@repo/features/pull-request-
 import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { holdExits } from "@repo/ui/testing/held-exits";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handHostReads } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
 
 /**
  * Settings › Coding agents' Chapters group over a bridge answering as the
- * host would: the member's model is read as the page opens and shown as a
- * segmented control over Claude's three, Haiku first; a press writes the
- * model and keeps what the service kept; a refusal is said under the row
- * with the stored model still checked; and a read that fails offers a retry.
+ * host would: the member's model is the account's preferences row the host
+ * holds, shown as a segmented control over Claude's three, Haiku first; a
+ * press writes the model, which the host draws over the row; a refusal is
+ * said under the row with the stored model still checked; and a read that
+ * fails offers a retry.
  */
 
 /** The model the test's service holds. */
 let stored: ChaptersModelId = CHAPTERS_MODEL.HAIKU;
 /** Every act the group sent, in order. */
 let sent: AnyAct[] = [];
-/** Whether the service fails the next read, or refuses the next write. */
+/** Whether the host's read of the row failed before it ever answered, or the service refuses the next write. */
 let failRead = false;
 let refuseWrite = false;
+/** Lays the account's row as the host holds it, from what the test's service stores. */
+let deliverRow: () => void = () => undefined;
+
+/** The account's row as the host holds it, the model the test's service stores. */
+const rowOf = (model: ChaptersModelId) => ({
+  rows: { agent: undefined, chaptersModel: model, slackNotifications: true },
+});
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   status: FAKE_ANSWER.DONE,
@@ -40,11 +51,14 @@ const UNANSWERED = { failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED };
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.CHAPTERS_MODEL_READ:
-      return Promise.resolve(done(failRead ? UNANSWERED : { model: stored }));
+    case ACT_KIND.AGENTS_PREFERENCES_RETRY:
+      deliverRow();
+      return Promise.resolve(done(undefined));
     case ACT_KIND.CHAPTERS_MODEL_WRITE:
       if (refuseWrite) return Promise.resolve(done(UNANSWERED));
       stored = request.payload.model;
+      // Note that the host draws the write over the row as it is pressed, before the service answers.
+      deliverRow();
       return Promise.resolve(done({ model: stored }));
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
@@ -78,11 +92,19 @@ async function settle(): Promise<void> {
 }
 
 async function mount(): Promise<HTMLElement> {
+  const { deliverPreferences } = handHostReads(
+    failRead ? { preferences: { failed: true } } : { preferences: rowOf(stored) },
+  );
+  deliverRow = () => deliverPreferences(rowOf(stored));
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(ChaptersModelSection, { signedIn: true })));
+  act(() =>
+    root.render(
+      onRegistry(AtomRegistry.make(), createElement(ChaptersModelSection, { signedIn: true })),
+    ),
+  );
   await settle();
   return container;
 }

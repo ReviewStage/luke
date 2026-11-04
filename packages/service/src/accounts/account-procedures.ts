@@ -41,6 +41,7 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
+  AccountPreferencesWritten,
   AccountSeamEffect,
 } from "@repo/database/models/account-store";
 import type { StandingSession } from "@repo/database/models/recorded-session";
@@ -99,11 +100,11 @@ export interface AccountProcedureSeams {
   accountFastOffer: (
     userId: string,
   ) => Effect.Effect<AccountFastOffer, TaskStoreFailure, DatabaseServices | ModelCatalog>;
-  /** Writes each part the write carries and answers the snapshot as it then stands. */
+  /** Writes each part the write carries and answers the snapshot as it then stands, with the transaction it committed in. */
   writePreferences: (
     userId: string,
     write: AccountPreferencesWrite,
-  ) => AccountSeamEffect<AccountPreferencesRow>;
+  ) => AccountSeamEffect<AccountPreferencesWritten>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -332,7 +333,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }
 
       const row = yield* hostedStoreOrUnavailable(seams.writePreferences(context.userId, write));
-      return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
+      return { ...snapshotAnswer(row, yield* snapshotAgent(context.userId, row)), txid: row.txid };
     }),
 
     ...providerKeysProcedures(seams),

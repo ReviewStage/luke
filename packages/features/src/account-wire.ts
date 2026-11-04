@@ -28,6 +28,8 @@ export const accountPreferencesAnswerSchema = EffectSchema.Struct({
   ),
   /** When the shared part was last written, in epoch milliseconds; absent while it never was. */
   updatedAt: EffectSchema.optionalKey(EffectSchema.Number),
+  /** The transaction a write committed in, which the account's live read of its preferences carries once it shows it; absent from a read, and from a service before it. */
+  txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AccountPreferencesAnswerWire = typeof accountPreferencesAnswerSchema.Type;

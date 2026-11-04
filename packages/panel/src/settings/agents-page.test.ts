@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -11,7 +11,6 @@ import {
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppHostRead, AppProviderKeyList } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
@@ -23,7 +22,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads } from "../testing/app-state.js";
+import { type HostReadsHanded, handHostReads } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
@@ -79,8 +78,9 @@ const OWN_ANTHROPIC: ProviderKeySummary = {
 /** The models the test's service offers, and the keys it holds for the account. */
 let models: readonly CatalogModel[] = [OPUS, OPUS_FAST];
 let keys: readonly ProviderKeySummary[] = [];
-/** The default the test's service holds. */
+/** The default and the chapters model the test's service holds. */
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
+let chapters: ChaptersModelId = CHAPTERS_MODEL.HAIKU;
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
@@ -97,35 +97,34 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.AGENTS_MODELS:
-      if (refuseModels) {
-        return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      }
-      return Promise.resolve(done({ models }));
+    case ACT_KIND.AGENTS_MODELS_RETRY:
+      deliverModels(modelsHeld());
+      return Promise.resolve(done(undefined));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.AGENTS_DEFAULT_READ:
-      return Promise.resolve(done({ choice: stored }));
-    case ACT_KIND.CHAPTERS_MODEL_READ:
-      return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.CHAPTERS_MODEL_WRITE:
       if (refuseWrite) {
         return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
+      chapters = request.payload.model;
+      // Note that the host draws the write over the account's row as it is pressed, before the service answers.
+      deliverPreferences(preferencesHeld());
       return Promise.resolve(done({ model: request.payload.model }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
       // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
       // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
       keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
-      // The host lays the save's own answer where it holds the keys before it answers.
+      // The host lays the save's own answer where it holds the keys before it answers, and asks the models again as the keys moved.
       deliverKeys({ rows: { keys } });
+      deliverModels(modelsHeld());
       return Promise.resolve(done({ keys }));
     case ACT_KIND.AGENTS_DEFAULT_WRITE:
       if (refuseWrite) {
         return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       stored = request.payload;
+      deliverPreferences(preferencesHeld());
       return Promise.resolve(done({ choice: stored }));
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
@@ -139,6 +138,7 @@ beforeEach(() => {
   // jsdom runs no motion, so a Saved tick would be taken the moment it stood.
   motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
   stored = { model: OPUS.id, effort: "high" };
+  chapters = CHAPTERS_MODEL.HAIKU;
   models = [OPUS, OPUS_FAST];
   keys = [];
   sent = [];
@@ -164,12 +164,26 @@ async function settle(): Promise<void> {
 /** Where the page opened Settings, as the window's opener heard it. */
 let opened: SettingsLink[] = [];
 
-/** How the keys the host holds are delivered to the window again, as a save's own answer lays them. */
-let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
+/** How the keys, the models, and the account's row the host holds are delivered to the window again, as the host tells them. */
+let deliverKeys: HostReadsHanded["deliverKeys"] = () => undefined;
+let deliverModels: HostReadsHanded["deliverModels"] = () => undefined;
+let deliverPreferences: HostReadsHanded["deliverPreferences"] = () => undefined;
 
-/** The account's keys as they stand, laid where the host holds them. */
+/** The models as the host holds them from what the test's service offers. */
+const modelsHeld = () => (refuseModels ? { failed: true as const } : { rows: { models } });
+
+/** The account's row as the host holds it from what the test's service stores. */
+const preferencesHeld = () => ({
+  rows: { agent: stored, chaptersModel: chapters, slackNotifications: true },
+});
+
+/** The account's keys, models, and row as they stand, laid where the host holds them. */
 function holdKeys(): void {
-  deliverKeys = handHostReads({ keys: { rows: { keys } } }).deliverKeys;
+  ({ deliverKeys, deliverModels, deliverPreferences } = handHostReads({
+    keys: { rows: { keys } },
+    models: modelsHeld(),
+    preferences: preferencesHeld(),
+  }));
 }
 
 async function mount(): Promise<HTMLElement> {
@@ -472,7 +486,7 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]);
 });
 
-test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
+test("replacing the account's own Anthropic key moves the models the host holds, so Fast follows the new key's organization", async () => {
   models = [{ ...OPUS, fastNotEnabled: true }];
   keys = [OWN_ANTHROPIC];
   const page = await mount();
@@ -526,7 +540,7 @@ test("a catalog that could not be read says so in the Default model menu with Re
     "The models could not be read.Retry",
   );
   assert.doesNotMatch(menu.textContent ?? "", /Open Settings again/u);
-  const reads = () => sent.filter((request) => request.kind === ACT_KIND.AGENTS_MODELS);
+  const reads = () => sent.filter((request) => request.kind === ACT_KIND.AGENTS_MODELS_RETRY);
   const before = reads().length;
 
   refuseModels = false;

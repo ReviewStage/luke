@@ -35,7 +35,8 @@ import {
 } from "@repo/ui";
 import { useSettingWrite } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useAgentDefault, useOfferedModels } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -67,6 +68,7 @@ import {
 } from "../tasks/agent-model.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { HOST_READ_STATUS } from "../use-host-read.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
 import { SettingMarks } from "./marks.js";
@@ -410,111 +412,40 @@ function DefaultRows({
   );
 }
 
-/** The Default model group: the model, Fast, effort, and context rows, or why they cannot be drawn. */
+/**
+ * The Default model group: the model, Fast, effort, and context rows, or why
+ * they cannot be drawn, over the default and the models the host holds for
+ * the account (`account-choices.ts`), which a key saved or removed moves on
+ * its own, since the host asks the models again as the keys move.
+ */
 function AgentsSection({
   signedIn,
   ownKeys,
-  keysAnswered,
 }: {
   signedIn: boolean;
   /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
-  /** How many times the API keys group has answered the keys: once as it reads them, and once more for each save or removal. */
-  keysAnswered: number;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
-  const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
-  const [modelsFailed, setModelsFailed] = useState(false);
-  const [readFailed, setReadFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  // Each press of the catalog's Retry reads it again alone, leaving the default read where it stands.
-  const [modelReads, setModelReads] = useState(0);
+  const drawn = useAgentDefault();
+  const offered = useOfferedModels(signedIn);
+  const models = offered.rows?.models;
+  const modelsFailed = offered.status === HOST_READ_STATUS.FAILED;
+  // Whether the catalog's Retry is out, which the menu says while it is.
   const [modelsRetrying, setModelsRetrying] = useState(false);
-
-  // The page opening reads the default the service holds now, which another window may just have written.
-  useEffect(() => {
-    if (!signedIn) return;
-    let live = true;
-    // Nothing of an earlier read, or an earlier account, stands while this one is out.
-    setChoice(undefined);
-    setReadFailed(false);
-    setModels(undefined);
-    setModelsFailed(false);
-    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
-      (answer) => {
-        if (!live) return;
-        if ("failure" in answer) setReadFailed(true);
-        else setChoice(answer.choice);
-      },
-      () => {
-        if (live) setReadFailed(true);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, attempt]);
-
-  // A key saved or removed may move the fallback an account that stored no default reads, so each answer of
-  // the keys after the first, which the read above stands for, reads the default again, the one shown standing meanwhile.
-  useEffect(() => {
-    if (!signedIn || keysAnswered < 2) return;
-    let live = true;
-    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
-      (answer) => {
-        if (live && !("failure" in answer)) setChoice(answer.choice);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, keysAnswered]);
-
-  const keysRead = ownKeys !== undefined;
-  // The models are read once the keys are, and again at every answer of a save or removal, a replacement included, since the service offers fast versions by the organization of the Anthropic key the agents run on.
-  useEffect(() => {
-    if (!signedIn || !keysRead) return;
-    let live = true;
-    // A catalog that could not be read is offered no longer, so the menu says so rather than offering one the keys may have changed.
-    const failModels = () => {
-      setModels(undefined);
-      setModelsFailed(true);
-      setModelsRetrying(false);
-    };
-    act(ACT_KIND.AGENTS_MODELS).then(
-      (answer) => {
-        if (!live) return;
-        if ("failure" in answer) failModels();
-        else {
-          setModels(answer.models);
-          setModelsFailed(false);
-          setModelsRetrying(false);
-        }
-      },
-      () => {
-        if (live) failModels();
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, attempt, keysRead, keysAnswered, modelReads]);
+  const retryModels = offered.retry;
+  const onRetryModels = useCallback(() => {
+    setModelsRetrying(true);
+    retryModels().then(() => setModelsRetrying(false));
+  }, [retryModels]);
 
   const write = useCallback(
-    (next: ModelChoice): Promise<ActionResult> => {
-      setBusy(true);
-      return act(ACT_KIND.AGENTS_DEFAULT_WRITE, next)
+    (next: ModelChoice): Promise<ActionResult> =>
+      act(ACT_KIND.AGENTS_DEFAULT_WRITE, next)
         .catch(() => undefined)
-        .then((answer) => {
-          setBusy(false);
-          if (answer === undefined || "failure" in answer) return WRITE_REFUSED;
-          setChoice(answer.choice);
-          return WRITE_ACCEPTED;
-        });
-    },
+        .then((answer) =>
+          answer === undefined || "failure" in answer ? WRITE_REFUSED : WRITE_ACCEPTED,
+        ),
     [act],
   );
 
@@ -522,24 +453,22 @@ function AgentsSection({
     <SettingsSection title="Default model">
       {!signedIn ? (
         <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>
-      ) : choice !== undefined && (models !== undefined || modelsFailed) ? (
+      ) : drawn.choice !== undefined && (models !== undefined || modelsFailed) ? (
         <DefaultRows
-          choice={choice}
+          choice={drawn.choice}
           models={models}
           ownKeys={ownKeys ?? new Map()}
-          busy={busy}
+          // Note that the rows stay live while a write is out, because the host draws the default on the press.
+          busy={false}
           modelsRetrying={modelsRetrying}
-          onRetryModels={() => {
-            setModelsRetrying(true);
-            setModelReads((count) => count + 1);
-          }}
+          onRetryModels={onRetryModels}
           onChange={write}
         />
-      ) : readFailed ? (
+      ) : drawn.status === HOST_READ_STATUS.FAILED ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AGENT_DEFAULTS_READ)}
-            onRetry={() => setAttempt((count) => count + 1)}
+            onRetry={() => void drawn.retry()}
           >
             {PAGE_LINE.FAILED}
           </ErrorState>
@@ -559,15 +488,13 @@ function AgentsSection({
  */
 export function AgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
-  const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
     setOwnKeys(new Map(keys.map((key) => [key.provider, key.status])));
-    setKeysAnswered((count) => count + 1);
   }, []);
   return (
     <>
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
-      <AgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
+      <AgentsSection signedIn={signedIn} ownKeys={ownKeys} />
       <ChaptersModelSection signedIn={signedIn} />
     </>
   );

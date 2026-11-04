@@ -162,7 +162,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
     macs: undefined,
     readModels: ignore,
-    readDefault: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
     continueAgent: undefined,
     start: {
@@ -442,7 +441,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       modelsFailed: false,
       modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
       readModels: ignore,
-      readDefault: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,
       tasks: [],
       onShowMention: ignore,

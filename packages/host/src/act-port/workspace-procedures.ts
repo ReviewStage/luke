@@ -71,7 +71,6 @@ export interface WorkspaceProceduresDependencies {
     workspaceSentryDisconnect(
       params: TasksWorkspaceSentryDisconnectParams,
     ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-    workspaceSlackBot(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
     workspaceSlackBotConnect(
       params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
@@ -306,14 +305,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceSentryDisconnect(input);
       if ("sentry" in answer) return answer.sentry;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
-    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceSlackBot(input);
-      if ("slackBot" in answer) return answer.slackBot;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]: actPort[

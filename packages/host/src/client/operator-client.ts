@@ -87,6 +87,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onOfflineRefusedChanged((offlineRefused) => {
         state.update({ network: { ...state.snapshot().network, offlineRefused } });
       }),
+      gateway.host.onAccountPreferencesChanged((held) => {
+        state.update({ [LIVE_READ.ACCOUNT_PREFERENCES]: held });
+      }),
       gateway.host.onAgentOriginsChanged((held) => {
         state.update({ [LIVE_READ.AGENT_ORIGINS]: held });
       }),
@@ -110,6 +113,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onMemoriesChanged((held) => {
         state.update({ [LIVE_READ.MEMORIES]: held });
+      }),
+      gateway.host.onModelsChanged((held) => {
+        state.update({ [LIVE_READ.MODELS]: held });
       }),
       gateway.host.onPagesChanged((held) => {
         state.update({ [LIVE_READ.PAGES]: held });

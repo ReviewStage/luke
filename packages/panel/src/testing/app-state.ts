@@ -3,6 +3,7 @@
  */
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { AccountPreferencesLive } from "@repo/features/account-preferences-live";
 import {
   type AgentBrowserTab,
   type BrowserTabsPlace,
@@ -21,6 +22,7 @@ import type { IntegrationStatusesAnswer } from "@repo/features/integration-live"
 import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW, type TASK_CALL_FAILURE, type TasksView } from "@repo/features/tasks-view";
 import {
@@ -121,6 +123,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     tasks: IDLE_TASKS_VIEW,
     agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
+    [LIVE_READ.ACCOUNT_PREFERENCES]: NO_KEYS_HELD,
     [LIVE_READ.AGENT_ORIGINS]: NO_AGENT_ORIGINS,
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
@@ -129,6 +132,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.LINK_STANDINGS]: NO_KEYS_HELD,
     [LIVE_READ.MEMORIES]: NO_KEYS_HELD,
+    [LIVE_READ.MODELS]: NO_KEYS_HELD,
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST]: NO_KEYS_HELD,
@@ -259,6 +263,10 @@ export interface HostReadsHanded {
   readonly deliverParts: (next: Partial<AppPullRequestParts>) => void;
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
+  /** The models the signed-in account is offered and its devices, held under its id. */
+  readonly deliverModels: (next: AppHostRead<ModelsAnswer>) => void;
+  /** The signed-in account's preferences row, held under its id. */
+  readonly deliverPreferences: (next: AppHostRead<AccountPreferencesLive>) => void;
   readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
   readonly deliverIntegrations: (next: AppWorkspaceIntegrations) => void;
@@ -282,7 +290,7 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 /**
  * Lays the host's reads as given, the account's feed of every item, the
  * holders' own inboxes, the pull requests' chapters, the servers' tools, the
- * signed-in account's keys, and the workspaces' people and token
+ * signed-in account's keys, preferences, and models, and the workspaces' people and token
  * repositories, over whatever document the window was handed, its
  * experiments and the reads handed before among it, and answers with how
  * each is delivered again as it moves, as the host tells it; what the bridge
@@ -295,6 +303,8 @@ export function handHostReads(first: {
   readonly chapters?: AppChapters;
   readonly tools?: AppIntegrationTools;
   readonly keys?: AppHostRead<AppProviderKeyList>;
+  readonly preferences?: AppHostRead<AccountPreferencesLive>;
+  readonly models?: AppHostRead<ModelsAnswer>;
   readonly members?: AppWorkspaceMembers;
   readonly tokenRepositories?: AppTokenRepositories;
 }): HostReadsHanded {
@@ -326,6 +336,12 @@ export function handHostReads(first: {
         ...(first.keys === undefined
           ? undefined
           : { [LIVE_READ.PROVIDER_KEYS]: { [account]: first.keys } }),
+        ...(first.preferences === undefined
+          ? undefined
+          : { [LIVE_READ.ACCOUNT_PREFERENCES]: { [account]: first.preferences } }),
+        ...(first.models === undefined
+          ? undefined
+          : { [LIVE_READ.MODELS]: { [account]: first.models } }),
         ...(first.members === undefined
           ? undefined
           : { [LIVE_READ.WORKSPACE_MEMBERS]: first.members }),
@@ -363,6 +379,8 @@ export function handHostReads(first: {
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverParts: (next) => deliver(next),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
+    deliverModels: (next) => deliver({ [LIVE_READ.MODELS]: { [account]: next } }),
+    deliverPreferences: (next) => deliver({ [LIVE_READ.ACCOUNT_PREFERENCES]: { [account]: next } }),
     deliverRepositoryLists: (next) => deliver({ [LIVE_READ.REPOSITORY_LISTS]: next }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
     deliverIntegrations: (next) => deliver({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: next }),

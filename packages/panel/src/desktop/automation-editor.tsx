@@ -1740,7 +1740,7 @@ function ModelPicker({
   models: RunChoices["models"];
   /** Whether the catalog could not be read, which the menu says with Retry. */
   modelsFailed: boolean;
-  /** Reads the catalog now, as the menu opens, so a catalog that failed to read is asked for again. */
+  /** Asks the host for the catalog again, as the menu's Retry asks. */
   readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
 }): React.JSX.Element {
@@ -1763,10 +1763,7 @@ function ModelPicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => {
-          if (!open) readModels();
-          setOpen(!open);
-        }}
+        onClick={() => setOpen(!open)}
       >
         <ChipName>Choose a model</ChipName>
       </Chip>

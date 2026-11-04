@@ -39,7 +39,6 @@ import {
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
-  type AgentModelsAnswer,
   type AgentPageAnswerView,
   type AgentPageParams,
   type AgentPartParams,
@@ -76,7 +75,6 @@ import {
   agentInboxReadStateViewSchema,
   agentListAnswerViewSchema,
   agentMessagesAnswerViewSchema,
-  agentModelsAnswerSchema,
   agentPageAnswerViewSchema,
   agentPartViewSchema,
   agentPullRequestWriteAnswerViewSchema,
@@ -342,6 +340,7 @@ import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Resu
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
+  AppAccountPreferences,
   AppAgentOrigins,
   AppAutomationReads,
   AppBrowserTabs,
@@ -359,6 +358,7 @@ import type {
   AppLinkStandings,
   AppMcpClients,
   AppMemories,
+  AppModels,
   AppPages,
   AppPlanComments,
   AppPlanDocuments,
@@ -618,8 +618,6 @@ export interface HostOperator {
   workspaceSentryDisconnect(
     params: TasksWorkspaceSentryDisconnectParams,
   ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-  /** Whether the deployment holds our Slack bot, and the reader's own Slack notifications; or why there is no answer. */
-  workspaceSlackBot(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
   workspaceSlackBotConnect(
     params: TasksWorkspaceParams,
@@ -714,11 +712,15 @@ export interface HostOperator {
   workspaceInvitationCancel(
     params: TasksWorkspaceInvitationCancelParams,
   ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
-  /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
-  agentModels(): Effect.Effect<AgentModelsAnswer>;
-  /** The account's default model and effort for a coding agent; or why there is none. */
-  agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
-  /** The default written; the choice as kept, or why it is unchanged. */
+  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, as the provider keys move, and every `MODEL_CATALOG_TTL`; what they hold is heard through `onModelsChanged`. */
+  agentModelsFollow(): Effect.Effect<void>;
+  /** The models let go by the windows. */
+  agentModelsUnfollow(): Effect.Effect<void>;
+  /** The held models asked again at once, as Try again asks. */
+  agentModelsRetry(): Effect.Effect<void>;
+  /** The models the host holds for the windows, whole, each time any of them moves. */
+  onModelsChanged(listener: (held: AppModels) => void): () => void;
+  /** The default drawn over the account's preferences at once and written; the choice as kept, or why it is unchanged. */
   agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts held for the windows from now until let go, followed live; what they hold is heard through `onHostsChanged`. */
   hostsFollow(): Effect.Effect<void>;
@@ -817,9 +819,7 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The Claude model the account's Generate chapters runs on, read from the service; or why there is none. */
-  chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
-  /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
+  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
@@ -950,6 +950,10 @@ export interface HostOperator {
   agentInboxItemsRetry(): Effect.Effect<void>;
   /** Every inbox item the account reaches, whole, each time the host's read of them for the session moves. */
   onInboxItemsChanged(listener: (read: AppHostRead<AppInboxItems>) => void): () => void;
+  /** The account's preferences row read again at once, as Try again asks. */
+  agentPreferencesRetry(): Effect.Effect<void>;
+  /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
+  onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
@@ -1666,11 +1670,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
       ),
-    workspaceSlackBot: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
     workspaceSlackBotConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT, {
@@ -1938,15 +1937,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_START, request),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
-    agentModels: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_MODELS),
-        answerOf(agentModelsAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentDefaultRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_DEFAULT_READ),
-        answerOf(agentDefaultAnswerViewSchema, AGENT_UNANSWERED),
+    agentModelsFollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW, {})),
+    agentModelsUnfollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW, {})),
+    agentModelsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_RETRY, {})),
+    onModelsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MODELS_CHANGED,
+        // Note that the held models are the host's own, handed over in this process, so they are passed on as built, as the held keys are.
+        (payload) => (isRecord(payload) ? answered<AppModels>(payload) : undefined),
+        listener,
       ),
     agentDefaultWrite: (choice) =>
       Effect.map(
@@ -2210,11 +2209,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chaptersModelRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_READ),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersModelWrite: (params) =>
       Effect.map(
@@ -2511,6 +2505,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         listener,
       ),
     agentInboxItemsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY, {})),
+    agentPreferencesRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_PREFERENCES_RETRY, {})),
+    onAccountPreferencesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED,
+        // Note that the read is the host's own, handed over in this process, so it is passed on as built, as the inbox items are.
+        (payload) => (isRecord(payload) ? answered<AppAccountPreferences>(payload) : undefined),
+        listener,
+      ),
     onInboxItemsChanged: (listener) =>
       on(
         GATEWAY_EVENT.INBOX_ITEMS_CHANGED,

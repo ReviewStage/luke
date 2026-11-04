@@ -59,8 +59,7 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AGENT_ACT_KIND.AGENTS_MODELS]: "Could not read the models on this system.",
-  [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: "Could not read the default model on this system.",
+  [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: "Could not read the models again on this system.",
   [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: "Could not change the default model on this system.",
   [AGENT_ACT_KIND.AGENTS_LIST]: "Could not read the task's agents on this system.",
   [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: "Could not read the workspace's agents on this system.",
@@ -93,12 +92,6 @@ const ACTS: readonly {
   payload: WireBoundaryInput;
   ask?: keyof HostAsk;
 }[] = [
-  { kind: AGENT_ACT_KIND.AGENTS_MODELS, payload: undefined, ask: "agentModels" },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_DEFAULT_READ,
-    payload: undefined,
-    ask: "agentDefaultRead",
-  },
   {
     kind: AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE,
     payload: { model: "anthropic/claude-opus-5.5", effort: "high" },
@@ -449,8 +442,8 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
   assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_LIST, { taskId: "" }), {
     refused: REFUSAL[AGENT_ACT_KIND.AGENTS_LIST],
   });
-  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_MODELS, { workspaceId: WORKSPACE_ID }), {
-    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_MODELS],
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_MODELS_RETRY, { workspaceId: WORKSPACE_ID }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_MODELS_RETRY],
   });
   assert.deepEqual(
     await call(AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE, {

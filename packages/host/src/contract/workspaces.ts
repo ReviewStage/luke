@@ -84,11 +84,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
     .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ]: actProcedure(
-    "Could not read that workspace's Slack bot on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]: actProcedure(
     "Could not connect the Slack bot to that workspace on this system.",
   )

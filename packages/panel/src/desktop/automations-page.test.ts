@@ -19,6 +19,7 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
+import { CHAPTERS_MODEL_DEFAULT } from "@repo/features/chapters-model-choice";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -235,7 +236,7 @@ let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FA
 let agentsOpened: string[] = [];
 /** Whether the account's default model reads, or answers that it could not. */
 let defaultRefused = false;
-/** How many times the model catalog was read. */
+/** How many times the model catalog was asked again. */
 let catalogReads = 0;
 /** Whether the model catalog answers that it could not be read. */
 let catalogRefused = false;
@@ -245,6 +246,36 @@ let catalogUnconnected = false;
 let agentListRefused = false;
 /** Lays the task list on the window again, as the host does once it reads it. */
 let deliverTasks: (next: TasksView) => void = () => undefined;
+/** Lays the models on the window again, as the host does once it asks them again. */
+let deliverModels: HostReadsHanded["deliverModels"] = () => undefined;
+
+/** The models as the host holds them: failed while refused, and the catalog otherwise, every model unpaid where the test says so. */
+const modelsHeld = () =>
+  catalogRefused
+    ? { failed: true as const }
+    : {
+        rows: {
+          models: CATALOG.map((model) =>
+            catalogUnconnected ? { ...model, credentialMissing: true } : model,
+          ),
+        },
+      };
+
+/** Lays the models and the account's row as the host holds them for the page about to draw: the row failed while the default is refused. */
+function holdChoices(): void {
+  deliverModels = handHostReads({
+    models: modelsHeld(),
+    preferences: defaultRefused
+      ? { failed: true }
+      : {
+          rows: {
+            agent: DEFAULT_CHOICE,
+            chaptersModel: CHAPTERS_MODEL_DEFAULT,
+            slackNotifications: true,
+          },
+        },
+  }).deliverModels;
+}
 /** Whether a search among the workspace's agents answers that it could not be made. */
 let agentSearchRefused = false;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
@@ -433,22 +464,10 @@ beforeEach(() => {
         layStanding();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
-      if (request.kind === ACT_KIND.AGENTS_MODELS) {
+      if (request.kind === ACT_KIND.AGENTS_MODELS_RETRY) {
         catalogReads += 1;
-        const value = catalogRefused
-          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-          : {
-              models: CATALOG.map((model) =>
-                catalogUnconnected ? { ...model, credentialMissing: true } : model,
-              ),
-            };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      if (request.kind === ACT_KIND.AGENTS_DEFAULT_READ) {
-        const value = defaultRefused
-          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-          : { choice: DEFAULT_CHOICE };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+        deliverModels(modelsHeld());
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
@@ -539,6 +558,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
 
 /** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
+  holdChoices();
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -868,6 +888,7 @@ let moveTo: (workspace: Workspace) => void = () => undefined;
  * first among the account's.
  */
 function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
+  holdChoices();
   places = [start];
   shellAsk = undefined;
   function Pages() {
@@ -2618,7 +2639,11 @@ test("a default model that could not be read is said as unknown, and a model can
   await settle();
 
   assert.ok(page.querySelector(".ui-searchable-menu"), "the model menu opens");
-  assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
+  assert.equal(
+    catalogReads,
+    readsBefore,
+    "opening it draws the catalog the host holds, asking nothing",
+  );
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
     "Saved",
