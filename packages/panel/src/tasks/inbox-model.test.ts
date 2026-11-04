@@ -599,7 +599,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
-test("Needs me lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, or a question that waits on a teammate", () => {
+test("Needs me lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
   const question = [asking({ type: INBOX_ASK.ANSWER })];
   const groups = [
     {
@@ -607,6 +607,7 @@ test("Needs me lists and counts only the questions whose ask waits on the reader
       items: [
         item({ id: "asks-me", startedBy: DANA, waitsOn: ME, thread: question, updatedAt: 30 }),
         item({ id: "tells-me", startedBy: ME, updatedAt: 20 }),
+        item({ id: "snoozed", waitsOn: ME, thread: question, snoozedUntil: 5_000, updatedAt: 15 }),
         item({ id: "asks-dana", startedBy: ME, waitsOn: DANA, thread: question, updatedAt: 10 }),
       ],
     },

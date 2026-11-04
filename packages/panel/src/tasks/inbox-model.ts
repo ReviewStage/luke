@@ -1727,7 +1727,7 @@ export function isDone(item: InboxItem): boolean {
 /**
  * Whether a scope lists the item: Needs me every question whose ask waits
  * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count, a notice never; Open every open thread, a question or an
+ * Dock's badge count but for those snoozed, a notice never; Open every open thread, a question or an
  * update not yet opened, which narrowed to the reader's own (`needsYou`)
  * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
  * all of them, each leaving out what the reader snoozed (`isSnoozed`),
