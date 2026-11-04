@@ -20,13 +20,13 @@ import { organization, user } from "./auth.js";
  * on every message. Each row leaves with its installation, so a Disconnect
  * forgets every member, and with its account.
  *
- * A Slack thread that speaks for an agent is kept against it, with where it
- * came from: one a member started the agent from, by mentioning the bot in a
- * channel or writing to it directly, or the DM the bot sent an automation
- * run's result in. A later message in the thread is sent to the agent rather
- * than starting another, and each of the agent's settled turns is posted
- * once, in its current thread, the one kept or written in latest. Each row
- * leaves with its installation, its agent, and its member.
+ * A Slack thread that speaks for an agent is kept against it, with its
+ * origin: either a thread where a member started the agent, by mentioning
+ * the bot in a channel or writing to it directly, or the DM where the bot
+ * sent an automation run's result. A later message in the thread is sent to
+ * the agent rather than starting another, and each of the agent's settled
+ * turns is posted once, in its current thread, the one kept or written in
+ * latest. Each row leaves with its installation, its agent, and its member.
  *
  * An owner or admin may name a default repository for the workspace's Slack
  * starts, and one for each channel the bot is in; a channel's leaves with
