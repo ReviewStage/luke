@@ -122,6 +122,7 @@ const EARLIER_SHOW = { NEEDS_YOU: "needs-you", UNREAD: "unread", OPEN: "open" } 
 
 /** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did. */
 const SHOW_OF_KEPT = {
+  [INBOX_SHOW.NEEDS_ME]: INBOX_SHOW.NEEDS_ME,
   [INBOX_SHOW.OPEN]: INBOX_SHOW.OPEN,
   [INBOX_SHOW.ALL]: INBOX_SHOW.ALL,
   [INBOX_SHOW.SNOOZED]: INBOX_SHOW.SNOOZED,

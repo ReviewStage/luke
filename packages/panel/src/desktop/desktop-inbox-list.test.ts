@@ -1192,7 +1192,7 @@ test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
-  assert.deepEqual(menuWords(), ["Open", "All", "Snoozed", "—", "Addressed to"]);
+  assert.deepEqual(menuWords(), ["Needs me", "Open", "All", "Snoozed", "—", "Addressed to"]);
   act(() => options.click());
   act(() => {
     runAppCommand(APP_COMMAND.MARK_INBOX_READ);

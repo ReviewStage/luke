@@ -599,6 +599,34 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
+test("Needs me lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
+  const question = [asking({ type: INBOX_ASK.ANSWER })];
+  const groups = [
+    {
+      holder: taskHolder(BILLING),
+      items: [
+        item({ id: "asks-me", startedBy: DANA, waitsOn: ME, thread: question, updatedAt: 30 }),
+        item({ id: "tells-me", startedBy: ME, updatedAt: 20 }),
+        item({ id: "snoozed", waitsOn: ME, thread: question, snoozedUntil: 5_000, updatedAt: 15 }),
+        item({ id: "asks-dana", startedBy: ME, waitsOn: DANA, thread: question, updatedAt: 10 }),
+      ],
+    },
+  ];
+  const dana: InboxWhose = { kind: INBOX_WHOSE.PERSON, ...DANA };
+  const needsMe = (whose: InboxWhose) =>
+    drawn(
+      inboxList(groups, {
+        show: INBOX_SHOW.NEEDS_ME,
+        readerId: ME.userId,
+        chosen: undefined,
+        whose,
+      }),
+    );
+  assert.deepEqual(needsMe(MINE), ["asks-me"]);
+  assert.deepEqual(needsMe(dana), ["asks-me"], "Addressed to a teammate narrows it no further");
+  assert.equal(inboxCounts(groups, ME.userId, dana)[INBOX_SHOW.NEEDS_ME], 1);
+});
+
 test("a task done or canceled hides none of its items: its open ones need you, Open listing and counting them as any task's, while its unread settled ones are All's", () => {
   const finished = [
     {
@@ -666,6 +694,7 @@ test("Open addressed to the reader lists their own open items, read or not, neve
     "unnamed",
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId, MINE), {
+    [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 3,
     [INBOX_SHOW.ALL]: 4,
     [INBOX_SHOW.SNOOZED]: 0,
@@ -709,6 +738,7 @@ test("Addressed to lists anyone's items, the reader's own, items whose starter t
   assert.deepEqual(whose(dana), ["danas-answered", "danas"]);
   assert.deepEqual(whose(dana, "kais"), ["danas-answered", "danas", "kais"]);
   assert.deepEqual(inboxCounts(SHARED, ME.userId, dana), {
+    [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 1,
     [INBOX_SHOW.ALL]: 2,
     [INBOX_SHOW.SNOOZED]: 0,
