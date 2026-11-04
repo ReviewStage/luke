@@ -68,9 +68,6 @@ const SHORT_SHA = 7;
 
 /** What the page and the dialog say that no row's data says. */
 export const SKILLS_LINE = {
-  /** Above the rows: where the rest come from, and when a change reaches an agent. */
-  ABOUT:
-    "Repository skills come from each repository's .agents/skills folder. Changes here reach only agents started afterwards.",
   PERSONAL: "Only you",
   PASTED: "Pasted",
   NONE: "No skills installed yet.",
