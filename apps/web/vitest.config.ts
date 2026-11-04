@@ -24,7 +24,11 @@ export default defineConfig({
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],
-    setupFiles: ["../../packages/wire/src/testing/file-time-cap.ts"],
+    // Every file's sockets refused at once, so a signed-in tab's live reads go over its fake service's HTTP and no test dials a port.
+    setupFiles: [
+      "../../packages/wire/src/testing/file-time-cap.ts",
+      "./tests/support/refused-socket.ts",
+    ],
     // One migrated PGlite per run, which every file's opening loads.
     globalSetup: ["../../packages/database/src/testing/migrated-pglite-setup.ts"],
     css: { include: [INLINE_STYLESHEETS] },
