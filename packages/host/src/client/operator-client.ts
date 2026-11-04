@@ -102,6 +102,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onIntegrationToolsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
       }),
+      gateway.host.onLinkStandingsChanged((held) => {
+        state.update({ [LIVE_READ.LINK_STANDINGS]: held });
+      }),
       gateway.host.onMemoriesChanged((held) => {
         state.update({ [LIVE_READ.MEMORIES]: held });
       }),
@@ -110,6 +113,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onProviderKeysChanged((held) => {
         state.update({ [LIVE_READ.PROVIDER_KEYS]: held });
+      }),
+      gateway.host.onRepositoryListsChanged((held) => {
+        state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
       }),
       gateway.host.onGitHubTokenChanged((held) => {
         state.update({ [LIVE_READ.GITHUB_TOKEN]: held });

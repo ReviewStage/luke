@@ -225,8 +225,7 @@ import {
   type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
-  type TasksIssueAnswer,
-  type TasksIssueParams,
+  type TasksLinkStandingParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -237,10 +236,7 @@ import {
   type TasksPictureParams,
   type TasksPinParams,
   type TasksPinRepositoryParams,
-  type TasksPullRequestAnswer,
-  type TasksPullRequestParams,
   type TasksRenameParams,
-  type TasksRepositoriesAnswer,
   type TasksRepositoriesParams,
   type TasksRevisionAnswer,
   type TasksRevisionParams,
@@ -296,13 +292,10 @@ import {
   tasksFindAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
-  tasksIssueAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
-  tasksPullRequestAnswerSchema,
-  tasksRepositoriesAnswerSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionsAnswerSchema,
   tasksSetParentAnswerSchema,
@@ -378,12 +371,14 @@ import type {
   AppInstalledSkills,
   AppIntegrations,
   AppIntegrationTools,
+  AppLinkStandings,
   AppMcpClients,
   AppMemories,
   AppPages,
   AppPlanComments,
   AppPlanDocuments,
   AppProviderKeys,
+  AppRepositoryLists,
   AppThisMacHosts,
   AppTokenRepositories,
   AppWorkspaceMembers,
@@ -480,8 +475,14 @@ export interface HostOperator {
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
-  /** The repositories the account reaches through our GitHub App, read from the service now; or why there is no list. */
-  tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
+  /** The repositories the account reaches in one workspace, or in every one, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onRepositoryListsChanged`. */
+  tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** One workspace's repositories let go by the windows. */
+  tasksRepositoriesUnfollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** One workspace's held repositories asked again at once, as Try again asks; done once the ask has landed. */
+  tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** Every workspace's repositories the host holds for the windows, whole, each time any of them moves. */
+  onRepositoryListsChanged(listener: (held: AppRepositoryLists) => void): () => void;
   /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
   /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
@@ -499,10 +500,12 @@ export interface HostOperator {
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
   /** The skills a developer may choose of a task's repository; or why they are not read. */
   tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
-  /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
-  tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
-  /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
-  tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+  /** What GitHub holds of the page a link names, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onLinkStandingsChanged`. */
+  tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
+  /** One link's standing let go by the windows. */
+  tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
+  /** Every link's standing the host holds for the windows, whole, each time any of them moves. */
+  onLinkStandingsChanged(listener: (held: AppLinkStandings) => void): () => void;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
@@ -1156,6 +1159,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   const wireReporter = (reporter: string) => ({ reporter });
 
+  /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
+  const repositoryScope = (params: TasksRepositoriesParams) =>
+    params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
+
   /**
    * A setting's value as the method's own field, or no field for a cleared
    * one. The envelope is JSON, and its encoder refuses a record holding
@@ -1368,13 +1375,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
         (answer) => record(answer)?.changed === true,
       ),
-    tasksRepositories: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.TASKS_REPOSITORIES,
-          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
-        ),
-        answerOf(tasksRepositoriesAnswerSchema, TASK_UNANSWERED),
+    tasksRepositoriesFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, repositoryScope(params))),
+    tasksRepositoriesUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_UNFOLLOW, repositoryScope(params))),
+    tasksRepositoriesRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_RETRY, repositoryScope(params))),
+    onRepositoryListsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.REPOSITORY_LISTS_CHANGED,
+        // Note that the held lists are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppRepositoryLists>(payload) : undefined),
+        listener,
       ),
     tasksFile: (params) =>
       Effect.map(
@@ -1416,23 +1428,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
         answerOf(tasksSkillsAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+    tasksLinkStandingFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, {
           workspaceId: params.workspaceId,
-          repository: params.repository,
-          number: params.number,
+          address: params.address,
         }),
-        answerOf(tasksPullRequestAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksIssue: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE, {
+    tasksLinkStandingUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_UNFOLLOW, {
           workspaceId: params.workspaceId,
-          repository: params.repository,
-          number: params.number,
+          address: params.address,
         }),
-        answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
+      ),
+    onLinkStandingsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.LINK_STANDINGS_CHANGED,
+        // Note that the held standings are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppLinkStandings>(payload) : undefined),
+        listener,
       ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(

@@ -110,6 +110,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   mode: plan.mode,
   /** Whether it waits on an open task the reader reaches; absent from a service before blocks. */
   blocked: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Whether an automation's run made it for itself alone; absent from a service before it. */
+  madeByRun: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** Who archived an agent as its row holds it. */
@@ -389,6 +391,7 @@ function taskSummaryOf(
       : { parentTaskId: row.parentTaskId }),
     ...(row.mode === undefined ? undefined : { mode: row.mode }),
     ...(row.blocked === true ? { blocked: true } : undefined),
+    ...(row.madeByRun === true ? { madeByRun: true } : undefined),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }

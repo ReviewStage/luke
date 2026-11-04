@@ -3,11 +3,12 @@
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppStateSnapshot } from "@repo/host/app-state";
+import type { AppHostRead, AppLinkStanding, AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -29,8 +30,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * its label and never its repository, so a pasted address and an agent's
  * `[@#42](…)` draw one chip, on a page with a repository and one with none; each wears GitHub's mark for where it
  * stands and says it in words, its card saying its key, its state, and a
- * pull request's lines added and removed in place of its address. Each is read by repository and number through
- * the plan's workspace, nothing is asked where that workspace has no active
+ * pull request's lines added and removed in place of its address. Each is held by its address through
+ * the plan's workspace, as the host holds it, nothing is asked where that workspace has no active
  * installation, and one the App answers nothing for stays as its address
  * says. A card names who opened it by their face, a pull request's by
  * its avatar, with how long ago it moved, its size, branches, labels, and
@@ -166,12 +167,34 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** Main's document holding the plan in Acme. */
+/** What the host holds of each page this file links, by its address, as Acme's GitHub App answered it: `acme/relay`'s pull requests and issues, `acme/ledger`'s one, and none of what `acme/secret` holds, which it does not reach. */
+const STANDINGS: Readonly<Record<string, AppHostRead<AppLinkStanding>>> = Object.fromEntries([
+  ...[...RELAY_PULLS.values()].map((pullRequest) => [pullRequest.url, { rows: { pullRequest } }]),
+  [
+    ELSEWHERE,
+    {
+      rows: {
+        pullRequest: {
+          number: 5,
+          title: "Settle nightly",
+          url: ELSEWHERE,
+          state: PULL_REQUEST_STATE.OPEN,
+        },
+      },
+    },
+  ],
+  [UNREACHED, { rows: { pullRequest: null } }],
+  ...[...RELAY_ISSUES.values()].map((issue) => [issue.url, { rows: { issue } }]),
+  [UNREACHED_ISSUE, { rows: { issue: null } }],
+]);
+
+/** Main's document holding the plan in Acme, with what the host holds of each page read through Acme, whether or not it is drawn. */
 function stateWith(workspace: Workspace): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   return {
     ...snapshot,
     tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: [workspace] },
+    [LIVE_READ.LINK_STANDINGS]: { [workspace.id]: STANDINGS },
   };
 }
 
@@ -205,18 +228,8 @@ function drawn(text: string, workspace: Workspace, asDocument = false, page = PA
   return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace, page);
 }
 
-/** How GitHub answers a window's reads of pull requests: as it holds them, never, or that none is there. */
-const PULL_READS = { ANSWERED: "answered", UNANSWERED: "unanswered", GONE: "gone" } as const;
-
-type PullReads = (typeof PULL_READS)[keyof typeof PULL_READS];
-
-/** `children` drawn on the plan's page in a window holding `workspace`, its pull requests read as `pulls` says, and every act the window asked. */
-async function drawnOnPage(
-  children: ReactNode,
-  workspace: Workspace,
-  page = PAGE,
-  pulls: PullReads = PULL_READS.ANSWERED,
-) {
+/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
+async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAGE) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -224,25 +237,9 @@ async function drawnOnPage(
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
-      if (pulls !== PULL_READS.ANSWERED && request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-        return pulls === PULL_READS.GONE
-          ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: null })
-          : new Promise(() => undefined);
-      }
-      if (request.kind === ACT_KIND.TASKS_ISSUE) {
-        const { repository, number } = request.payload;
-        const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: issue ?? null });
-      }
-      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-        const { repository, number } = request.payload;
-        const pullRequest =
-          repository === "acme/relay"
-            ? RELAY_PULLS.get(number)
-            : repository === "acme/ledger" && number === 5
-              ? { number, title: "Settle nightly", url: ELSEWHERE, state: PULL_REQUEST_STATE.OPEN }
-              : undefined;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: pullRequest ?? null });
+      // A link's standing is held quietly, as the host holds one, what it holds already on the document.
+      if (request.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW) {
+        return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
       }
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
@@ -264,6 +261,13 @@ async function drawnOnPage(
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   return { container, asked };
+}
+
+/** Each link the window held a standing of, in order, by the workspace and the address. */
+function standingsHeld(asked: readonly AnyAct[]) {
+  return asked.flatMap((each) =>
+    each.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW ? [each.payload] : [],
+  );
 }
 
 /** Each chip drawn: the name it says, the state after it, and the pull request's mark it wears, if any. */
@@ -301,48 +305,13 @@ test("a pull request's link says its number, live title, and state, wearing its 
     ["#5", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret#7", null, undefined],
   ]);
-  assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST).map((each) => each.payload),
-    [
-      { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
-      { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
-      { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
-      { workspaceId: "workspace-acme", repository: "acme/ledger", number: 5 },
-      { workspaceId: "workspace-acme", repository: "acme/secret", number: 7 },
-    ],
-  );
-});
-
-test("a pull request's chip drawn again, as a plan's section opening in its editor draws it, says its number and title at once rather than its address while GitHub is asked again", async () => {
-  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
-  act(() => root?.unmount());
-  root = undefined;
-  document.body.innerHTML = "";
-
-  const { container } = await drawnOnPage(
-    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
-    ACME_WITH_GITHUB,
-    PAGE,
-    PULL_READS.UNANSWERED,
-  );
-
-  assert.deepEqual(chips(container), [["#42", "Merged", PULL_REQUEST_STATE.MERGED]]);
-});
-
-test("a pull request's chip drawn again once GitHub answers it is gone says its address, not the title it answered before", async () => {
-  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
-  act(() => root?.unmount());
-  root = undefined;
-  document.body.innerHTML = "";
-
-  const { container } = await drawnOnPage(
-    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
-    ACME_WITH_GITHUB,
-    PAGE,
-    PULL_READS.GONE,
-  );
-
-  assert.deepEqual(chips(container), [["#42", null, undefined]]);
+  assert.deepEqual(standingsHeld(asked), [
+    { workspaceId: "workspace-acme", address: MERGED },
+    { workspaceId: "workspace-acme", address: MERGED },
+    { workspaceId: "workspace-acme", address: MERGED },
+    { workspaceId: "workspace-acme", address: ELSEWHERE },
+    { workspaceId: "workspace-acme", address: UNREACHED },
+  ]);
 });
 
 test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {
@@ -400,10 +369,7 @@ test("where the workspace has no GitHub App installed, nothing is asked and the 
   const { container, asked } = await drawn(`See ${MERGED}.`, ACME);
 
   assert.deepEqual(chips(container), [["#42", null, undefined]]);
-  assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST),
-    [],
-  );
+  assert.deepEqual(standingsHeld(asked), []);
 });
 
 test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it, bar one written as its number and title, which says its number", async () => {
@@ -455,29 +421,18 @@ test("an issue's link says its number, live title, and state, whatever its label
     ["#9 Invite by phone number", "Not planned", ISSUE_STATE.NOT_PLANNED, "Issue #9, not planned"],
     ["secret#3", null, undefined, undefined],
   ]);
-  assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE).map((each) => each.payload),
-    [
-      { workspaceId: "workspace-acme", repository: "acme/relay", number: 7 },
-      { workspaceId: "workspace-acme", repository: "acme/relay", number: 9 },
-      { workspaceId: "workspace-acme", repository: "acme/secret", number: 3 },
-    ],
-  );
-  assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST),
-    [],
-    "an issue's link asks for no pull request",
-  );
+  assert.deepEqual(standingsHeld(asked), [
+    { workspaceId: "workspace-acme", address: OPEN_ISSUE },
+    { workspaceId: "workspace-acme", address: SHELVED_ISSUE },
+    { workspaceId: "workspace-acme", address: UNREACHED_ISSUE },
+  ]);
 });
 
 test("where the workspace has no GitHub App installed, an issue's link asks nothing and says what the address says", async () => {
   const { container, asked } = await drawn(`See ${OPEN_ISSUE}.`, ACME);
 
   assert.deepEqual(issueChips(container), [["#7", null, undefined, undefined]]);
-  assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE),
-    [],
-  );
+  assert.deepEqual(standingsHeld(asked), []);
 });
 
 /** The card a chip hangs: a pull request's own, or the mention's. */

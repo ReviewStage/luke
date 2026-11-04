@@ -4,7 +4,6 @@ import {
   type GitHubTokenRejection,
 } from "@repo/features/github-token-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   ALIGN,
@@ -26,14 +25,13 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
-import type { RepositoryChooser } from "../tasks/repository-chip.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
@@ -57,13 +55,6 @@ const ROUTE = {
 } as const;
 
 type Route = (typeof ROUTE)[keyof typeof ROUTE];
-
-/** The repositories a read answered; none for a failed or unanswered read. */
-function reachedOf(answer: TasksRepositoriesAnswer | undefined): number {
-  return answer !== undefined && "repositories" in answer
-    ? answer.repositories.repositories.length
-    : 0;
-}
 
 /** A card's words under its choice, in the caption's muted ink. */
 function CardWords({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -109,13 +100,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
 }
 
 /** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to. */
-function TokenRoute({
-  workspaceId,
-  onAdded,
-}: {
-  workspaceId: string;
-  onAdded: () => void;
-}): React.JSX.Element {
+function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
@@ -128,11 +113,6 @@ function TokenRoute({
   const [rejection, setRejection] = useState<GitHubTokenRejection | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const added = repositories.listed.length;
-  // A repository added reaches the workspace, which the step reads again.
-  useEffect(() => {
-    if (added > 0) onAdded();
-  }, [added, onAdded]);
   const save = () => {
     const typed = pasted.trim();
     if (typed === "" || saving) return;
@@ -206,40 +186,23 @@ function TokenRoute({
   );
 }
 
-/** Setup's GitHub step for `workspaceId`; `onReached` hears whether the workspace reaches a repository. */
+/**
+ * Setup's GitHub step for `workspaceId`; `onReached` hears whether the
+ * workspace reaches a repository. Note that the host holds the workspace's
+ * repositories while the step stands and asks again as the window comes
+ * back from the install in the browser and as a token repository is added
+ * (`LIVE_READ.REPOSITORY_LISTS`), so the step reads none of its own.
+ */
 export function GitHubSetup({
   workspaceId,
-  repositories,
   onReached,
 }: {
   workspaceId: string;
-  repositories: RepositoryChooser;
   onReached: (reached: boolean) => void;
 }): React.JSX.Element {
   const [route, setRoute] = useState<Route>(ROUTE.APP);
-  const [answer, setAnswer] = useState<TasksRepositoriesAnswer | undefined>(undefined);
-  // Note that the chooser is a new object on each of its owner's draws, so its read is held rather than depended on: the workspace alone asks for a read.
-  const read = useRef(repositories.read);
-  read.current = repositories.read;
-  const latest = useRef(0);
-  const reread = useCallback(() => {
-    latest.current += 1;
-    const asked = latest.current;
-    // Only the newest read lands, since an older one answered late says less than it.
-    read.current().then(
-      (landed) => {
-        if (asked === latest.current) setAnswer(landed);
-      },
-      () => undefined,
-    );
-  }, []);
-  // The install finishes in the browser, so the window's coming back reads the repositories again.
-  useEffect(() => {
-    reread();
-    window.addEventListener("focus", reread);
-    return () => window.removeEventListener("focus", reread);
-  }, [reread, workspaceId]);
-  const reached = reachedOf(answer);
+  const reached =
+    useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId).rows?.repositories.length ?? 0;
   useEffect(() => onReached(reached > 0), [reached, onReached]);
   const done =
     reached > 0 ? (
@@ -257,10 +220,7 @@ export function GitHubSetup({
     {
       value: ROUTE.TOKEN,
       label: "Personal access token",
-      below:
-        route !== ROUTE.TOKEN
-          ? null
-          : (done ?? <TokenRoute workspaceId={workspaceId} onAdded={reread} />),
+      below: route !== ROUTE.TOKEN ? null : (done ?? <TokenRoute workspaceId={workspaceId} />),
     },
   ];
   return (

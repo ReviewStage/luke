@@ -1,4 +1,5 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
+import type { GitHubRepositoriesAnswer } from "@repo/features/github-repositories-wire";
 import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
@@ -7,6 +8,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppGitHubToken } from "@repo/host/app-state";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
@@ -25,7 +27,7 @@ import {
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
@@ -133,6 +135,32 @@ type Candidates =
   | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
 
 /**
+ * What the picker offers, from the reader's token and the workspace's
+ * repositories as the host holds them, less those already listed. Note that
+ * a token read that fails is taken for no word on the token, because the
+ * list alone says what the token may reach.
+ */
+function candidatesOf(
+  token: { readonly rows: AppGitHubToken | undefined; readonly status: HostReadStatus },
+  list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
+  listed: readonly { readonly fullName: string }[],
+): Candidates {
+  if (token.rows?.token === null) return { kind: "no-token" };
+  if (token.status === HOST_READ_STATUS.LOADING) return { kind: "reading" };
+  if (list.rows === undefined) {
+    return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
+  }
+  const added = new Set(listed.map((one) => one.fullName.toLowerCase()));
+  // A service older than `addable` lists the token's repositories among the picker's own.
+  const { addable, repositories } = list.rows;
+  const offered = addable ?? repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+  const rows = offered
+    .filter((one) => !added.has(one.fullName.toLowerCase()))
+    .map((one) => repositoryMenuRow(one.fullName, true));
+  return { kind: "read", rows };
+}
+
+/**
  * Add repository and its menu: the outline `Button`, and under it the
  * app's searched menu hung from it at a Settings picker's width.
  */
@@ -145,32 +173,14 @@ export function AddTokenRepository({
   repositories: TokenRepositories;
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  // Note that a token not yet read, or whose read failed, is taken for no word on the token, because the list alone says what the token may reach.
-  const tokenless = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId).rows?.token === null;
-  const [listing, setCandidates] = useState<Candidates>({ kind: "reading" });
-  const candidates: Candidates = tokenless ? { kind: "no-token" } : listing;
+  // Note that the workspace's repositories and the reader's token are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`, `LIVE_READ.GITHUB_TOKEN`).
+  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
   const read = () => {
-    setCandidates({ kind: "reading" });
-    const added = new Set(repositories.listed.map((one) => one.fullName.toLowerCase()));
-    act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }).then(
-      (answer) => {
-        if ("failure" in answer) {
-          setCandidates({ kind: "failed" });
-          return;
-        }
-        // A service older than `addable` lists the token's repositories among the picker's own.
-        const { addable, repositories: listed } = answer.repositories;
-        const offered = addable ?? listed.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
-        const rows = offered
-          .filter((one) => !added.has(one.fullName.toLowerCase()))
-          .map((one) => repositoryMenuRow(one.fullName, true));
-        setCandidates({ kind: "read", rows });
-      },
-      () => setCandidates({ kind: "failed" }),
-    );
+    if (list.status === HOST_READ_STATUS.FAILED) list.retry();
   };
+  const candidates = candidatesOf(token, list, repositories.listed);
   const rows = candidates.kind === "read" ? candidates.rows : [];
   const note = (close: () => void) =>
     candidates.kind === "reading" ? (

@@ -7,11 +7,7 @@
   "packages/panel/src/settings/chapters-model-section.tsx": "P28: chapters model",
   "packages/panel/src/settings/host-connect-dialog.tsx": "P18: a host's pairing",
   "packages/panel/src/settings/hosts-section.tsx": "P18: hosts",
-  "packages/panel/src/settings/slack-bot-channels.tsx": "P19: repositories",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
-  "packages/panel/src/settings/workspace-token-repositories.tsx": "P19: repositories",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
-  "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default",
-  "packages/panel/src/tasks/use-link-standing.ts": "P19: a link chip's standing",
-  "packages/panel/src/tasks/use-tasks-tab.ts": "P19: repositories"
+  "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default"
 }

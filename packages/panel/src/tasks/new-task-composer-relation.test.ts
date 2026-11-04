@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import type { TaskCreateRelation, TaskSummary } from "@repo/features/task-wire";
-import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -11,6 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -47,8 +47,8 @@ const LOGIN = task("1a2b3c4d-0000-4000-8000-000000000001", "Ship login", 212, "a
 const LIMIT = task("1a2b3c4d-0000-4000-8000-000000000002", "API rate limit", 7, "acme/api");
 const SIGNUP = task("1a2b3c4d-0000-4000-8000-000000000003", "Ship signup", 213, "acme/web");
 
-/** A read listing both of Acme's repositories on its App. */
-const LISTING = (): Promise<TasksRepositoriesAnswer> =>
+/** The host's read of Acme's repositories, listing both on its App. */
+const LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
       installed: true,
@@ -91,6 +91,7 @@ async function settle(): Promise<void> {
 
 /** The card in Acme on acme/web, each start's repository and relations written down. */
 async function mount() {
+  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, LISTING);
   const control = tasksControl();
   const starts: {
     repository: string | null;
@@ -111,7 +112,7 @@ async function mount() {
             workspaceId: ACME.id,
             preset: { repository: "acme/web" },
             tasks: [LOGIN, LIMIT, SIGNUP],
-            repositoriesIn: () => ({ ...control.repositories, scope: ACME.id, read: LISTING }),
+            repositoriesIn: () => ({ ...control.repositories, scope: ACME.id }),
             start: (
               _name: string,
               repository: string | null,

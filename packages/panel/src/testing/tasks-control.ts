@@ -121,10 +121,9 @@ function versionHistoryControl(
   };
 }
 
-/** A repository chip's list read from nowhere, which answers that the service did not. */
+/** A repository chip's chooser for no workspace in particular, whose list the host holds (`LIVE_READ.REPOSITORY_LISTS`). */
 const NO_REPOSITORIES = {
   recent: [],
-  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
   openGitHub: ignore,
   pictures: true,
   manages: true,

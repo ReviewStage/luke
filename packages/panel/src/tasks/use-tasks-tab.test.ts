@@ -79,7 +79,13 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, handState, holdPages, stateWith } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handState,
+  holdPages,
+  holdRepositoryLists,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { listedAgent } from "../testing/tasks-control.js";
@@ -2379,31 +2385,17 @@ test("a Disconnect whose page did not open says why in a toast", async () => {
   assert.equal(newestToastSays(), refusal);
 });
 
-test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
-  const listed = {
-    repositories: {
-      installed: true,
-      repositories: [],
-      installationUrl: "https://github.com/apps/luke/installations/new",
-    },
-  };
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    { [ACT_KIND.TASKS_REPOSITORIES]: () => Promise.resolve(listed) },
-  );
+test("the repository chip holds the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   await settle();
 
-  await tab.control().repositories.read();
+  const scopes = [tab.control().repositories.scope];
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().repositories.read();
+  scopes.push(tab.control().repositories.scope);
   tab.stand({ tasks: { ...OPEN, workspaces: [PERSONAL, ACME] } });
-  await tab.control().repositories.read();
+  scopes.push(tab.control().repositories.scope);
 
-  assert.deepEqual(namedIn(tab.payloads, ACT_KIND.TASKS_REPOSITORIES), [
-    PERSONAL.id,
-    ACME.id,
-    TASK.workspaceId,
-  ]);
+  assert.deepEqual(scopes, [PERSONAL.id, ACME.id, TASK.workspaceId]);
 });
 
 test("the repository chip's list for a workspace with GitHub connected is its repositories alone, under no heading", async () => {
@@ -2423,28 +2415,29 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  const tab = mount(
-    {
-      shown: true,
-      tasks: {
-        ...TWO_WORKSPACES,
-        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-      },
+  const tab = mount({
+    shown: true,
+    tasks: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
     },
-    { [ACT_KIND.TASKS_REPOSITORIES]: () => Promise.resolve(listed) },
-  );
+  });
+  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
   const chipRoot = createRoot(chip);
   roots.push(chipRoot);
   act(() =>
     chipRoot.render(
-      createElement(RepositoryChip, {
-        value: null,
-        chooser: tab.control().newTask.repositoriesIn(ACME.id),
-        onChoose: () => undefined,
-        place: CHIP_PLACE.FIELD,
-      }),
+      onRegistry(
+        AtomRegistryModule.make(),
+        createElement(RepositoryChip, {
+          value: null,
+          chooser: tab.control().newTask.repositoriesIn(ACME.id),
+          onChoose: () => undefined,
+          place: CHIP_PLACE.FIELD,
+        }),
+      ),
     ),
   );
   await settle();

@@ -341,6 +341,8 @@ export interface AgentsDependencies {
    * servers is drawn over (`task-list-collections.ts`).
    */
   pool: EntityPool;
+  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
+  repositoriesMoved?: Effect.Effect<void>;
 }
 
 export interface AgentsComposer extends Composer {
@@ -940,17 +942,6 @@ function composed(
     });
 
   /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
-  /** A token save's or removal's answer, laid on the held token for the account signed in where it carries the token, and answered as it came. */
-  const tokenWritten = (answer: GitHubTokenAnswerView) =>
-    Effect.as(
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return userId === undefined || "failure" in answer
-          ? Effect.void
-          : token.answered(userId, { token: answer.token });
-      }),
-      carried<GitHubTokenAnswerView>(answer),
-    );
   const keysWritten = (answer: ProviderKeysAnswerView) =>
     Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
   /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them. */
@@ -961,6 +952,25 @@ function composed(
         ? Effect.void
         : keys.answered(userId, keyListOf(answer));
     });
+
+  /**
+   * A token's write answered whole to the window that asked; where the
+   * service took it, its answer laid on the held token for the account
+   * signed in, and the repositories every list holds asked again, since what
+   * the token reaches moved.
+   */
+  const tokenWritten = (answer: GitHubTokenAnswerView) =>
+    Effect.as(
+      Effect.suspend(() => {
+        if ("failure" in answer) return Effect.void;
+        const userId = dependencies.accountId();
+        return Effect.andThen(
+          userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
+          dependencies.repositoriesMoved ?? Effect.void,
+        );
+      }),
+      carried<GitHubTokenAnswerView>(answer),
+    );
 
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>

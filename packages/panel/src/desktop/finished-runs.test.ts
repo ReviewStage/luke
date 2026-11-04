@@ -6,11 +6,17 @@ import {
   type PullRequestState,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
+import type { TaskAgentsSummary, TaskSummary } from "@repo/features/task-wire";
 import { describe, it } from "vitest";
-import { type RunsHeld, withoutFinishedRuns } from "./finished-runs.js";
+import {
+  type RunsHeld,
+  type RunTasksHeld,
+  withoutFinishedRunTasks,
+  withoutFinishedRuns,
+} from "./finished-runs.js";
 
 /**
- * finished-runs.test.ts -- an automation's finished run leaves the sidebar's Tasks unless something still holds it for the reader: it has not completed, ended unseen, waits on the reader in the Inbox, has its pull request open, or is the agent shown; an agent started by hand always stands.
+ * finished-runs.test.ts -- an automation's finished run leaves the sidebar's Tasks unless something still holds it for the reader: it has not completed, ended unseen, waits on the reader in the Inbox, has its pull request open, or is the agent shown; an agent started by hand always stands. A task a run made leaves once its run failed or was stopped and nothing holds it; any other task always stands.
  *
  * Synthetic agents throughout.
  */
@@ -88,5 +94,81 @@ describe("an automation's finished runs under Tasks", () => {
     ["shown", RUN, { ...NOTHING_HELD, shown: RUN.id }],
   ])("keeps a run %s", (_, agent, held) => {
     assert.deepEqual(standing(agent, held), [RUN.id]);
+  });
+});
+
+/** The agents of a run's task whose one agent failed. */
+const FAILED_RUN_AGENTS: TaskAgentsSummary = {
+  total: 1,
+  working: 0,
+  failed: 1,
+  agents: [
+    { id: RUN.id, title: null, model: RUN.model, effort: RUN.effort, status: AGENT_STATUS.FAILED },
+  ],
+  pullRequestTotal: 0,
+  pullRequests: [],
+};
+
+/** A task a run made whose run failed, as the sidebar lists it. */
+const RUN_TASK: TaskSummary = {
+  id: "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+  workspaceId: "workspace-1",
+  name: "Copy sweep · Nov 4, 9:00",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme/relay",
+  madeByRun: true,
+  agents: FAILED_RUN_AGENTS,
+};
+
+/** The same task made by a member, which names no run. */
+const { madeByRun: _madeByRun, ...BY_MEMBER } = RUN_TASK;
+
+/** Nothing holding any task. */
+const NO_TASK_HELD: RunTasksHeld = { unread: () => false, inbox: [], shown: () => false };
+
+/** The run's task with one pull request in the state given. */
+function taskWithPullRequest(state: PullRequestState): TaskSummary {
+  const pullRequest = {
+    number: 42,
+    title: "Remove the stale copy",
+    state,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 3,
+    deletions: 1,
+  };
+  return {
+    ...RUN_TASK,
+    agents: { ...FAILED_RUN_AGENTS, pullRequestTotal: 1, pullRequests: [pullRequest] },
+  };
+}
+
+/** The task ids that stand. */
+function tasksStanding(task: TaskSummary, held: RunTasksHeld): readonly string[] {
+  return withoutFinishedRunTasks([task], held).map((each) => each.id);
+}
+
+describe("the tasks an automation's runs made under Tasks", () => {
+  it("leaves a run's task once its run failed and nothing holds it", () => {
+    assert.deepEqual(tasksStanding(RUN_TASK, NO_TASK_HELD), []);
+  });
+
+  it.each<[string, TaskSummary, RunTasksHeld]>([
+    ["no run made", BY_MEMBER, NO_TASK_HELD],
+    [
+      "whose run still works",
+      { ...RUN_TASK, agents: { ...FAILED_RUN_AGENTS, working: 1 } },
+      NO_TASK_HELD,
+    ],
+    ["unread", RUN_TASK, { ...NO_TASK_HELD, unread: (task) => task.id === RUN_TASK.id }],
+    [
+      "waiting on the reader in the Inbox",
+      RUN_TASK,
+      { ...NO_TASK_HELD, inbox: [{ taskId: RUN_TASK.id }] },
+    ],
+    ["with a pull request open", taskWithPullRequest(PULL_REQUEST_STATE.OPEN), NO_TASK_HELD],
+    ["shown", RUN_TASK, { ...NO_TASK_HELD, shown: (taskId) => taskId === RUN_TASK.id }],
+  ])("keeps a task %s", (_, task, held) => {
+    assert.deepEqual(tasksStanding(task, held), [RUN_TASK.id]);
   });
 });

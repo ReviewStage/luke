@@ -713,6 +713,13 @@ const taskSummaryFields = {
    * service before blocks.
    */
   blocked: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * True where an automation's run made the task for itself alone, which
+   * the sidebar lets go once the run finished and holds nothing of the
+   * reader's; absent for any other task, a same-agent automation's standing
+   * task among them, and from a service before it.
+   */
+  madeByRun: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
