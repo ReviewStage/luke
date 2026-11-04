@@ -7,16 +7,19 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
 } from "@repo/features/agent-view";
-import type {
-  AgentContext,
-  AgentFailure,
-  AgentLaunch,
-  AgentPayer,
-  AgentStatus,
-  AgentSubagentStanding,
-  AgentTranscriptMessage,
-  AgentUsage,
+import {
+  AGENT_LAUNCH,
+  AGENT_STATUS,
+  type AgentContext,
+  type AgentFailure,
+  type AgentLaunch,
+  type AgentPayer,
+  type AgentStatus,
+  type AgentSubagentStanding,
+  type AgentTranscriptMessage,
+  type AgentUsage,
 } from "@repo/features/agent-wire";
+import type { DeviceLaunchStep } from "@repo/features/device-agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppTranscript } from "@repo/host/app-state";
@@ -106,8 +109,10 @@ export interface AgentTranscriptControl {
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
   /** The messages queued behind the agent's turn and the queue's pause, as the last page said; none while none is queued, and on a worker's. */
   queue: AgentQueue | undefined;
-  /** Where the launch a local agent waits on stands, as the last page said; none for one in the cloud, once the launch's turn opened, and on a worker's. */
+  /** Where the launch a local agent waits on stands, as the last page said while it still wrote; none for one in the cloud, once the launch's turn opened, once it ended, and on a worker's. */
   launch: AgentLaunch | undefined;
+  /** Where the launch of a failed local agent its host settled unstarted stopped, as the last page said; nothing for any other failure. */
+  launchStopped: DeviceLaunchStep | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the transcript could not be read, so the tab offers to try again. */
@@ -297,7 +302,12 @@ export function useAgentTranscript(input: {
     delegations,
     subagents,
     queue: word?.queue,
-    launch: word?.launch,
+    // Note that the page's one launch word is where a start stands while the agent writes and where it stopped once it failed, so a line sent after a failure never reads as the failed step.
+    launch: writing ? word?.launch : undefined,
+    launchStopped:
+      word?.status === AGENT_STATUS.FAILED && word.launch !== AGENT_LAUNCH.WAITING
+        ? word.launch
+        : undefined,
     reading: shown && !failed && messages.length === 0 && writing,
     failed,
     failedWith: held?.failure,

@@ -130,9 +130,11 @@ import type { RunMode } from "./run-mode.js";
  * a log, and its first lines on its stdin; its line is settled with the
  * runner's exit code once it exits. As it goes, it reports on its line the
  * step it has reached (`DEVICE_LAUNCH_STEP`), which the agent's transcript
- * words until the harness's first event: preparing once it is taken,
- * fetching just before a repository is made, and starting just before the
- * runner, each on a fiber of its own, so the launch never waits on it. A
+ * words until the harness's first event, and its failed turn names where a
+ * launch settled unstarted stopped: preparing once it is taken, fetching
+ * just before a repository is made, and starting just before the agent's
+ * folders and Git are set up for the runner, each on a fiber of its own, so
+ * the launch never waits on it. A
  * message or retune line is written to the running runner's stdin; a files
  * line writes its files under the agent's folder; a stop line ends the
  * runner; a discard line ends it and removes the agent's folder with
@@ -1114,6 +1116,8 @@ export function composeLocalAgents(
               yield* agentGithubForgotten(layout.folder);
               return yield* notStarted(agentId, line.id);
             }
+            // Note that starting is said before the agent's folders and Git are set up, so a launch that stops there is worded as starting rather than by the step before.
+            yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.STARTING);
             const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
@@ -1153,7 +1157,6 @@ export function composeLocalAgents(
               bundle: platform.runnerBundle,
               env: { ...shellVariables, TMPDIR: temp, ...platform.runnerEnv, ...secrets.env },
             });
-            yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.STARTING);
             const started = yield* ChildProcess.make(command.command, [...command.args], {
               cwd: layout.checkoutPath,
               env: command.env,

@@ -67,16 +67,17 @@ export type DeviceAgentLineKind =
  * the launch line it claimed (`deviceAgentStepRequestSchema`), in the order
  * a launch passes them, which is the order a report moves the line's step
  * along and never back. The agent's transcript words what it waits on from
- * it until the harness's first event opens its turn. A step travels as one
- * word of this set and never as free text, so no path, command's output, or
- * credential rides with it.
+ * it until the harness's first event opens its turn, and a launch the host
+ * settles unstarted fails its turn in words naming the last step it
+ * reported. A step travels as one word of this set and never as free text,
+ * so no path, command's output, or credential rides with it.
  */
 export const DEVICE_LAUNCH_STEP = {
-  /** The agent's folder made, its GitHub token fetched, and its Git set up. */
+  /** The launch taken and the agent's GitHub token fetched. */
   PREPARING: "preparing",
   /** The agent's repository being made, where its folder holds none. */
   FETCHING: "fetching",
-  /** The runner, and the harness it runs, Claude Code or Codex, starting. */
+  /** The agent's folders and Git set up, then the runner, and the harness it runs, Claude Code or Codex, starting. */
   STARTING: "starting",
 } as const;
 

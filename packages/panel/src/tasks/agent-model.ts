@@ -1,6 +1,7 @@
 import {
   agentFailureWords,
   hostLostWords,
+  launchStoppedWords,
   mendedByNewAgent,
   ranDirectlyWords,
 } from "@repo/features/agent-failure-words";
@@ -46,7 +47,11 @@ import {
   type PullRequestState,
   type RefusedDevice,
 } from "@repo/features/agent-wire";
-import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_PLATFORM,
+  type DeviceLaunchStep,
+  type DevicePlatform,
+} from "@repo/features/device-agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -396,6 +401,12 @@ export interface EndLineParts {
   readonly failure?: AgentFailure | undefined;
 }
 
+/** Where a launch its host settled unstarted stopped, as the page said, and the harness the agent runs, as its summary says. */
+export interface LaunchStopped {
+  readonly step: DeviceLaunchStep;
+  readonly runtime?: NativeAgentRuntime | undefined;
+}
+
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
  * in parts, so its words and its failed mark can be drawn apart; nothing
@@ -406,7 +417,9 @@ export interface EndLineParts {
  * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
  * where its work still is, in place of its failure's words, and one whose
  * host stopped beating while its turn ran (`hostLost`) names the host and
- * that a message carries it on once the host is back.
+ * that a message carries it on once the host is back. One whose host
+ * settled its launch unstarted (`launchStopped`) names the step the launch
+ * stopped at and that a message tries again.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's last line says (`agentPayerLine`).
  */
@@ -417,6 +430,7 @@ export function endLineParts(
   continuable = false,
   ranDirectly?: { readonly folder: string },
   hostLost?: { readonly host: string },
+  launchStopped?: LaunchStopped,
 ): EndLineParts | undefined {
   switch (status) {
     case AGENT_STATUS.CANCELED:
@@ -426,6 +440,10 @@ export function endLineParts(
         return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
       if (hostLost !== undefined)
         return { words: hostLostWords(hostLost.host), failed: true, failure };
+      if (launchStopped !== undefined) {
+        const words = launchStoppedWords(launchStopped.step, launchStopped.runtime);
+        return { words, failed: true, failure };
+      }
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return {

@@ -81,6 +81,7 @@ import {
   agentRunStartedAt,
   agentStatusOf,
   hostLostOf,
+  launchStoppedOf,
   ranDirectlyFolderOf,
   statusClockEdge,
 } from "./status.js";
@@ -113,7 +114,8 @@ import { usageOfTurns } from "./usage.js";
  * its model's context holds as its newest step left it (`context.ts`),
  * when each worker its newest turn still waits on began, and, for an
  * agent on a device, where the launch it waits on stands until that
- * launch's turn opens (`launchOf`). A line that
+ * launch's turn opens, or where one its host settled unstarted stopped
+ * (`launchOf`). A line that
  * steered a turn under way carries the turn's journal and the steps it had
  * begun before the line, since the journal closes behind every line its
  * turn took and the order alone would draw the line ahead of the turn's
@@ -242,9 +244,11 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
  * harness's first event, so a turn queued after the line is that launch's
  * own opening, and a line a former run's turn opened, as a warm runner's
  * that a new message reaches, is never read as the one waited on. Waiting
- * while no host has claimed it, then the step its host reported. None
- * where the host reported no step this build knows, and on a worker's or a
- * cloud agent's transcript, which no launch line stands for.
+ * while no host has claimed it, then the step its host reported. Once
+ * the agent failed, the step a launch its host settled unstarted stopped
+ * at, as its failed turn records it (`launchStoppedOf`). None where the
+ * host reported no step this build knows, and on a worker's or a cloud
+ * agent's transcript, which no launch line stands for.
  */
 const launchOf = (
   target: ConversationTarget,
@@ -252,6 +256,9 @@ const launchOf = (
   turn: NewestTurn,
   status: AgentStatus,
 ): TranscriptEffect<AgentLaunch | undefined> => {
+  if (own?.machine === AGENT_MACHINE.DEVICE && status === AGENT_STATUS.FAILED) {
+    return Effect.succeed(launchStoppedOf(turn));
+  }
   if (own?.machine !== AGENT_MACHINE.DEVICE || !WAITING_STATUSES.has(status)) {
     return Effect.succeed(undefined);
   }
