@@ -28,7 +28,8 @@ import { ChevronRightIcon } from "../face/glyphs.js";
  * - An item is a menu row: one fixed height (or grown to hold a second
  *   line, `data-detail`), the menu row's corner and type, lit by the fill
  *   every row is lit by, red for an act that cannot be taken back
- *   (`variant="destructive"`), dimmed where it does not apply now, and
+ *   (`variant="destructive"`), its parts dimmed where it does not apply now
+ *   but for the detail that says why (`menu.css`), and
  *   lit under the pointer and the keyboard's focus as the window's rows
  *   are, rather than wherever Base UI's highlight stands. A
  *   checkbox item draws its own end rather than shadcn's absolute check, so
@@ -43,9 +44,9 @@ import { ChevronRightIcon } from "../face/glyphs.js";
  * this is its inside.
  */
 
-/** A menu row's shape, as every item, checkbox item, and submenu trigger draws it, which a row standing outside any menu wears too. */
+/** A menu row's shape, as every item, checkbox item, and submenu trigger draws it, which a row standing outside any menu wears too; a row that cannot be chosen dims its parts in `menu.css`, its detail aside. */
 export const DROPDOWN_MENU_ITEM =
-  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-row-inset py-0 text-left font-sans text-body leading-[normal] font-text whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-ui-4 disabled:opacity-disabled aria-disabled:opacity-disabled";
+  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-row-inset py-0 text-left font-sans text-body leading-[normal] font-text whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-ui-4";
 
 /**
  * A row in a menu lit by the fill every row is lit by, never ringed: under
