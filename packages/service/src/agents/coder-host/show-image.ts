@@ -79,7 +79,10 @@ export const SHOW_IMAGE_TOOL = {
     "drawn, so the video opens on it rather than on its loading, and show that file the same way; the " +
     "transcript plays it. " +
     `Each is a PNG, JPEG, or WebP, or a WebM video, of at most ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. ` +
-    "Never show a picture of a secret. A Markdown image in your reply shows nothing; this is the one " +
+    `Never show a picture of a secret. Never show pictures of a page you showed with \`${AGENT_TOOL.SHOW_PAGE}\`, ` +
+    "or the page beside pictures of it: choose one, the page where it says what you mean, or " +
+    "pictures where they say it better, such as parts of a page set side by side. " +
+    "A Markdown image in your reply shows nothing; this is the one " +
     "way to show a picture in your transcript. Answers `accepted` with each picture's id, or `rejected` and why nothing " +
     "was shown.",
   inputSchema: SHOW_IMAGE_INPUT,
