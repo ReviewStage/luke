@@ -252,6 +252,25 @@ lands once you're back online.
 
 ### Fixes
 
+- Fixed a new account getting no workspace, which left Start disabled and
+  GitHub unconnectable
+  ([#6753](https://github.com/ReviewStage/vespin/pull/6753))
+- Fixed the same Inbox thread being listed more than once
+  ([#6762](https://github.com/ReviewStage/vespin/pull/6762))
+- Fixed an archived agent that wouldn't open when pressed; it opens on its
+  own page from anywhere
+  ([#6761](https://github.com/ReviewStage/vespin/pull/6761))
+- Fixed a failed turn offering Continue in new agent when the agent could
+  still take your next message
+  ([#6757](https://github.com/ReviewStage/vespin/pull/6757))
+- Fixed an agent started from Slack missing an image sent as HEIC, such as a
+  Mac screenshot ([#6759](https://github.com/ReviewStage/vespin/pull/6759))
+- Fixed a hover card on a phone opening off screen
+  ([#6760](https://github.com/ReviewStage/vespin/pull/6760))
+- Fixed the web app's pages failing to load after a dropped connection, and
+  its toast then saying a new version was ready
+  ([#6754](https://github.com/ReviewStage/vespin/pull/6754),
+  [#6756](https://github.com/ReviewStage/vespin/pull/6756))
 - Fixed an update failing with only "Couldn't install" while Vespin ran from
   its disk image, which now offers to move itself to Applications
   ([#6593](https://github.com/ReviewStage/vespin/pull/6593))
