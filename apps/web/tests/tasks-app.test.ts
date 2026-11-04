@@ -1390,6 +1390,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const { plan: task } = answered;
         const at = task.lastEdit?.at ?? assert.fail("the edit names no last edit");
         assert.deepEqual(task.document, { body: value, assumptions: [] });
+        // A host waits on the transaction the edit answers before it lets a delivery of the plan land.
+        assert.match(answered.txid ?? "", /^\d+$/u);
         assert.equal(task.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
         const by = task.lastEdit?.by ?? assert.fail("the edit names no member");
         assert.equal(by.userId, owner);

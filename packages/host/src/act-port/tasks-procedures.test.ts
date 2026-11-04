@@ -424,6 +424,9 @@ function windowPort(
       }),
     tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
     tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
+    tasksDocumentFollow: (scope) => ask(`document-follow:${scope.taskId}`, () => undefined),
+    tasksDocumentUnfollow: (scope) => ask(`document-unfollow:${scope.taskId}`, () => undefined),
+    tasksDocumentRetry: (scope) => ask(`document-retry:${scope.taskId}`, () => undefined),
     tasksBrowserTabsFollow: (scope) =>
       ask(`tabs-follow:${browserTabsPlaceId(scope)}`, () => undefined),
     tasksBrowserTabsUnfollow: (scope) =>

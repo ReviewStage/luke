@@ -958,7 +958,7 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
  * the task list waits for it to arrive before it confirms the write, and
  * absent where nothing changed, as Neon's mutations guide says.
  */
-const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+export const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
 /** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
 export const taskAnswerSchema = EffectSchema.Struct({
