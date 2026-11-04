@@ -53,6 +53,7 @@ import type { ShownFailure } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
+import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { useExperiment } from "../use-app-state.js";
 import {
   ARCHIVE_NOT_READY,
@@ -107,6 +108,9 @@ const agentUnreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
+
+/** No agent listed, as the list reads where it is not followed. */
+const NO_LISTED_AGENTS: readonly AgentSummary[] = [];
 
 /** How long a read of the models may stay out before it is said as failed, past the host's own ten-second bound on the call it makes. */
 const MODELS_READ_BOUND_MS = 15_000;
@@ -185,6 +189,12 @@ interface StartedWords {
 interface OpeningLine {
   readonly agentId: string;
   readonly line: SentLine;
+}
+
+/** How an archive was pressed: whether its row is drawn at once or on the answer, and whether a question was asked first, which keeps it off ⌘Z. */
+interface ArchivePress {
+  readonly drawn?: ArchiveDrawn;
+  readonly asked?: true;
 }
 
 /** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
@@ -354,11 +364,12 @@ export interface AgentsControl {
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
    * back, drawn at once by the host unless `drawn` waits on the answer, and
-   * offering Undo in a toast; a refusal puts it back and is answered rather
-   * than said, for the caller to say in its dialog or a toast of its own.
+   * offering Undo in a toast, which ⌘Z reaches too unless a question was
+   * `asked` first; a refusal puts it back and is answered rather than said,
+   * for the caller to say in its dialog or a toast of its own.
    */
   /** Archives or unarchives an agent, answering whether it was kept, with what refused it beneath a refusal. */
-  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActedResult>;
+  onArchive: (agentId: string, archived: boolean, how?: ArchivePress) => Promise<ActedResult>;
   /**
    * Deletes one agent for good, a turn it still runs stopped first, taking
    * it out of the list and saying so in a toast; a refusal is answered
@@ -1358,15 +1369,26 @@ export function useAgents(input: {
     return false;
   };
 
-  // Note that the archive is read through a ref from its toast's Undo,
-  // because the press lands renders after the toast was raised. The host
-  // draws the agent moved at once, and back where the service refuses,
-  // unless a dialog that asked waits on it.
+  // The agents the list draws as they stand at each call, and the act,
+  // which ⌘Z reads an archive's row and sends its writes through.
+  const listedNow = useRef(input.listedAgents ?? NO_LISTED_AGENTS);
+  listedNow.current = input.listedAgents ?? NO_LISTED_AGENTS;
+  const agentDoors: RowDoors<readonly AgentSummary[]> = { rows: () => listedNow.current, act };
+  // The host draws the agent moved at once, and back where the service
+  // refuses, unless a dialog that asked waits on it. An archive kept is
+  // ⌘Z's to take back, and its toast's Undo runs the same entry, unless a
+  // question was asked first, since ⌘Z must not put back what took one: its
+  // toast then keeps an Undo of its own, read through a ref because the
+  // press lands renders after the toast was raised, as it does where the
+  // window shows no row of the agent to put back.
   const onArchive = async (
     agentId: string,
     archived: boolean,
-    drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
+    { drawn = ARCHIVE_DRAWN.AT_ONCE, asked }: ArchivePress = {},
   ): Promise<ActedResult> => {
+    const pressed = pressRows(ROW_WRITE.AGENT_ARCHIVE, agentDoors, [
+      { id: agentId, after: { archived } },
+    ]);
     setArchivesOut((count) => count + 1);
     const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
       agentId,
@@ -1384,11 +1406,11 @@ export function useAgents(input: {
         cause: answer,
       };
     }
-    toast(
-      undoToast(words.done, () =>
-        archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)),
-      ),
-    );
+    const undo =
+      (asked ? undefined : pressed.keep(words.done)) ??
+      (() =>
+        void archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)));
+    toast(undoToast(words.done, undo));
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);

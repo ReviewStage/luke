@@ -93,10 +93,11 @@ test("a dialog standing holds off the menu bar's Back and Forward, which run aga
   assert.deepEqual(moves, ["back"]);
 });
 
-/** A window whose keymap answers, offering the Inbox's J, each press recorded, with a field to type in. */
+/** A window whose keymap answers, offering the Inbox's J and ⌘Z's undo, each press recorded, with a field to type in. */
 function KeyedWindow({ moves }: { moves: string[] }): ReactElement {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, () => moves.push("inbox"));
+  useAppCommand(APP_COMMAND.UNDO, () => moves.push("undo"));
   return createElement("textarea", { "aria-label": "Message" });
 }
 
@@ -107,14 +108,34 @@ function pressJ(target: EventTarget): void {
   });
 }
 
-test("J runs the Inbox's command, and nothing while the press is typing into a field", () => {
+/** Presses ⌘Z where the press lands, answering whether the window claimed it from what would answer it next. */
+function pressUndo(target: EventTarget): boolean {
+  const press = new KeyboardEvent("keydown", {
+    key: "z",
+    code: "KeyZ",
+    metaKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    target.dispatchEvent(press);
+  });
+  return press.defaultPrevented;
+}
+
+test("J and ⌘Z run their commands, and nothing while the press is typing into a field, which keeps ⌘Z as its own undo", () => {
   const moves: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   act(() => root.render(createElement(KeyedWindow, { moves })));
+  const field = document.querySelector("textarea") ?? assert.fail("the field");
   pressJ(document.body);
-  pressJ(document.querySelector("textarea") ?? assert.fail("the field"));
-  assert.deepEqual(moves, ["inbox"]);
+  pressJ(field);
+  const claimed = pressUndo(document.body);
+  const claimedInField = pressUndo(field);
+  assert.deepEqual(moves, ["inbox", "undo"]);
+  assert.equal(claimed, true);
+  assert.equal(claimedInField, false, "the field's own undo answers it");
 });
 
 /** What the open thing offers on U, P, and S, each press recorded: a plan's, say. */

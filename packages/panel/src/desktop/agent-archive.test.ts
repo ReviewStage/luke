@@ -195,9 +195,9 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
           archivedAt: 2,
         },
       ],
-      onArchive: (_id, _archived, when) => {
+      onArchive: (_id, _archived, how) => {
         unarchives += 1;
-        drawn = when;
+        drawn = how?.drawn;
         return new Promise((resolve) => {
           answer = () => resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
         });

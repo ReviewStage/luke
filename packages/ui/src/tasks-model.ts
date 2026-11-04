@@ -267,19 +267,16 @@ function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
 }
 
 /**
- * What setting tasks at a status asks of each, and what its Undo asks: the
- * status each stood at before. A task already there is left out of both,
- * since the press changes nothing about it.
+ * What setting tasks at a status asks of each. A task already there is left
+ * out, since the press changes nothing about it.
  */
 export function settleChanges(
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
   status: TaskStatus,
-): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
-  const moved = tasks.filter((task) => standingStatus(task) !== status);
-  return {
-    asked: moved.map((task) => ({ taskId: task.id, status })),
-    undo: moved.map((task) => ({ taskId: task.id, status: standingStatus(task) })),
-  };
+): readonly StatusChange[] {
+  return tasks
+    .filter((task) => standingStatus(task) !== status)
+    .map((task) => ({ taskId: task.id, status }));
 }
 
 /** Whether the task menu offers settling the task at a status: not where it already stands there. */
@@ -335,25 +332,6 @@ export function settledNote(status: TaskStatus, landed: number, refused: number)
 export function settleFailedNote(status: TaskStatus, refused: number): string {
   const notes = STATUS_NOTES[status];
   return refused === 1 ? notes.failedOne : notes.failedMany;
-}
-
-/** What the toast says when the service refused an Undo putting a status back. */
-export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
-
-/**
- * What an Undo of setting tasks at a status still puts back: only the tasks
- * that still stand there, since one given another status since was chosen
- * anew and an Undo must not take that choice back.
- */
-export function undoStillDue(
-  undo: readonly StatusChange[],
-  settled: TaskStatus,
-  tasks: readonly Pick<TaskSummary, "id" | "status">[],
-): readonly StatusChange[] {
-  return undo.filter(({ taskId }) => {
-    const task = tasks.find((each) => each.id === taskId);
-    return task !== undefined && standingStatus(task) === settled;
-  });
 }
 
 /** What the toast says when the service refused a repository's pin, by whether it was a pin or an unpin. */

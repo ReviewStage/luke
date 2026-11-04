@@ -119,15 +119,17 @@ function archiveQuestion(name: string): DialogQuestion {
 function useArchivePress(agents: AgentsControl) {
   const toast = useToast();
   return (agentId: string, archived: boolean, drawn?: ArchiveDrawn) =>
-    agents.onArchive(agentId, archived, drawn).then((result: ActionResult) => {
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
-      toast({
-        words: result.reason,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
+    agents
+      .onArchive(agentId, archived, drawn === undefined ? {} : { drawn })
+      .then((result: ActionResult) => {
+        if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
+        });
       });
-    });
 }
 
 /** An agent's Archive as a menu offers it, and the question it asks through. */
@@ -160,7 +162,7 @@ export function useAgentArchive(
   // Note that an archive asked about waits on its answer, so the dialog stands to say a refusal.
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => agents.onArchive(agent.id, true, ARCHIVE_DRAWN.ON_ANSWER),
+    () => agents.onArchive(agent.id, true, { drawn: ARCHIVE_DRAWN.ON_ANSWER, asked: true }),
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);
