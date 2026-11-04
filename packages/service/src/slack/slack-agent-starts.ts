@@ -45,8 +45,8 @@
  * (`SlackBot.download`), sniffed by their bytes and held to the bounds a
  * Start holds a message's files to: a PNG, JPEG, or WebP within them read
  * whole, and a larger one, or one of a type no model reads (a Mac's HEIC
- * screenshot), read as the largest thumbnail Slack made of it, and handed to
- * the agent as the message's files, a Start's or a steer's alike; any other
+ * screenshot), read as the largest thumbnail Slack made of it that fits, and
+ * handed to the agent as the message's files, a Start's or a steer's alike; any other
  * file is left out, and a message of images alone is acted on as one with
  * words.
  * Its prompt is the writer's words, the thread's earlier messages fenced as data, since anyone in the channel wrote them, and the
@@ -321,6 +321,35 @@ function heardLine(kind: string, outcome: string): Effect.Effect<void> {
   return Effect.logInfo("A Slack event was heard", { event: kind, outcome });
 }
 
+/** Slack's thumbnails of a shared image, largest first, as the event names them. */
+const SHARED_THUMBNAILS = [
+  "thumb_1024",
+  "thumb_960",
+  "thumb_800",
+  "thumb_720",
+  "thumb_480",
+  "thumb_360",
+] as const;
+
+/**
+ * Where a shared image may be read from, in the order tried: the file itself
+ * where it is of a type a model reads and Slack says it is within one
+ * image's bound, then every thumbnail Slack made of it, largest first; none
+ * for a file that is no image, or one Slack names no address for.
+ */
+function sharedImageUrls(file: SharedFile): readonly string[] {
+  if (file.mimetype?.startsWith(IMAGE_TYPE_PREFIX) !== true) return [];
+  const whole =
+    SHARED_IMAGE_TYPES.has(file.mimetype) &&
+    file.size !== undefined &&
+    file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES
+      ? [file.url_private_download]
+      : [];
+  return [...whole, ...SHARED_THUMBNAILS.map((thumbnail) => file[thumbnail])].filter(
+    (url) => url !== undefined,
+  );
+}
+
 /** The callback as a message addressed to the bot, or why it is not one: a bot wrote it, an edit or other subtype, or any other event. */
 function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
   const { event } = callback;
@@ -337,8 +366,7 @@ function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
     return SLACK_DROP.FROM_BOT;
   }
   const text = withoutBotMention(event.text ?? "", botUserId);
-  const images = (event.files ?? [])
-    .filter((file) => file.mimetype?.startsWith(IMAGE_TYPE_PREFIX) === true);
+  const images = (event.files ?? []).filter((file) => sharedImageUrls(file).length > 0);
   if (text === "" && images.length === 0) return SLACK_DROP.EMPTY;
   return {
     teamId: callback.team_id,
@@ -362,34 +390,30 @@ function sharedImageName(file: SharedFile): string {
 }
 
 /**
- * Where a shared image is read from: the file itself where it is of a type
- * a model reads, Slack says it is within one image's bound, and names its
- * address, else the largest thumbnail Slack made of it; nothing where Slack
- * made none.
+ * A shared image's bytes from the first of its addresses whose read arrived
+ * as a PNG, JPEG, or WebP within `room`, and the type they sniff as; nothing
+ * where none did.
  */
-function sharedImageUrl(file: SharedFile): string | undefined {
-  const whole =
-    file.mimetype !== undefined &&
-    SHARED_IMAGE_TYPES.has(file.mimetype) &&
-    file.size !== undefined &&
-    file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES;
-  if (whole && file.url_private_download !== undefined) return file.url_private_download;
-  return (
-    file.thumb_1024 ??
-    file.thumb_960 ??
-    file.thumb_800 ??
-    file.thumb_720 ??
-    file.thumb_480 ??
-    file.thumb_360
-  );
-}
+const readSharedImage = Effect.fnUntraced(function* (
+  bot: SlackBotService,
+  file: SharedFile,
+  room: number,
+) {
+  for (const url of sharedImageUrls(file)) {
+    const read = yield* bot.download(url, Math.min(room, AGENT_BOUNDS.MAX_IMAGE_BYTES));
+    if (Option.isNone(read)) continue;
+    const mediaType = sniffImageType(read.value);
+    if (mediaType !== undefined) return Option.some({ bytes: read.value, mediaType });
+  }
+  return Option.none();
+});
 
 /**
  * The images the message shared, read from Slack and made the files a
- * message carries, in the order shared, each from where `sharedImageUrl`
- * says and sniffed by its bytes, as many as a message may carry; one that
- * failed, is no PNG, JPEG, or WebP, or would take the files past their bytes
- * together is left out, and so takes none of those places.
+ * message carries, in the order shared, each as `readSharedImage` reads it
+ * in the room their bytes together leave, as many as a message may carry;
+ * one none of whose addresses read is left out, and so takes none of those
+ * places.
  */
 const sharedImages = Effect.fnUntraced(function* (
   bot: SlackBotService,
@@ -399,15 +423,15 @@ const sharedImages = Effect.fnUntraced(function* (
   let bytesTogether = 0;
   for (const file of images) {
     if (attachments.length === AGENT_BOUNDS.MAX_ATTACHMENTS) break;
-    const url = sharedImageUrl(file);
-    if (url === undefined) continue;
-    const read = yield* bot.download(url, AGENT_BOUNDS.MAX_IMAGE_BYTES);
+    const read = yield* readSharedImage(
+      bot,
+      file,
+      AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES - bytesTogether,
+    );
     if (Option.isNone(read)) continue;
-    const mediaType = sniffImageType(read.value);
-    if (mediaType === undefined) continue;
-    if (bytesTogether + read.value.byteLength > AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) continue;
-    bytesTogether += read.value.byteLength;
-    const data = Buffer.from(read.value).toString("base64");
+    const { bytes, mediaType } = read.value;
+    bytesTogether += bytes.byteLength;
+    const data = Buffer.from(bytes).toString("base64");
     attachments.push({ name: sharedImageName(file), mediaType, data });
   }
   return attachments;
