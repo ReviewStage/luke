@@ -170,7 +170,7 @@ ChatGPT, or Cursor can connect to our MCP server and act as you once you allow
 them on a consent page. We keep a record of the app, your consent, and hashed
 access and refresh tokens. The app receives what our tools answer and keeps it
 under its maker's policy. You can see and revoke connected apps in
-Settings › Integrations.
+Settings › MCP › Agents with access.
 
 **Browser tabs.** Agents can drive a Chromium browser in their sandbox, which
 you can watch and take over. Each page's address, title, screenshot, and text
