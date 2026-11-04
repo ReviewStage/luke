@@ -524,42 +524,21 @@ test("the workspace's skills stand before the account's own, each with its sourc
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
   assert.deepEqual(headings, ["Stage", "Only you"]);
   const text = document.body.textContent ?? "";
-  assert.match(
-    text,
-    /release-notes describedacme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
-  );
-  assert.match(text, /pr-style describedPastedOnly you/u);
-  assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
+  assert.match(text, /release-notes describedacme\/agent-skills @ 3f9c2e1 · by Dean/u);
+  assert.match(text, /pr-style describedPasted/u);
 });
 
-test("a skill's description stands alone, its source and keep line under it as the row's detail", async () => {
+test("a skill's description stands alone, its source line under it as the row's detail", async () => {
   await mountPage();
 
   const row = rowOf("release-notes");
   assert.equal(
     row.querySelector(".ui-settings-row-state")?.textContent,
-    "acme/agent-skills @ 3f9c2e1 · by Dean. Follows your workspace.",
+    "acme/agent-skills @ 3f9c2e1 · by Dean",
   );
   assert.equal(
     row.querySelector(".ui-settings-row-description")?.firstChild?.textContent,
     "release-notes described",
-  );
-});
-
-test("the workspace's skills each say they follow the workspace, and the account's own say nothing the page's head does not", async () => {
-  await mountPage();
-
-  assert.match(rowOf("release-notes").textContent ?? "", /Follows your workspace\./u);
-  assert.doesNotMatch(rowOf("pr-style").textContent ?? "", /Follows your/u);
-});
-
-test("an empty workspace group says it follows the workspace", async () => {
-  stored = [PR_STYLE];
-  await mountPage();
-
-  assert.match(
-    document.body.textContent ?? "",
-    /No skills installed yet\. Follows your workspace\./u,
   );
 });
 
@@ -612,10 +591,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   const [, shared, personal] = [...document.querySelectorAll("section")];
-  assert.match(
-    shared?.textContent ?? "",
-    /pr-style describedPasted · by you\. Follows your workspace\.Workspace/u,
-  );
+  assert.match(shared?.textContent ?? "", /pr-style describedPasted · by you/u);
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
 
@@ -631,7 +607,7 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /PastedOnly you/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /Pasted/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {

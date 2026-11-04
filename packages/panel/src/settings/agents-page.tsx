@@ -8,11 +8,7 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@repo/features/models-wire";
-import {
-  PROVIDER_KEY_STATUS,
-  type ProviderKeyStatus,
-  type ProviderKeySummary,
-} from "@repo/features/provider-key-wire";
+import type { ProviderKeyStatus, ProviderKeySummary } from "@repo/features/provider-key-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -146,12 +142,6 @@ const DEFAULT_SKELETON: readonly SettingsRowSkeletonShape[] = [
 /** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
 
-/** A provider as the model row names the key it runs on. */
-const PROVIDER_NAME = {
-  [MODEL_PROVIDER.ANTHROPIC]: "Anthropic",
-  [MODEL_PROVIDER.OPENAI]: "OpenAI",
-} as const satisfies Record<ModelProvider, string>;
-
 /** A write the service kept. */
 const WRITE_ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -160,25 +150,6 @@ const WRITE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: PAGE_LINE.WRITE_FAILED,
 };
-
-/**
- * What the model row says under its name, where the key it runs on is the
- * account's own: that it runs there while the provider last accepted it, and
- * that the key needs a hand where it did not, since such a key fails the
- * agent's steps. Without an API key the row says nothing where a
- * subscription pays; where nothing does, `DefaultRows` says the default
- * cannot run in this note's place.
- */
-function modelRowNote(
-  provider: ModelProvider | undefined,
-  status: ProviderKeyStatus | undefined,
-): string | undefined {
-  if (provider === undefined || status === undefined) return undefined;
-  const name = PROVIDER_NAME[provider];
-  return status === PROVIDER_KEY_STATUS.VERIFIED
-    ? `Runs on your own ${name} key.`
-    : `Your ${name} key needs attention.`;
-}
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
@@ -207,16 +178,13 @@ function DefaultRows({
   const speedWrite = useSettingWrite(onChange);
   const contextWrite = useSettingWrite(onChange);
   const listed = models?.find((model) => model.id === choice.model);
-  const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   // Modified reads against the default this account would run on with none stored, as its credentials decide it.
   const fallback = agentFallbackChoice(models ?? []);
   const remedy = useRepositoryRemedy();
-  // A default nothing pays for says so in the key's note's place, with the press that connects it.
+  // A default nothing pays for says so under the model row, with the press that connects it.
   const unrunnable = models === undefined ? undefined : unrunnableChoice(models, choice);
   const note =
-    unrunnable === undefined ? (
-      modelRowNote(listed?.provider, ownKey)
-    ) : (
+    unrunnable === undefined ? undefined : (
       <>
         {unrunnable.text}{" "}
         <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => remedy(unrunnable)?.()}>

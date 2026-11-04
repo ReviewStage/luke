@@ -198,7 +198,6 @@ export const APP_SETTING_SCHEMA = {
     field: "linkOpen",
     id: APP_SETTING_ID.LINK_OPEN,
     label: `Open ${PRODUCT_NAME} links in`,
-    detail: `${PRODUCT_NAME} for Mac takes the links you open in a browser on a Mac with ${PRODUCT_NAME} installed.`,
     values: LINK_OPEN_LIST,
     token: (choice) => choice,
     optionLabel: (choice) => LINK_OPEN_LABEL[choice],
@@ -239,9 +238,6 @@ export const APP_SETTING_SCHEMA = {
     field: "usageData",
     id: APP_SETTING_ID.USAGE_DATA,
     label: "Share usage data",
-    detail:
-      `Counts of which ${PRODUCT_NAME} features you use, sent under your account. ` +
-      "Never what you type or say.",
     default: true,
     unpackagedDefault: false,
     page: SETTINGS_PAGE.ACCOUNT,
@@ -254,9 +250,6 @@ export const APP_SETTING_SCHEMA = {
     field: "preferBuiltInMicrophone",
     id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
     label: "Prefer the Mac's microphone",
-    detail:
-      "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
-      `With the lid shut, ${PRODUCT_NAME} uses the headset's microphone anyway.`,
     default: true,
     // Note that it stands on This Mac, under no page's reset, as the switch to
     // open at login does; the field and its id are unmoved, so a choice already made is kept.
