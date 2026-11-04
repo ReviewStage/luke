@@ -171,8 +171,8 @@ body,
    field stops growing at a smaller share of what is seen
    (`--ui-stage-height`) than the two fifths every room keeps (tasks.css),
    short of its eight lines, and scrolls past it, so the words written to and
-   the box writing them both keep a part of the screen. Home's card keeps its
-   five lines under the cap, since Home scrolls. New task's dialog portals out
+   the box writing them both keep a part of the screen. New task's card keeps
+   its own minimum under the cap (`.new-task-composer`). New task's dialog portals out
    of the shell, so it reads the shell's room off the document's root
    (`stage-room.ts`), and its Start stays in the card above the keyboard. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .agent-composer-field,
@@ -1506,7 +1506,7 @@ body,
 /* In the dialog, which does not scroll, a window too short for five lines,
    as a small one zoomed in, has the minimum yield to a quarter of the
    window, so the card's foot and its Start stay in view. Home scrolls, so
-   its composer keeps the five lines. */
+   its composer keeps the five lines but in a narrow room (below). */
 .new-task .new-task-composer .agent-composer-input {
   min-height: min(
     calc(5 * var(--ui-type-body-leading) + var(--agent-composer-field-block)),
@@ -1514,21 +1514,33 @@ body,
   );
 }
 
-/* Where the card is too narrow for one row, as in a narrow window zoomed
-   in, the foot wraps: its chips and its presses each stand on a line of
-   their own, the presses kept at the right. */
-.new-task-composer :is(.ui-composer-foot-bar, .ui-composer-foot-tools) {
-  flex-wrap: wrap;
-  row-gap: var(--ui-control-gap);
+/* A narrow room's card, a phone's, stands its empty field two lines tall
+   rather than five, so Home's Inbox stays in view under it; it still grows
+   to the cap as the words are written. */
+:where(:root)[data-ui-room="narrow"] .new-task-composer .agent-composer-input {
+  min-height: calc(2 * var(--ui-type-body-leading) + var(--agent-composer-field-block));
 }
 
+/* The foot stands on one row however narrow the card: the Runs on chip and
+   the model chip draw their marks alone at the box's own steps
+   (`agent-composer.tsx`'s `FOLD_WIDTH`), and between them the model chip's
+   words give way, cut short, rather than the row wrapping. */
 .new-task-composer .agent-composer-actions {
   margin-left: auto;
 }
 
+/* Where the Runs on chip draws its glyph alone, the foot's left, the "+"
+   and that glyph, stands whole, so the model chip's words give way first. */
+/* off-scale: 520px, the card under which the Runs on chip draws its glyph alone (`agent-composer.tsx`'s `FOLD_WIDTH.PUBLISHED`) */
+@container composer (width < 520px) {
+  .new-task-composer .ui-composer-foot-tools {
+    flex-shrink: 0;
+  }
+}
+
 /* A card too narrow for its placeholder on one line, as on a phone, wraps
-   it, since its field stands five lines tall; the agent's one-line box cuts
-   its own short instead, which would otherwise run over its foot. */
+   it, since its field stands at least two lines tall; the agent's one-line
+   box cuts its own short instead, which would otherwise run over its foot. */
 @container composer (width < 480px) {
   .new-task-composer .agent-composer-placeholder {
     white-space: normal;
