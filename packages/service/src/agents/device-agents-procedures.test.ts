@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a member's sign-in is no device's and is refused as unauthenticated, a Mac enrolls on that sign-in, created where we never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of no release where it runs the published one and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a member's sign-in is no device's and is refused as unauthenticated, a Mac enrolls on that sign-in, created where we never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
  *
  * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
  */
@@ -60,8 +60,8 @@ const PATH = {
   PAIRING_DENY: "/api/hosts/pairing/deny",
 } as const;
 
-/** A daemon below the floor: the last host release before the one this service's wire was cut over to. */
-const OLD_VERSION = "0.8.0";
+/** A daemon below the floor. */
+const OLD_VERSION = "0.0.9";
 
 /** The deployment's environment, its key ring a throwaway of this file's. */
 const ENVIRONMENT: HostedEnvironmentValues = {
@@ -386,9 +386,17 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
-        assert.equal(ownBeat.status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(ownBeat.body.openLaunches, []);
+        const published = publishedRelease();
+
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent, and the release published, which a host at the floor is below.
+        assert.deepEqual(ownBeat, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            done: true,
+            openLaunches: [],
+            release: { version: published.VERSION, sha256: published.SHA256 },
+          },
+        });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],
