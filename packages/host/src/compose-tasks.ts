@@ -1536,9 +1536,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     pool: dependencies.pool,
     fetched: () => tokenRepositoriesFetched,
     tell: Effect.sync(() => tellTokenRepositories()),
-    answered: (workspaceId, repositories) => tokenRepositories.answered(workspaceId, repositories),
+    // Note that the workspace reaches other repositories once the service took the change, so its lists are woken with the answer, and only for the session it was asked in.
+    answered: (workspaceId, repositories) =>
+      Effect.andThen(
+        tokenRepositories.answered(workspaceId, repositories),
+        repositoriesMovedIn(new Set([workspaceId])),
+      ),
   });
-  /** A token repository added or removed, sent where the gate stands open; the workspace reaches other repositories once the service took it. */
+  /** A token repository added or removed, sent where the gate stands open. */
   const tokenRepositorySet = tokenRepositoryWritten.set<WireValue>(
     ({ workspaceId, repository, added }) =>
       gate()
@@ -1553,7 +1558,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 }),
               };
             }
-            yield* repositoriesMovedIn(new Set([workspaceId]));
             return {
               answer: carried<TasksWorkspaceTokenRepositoriesAnswer>({
                 repositories: changed.answer,

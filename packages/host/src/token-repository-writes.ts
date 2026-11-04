@@ -70,7 +70,7 @@ export interface TokenRepositoryWritesDependencies {
   readonly fetched: () => AppTokenRepositories;
   /** Tells the lists again, as `drawn` draws them now. */
   readonly tell: Effect.Effect<void>;
-  /** Lays the list the service answered as the workspace's, as the fetch's own answer would. */
+  /** Lays the list the service answered as the workspace's, as the fetch's own answer would, with whatever else the answer moves; only for the session the write was asked in. */
   readonly answered: (
     workspaceId: string,
     repositories: readonly WorkspaceTokenRepository[],

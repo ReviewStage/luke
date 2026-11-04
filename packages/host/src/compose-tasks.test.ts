@@ -2976,9 +2976,10 @@ it.effect("a rename still being written when the account signs out is drawn for 
     yield* settled;
     yield* Deferred.succeed(answered, undefined);
     yield* Fiber.join(renaming);
-    yield* Fiber.join(queued);
+    const unsent = yield* Fiber.join(queued);
     yield* settled;
 
+    assert.deepEqual(unsent, { failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     assert.deepEqual(
       service.reads.filter((read) => read.startsWith("rename:")),
