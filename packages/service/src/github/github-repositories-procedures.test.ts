@@ -405,7 +405,11 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ],
           addable: [],
           installations: [
-            { installationId: 7101, repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL },
+            {
+              installationId: 7101,
+              login: "octocat",
+              repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
+            },
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });

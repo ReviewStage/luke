@@ -318,11 +318,12 @@ interface GitHubInstallation {
   readonly suspended: boolean;
 }
 
-/** A workspace's repositories as its running installations list them, with each installation's repository selection, the first linked first. */
+/** A workspace's repositories as its running installations list them, with each installation's login as GitHub holds it now and its repository selection, the first linked first. */
 export interface WorkspaceListing {
   readonly repositories: readonly GitHubRepository[];
   readonly installations: readonly {
     readonly installationId: number;
+    readonly login?: string;
     readonly repositorySelection: GitHubRepositorySelection;
   }[];
 }
@@ -1625,6 +1626,7 @@ function githubAppService(
         repositories: combinedRepositories(listed.flat()),
         installations: live.map((one) => ({
           installationId: one.id,
+          ...(one.accountLogin === undefined ? {} : { login: one.accountLogin }),
           repositorySelection: one.repositorySelection,
         })),
       });

@@ -97,9 +97,11 @@ export const GITHUB_REPOSITORY_SELECTION = {
 export type GitHubRepositorySelection =
   (typeof GITHUB_REPOSITORY_SELECTION)[keyof typeof GITHUB_REPOSITORY_SELECTION];
 
-/** One installation a workspace's listing read: GitHub's id for it, and whether it was given all its account's repositories or a selection. */
+/** One installation a workspace's listing read: GitHub's id for it, the login of its account as GitHub holds it now, and whether it was given all its account's repositories or a selection. */
 const githubListedInstallationSchema = EffectSchema.Struct({
   installationId: EffectSchema.Number,
+  /** The account's login as GitHub answers it now, which a rename on GitHub moves before the workspace's stored one; absent for an account with none. */
+  login: EffectSchema.optionalKey(EffectSchema.String),
   repositorySelection: EffectSchema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
 });
 

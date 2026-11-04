@@ -51,9 +51,11 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * The repositories are the App's from the list the repository picker reads
  * for the workspace (`LIVE_READ.REPOSITORY_LISTS`), grouped by owner, which
  * GitHub spells as it pleases, so an account's are those whose owner is its
- * login in any case; and whether an installation was given all or a
- * selection is the listing's own (`installations`), which a service older
- * than it leaves out, and a line then says the count alone. The list is
+ * login in any case: the login the listing read from GitHub now
+ * (`installations`), since the store keeps an account's old one after a
+ * rename, else the stored one. Whether an installation was given all or a
+ * selection is the listing's too, which a service older than it leaves
+ * out, and a line then says the count alone. The list is
  * read only while an account stands active. While it is read each active
  * account's line says so, and a read that failed says so once under the
  * accounts with Retry, neither drawn as an account with none. Members read
@@ -109,13 +111,9 @@ function repositoriesByOwner(
   return byOwner;
 }
 
-/** What the listing says the installation was given, where it says. */
-function selectionOf(
-  answer: GitHubRepositoriesAnswer,
-  connection: ShownConnection,
-): GitHubRepositorySelection | undefined {
-  return answer.installations?.find((one) => one.installationId === connection.installationId)
-    ?.repositorySelection;
+/** What the listing read of the connection's installation, where it names it: its login now and what it was given. */
+function listedOf(answer: GitHubRepositoriesAnswer, connection: ShownConnection) {
+  return answer.installations?.find((one) => one.installationId === connection.installationId);
 }
 
 /** The account's picture on GitHub, a workspace's tile keyed by its login, so its letter stands until the picture loads and wherever it fails to. */
@@ -278,12 +276,15 @@ function ListedAccountRows({
         if (answer === undefined || byOwner === undefined || !connection.active) {
           return <AccountRow key={key} connection={connection} reading={reading} />;
         }
+        // Note that the login GitHub answers now wins, because the store keeps an account's old one after a rename on GitHub.
+        const listed = listedOf(answer, connection);
+        const owner = (listed?.login ?? connection.login).toLowerCase();
         return (
           <AccountFoldRow
             key={key}
             connection={connection}
-            repositories={byOwner.get(connection.login.toLowerCase()) ?? NONE}
-            selection={selectionOf(answer, connection)}
+            repositories={byOwner.get(owner) ?? NONE}
+            selection={listed?.repositorySelection}
           />
         );
       })}

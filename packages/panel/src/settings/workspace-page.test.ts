@@ -1660,12 +1660,16 @@ test("an active account counts the App's repositories whose owner is its login i
   assert.equal(labs.querySelector("button"), null);
 });
 
-test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected, and one the service says nothing of says the count alone", async () => {
+test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected under the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
   const shown = Array.from({ length: 8 }, (_, at) => `acme-org/r${at + 1}`);
-  githubRepositories = [...shown, "acme-labs/one", "acme-tools/a", "acme-tools/b"];
+  githubRepositories = [...shown, "acme-labs-renamed/one", "acme-tools/a", "acme-tools/b"];
   listedInstallations = [
     { installationId: 11, repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL },
-    { installationId: 12, repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED },
+    {
+      installationId: 12,
+      login: "acme-labs-renamed",
+      repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+    },
   ];
   const { page } = await mount({
     ...CONNECTED,
