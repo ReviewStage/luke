@@ -50,9 +50,9 @@ import {
   type SettingsStoreOptions,
   type StoredAccount,
 } from "./settings-store.js";
+import { TEST_CIPHER_PREFIX, testCipher } from "./testing/test-cipher.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
-const CIPHER_PREFIX = "sealed:";
 
 /** The account every test that needs one signs in, tokens and display identity together. */
 const TEST_ACCOUNT = {
@@ -63,22 +63,9 @@ const TEST_ACCOUNT = {
   provider: "github",
 } as const satisfies StoredAccount;
 
-/** Stands in for Electron's Keychain-backed `safeStorage`. */
-function testCipher(available = true): SecretCipher {
-  return {
-    isAvailable: () => available,
-    encrypt: (plainText) => new TextEncoder().encode(`${CIPHER_PREFIX}${plainText}`),
-    decrypt: (cipherText) => {
-      const value = new TextDecoder().decode(cipherText);
-      if (!value.startsWith(CIPHER_PREFIX)) throw new Error("Unreadable ciphertext");
-      return value.slice(CIPHER_PREFIX.length);
-    },
-  };
-}
-
 /** Text sealed by `testCipher` as an earlier build kept it at rest: Node's standard base64 of the cipher's bytes. */
 function sealed(plainText: string): string {
-  return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
+  return Buffer.from(`${TEST_CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
 
 /** The file system every store this suite opens reads and writes through. */
