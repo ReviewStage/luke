@@ -267,6 +267,18 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed for a
+   * window from now until it is let go, over the service's held poll, and a
+   * while after among those let go lately. What it holds is heard as
+   * `AGENT_ORIGINS_CHANGED` events, on the app state every window draws,
+   * never answered.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** One agent's origin let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
+  /** One agent's held origin read again at once, as Try again asks; never answered. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
@@ -621,6 +633,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
+  /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

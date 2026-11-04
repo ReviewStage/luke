@@ -26,6 +26,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { listedAgent } from "../testing/tasks-control.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -297,7 +298,7 @@ test("an archived agent's chip, which no task's row names, wears the harness the
       ...STATE,
       tasks: {
         ...STATE.tasks,
-        taskAgents: [archivedAgent(onTask, TASK_ID, "openai/gpt-6.1-sol")],
+        taskAgents: [listedAgent(archivedAgent(onTask, TASK_ID, "openai/gpt-6.1-sol"))],
         tasklessAgents: [
           ...(STATE.tasks.tasklessAgents ?? []),
           {

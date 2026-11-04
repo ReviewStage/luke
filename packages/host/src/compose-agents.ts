@@ -38,7 +38,6 @@ import {
   type AgentServersParams,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
-  ARCHIVE_DRAWN,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
   agentDefaultWriteParamsSchema,
@@ -130,6 +129,7 @@ import {
   declaredMethod,
   type EntityPool,
   type FieldChange,
+  ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
 import type { WireRecord, WireValue } from "@repo/wire";
@@ -149,6 +149,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
 import {
+  type AppAgentOrigins,
   type AppChapters,
   type AppDevicePresence,
   type AppDevicePresences,
@@ -186,6 +187,7 @@ import {
   keptOfAgent,
 } from "./kept-content.js";
 import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
+import { heldAgentOrigins } from "./origin-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -240,6 +242,7 @@ import type { WindowFocus } from "./window-focus.js";
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
+  | "agentOriginLive"
   | "generateChapters"
   | "readChaptersModel"
   | "writeChaptersModel"
@@ -323,8 +326,7 @@ export interface AgentsDependencies {
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every agent's row (`TasksComposer.listed`), so a
-   * Start, or an archive a dialog waits on, is answered once the list
-   * carries it; none waits for nothing.
+   * Start is answered once the list carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
   /**
@@ -454,6 +456,14 @@ export function composeAgents(
       tell: (held: AppChapters) =>
         dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
     });
+    const origins = yield* heldAgentOrigins({
+      seal: (agentId, poll, userId, after) =>
+        asked(client.agentOriginLive(agentId, userId, poll, after)),
+      accountId: dependencies.accountId,
+      gate,
+      tell: (held: AppAgentOrigins) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.AGENT_ORIGINS_CHANGED, carried(held)),
+    });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
       () => (gate() ? dependencies.accountId() : undefined),
@@ -472,6 +482,7 @@ export function composeAgents(
       );
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const chapterHolds = yield* FiberMap.make<ChaptersKey>();
+    const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
     return composed(
@@ -482,6 +493,7 @@ export function composeAgents(
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
       { chapters, holds: chapterHolds },
+      { origins, holds: originHolds },
       fetched,
     );
   });
@@ -519,6 +531,12 @@ interface SessionReads {
 interface ChapterFollows {
   readonly chapters: HeldSlice<ChaptersKey>;
   readonly holds: FiberMap.FiberMap<ChaptersKey>;
+}
+
+/** The held lifetime over every agent's origin the windows hold, and the windows' holds, one fiber per agent held. */
+interface OriginFollows {
+  readonly origins: HeldSlice<string>;
+  readonly holds: FiberMap.FiberMap<string>;
 }
 
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
@@ -641,6 +659,8 @@ function composed(
   { reads: sessionReads, followItems }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
+  /** The agents' origins the windows hold. */
+  { origins, holds: originHolds }: OriginFollows,
   { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
@@ -695,14 +715,12 @@ function composed(
   );
   /**
    * An archive, drawn on the agent's row at once, stamped now by the member,
-   * unless a dialog that asked waits on the answer, which then draws nothing
-   * and comes once the list carries it. Note that an agent archived lets go
-   * of what this host held of its transcript and its workers', and of their
-   * content kept.
+   * a dialog's that asked first among them. Note that an agent archived
+   * lets go of what this host held of its transcript and its workers', and
+   * of their content kept.
    */
   const archived = agentWrite<AgentArchiveParams>(
-    ({ drawn, archived: archive }) => {
-      if (drawn === ARCHIVE_DRAWN.ON_ANSWER) return () => ({});
+    ({ archived: archive }) => {
       const archiver = reader();
       const at = kernel.now();
       return () =>
@@ -717,19 +735,39 @@ function composed(
             }
           : { archivedAt: null, archivedBy: null, archiverName: null };
     },
-    ({ agentId, drawn, ...request }) =>
+    ({ agentId, ...request }) =>
       Effect.tap(asked(client.archive(agentId, request)), (answer) =>
         "agent" in answer
           ? Effect.andThen(
-              Effect.andThen(
-                held.forget((key) => key.agentId === agentId),
-                kept.forget(keptOfAgent(agentId)),
-              ),
-              drawn === ARCHIVE_DRAWN.ON_ANSWER ? listed(answer.txid) : Effect.void,
+              held.forget((key) => key.agentId === agentId),
+              kept.forget(keptOfAgent(agentId)),
             )
           : Effect.void,
       ),
   );
+  /**
+   * An agent deleted once its question was answered, drawn gone from the
+   * list at once and kept once the list carries it; a refusal puts it back.
+   * Note that an agent deleted lets go of its content kept, and its
+   * workers'.
+   */
+  const deleted: WriteDeclaration<
+    AgentRow,
+    FieldChange<AgentRow>,
+    { readonly agentId: string },
+    WireValue
+  > = {
+    kind: AGENT,
+    keys: ({ agentId }) => [agentId],
+    change: () => () => ROW_GONE,
+    send: ({ agentId }) =>
+      Effect.gen(function* () {
+        const answer = yield* asked(client.delete(agentId));
+        if (!("deleted" in answer)) return { refused: carried<AgentDeleteAnswerView>(answer) };
+        yield* kept.forget(keptOfAgent(agentId));
+        return { answer: carried<AgentDeleteAnswerView>(answer), txid: answer.txid };
+      }),
+  };
   /** A pin, drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it. */
   const pinned = agentWrite<AgentPinParams>(
     (request) => (row) =>
@@ -1176,19 +1214,12 @@ function composed(
         const answer = yield* asked(client.rewind(agentId, messageId));
         return carried<AgentAgentAnswer>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_DELETE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentStopParamsSchema,
-          params,
-          "deleting an agent names one agent",
-        );
-        const answer = yield* asked(client.delete(agentId));
-        // Note that an agent deleted lets go of its content kept, and its workers'.
-        if ("deleted" in answer) yield* kept.forget(keptOfAgent(agentId));
-        if ("txid" in answer) yield* listed(answer.txid);
-        return carried<AgentDeleteAnswerView>(answer);
-      }),
+    [GATEWAY_METHOD.AGENTS_DELETE]: declaredMethod(
+      dependencies.pool,
+      deleted,
+      (params: WireRecord) =>
+        readParams(agentStopParamsSchema, params, "deleting an agent names one agent"),
+    ),
     [GATEWAY_METHOD.AGENTS_PAGE]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
@@ -1198,6 +1229,42 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<AgentPageAnswerView>(answer);
+      }),
+    // An agent's origin is held for a window while its page shows it, and told only on the app state (`AGENT_ORIGINS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "following the run that started an agent names one agent",
+        );
+        yield* FiberMap.run(
+          originHolds,
+          agentId,
+          Effect.scoped(Effect.andThen(origins.hold(agentId), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "letting the run that started an agent go names one agent",
+        );
+        yield* FiberMap.remove(originHolds, agentId);
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_ORIGIN_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "reading the run that started an agent again names one agent",
+        );
+        yield* origins.retry(agentId);
+        return {};
       }),
     [GATEWAY_METHOD.AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
@@ -1564,6 +1631,7 @@ function composed(
     yield* FiberMap.clear(followed);
     yield* holders.end;
     yield* chapters.end;
+    yield* origins.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
@@ -1581,6 +1649,7 @@ function composed(
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
     yield* chapters.open;
+    yield* origins.open;
     yield* presenceHold.open;
     yield* keysHold.open;
     yield* tools.open;

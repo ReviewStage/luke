@@ -121,6 +121,7 @@ import {
 } from "./task-card.js";
 import { taskSubject, useStandingDoor } from "./task-row-parts.js";
 import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
+import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
  * task-actions.tsx -- one task's menu, built once (`taskActionGroups`) for the two surfaces that offer it: the Plan tab, which shows the task, from the ⋯ in the side panel's bar and the tab's right-click, and a row of the task, in the sidebar, the Tasks list, the Board, and the Recent list, from its ⋯, a right-click, and the menu key.
@@ -744,9 +745,14 @@ export function useTaskMenuItems(
   const opened = openedAs(doors.opened, taskId);
   const task = rowTaskOf(tasks.tasksNow(), opened, taskId);
   const markRead = useReadMark();
+  // Note that a delete asked is drawn at once, which may take the row the question stands on with it.
+  const heard = useRefusalHeard(task !== undefined && tasks.shown, {
+    surface: FAILURE_SURFACE.TASK_DELETE,
+    about: { taskId },
+  });
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
-    () => tasks.onDeleteTask(taskId),
+    () => tasks.onDeleteTask(taskId).then(heard),
     confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.

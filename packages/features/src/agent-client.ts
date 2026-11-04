@@ -11,6 +11,7 @@ import {
 } from "./account-call.js";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
+import type { AgentOriginLiveAnswer } from "./agent-origin-live.js";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
@@ -1298,6 +1299,30 @@ export class HostedAgentClient {
     const read = { id: agentId, number: String(number), [LIVE_USER_QUERY]: userId };
     return Effect.catchIf(
       askLive(this.#hosted.live.pullRequestChapters, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
+  /**
+   * The run of an automation that started one agent, sealed for following,
+   * on the terms an agent's inbox is: the agent's page holds it while it
+   * stands rather than reading the agent whole.
+   */
+  agentOriginLive(
+    agentId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AgentOriginLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.agentOrigin, read, poll, after),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

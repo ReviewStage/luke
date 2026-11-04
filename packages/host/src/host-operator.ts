@@ -373,6 +373,7 @@ import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Resu
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
+  AppAgentOrigins,
   AppAutomationReads,
   AppBrowserTabs,
   AppChapters,
@@ -733,6 +734,14 @@ export interface HostOperator {
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
+  /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
+  agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
+  /** One agent's origin let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
+  /** One agent's held origin read again at once, as Try again asks. */
+  agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
+  /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
+  onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
   /** An automation made; the automation as the service kept it, or why it was not made. */
   automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
   /** One automation changed; the automation as it then stands, or why it is unchanged. */
@@ -1942,6 +1951,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    agentOriginFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, { agentId: params.agentId })),
+    agentOriginUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, { agentId: params.agentId })),
+    agentOriginRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_RETRY, { agentId: params.agentId })),
+    onAgentOriginsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AGENT_ORIGINS_CHANGED,
+        // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held chapters are.
+        (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
+        listener,
       ),
     automationCreate: (params) =>
       Effect.map(

@@ -13,6 +13,7 @@ import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effec
 import {
   type AppState,
   NO_ACCESS,
+  NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
   NO_HOLDER_INBOXES,
@@ -232,6 +233,7 @@ export function initialAppState(
     tasks: IDLE_TASKS_VIEW,
     agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
+    [LIVE_READ.AGENT_ORIGINS]: NO_AGENT_ORIGINS,
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,

@@ -4,6 +4,7 @@ import {
   type AgentTranscriptKey,
   type AgentTranscriptPage,
 } from "@repo/features/agent-view";
+import type { AgentSummary, ListedAgent } from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import type {
@@ -28,6 +29,21 @@ import {
 } from "../tasks/use-tasks-tab.js";
 
 const ignore = () => undefined;
+
+/** The workspace an agent the task list carries stands in where a test names none. */
+const LISTED_WORKSPACE_ID = "workspace-listed";
+
+/** An agent as the task list carries it: with the workspace and repository its own row names, a test's own where given, else one workspace and no repository. */
+export function listedAgent(
+  agent: AgentSummary,
+  place: Partial<Pick<ListedAgent, "workspaceId" | "repository">> = {},
+): ListedAgent {
+  return {
+    ...agent,
+    workspaceId: place.workspaceId ?? LISTED_WORKSPACE_ID,
+    repository: place.repository ?? null,
+  };
+}
 
 /** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
 /** A page as the host pushes it: caught up where it came back with nothing on it, unless it says otherwise. */

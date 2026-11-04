@@ -197,9 +197,10 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * keys, by the account, which the window holds while signed in and
  * Settings › Agents draws; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
- * automations, one workspace's runs, or one automation's runs, by its id; and one plan's comments, or one
- * page's, which the open task's plan and a page's tab each hold. Pages and
- * Browser tabs offer no Try again, because the host reads those that did
+ * automations, one workspace's runs, or one automation's runs, by its id;
+ * one plan's comments, or one page's, which the open task's plan and a
+ * page's tab each hold; and the run that started one agent, which its page
+ * holds. Pages and Browser tabs offer no Try again, because the host reads those that did
  * not answer again on its own, and those it was refused, a plan's or an
  * agent's the reader cannot reach, stand failed until every surface lets
  * them go and one holds them anew (`@repo/host`'s `live-push.ts`). The
@@ -208,6 +209,12 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * online (`device-presence.ts`), never to a press.
  */
 const HOST_READS = {
+  [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
+    slice: APP_SLICE.AGENT_ORIGINS,
+    path: (agentId: string) => [agentId],
+    hold: (agentId) => askAct(ACT_KIND.AGENTS_ORIGIN_FOLLOW, { agentId }),
+    retry: (agentId) => tellAct(ACT_KIND.AGENTS_ORIGIN_RETRY, { agentId }),
+  }),
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
     slice: APP_SLICE.INBOX_ITEMS,
     path: undefined,

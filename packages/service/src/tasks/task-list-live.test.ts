@@ -48,6 +48,7 @@ import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
+  type ListedAgent,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import {
@@ -207,6 +208,10 @@ const liveRowsOf = (userId: string) =>
       agents: yield* runLive(statements.agents),
     });
   });
+
+/** An agent on a plan as the plan's own list names it, the workspace and repository the live list keeps beside it left out. */
+const summaryOf = ({ workspaceId: _workspaceId, repository: _repository, ...agent }: ListedAgent) =>
+  agent;
 
 /** The list as the desktop builds it from the live rows, at `now`. */
 const liveListOf = (userId: string, now: number) =>
@@ -522,7 +527,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           return { ...agent, mac };
         };
         for (const reader of [owner, teammate]) {
-          const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(reader), NOW);
+          const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(reader), NOW).map(summaryOf);
           assert.deepEqual(
             byId(taskAgents),
             byId(
@@ -682,7 +687,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         );
         const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
         assert.deepEqual(
-          taskAgents.filter((agent) => agent.planId === plan.id),
+          taskAgents.filter((agent) => agent.planId === plan.id).map(summaryOf),
           yield* heldTaskAgentsOf(owner, plan.id, NOW),
         );
         const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);

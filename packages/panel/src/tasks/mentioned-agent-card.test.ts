@@ -31,6 +31,7 @@ import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { listedAgent } from "../testing/tasks-control.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MentionedAgents } from "./mentioned-place.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -191,7 +192,7 @@ const LISTED_STATE: AppStateSnapshot = {
         },
       },
     ],
-    taskAgents: [PRORATE],
+    taskAgents: [listedAgent(PRORATE)],
     tasklessAgents: [
       {
         ...SWEEPER,

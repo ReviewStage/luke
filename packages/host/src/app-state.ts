@@ -6,6 +6,7 @@ import {
   type BrowserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { AgentOrigin } from "@repo/features/agent-wire";
 import type {
   AutomationRunSummary,
   AutomationSummary,
@@ -276,6 +277,19 @@ export interface AppHostRead<Rows> {
 /** A read that has not answered yet, as every read stands as a session opens. */
 export const UNREAD: AppHostRead<never> = {};
 
+/** The run of an automation that started one agent, as the host's read of it stands: null for an agent no run started, once it answered. */
+type AppAgentOrigin = AppHostRead<AgentOrigin | null>;
+
+/**
+ * Each agent's origin the host holds for the windows (`compose-agents.ts`):
+ * those an agent's page chose, and the few let go lately, by the agent's
+ * id, each as its own read stands. One absent is held by nobody.
+ */
+export type AppAgentOrigins = Readonly<Record<string, AppAgentOrigin>>;
+
+/** No origin held, as the host stands before any window shows an agent's page and after the session ends. */
+export const NO_AGENT_ORIGINS: AppAgentOrigins = {};
+
 /** One value for each holder of inbox items, a plan or an agent, by its kind and then its id, never by a key built from both. */
 type ByInboxHolder<Value> = {
   readonly [Kind in InboxHolderKind]: Readonly<Record<string, Value>>;
@@ -448,6 +462,7 @@ export const NO_PLAN_COMMENTS: AppPlanComments = {
 
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
+  [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
@@ -548,6 +563,8 @@ export interface AppState {
   tasks: TasksView;
   agents: AppAgentsSlice;
   inbox: AppInboxSlice;
+  /** Each agent's origin the windows chose, held while an agent's page holds it and a while after: the run its page says started it. */
+  [LIVE_READ.AGENT_ORIGINS]: AppAgentOrigins;
   /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
@@ -683,6 +700,7 @@ interface HostReadSliceEntry {
  * crosses only where it moved.
  */
 export const HOST_READ_SLICE = {
+  [LIVE_READ.AGENT_ORIGINS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INBOX_ITEMS]: {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.ROWS,

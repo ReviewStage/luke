@@ -70,6 +70,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handState, holdPages, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
@@ -2622,7 +2623,7 @@ function listed(): TasksView["tasks"][number] {
 
 /** The task listed and open, its agents as the list followed live carries them. */
 function withAgents(agents: readonly AgentSummary[]): TasksView {
-  return { ...OPEN, tasks: [listed()], taskAgents: agents };
+  return { ...OPEN, tasks: [listed()], taskAgents: agents.map((agent) => listedAgent(agent)) };
 }
 
 /** The view once the list is read with nothing open, holding `plans`. */
@@ -2860,7 +2861,7 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
       .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
-  const live = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const live = { ...listRead([listed()]), taskAgents: [listedAgent(RUNNING_AGENT)] };
   const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
   /** A launch over the kept pin, the service answering its pin as `answer` does. */
   const launch = async (
@@ -3305,7 +3306,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
           tasks: {
             ...AGENT_TASK,
             tasks: [{ ...listed(), id: OTHER_TASK_ID }],
-            taskAgents: [started],
+            taskAgents: [listedAgent(started)],
           },
         });
         return Promise.resolve({ agent: started });
