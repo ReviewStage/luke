@@ -175,8 +175,14 @@
   --ui-dialog-drop-shadow:
     0 0 0 2px color-mix(in srgb, var(--ui-color-accent) 70%, transparent),
     0 24px 64px var(--ui-color-shadow-deep);
-  /* The room a dialog's card may stand in: the window seen, less its margins. */
-  --ui-dialog-room: calc(var(--ui-stage-height) - 2 * var(--ui-space-24));
+  /* The room a dialog's card may stand in: the window seen, less its margins,
+     each the wider of a card's margin and a phone's safe-area inset there
+     (`../shadcn/dialog.tsx`'s room margin). */
+  --ui-dialog-room: calc(
+    var(--ui-stage-height) -
+    max(var(--ui-space-24), env(safe-area-inset-top, 0px)) -
+    max(var(--ui-space-24), env(safe-area-inset-bottom, 0px) - var(--ui-keyboard-inset))
+  );
   /* ⌘K's card: the chrome around its list is a field, a filter band and a
      foot, the list's own padding, a group's heading and the three hairlines
      between them; the list keeps three rows beside that however short the
@@ -433,8 +439,14 @@
   --ui-dialog-drop-shadow:
     0 0 0 2px color-mix(in srgb, var(--ui-color-accent) 70%, transparent),
     0 24px 64px var(--ui-color-shadow-deep);
-  /* The room a dialog's card may stand in: the window seen, less its margins. */
-  --ui-dialog-room: calc(var(--ui-stage-height) - 2 * var(--ui-space-24));
+  /* The room a dialog's card may stand in: the window seen, less its margins,
+     each the wider of a card's margin and a phone's safe-area inset there
+     (`../shadcn/dialog.tsx`'s room margin). */
+  --ui-dialog-room: calc(
+    var(--ui-stage-height) -
+    max(var(--ui-space-24), env(safe-area-inset-top, 0px)) -
+    max(var(--ui-space-24), env(safe-area-inset-bottom, 0px) - var(--ui-keyboard-inset))
+  );
   /* ⌘K's card: the chrome around its list is a field, a filter band and a
      foot, the list's own padding, a group's heading and the three hairlines
      between them; the list keeps three rows beside that however short the
