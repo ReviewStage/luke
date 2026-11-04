@@ -160,6 +160,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       const signedIn = account.session.snapshot();
       return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
     };
+    /** The account signed in now as a member is named, by its id and its name, or its email where it names itself none. */
+    const member = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined
+        ? { userId: signedIn.id, name: signedIn.name ?? signedIn.email }
+        : undefined;
+    };
     /** Content read under a key it never changes under, kept in this process for the account signed in until the agents' reset lets it go at a sign-out. */
     const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
     /** A window coming forward, raised by the workspaces' refresh it already sends and heard by every read the host asks again on focus. */
@@ -171,6 +178,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         kernel,
         account,
         accountId,
+        member,
         kept,
         focus,
         pool,
