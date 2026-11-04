@@ -2,9 +2,6 @@ import type { ExperimentChoices, HostCapability } from "@repo/settings";
 import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   APP_SHORTCUTS,
-  CHAPTERS_GROUP_TITLE,
-  CHAPTERS_KEYS,
-  CHAPTERS_SHORTCUTS,
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
@@ -63,7 +60,7 @@ const RUN_DASH = "–";
  * over selected words and the `@` list's keys. Files changed's
  * own keys follow under a group of their own, read from the
  * table the view's handler answers to (`changes-list.tsx`), the order its
- * `?` sheet lists them in, and Chapters' after them (`agent-chapters-tab.tsx`).
+ * `?` sheet lists them in.
  */
 export function WindowShortcutSections({
   experiments,
@@ -114,15 +111,6 @@ export function WindowShortcutSections({
               label={FILES_CHANGED_SHORTCUTS[key].label}
             >
               {() => <Shortcut value chord={FILES_CHANGED_SHORTCUTS[key].chord} spoken />}
-            </SettingsRow>
-          </div>
-        ))}
-      </SettingsSection>
-      <SettingsSection title={CHAPTERS_GROUP_TITLE}>
-        {CHAPTERS_KEYS.map((key) => (
-          <div key={key} {...searchAnchorProps(key)}>
-            <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={CHAPTERS_SHORTCUTS[key].label}>
-              {() => <Shortcut value chord={CHAPTERS_SHORTCUTS[key].chord} spoken />}
             </SettingsRow>
           </div>
         ))}

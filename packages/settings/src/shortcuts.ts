@@ -1034,45 +1034,6 @@ export const FILES_CHANGED_KEYS_LISTED: readonly FilesChangedKey[] =
 /** Every one of Files changed's keys, in the order the table declares them. */
 export const FILES_CHANGED_KEYS: readonly FilesChangedKey[] = Object.values(FILES_CHANGED_KEY);
 
-/**
- * What a key does in Chapters, the Pull request tab's view of its chapters,
- * as ReviewStage's chapter navigator answers them: ← and → step to the
- * previous and the next chapter, and ⇧V marks every file of the chapter
- * viewed, or unmarks them all. They answer only where the press lands inside
- * the view and is not typing (`agent-chapters-tab.tsx` in `@repo/panel`),
- * past the chapter's own Files changed list, whose keys come first and none
- * of which these share, so none is an app command.
- */
-export const CHAPTERS_KEY = {
-  PREVIOUS_CHAPTER: "chapters-previous-chapter",
-  NEXT_CHAPTER: "chapters-next-chapter",
-  MARK_CHAPTER_VIEWED: "chapters-mark-chapter-viewed",
-} as const;
-
-export type ChaptersKey = (typeof CHAPTERS_KEY)[keyof typeof CHAPTERS_KEY];
-
-/** Chapters' keys: the one table the view's handler matches a press against, and the Keyboard shortcuts page lists, in this order. */
-export const CHAPTERS_SHORTCUTS = {
-  [CHAPTERS_KEY.PREVIOUS_CHAPTER]: {
-    label: "Previous chapter",
-    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
-  },
-  [CHAPTERS_KEY.NEXT_CHAPTER]: {
-    label: "Next chapter",
-    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
-  },
-  [CHAPTERS_KEY.MARK_CHAPTER_VIEWED]: {
-    label: "Toggle chapter viewed",
-    chord: { key: SHORTCUT_KEY.V, plain: true, shift: true },
-  },
-} as const satisfies Record<ChaptersKey, FilesChangedShortcut>;
-
-/** The Keyboard shortcuts page's group of Chapters' keys, and its settings search's words for them. */
-export const CHAPTERS_GROUP_TITLE = "Chapters";
-
-/** Every one of Chapters' keys, in the order the table declares them, which the Keyboard shortcuts page lists. */
-export const CHAPTERS_KEYS: readonly ChaptersKey[] = Object.values(CHAPTERS_KEY);
-
 /** A mark laid on words as they are written: what the selection toolbar and every box's chords toggle. */
 export const WRITING_MARK = {
   BOLD: "writing-bold",
@@ -1455,11 +1416,6 @@ export function filesChangedKeyFor(event: ShortcutKeyPress): FilesChangedKey | u
   return FILES_CHANGED_KEYS.find((key) =>
     shortcutMatches(FILES_CHANGED_SHORTCUTS[key].chord, event),
   );
-}
-
-/** The Chapters key whose chord a key press is, or nothing. */
-export function chaptersKeyFor(event: ShortcutKeyPress): ChaptersKey | undefined {
-  return CHAPTERS_KEYS.find((key) => shortcutMatches(CHAPTERS_SHORTCUTS[key].chord, event));
 }
 
 /** Whether the keymap leaves the chord to the window's own Escape, which steps back a layer at a time. */

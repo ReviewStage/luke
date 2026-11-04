@@ -27,7 +27,6 @@ import { mcpClientsContract } from "./mcp-clients.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 import { planCommentsContract } from "./plan-comments.js";
-import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { pullRequestsContract } from "./pull-requests.js";
 import { repositoryPinsContract } from "./repository-pins.js";
 import { taskFilesContract } from "./task-files.js";
@@ -71,7 +70,6 @@ export const hostedContract = {
   models: modelsContract,
   planComments: planCommentsContract,
   plans: tasksContract,
-  pullRequestChapters: pullRequestChaptersContract,
   pullRequests: pullRequestsContract,
   repositoryPins: repositoryPinsContract,
   taskFiles: taskFilesContract,

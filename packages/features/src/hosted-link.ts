@@ -80,7 +80,6 @@ export const HOSTED_DEADLINE = {
   HELD: "held",
   STEER: "steer",
   START: "start",
-  CHAPTERS: "chapters",
   BROWSER_OPEN: "browser-open",
 } as const;
 
@@ -93,9 +92,7 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * wait for the conversation's lock (five seconds) and its hand-over to eve
  * under it (thirty, `@repo/database/models/writer`'s bounds) with room for
  * the reads before them, so a send that lands slowly is never read as one
- * that did not answer, a Start's outlasts the copy, and a
- * Generate of a pull request's chapters outlasts the function it runs in
- * (`@repo/service/chapters/chapters-function`'s 240 seconds), and a Browser
+ * that did not answer, a Start's outlasts the copy, and a Browser
  * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
  * and its bridge's bound (twenty seconds, `agent-browser.ts`).
  */
@@ -103,7 +100,6 @@ const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
   [HOSTED_DEADLINE.STEER]: 45_000,
   [HOSTED_DEADLINE.START]: 120_000,
-  [HOSTED_DEADLINE.CHAPTERS]: 250_000,
   [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 

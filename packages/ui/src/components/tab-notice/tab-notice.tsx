@@ -5,9 +5,8 @@ import type { ReactNode } from "react";
  *
  * A tab says here what the reader must know before reading what it shows:
  * why the file is not drawn, over the lines that were shown of it; that a
- * filter narrows the list under it, with the press that clears it; that
- * chapters were made for an older head, with Regenerate; that a long list
- * leaves files out. The words are a paragraph that takes the line, and what
+ * filter narrows the list under it, with the press that clears it; that a
+ * long list leaves files out. The words are a paragraph that takes the line, and what
  * may be done about them stands at its end, a control's gap after them, in
  * the caption role and the muted ink, ruled off from what stands under it.
  * Inside a code card, whose own frame closes it, it draws no rule of its own.

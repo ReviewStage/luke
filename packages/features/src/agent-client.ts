@@ -80,7 +80,6 @@ import {
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
-import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
@@ -149,12 +148,6 @@ import {
   providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
-import type { PullRequestChaptersLiveAnswer } from "./pull-request-chapters-live.js";
-import {
-  type ChaptersModelAnswerView,
-  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
-  type PullRequestChaptersAnswerView,
-} from "./pull-request-chapters-view.js";
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
@@ -310,39 +303,6 @@ function pairingAnswer<Answer>(
   });
 }
 
-/** The chapters failures a refusal may stand for, by the service's own word for each. */
-type ChaptersRefusals = Readonly<
-  Partial<
-    Record<
-      HostedApiError,
-      (typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE)[keyof typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE]
-    >
-  >
->;
-
-/** The refusals a read or a Generate of a pull request's chapters can answer with. */
-const CHAPTERS_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]:
-    PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.UNAVAILABLE]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE,
-} satisfies ChaptersRefusals;
-
-/** A chapters procedure's answer, or the refusal it failed with where it is one the tab acts on; unanswered for everything else. */
-function chaptersAnswer(
-  asked: Effect.Effect<PullRequestChaptersAnswerView, HostedFailure, HttpClient.HttpClient>,
-  named: ChaptersRefusals = CHAPTERS_REFUSALS,
-): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) =>
-    Effect.succeed({
-      failure:
-        (failed._tag === "HostedRefused" ? named[failed.refusal] : undefined) ??
-        PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-    }),
-  );
-}
-
 /**
  * The refusal a refused answer carries, where it is one the caller names;
  * unanswered otherwise. A repository out of reach carries why where the
@@ -468,27 +428,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAns
   return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
-/** The chapters model as nothing the window can show: the call never answered, or answered no model this build offers. */
-const CHAPTERS_MODEL_UNANSWERED = {
-  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-} as const;
-
-/** The chapters model a write left off the preferences snapshot, with the transaction it committed in, or unanswered where it carries none this build offers. */
-function chaptersModelAnswerOf(
-  asked: Effect.Effect<AccountPreferencesAnswerWire, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-  return Effect.match(asked, {
-    onFailure: () => CHAPTERS_MODEL_UNANSWERED,
-    onSuccess: (read) => {
-      const model = Option.getOrUndefined(
-        Schema.decodeUnknownOption(chaptersModelSchema)(read.chaptersModel),
-      );
-      if (model === undefined) return CHAPTERS_MODEL_UNANSWERED;
-      return read.txid === undefined ? { model } : { model, txid: read.txid };
-    },
-  });
-}
-
 /**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
@@ -577,8 +516,8 @@ export class HostedAgentClient {
   }
 
   /**
-   * The account's preferences row, its default agent, chapters model, and
-   * Slack notifications as stored, sealed for following, or with its row
+   * The account's preferences row, its default agent and Slack
+   * notifications as stored, sealed for following, or with its row
    * inline where `poll` asks for it; signed out where the session is
    * another account's, or why not.
    */
@@ -609,15 +548,6 @@ export class HostedAgentClient {
     return Effect.map(
       hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),
       defaultOf,
-    );
-  }
-
-  /** The account's chapters model written on its own, answering it as kept with the transaction it committed in. */
-  writeChaptersModel(
-    model: ChaptersModelId,
-  ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-    return chaptersModelAnswerOf(
-      askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
     );
   }
 
@@ -1188,23 +1118,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent's pull request's chapters generated for its head now, or the generation already under way, answered as a read of them is; held for as long as a generation may take. */
-  generateChapters(
-    agentId: string,
-    number?: number,
-  ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
-    return chaptersAnswer(
-      askHosted(
-        this.#hosted.pullRequestChapters.generate,
-        {
-          params: { id: agentId },
-          ...(number === undefined ? undefined : { query: { number: String(number) } }),
-        },
-        HOSTED_DEADLINE.CHAPTERS,
-      ),
-    );
-  }
-
   /** The checks on one agent's pull request's head as GitHub holds them now. */
   overviewChecks(
     agentId: string,
@@ -1340,32 +1253,6 @@ export class HostedAgentClient {
     const read = { id: agentId, [LIVE_USER_QUERY]: userId };
     return Effect.catchIf(
       askLive(this.#hosted.live.agentInbox, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * One agent's pull request's newest chapters sealed for following, by the
-   * number the tab's own read of the pull request found, with whether the
-   * reader can generate them beside the statement, on the terms an agent's
-   * inbox is.
-   */
-  pullRequestChaptersLive(
-    agentId: string,
-    number: number,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    PullRequestChaptersLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { id: agentId, number: String(number), [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.pullRequestChapters, read, poll, after),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

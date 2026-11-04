@@ -75,7 +75,7 @@ import {
  * closes, and it is kept nowhere, so a launch opens none. An agent's Pull request tab, kept as
  * `changes` for the tab that once showed its files alone, opened from the
  * pull request's chip at its tab's foot, the "+", the
- * task's summary, or ⌘K, shows the pull request's conversation, its checks, its chapters,
+ * task's summary, or ⌘K, shows the pull request's conversation, its checks,
  * or its files (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
  * window's life and kept nowhere, and is
  * the one kind besides the fixed three kept as they are: one per agent,
@@ -260,11 +260,10 @@ export interface OpenFile {
 /** A file a File tab showed, as its history holds it to show again. */
 type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "reads" | "commit">;
 
-/** Which of an agent's Pull request tab's tabs it shows under its fixed header: the description and conversation, the checks, the chapters, or the changed files. */
+/** Which of an agent's Pull request tab's tabs it shows under its fixed header: the description and conversation, the checks, or the changed files. */
 export const PULL_REQUEST_VIEW = {
   CONVERSATION: "conversation",
   CHECKS: "checks",
-  CHAPTERS: "chapters",
   FILES: "files",
 } as const;
 

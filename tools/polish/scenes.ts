@@ -357,7 +357,6 @@ export const SCENES: readonly Scene[] = [
   },
   { id: "agent-checks", place: PLACE.AGENT, title: "Checks", profile: "agent-checks" },
   { id: "agent-files", place: PLACE.AGENT, title: "Files changed", profile: "agent-files" },
-  { id: "agent-chapters", place: PLACE.AGENT, title: "Chapters", profile: "agent-chapters" },
   { id: "agent-file", place: PLACE.AGENT, title: "A file tab", profile: "agent-file" },
   // The Terminal, one scene per state it draws.
   { id: "terminal", place: PLACE.TERMINAL, title: "Attached", profile: "agent-terminal" },

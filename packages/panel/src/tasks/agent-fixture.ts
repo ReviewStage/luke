@@ -6,7 +6,7 @@
  * the same task holds one agent, finished, whose pull request waits second
  * in its merge queue with its checks passed, an approval, and a bot's review
  * with a thread on a line; the side panel opens on that pull request's
- * overview, its checks, its Files changed, or its Chapters, on a file of its
+ * overview, its checks, or its Files changed, on a file of its
  * repository, or on its Terminal in one of the states the tab draws. Every
  * person, repository, and line here is invented; nothing is read from an
  * account.
@@ -53,8 +53,6 @@ import {
 } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER } from "@repo/features/page-wire";
-import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@repo/features/pull-request-chapters";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
@@ -78,7 +76,6 @@ import {
 import { SANDBOX_STATE, type SandboxState } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  type AppChapters,
   type AppPages,
   type AppPullRequestPart,
   type AppStateSnapshot,
@@ -753,72 +750,6 @@ const CHANGES = {
   },
 };
 
-/** The pull request's chapters, made for its head: the pending state first, then the invite itself. */
-const CHAPTERS = {
-  pullRequest: {
-    number: PULL_REQUEST.number,
-    generatable: true,
-    chapters: {
-      status: PULL_REQUEST_CHAPTERS_STATE.READY,
-      headSha: PULL_REQUEST.headSha,
-      baseSha: PULL_REQUEST.baseSha,
-      model: "anthropic/claude-sonnet-5.5",
-      chapters: [
-        {
-          kind: CHAPTER_KIND.STORY,
-          title: "An invite is a pending membership",
-          summary:
-            "Memberships gain an email and a state, so an invite needs no table of its own and removal covers it.",
-          hunkRefs: [
-            { path: "src/db/schema/memberships.ts", oldStart: 4 },
-            { path: "src/members/remove.ts", oldStart: 8 },
-          ],
-          keyChanges: [
-            {
-              content: "Existing rows default to active, so nothing is backfilled.",
-              lineRefs: [
-                {
-                  path: "src/db/schema/memberships.ts",
-                  side: LINE_REF_SIDE.ADDITIONS,
-                  startLine: 7,
-                  endLine: 8,
-                },
-              ],
-            },
-          ],
-          risk: CHAPTER_RISK.MEDIUM,
-          riskReasons: ["userId becomes nullable, which every reader of memberships must allow."],
-        },
-        {
-          kind: CHAPTER_KIND.STORY,
-          title: "Sending and accepting an invite",
-          summary:
-            "inviteMember adds a pending membership and mails its link; acceptInvite activates it once, within seven days.",
-          hunkRefs: [
-            { path: "src/members/invite.ts", oldStart: 0 },
-            { path: "src/members/invite.test.ts", oldStart: 0 },
-          ],
-          keyChanges: [
-            {
-              content: "A used or expired link is refused as no longer valid.",
-              lineRefs: [
-                {
-                  path: "src/members/invite.ts",
-                  side: LINE_REF_SIDE.ADDITIONS,
-                  startLine: 15,
-                  endLine: 17,
-                },
-              ],
-            },
-          ],
-          risk: CHAPTER_RISK.LOW,
-          riskReasons: [],
-        },
-      ],
-    },
-  },
-};
-
 /** A folder of the agent's branch as a File tab's tree and breadcrumbs read it: what stands in it of the files it holds, its folders first. */
 function treeAt(path: string): readonly TaskTreeEntry[] {
   const prefix = path === "" ? "" : `${path}/`;
@@ -887,7 +818,6 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   ],
   [RUN_PROFILE.AGENT_CHECKS, { view: PULL_REQUEST_VIEW.CHECKS }],
   [RUN_PROFILE.AGENT_FILES, { view: PULL_REQUEST_VIEW.FILES }],
-  [RUN_PROFILE.AGENT_CHAPTERS, { view: PULL_REQUEST_VIEW.CHAPTERS }],
   [RUN_PROFILE.AGENT_FILE, { file: OPENED_FILE }],
   [RUN_PROFILE.AGENT_TERMINAL, { terminal: { kind: TERMINAL_STAGE.PORT } }],
   [RUN_PROFILE.AGENT_TERMINAL_CONNECTING, { terminal: { kind: TERMINAL_STAGE.HELD } }],
@@ -1133,9 +1063,6 @@ function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): App
   return laid;
 }
 
-/** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
-const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
-
 /** Lays `rows` as one part of the agent's own pull request over main's held part, one object for each of main's. */
 function stagedPart<Part>(
   rows: Part,
@@ -1175,9 +1102,9 @@ const STAGED_PARTS = {
 /**
  * Main's document as an agent profile draws it: the open task's pages held
  * with the page its agent showed, as the window's read of them holds them
- * (`LIVE_READ.PAGES`), and the agent's pull request's chapters and parts
- * held as its Pull request tab's reads of them hold them
- * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings),
+ * (`LIVE_READ.PAGES`), and the agent's pull request's parts held as its
+ * Pull request tab's reads of them hold them (`LIVE_READ.PULL_REQUEST` and
+ * its siblings),
  * and the agent's transcript as its tab's read of it holds it
  * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached.
  * The same document, the very object, under any other profile.
@@ -1195,19 +1122,9 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     };
     STAGED_PAGES.set(held, staged);
   }
-  const heldChapters = state[LIVE_READ.PULL_REQUEST_CHAPTERS];
-  let chapters = STAGED_CHAPTERS.get(heldChapters);
-  if (chapters === undefined) {
-    chapters = {
-      ...heldChapters,
-      [FIXTURE_AGENT_ID]: { [String(PULL_REQUEST.number)]: { rows: CHAPTERS } },
-    };
-    STAGED_CHAPTERS.set(heldChapters, chapters);
-  }
   return {
     ...state,
     [LIVE_READ.PAGES]: staged,
-    [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters,
     [LIVE_READ.TRANSCRIPT]: stagedTranscripts(state[LIVE_READ.TRANSCRIPT], stagedTranscript(stage)),
     [LIVE_READ.PULL_REQUEST]: STAGED_PARTS[LIVE_READ.PULL_REQUEST](state[LIVE_READ.PULL_REQUEST]),
     [LIVE_READ.PULL_REQUEST_CHECKS]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CHECKS](

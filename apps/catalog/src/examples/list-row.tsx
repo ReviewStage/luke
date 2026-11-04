@@ -317,9 +317,9 @@ function ListRows(): React.JSX.Element {
         title="A rail's rows: titles on up to two lines, their counts on the last line, the open row tinted"
       >
         <div className="catalog-narrow">
-          <List label="Chapters">
+          <List label="Steps">
             <ListRow
-              leading={<GLYPH.PULL_REQUEST_CHAPTERS />}
+              leading={<GLYPH.PULL_REQUEST_CHANGES />}
               title="Expose an open-question check for task finishing"
               titleLines={LIST_ROW_TITLE_LINES.TWO}
               description="+9 −0"
@@ -331,7 +331,7 @@ function ListRows(): React.JSX.Element {
               onPress={() => undefined}
             />
             <ListRow
-              leading={<GLYPH.PULL_REQUEST_CHAPTERS />}
+              leading={<GLYPH.PULL_REQUEST_CHANGES />}
               title="Refuse an agent's Done while an ask is open, and say why in the transcript"
               titleLines={LIST_ROW_TITLE_LINES.TWO}
               description="+44 −0"

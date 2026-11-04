@@ -9,7 +9,6 @@ import {
   MENU_SURFACE_FLOW,
   MenuSurface,
   ScrollArea,
-  type ScrollOverscroll,
   SpinnerRegion,
   TooltipPill,
   useHintRest,
@@ -36,7 +35,6 @@ import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import {
   type DiffAnnotation,
   type DiffFileTexts,
-  type DiffLineRange,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -64,9 +62,9 @@ import { CHANGES_WORDS } from "./changes-model.js";
  * the file and under its line, so a header and a note are this window's own
  * React and stylesheets. The view is told the file whose header stands at
  * the top as the list scrolls, and scrolls the list to a file through
- * `door`, to a review thread's line (`reveal`), or to a key change's lines,
- * lit a moment (`flash`). Where the view comments on lines, the gutter's + tells it the
- * lines picked (`onComment`), and the lines it is commenting on stand lit
+ * `door`, or to a review thread's line (`reveal`). Where the view comments
+ * on lines, the gutter's + tells it the lines picked (`onComment`), and the
+ * lines it is commenting on stand lit
  * (`selected`). Code selected as text on lines a comment may be on
  * (`commentOn`) is offered a comment too, by a Comment press floating over
  * the selection, as stage-cli offers one; the press opens the comment on
@@ -109,12 +107,6 @@ export interface DiffListReveal {
   readonly ask: number;
   readonly path: string;
   readonly at?: { readonly side: DiffSelection["side"]; readonly line: number } | undefined;
-}
-
-/** An ask to scroll the list to a run of a file's lines and light them a moment, a chapter's key change's; counted, so each ask is its own. */
-export interface DiffListFlash {
-  readonly ask: number;
-  readonly range: DiffLineRange;
 }
 
 /** The hint over a gap's control under the pointer or the keyboard's focus: the control, and what it opens. */
@@ -271,8 +263,6 @@ export function PierreDiffList({
   readTexts,
   reveal,
   onDrawn,
-  flash,
-  overscroll,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -294,10 +284,6 @@ export function PierreDiffList({
   reveal?: DiffListReveal | undefined;
   /** Told which of a file's hidden lines it draws, each time that changes; a door that stays the same. */
   onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
-  /** The lines to scroll to and light a moment once the list draws their file open; each ask once. */
-  flash?: DiffListFlash | undefined;
-  /** Whether a swipe past the list's end stops there or is handed on to the box it stands in; it stops where none is named. */
-  overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
   const loaded = useAtomValue(diffView);
@@ -473,18 +459,6 @@ export function PierreDiffList({
     };
   }, [hang, letGoHint]);
 
-  // Note that lines are lit as a reveal waits, for their file drawn open; a file drawn as its notes alone has no lines to light, so its header is scrolled to.
-  const flashed = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const mounted = handle.current;
-    if (mounted === undefined || flash === undefined || flashed.current === flash.ask) return;
-    const file = drawn.current.files.find((each) => each.path === flash.range.path);
-    if (file === undefined || file.collapsed) return;
-    flashed.current = flash.ask;
-    if (file.lead) mounted.reveal(flash.range.path);
-    else mounted.revealLines(flash.range);
-  });
-
   // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.
   usePressAway(offerBox, () => undefined, {
     onPressAway: offer === undefined ? undefined : () => setOffer(undefined),
@@ -521,7 +495,7 @@ export function PierreDiffList({
       {module === undefined ? (
         <SpinnerRegion delay label={CHANGES_WORDS.READING} />
       ) : (
-        <ScrollArea ref={host} overscroll={overscroll} data-diff-list-scroller="">
+        <ScrollArea ref={host} data-diff-list-scroller="">
           {null}
         </ScrollArea>
       )}

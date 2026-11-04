@@ -1,7 +1,5 @@
-import { MOTION_DELAY_MS } from "@repo/brand";
 import { DIFF_LAYOUT } from "@repo/settings/diff-view";
 import { onDrawnThemeChange } from "@repo/ui/appearance";
-import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@repo/ui/landed";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -29,7 +27,6 @@ import {
 import {
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
-  type DiffLineRange,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -139,12 +136,7 @@ import { wholeOf } from "./whole-diff.js";
  * header beyond its one row, because Pierre reserves the header a height of
  * its own and holds it at the top while the file scrolls by. The view is
  * told which file stands at the top as the list scrolls, and scrolls it to
- * a file's header, to one of its lines, or to a run of its lines, which
- * stand lit a moment and fade (`revealLines`): Pierre's own lit lines,
- * which it keeps on the rows it draws however it draws them again, lit as
- * every place landed on is, the file's element landed on and its rows
- * drawing the light it holds (`FLASH_CSS`), whose end lets them go, or a
- * deadline of the moment's own where the file was taken down first.
+ * a file's header or to one of its lines.
  *
  * A note under a changed line keeps that line's band, its code's and its
  * numbers' ground and its change bar, behind the card it holds
@@ -184,14 +176,6 @@ declare const DIFF_HIGHLIGHT_WORKER: string | undefined;
 
 /** The attribute a list's file wears while it is drawn as its notes alone. */
 const LEAD_ATTRIBUTE = "data-lead";
-
-/**
- * How long a moment stands at most, in milliseconds, past its hold and its
- * fade: a light on a file taken down before it ends is dropped with no end
- * told, so the moment ends by this deadline of its own. Twice the hold
- * (`--ui-confirm-delay`) outlasts the fade and the scroll to the lines.
- */
-const FLASH_DEADLINE_MS = MOTION_DELAY_MS.CONFIRM * 2;
 
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
@@ -409,27 +393,6 @@ const LOOK_CSS = `
 }
 `;
 
-/**
- * Lines lit a moment: the file's element is landed on (`@repo/ui/landed`),
- * whose light, `--ui-landed`, falls from 1 to 0 on the element and is
- * inherited inside, since no keyframes of the document's reach a shadow
- * root, and Pierre's lit rows stand that far between their lit ground and
- * the line's own. So they hold lit and fade as every place landed on does,
- * reduced motion holding them lit for as long with only the fade dropped.
- * The light's end is the moment's (`mountList`).
- */
-const FLASH_CSS = `
-@layer unsafe {
-  :host([${LANDED_ATTRIBUTE}]) [data-selected-line] {
-    background-color: color-mix(
-      in lab,
-      var(--diffs-computed-selected-line-bg) calc(var(--ui-landed) * 100%),
-      var(--diffs-computed-diff-line-bg, transparent)
-    );
-  }
-}
-`;
-
 /** One diff alone: the theme's ground runs to the foot of the box it is drawn in, however few its lines. */
 const FILL_CSS = `
 @layer unsafe {
@@ -485,11 +448,11 @@ let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet; whole: CSSStyleSheet } |
 function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet; whole: CSSStyleSheet } {
   if (sheets !== undefined) return sheets;
   const look = new CSSStyleSheet();
-  look.replaceSync(`${LOOK_CSS}${LIST_CSS}${FLASH_CSS}`);
+  look.replaceSync(`${LOOK_CSS}${LIST_CSS}`);
   const fill = new CSSStyleSheet();
   fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
   const whole = new CSSStyleSheet();
-  whole.replaceSync(`${LOOK_CSS}${FLASH_CSS}`);
+  whole.replaceSync(LOOK_CSS);
   sheets = { look, fill, whole };
   return sheets;
 }
@@ -905,21 +868,9 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const dressed = new WeakSet<HTMLElement>();
   // Each file's element by the file it draws now, which a drag's selection is read in.
   const elementPaths = new WeakMap<EventTarget, string>();
-  // The lines lit a moment, none while none are.
-  let flash: DiffLineRange | undefined;
-  // The moment's deadline, run on the host's own animation clock, since the bundle holds no runtime to wait on.
-  let deadline: Animation | undefined;
-  const lit = (element: HTMLElement) =>
-    flash !== undefined && elementPaths.get(element) === flash.path;
-  // Note that a file already lit keeps its light, which a mark set again would not start over.
-  const markFlash = (element: HTMLElement) => {
-    if (!lit(element)) return element.removeAttribute(LANDED_ATTRIBUTE);
-    if (!element.hasAttribute(LANDED_ATTRIBUTE))
-      element.setAttribute(LANDED_ATTRIBUTE, LANDED.HELD);
-  };
   // Note that Pierre keeps a file's element for another file once the first
   // scrolls away, so each element's shadow root is dressed once, the first
-  // time it is drawn, and whether it is drawn as notes alone, and lit a moment, every time.
+  // time it is drawn, and whether it is drawn as notes alone every time.
   // Each drawn file's gaps watched for their controls (\`./gap-controls.ts\`), and let go as Pierre lets the file go, until its element draws a file again.
   const gapWatches = new Map<HTMLElement, () => void>();
   const watchGaps = (element: HTMLElement, phase: PostRenderPhase) => {
@@ -942,15 +893,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     }
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
-    markFlash(element);
     if (dressed.has(element) || element.shadowRoot === null) return;
     dressed.add(element);
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
     releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
-    // Note that the light plays on the file's element itself, so its end is heard there, not in the shadow root.
-    element.addEventListener("animationend", (event) => {
-      if (event.target === element && event.animationName === LANDED_ANIMATION) endFlash();
-    });
   };
   // The hidden lines each file was last told to draw, told again only as they change.
   const drawn = drawnTeller((path, lines) => latest.onDrawn?.(path, lines));
@@ -1063,48 +1009,6 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     view.setSelectedLines({ id: selected.path, range: { start, side, end, endSide } });
   };
   if (props.selected !== undefined) light(props.selected);
-  const drawnElements = () => host.querySelectorAll<HTMLElement>(`[${FIND_SHADOW_ATTRIBUTE}]`);
-  // Note that the lines lit before stand again only where the moment's still stand, on the same side, since a press may have picked others meanwhile.
-  const endFlash = () => {
-    const standing = flash;
-    deadline?.cancel();
-    deadline = undefined;
-    if (standing === undefined) return;
-    flash = undefined;
-    for (const element of drawnElements()) markFlash(element);
-    const now = view.getSelectedLines();
-    const picked = now === null ? undefined : selectionOf(now.range);
-    if (
-      now?.id === standing.path &&
-      picked?.start === standing.startLine &&
-      picked.end === standing.endLine &&
-      picked.side === standing.side &&
-      picked.endSide === standing.side
-    )
-      light(latest.selected);
-  };
-  const revealLines = (range: DiffLineRange) => {
-    const { path, side, startLine, endLine } = range;
-    const lines = { start: startLine, side, end: endLine, endSide: side };
-    flash = range;
-    deadline?.cancel();
-    deadline = host.animate([], { duration: FLASH_DEADLINE_MS });
-    deadline.onfinish = endFlash;
-    view.setSelectedLines({ id: path, range: lines });
-    // Note that the file lit is landed on afresh, so lines lit again while still lit fade anew.
-    for (const element of drawnElements()) {
-      if (lit(element)) land(element, LANDED.HELD);
-      else element.removeAttribute(LANDED_ATTRIBUTE);
-    }
-    view.scrollTo({
-      type: "range",
-      id: path,
-      range: lines,
-      align: "start",
-      offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
-      behavior: glideOf(host),
-    });
-  };
   return {
     update: (next) => {
       const was = latest;
@@ -1127,11 +1031,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       drawn.forget(new Set(next.files.map((file) => file.path)));
       readRehidden();
       tellTop(host.scrollTop);
-      // Lines lit for a comment take the place of a moment's, which lights them again as it fades.
-      if (!sameListSelection(next.selected, was.selected)) {
-        if (flash === undefined) light(next.selected);
-        else endFlash();
-      }
+      if (!sameListSelection(next.selected, was.selected)) light(next.selected);
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: glideOf(host) }),
@@ -1146,11 +1046,9 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
         behavior: glideOf(host),
       }),
-    revealLines,
     unmount: () => {
       // A list taken down draws nothing; the next one mounted opens no gap.
       drawn.forget(new Set());
-      deadline?.cancel();
       stopWatching();
       unsubscribe();
       view.cleanUp();

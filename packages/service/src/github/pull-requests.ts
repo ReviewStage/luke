@@ -700,33 +700,6 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   return { files: kept, truncated: pullRequest.changedFiles > kept.length };
 });
 
-/** A pull request's commits as GitHub lists them, read for their messages alone. */
-const PullRequestCommitsSchema = Schema.Array(
-  Schema.Struct({ commit: Schema.Struct({ message: Schema.String }) }),
-);
-
-/** The most commits a pull request's messages are read for: GitHub's one page. */
-const MAX_COMMIT_MESSAGES = 100;
-
-/**
- * The messages of a pull request's commits, oldest first, as far as its
- * first page of them; none where the repository has no such pull request.
- * Note that one page is read and no more, because a pull request's own
- * words and its diff tell most of its story, and the messages only help.
- */
-export function pullRequestCommitMessages(
-  token: Redacted.Redacted,
-  fullName: string,
-  number: number,
-): Read<readonly string[]> {
-  const request = githubRead(`${repositoryPath(fullName)}/pulls/${number}/commits`, token).pipe(
-    HttpClientRequest.setUrlParams({ per_page: String(MAX_COMMIT_MESSAGES) }),
-  );
-  return Effect.map(readOptional(request, PullRequestCommitsSchema), (read) =>
-    Option.getOrElse(read, () => []).map(({ commit }) => commit.message),
-  );
-}
-
 /** Two commits compared, as far as where they part. */
 const CompareSchema = Schema.Struct({ merge_base_commit: Schema.Struct({ sha: Schema.String }) });
 

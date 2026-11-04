@@ -28,15 +28,15 @@ function Pagers(): React.JSX.Element {
         title="Through pages at the end of a tab's bar, at the first"
       >
         <PaneBar
-          title="Read the expiry"
+          title="Nightly sweep"
           actions={
             <Pager
               axis={PAGER_AXIS.HORIZONTAL}
               place={{ at: 1, total: 8 }}
-              previous={{ label: "Previous chapter", onStep: undefined }}
+              previous={{ label: "Previous run", onStep: undefined }}
               next={{
-                label: "Next chapter",
-                hint: "Next chapter: Sweep what expired",
+                label: "Next run",
+                hint: "Next run: Sweep what expired",
                 onStep: stay,
               }}
             />

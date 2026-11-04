@@ -287,8 +287,8 @@ head finished, to the agent at work waiting on them (`src/github/agent-wakes.ts`
 delivery names is recorded by GitHub's id under the name it carries
 (`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
-name of it (tasks, agents, automations, pins, token reads, chapters, and
-workspace token repositories) moves to the new one in the same transaction,
+name of it (tasks, agents, automations, pins, token reads, and workspace
+token repositories) moves to the new one in the same transaction,
 so the agents and tasks the delivery is matched to are found after a rename
 or a transfer. A delivery older than the one the id was last seen in, by the
 repository's own `updated_at`, moves nothing back, since GitHub delivers
@@ -1436,7 +1436,7 @@ and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
-The preferences snapshot carries seven parts. `preferences` is the settings
+The preferences snapshot carries six parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
 `linkOpen`, where the account's app links open (null reads as the browser),
 `agentEnter`, what Enter does in an agent's box while it works (`steer`
@@ -1469,10 +1469,6 @@ that carries no `preferences`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
-
-`chaptersModel` is the Claude model Generate chapters runs on, one of
-`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
-the account chooses; any other value is `invalid-request`.
 
 `experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
@@ -1529,26 +1525,6 @@ query names: an account that is no member is answered `NOT_FOUND`. A forget is
 the member's whose words the memory holds, or an owner's or admin's
 (`src/accounts/workspace-memories.ts`); any other is `NOT_PERMITTED`.
 `src/accounts/memories-procedures.test.ts` answers both over a real dialect.
-
-## The chapters group
-
-`src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
-(`@repo/features/pull-request-chapters`): `generateChapters(model, input)`
-groups, orders, and narrates the hunks in one structured call
-(`Output.object`, its JSON Schema emitted from the Effect Schema that decodes
-the answer), holds the answer to the diff, asks once more for any hunk it left
-out, and closes the story with "Other changes": the files a reader reads past,
-those with no hunk, and whatever is still outside. The model is a seam: the
-route hands in `chaptersModelOf(own, modelId)` on the API key the member who
-pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
-Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Vespin's
-key; a member who saved none reads `generatable: false`. A test hands in a
-scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
-call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
-one of the store's `PULL_REQUEST_CHAPTERS_FAILURE` kinds, logged by its kind alone. The prompt,
-ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
-lays it out are `src/chapters/chapters-prompt.ts`.
-`src/chapters/chapters-generator.test.ts` answers it over a scripted model.
 
 ## The member MCP server
 

@@ -344,7 +344,6 @@ const TASK_SURFACES = {
     "image-diff-side",
     "snippet-pending",
     "pull-request-page",
-    "chapter-rail",
     "review-badge",
     "comment-editor",
     "branch-chip",

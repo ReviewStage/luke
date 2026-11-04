@@ -279,8 +279,7 @@ export const macCommandSync = defineSyncTable(macCommand, {
 
 /**
  * The account's preferences row, on the account's topic, which the
- * account's read of its default agent, chapters model, and Slack
- * notifications is woken on. Note that where the account last chose to run
+ * account's read of its default agent and Slack notifications is woken on. Note that where the account last chose to run
  * a task is ignored, because a Start with Runs on, an enroll, and a
  * register each rewrite it and only an agent's start reads it, and so is
  * the row's own instant, which every settings push moves whether or not a

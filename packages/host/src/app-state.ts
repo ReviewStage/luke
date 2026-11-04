@@ -47,7 +47,6 @@ import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
-import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
@@ -99,8 +98,6 @@ export const RUN_PROFILE = {
   AGENT_CHECKS: "agent-checks",
   /** The same agent, its Pull request tab on Files changed. */
   AGENT_FILES: "agent-files",
-  /** The same agent, its Pull request tab on Chapters. */
-  AGENT_CHAPTERS: "agent-chapters",
   /** The same agent beside a file of its repository opened in a tab of its own. */
   AGENT_FILE: "agent-file",
   /** The same agent beside its Terminal, attached to a shell: one profile per state the tab draws. */
@@ -454,22 +451,6 @@ export const NO_BROWSER_TABS: AppBrowserTabs = {
   [BROWSER_TABS_PLACE.AGENT]: {},
 };
 
-/** One agent's pull request's newest chapters, as the host's read of them stands: with whether the reader can generate them, once it answered. */
-export type AppPullRequestChapters = AppHostRead<PullRequestChaptersAnswer>;
-
-/**
- * Each agent's pull request's chapters the host holds for the windows
- * (`compose-agents.ts`): those a window's Pull request tab chose, and the
- * few let go lately, by the agent's id and then the pull request's number,
- * each as its own read stands. One absent is held by nobody.
- */
-export type AppChapters = Readonly<
-  Record<string, Readonly<Record<string, AppPullRequestChapters>>>
->;
-
-/** No chapters held, as the host stands before any window shows a pull request's and after the session ends. */
-export const NO_CHAPTERS: AppChapters = {};
-
 /**
  * One part of each agent's pull request the windows hold for their Pull
  * request tabs (`pull-request-parts.ts`), by the agent's id and then the
@@ -734,7 +715,6 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST]: AgentOverviewPullRequestAnswerView;
   [LIVE_READ.REPOSITORY_LISTS]: GitHubRepositoriesAnswer;
   [LIVE_READ.GITHUB_TOKEN]: AppGitHubToken;
-  [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.PULL_REQUEST_CHECKS]: AgentOverviewChecksAnswerView;
   [LIVE_READ.PULL_REQUEST_CONVERSATION]: AgentOverviewConversationAnswerView;
@@ -849,7 +829,7 @@ export interface AppState {
   inbox: AppInboxSlice;
   /** Each agent's origin the windows chose, held while an agent's page holds it and a while after: the run its page says started it. */
   [LIVE_READ.AGENT_ORIGINS]: AppAgentOrigins;
-  /** The account's preferences row, by the account, held for the signed-in session: the default agent, the chapters model, and Slack notifications every surface draws. */
+  /** The account's preferences row, by the account, held for the signed-in session: the default agent and Slack notifications every surface draws. */
   [LIVE_READ.ACCOUNT_PREFERENCES]: AppAccountPreferences;
   /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
@@ -875,8 +855,6 @@ export interface AppState {
   [LIVE_READ.REPOSITORY_LISTS]: AppRepositoryLists;
   /** The account's own GitHub token, held while a window draws it and a while after: what Settings › Account, a workspace's Add repository, and onboarding's GitHub step read. Never written to disk. */
   [LIVE_READ.GITHUB_TOKEN]: AppGitHubTokens;
-  /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
-  [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   /** Each task's or agent's cloud Browser tabs the windows' side panels list, held while one lists them and a while after: what the side panel's Browser tabs draw. Never written to disk. */
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** Each agent's pull request the windows' Pull request tabs chose, held while a tab shows it and a while after: its description, branches, mergeability, and people. */
@@ -1071,7 +1049,6 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.LINK_STANDINGS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.REPOSITORY_LISTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.GITHUB_TOKEN]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
-  [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHECKS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CONVERSATION]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },

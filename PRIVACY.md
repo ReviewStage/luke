@@ -142,8 +142,7 @@ sign out or quit Vespin, or in a browser until its tab closes or reloads, so
 that showing one again asks our service nothing. Your default model, effort, and
 context size for an agent are kept with your account preferences on our
 service, set in Settings › Agents or by the model you last started
-with. The Claude model your Generate chapters runs on is kept with them too,
-set in Settings › Agents. Where a Vespin link you open in a browser goes, staying there or handed
+with. Where a Vespin link you open in a browser goes, staying there or handed
 to Vespin for Mac, is kept with them too, set in Settings › Account; Vespin in a
 browser on a Mac reads it each time it loads a link that names something in
 Vespin.
@@ -403,10 +402,10 @@ or our service could no longer read it, updated when an agent call on it
 finds that changed. Every model call Vespin makes for you runs on your own keys
 and never on ours: an agent's and its workers' calls, Fast, and web
 search on the key of the provider the model is on; dictation on your OpenAI
-key; and titles, pull request chapters, and the summary a
+key; and titles and the summary a
 Continue or Fork writes on whichever of your keys there is. Without an OpenAI
 key, dictation is off; without any API key, an agent is titled from
-the first words of its first message, and no chapters or summaries are
+the first words of its first message, and no summaries are
 written. After you save it, neither your Mac nor any answer from our
 service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
@@ -657,28 +656,7 @@ GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Vespin
 holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. Chapters splits the pull
-request into chapters only when a member presses Generate chapters, or
-Regenerate once its head has moved on; nothing makes them on its own. Our
-service then reads the pull request's title, description, the messages of up
-to its first 100 commits, and each changed file's patch as Files changed
-reads them, and sends all of it, except the patches of files a reader reads
-past (lockfiles, minified files, source maps, snapshots, images, fonts,
-videos, and documents) and of files with no patch to read, to the Claude model
-the member who pressed it chose in Settings › Agents (Haiku 5.5 unless
-they changed it), on that member's own Anthropic API key (or, with only an
-OpenAI key saved, to an OpenAI model on that key), never ours and never
-counted in your daily usage, as described under "Who we send it to".
-It stores the chapters that come back with the workspace, for that repository,
-pull request, and head commit, beside which member asked, when, the model
-that answered, and why a generation failed where one did: each chapter's
-title, summary, risk and reasons, the questions it puts to a reviewer, and the
-file paths and line numbers it covers, never a patch, the description, or a
-commit message. Every member of the workspace who can reach the repository
-sees them, and a Generate for the same head replaces them. They are deleted
-when the workspace is; nothing else deletes them, so they stay after the pull
-request closes, after a newer head's chapters are made, and after the member
-who asked deletes their account, which only clears who asked. A button in the tab that
+downloading a patch writes it where you save it. A button in the tab that
 changes the pull request, such as Ready for review, Convert to draft, Merge,
 Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
@@ -1265,8 +1243,7 @@ answered, an automation made (with what triggers it), edited, or deleted (with
 whether you or an agent made the change), a message handed to an agent's runner (with which harness it
 runs, how the message reached it, whether a turn was under way, and how long the
 agent had been idle), an integration connected or disconnected (with which
-provider), and a pull request's chapters generated (with how it came out, how
-many chapters and parts of the diff they hold, and how long it took). It
+provider). It
 counts how a team comes together and sets up the same way, each under the
 account that did it: an account's first sign-in (with whether it was through
 Google or GitHub), a GitHub account linked or a GitHub token saved, a model
@@ -1567,17 +1544,6 @@ team's Slack; the screenshots stay in the email.
   PostHog as a feedback survey response, with no network address, and PostHog
   posts them to a channel in our own team's Slack workspace, which Slack keeps
   under its own policy.
-- Anthropic, for a pull request's chapters. Pressing Generate chapters in a
-  agent's Pull request tab sends the pull request's title, description,
-  commit messages, and patches, except those of files a reader reads past, to
-  the Claude model the member chose in Settings (Haiku 5.5 unless they changed
-  it) from our service, on that member's own Anthropic API key (or, with only
-  an OpenAI key saved, on an OpenAI model and that key), never ours, in at most two
-  calls (the second places the parts of the diff the first left out), as
-  described under "An agent's pull request". Our service logs only how a
-  generation failed, by its kind, and counts its outcome as described under
-  "Usage data"; Anthropic keeps the request and its reply under its own
-  retention policy.
 - Anthropic and OpenAI, for an agent. When you, or another
   agent, start one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)

@@ -1,7 +1,4 @@
 {
   "instead": "Float a pane over its tab with OverPane from @repo/ui, which slides itself in and out.",
-  "classes": [
-    { "class": "pane-over-in", "allow": ["packages/ui/src/components/over-pane/"] },
-    { "class": "chapter-rail-in", "allow": ["packages/ui/src/components/over-pane/"] }
-  ]
+  "classes": [{ "class": "pane-over-in", "allow": ["packages/ui/src/components/over-pane/"] }]
 }

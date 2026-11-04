@@ -1,10 +1,5 @@
 import { storedAgentChoice } from "@repo/features/account-preferences-live";
 import { contextWindowSchema } from "@repo/features/agent-wire";
-import {
-  CHAPTERS_MODEL_LIST,
-  type ChaptersModelId,
-  chaptersModelFrom,
-} from "@repo/features/chapters-model-choice";
 import { LINK_OPEN_LIST, type LinkOpen } from "@repo/features/link-open";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
@@ -34,8 +29,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * What the account group reads and writes of an account: the erasure, the
  * cross-device snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
- * context window, the model the account's Generate chapters runs on, and
- * the experiments the account turned on. Every function here is an effect over the ambient `SqlClient`
+ * context window, and the experiments the account turned on. Every function here is an effect over the ambient `SqlClient`
  * and names no database of its own; `account-seams.ts` beside it runs them
  * at the web edge and is the only file of the two that reaches the auth
  * session.
@@ -47,8 +41,6 @@ export interface AccountPreferencesRow {
   preferences: AccountPreferences;
   /** What a click on Start runs on; none until the account chooses, which the service answers with the fallback its credentials pay for. */
   agent: ModelChoice | undefined;
-  /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
-  chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -80,7 +72,6 @@ export interface AccountPreferencesWrite {
   agentEnter?: AgentEnter;
   setupFinished?: boolean;
   agent?: ModelChoice;
-  chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
 
@@ -152,7 +143,6 @@ const PREFERENCE_COLUMNS = {
   agentModel: accountPreference.agentModel,
   agentEffort: accountPreference.agentEffort,
   agentContextWindow: accountPreference.agentContextWindow,
-  chaptersModel: accountPreference.chaptersModel,
   experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
 };
@@ -164,7 +154,6 @@ const PreferenceRowSchema = Schema.Struct({
   agentModel: Schema.NullOr(Schema.String),
   agentEffort: Schema.NullOr(Schema.String),
   agentContextWindow: Schema.NullOr(contextWindowSchema),
-  chaptersModel: Schema.NullOr(Schema.String),
   experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
 });
@@ -185,8 +174,6 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         ...(row.setupFinished === null ? undefined : { setupFinished: row.setupFinished }),
       }) ?? {},
     agent: storedAgentChoice(row),
-    // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
-    chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
     experiments: experimentChoicesFrom(row.experiments ?? undefined) ?? NO_EXPERIMENTS,
     updatedAt: row.updatedAt ?? undefined,
@@ -208,8 +195,8 @@ const findPreference = SqlSchema.findOneOption({
 
 /**
  * The account's preferences row written for its live read: the coding
- * agents' default as its three columns stand, the chapters model, and
- * whether our Slack bot writes the account, each as stored, null where
+ * agents' default as its three columns stand and whether our Slack bot
+ * writes the account, each as stored, null where
  * never chosen, which the reader reads as the snapshot does
  * (`@repo/features/account-preferences-live`). No row for an account that
  * stored none. None where a value cannot be carried.
@@ -222,7 +209,8 @@ export function accountPreferencesLiveStatement(userId: string): Option.Option<L
           agentModel: accountPreference.agentModel,
           agentEffort: accountPreference.agentEffort,
           agentContextWindow: accountPreference.agentContextWindow,
-          chaptersModel: accountPreference.chaptersModel,
+          // Note that a 0.26.0 desktop reads a chapters model on every row, so it is answered as never chosen until no such build is left.
+          chaptersModel: sql<null>`null::text`,
           slackNotifications: accountPreference.slackNotifications,
         }),
       )
@@ -291,7 +279,6 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
-  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   /** The instant the shared preferences part was written, where the write carries it. */
   updatedAt: Schema.optionalKey(Schema.Date),
@@ -306,7 +293,6 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
     ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
-    ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
     ...(write.agent === undefined
       ? undefined
@@ -349,9 +335,9 @@ const upsertPreference = SqlSchema.findOne({
 
 /**
  * Writes each part the write carries over what stood — the preferences
- * whole, the coding-agent default whole, the chapters model, the experiments key by key — and answers the snapshot as it
+ * whole, the coding-agent default whole, the experiments key by key — and answers the snapshot as it
  * now stands, with the transaction it committed in. The instant moves with the shared preferences part alone,
- * so a coding-agent choice, a chapters model, or a link choice never reads to a Mac as a
+ * so a coding-agent choice or a link choice never reads to a Mac as a
  * settings snapshot it has to take.
  */
 export function writeAccountPreferences(
@@ -368,7 +354,6 @@ export function writeAccountPreferences(
       ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
       ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
       ...(write.agent === undefined ? undefined : { agent: write.agent }),
-      ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };
     const row = yield* upsertPreference(stored).pipe(

@@ -129,9 +129,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onGitHubTokenChanged((held) => {
         state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
       }),
-      gateway.host.onChaptersChanged((held) => {
-        state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });
-      }),
       gateway.host.onBrowserTabsChanged((held) => {
         state.update({ [LIVE_READ.BROWSER_TABS]: held });
       }),

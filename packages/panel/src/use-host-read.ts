@@ -14,7 +14,6 @@ import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automat
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
-import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import {
   COMMENT_SUBJECT,
   type TasksCommentsFollow,
@@ -224,8 +223,8 @@ function pullRequestPartRead(part: PullRequestPart) {
 /**
  * Every read a surface reads through `useHostRead`, by its name: the
  * account's preferences row, by the account, held for the session, which
- * every surface drawing the default agent, the chapters model, or the Slack
- * notifications switch reads; the feed of
+ * every surface drawing the default agent or the Slack notifications
+ * switch reads; the feed of
  * every item the account reaches, held for the session; one holder's own
  * inbox; where the account's integrations stand, by the account, which every
  * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
@@ -233,8 +232,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * or frame each hold; the parts of one agent's pull request a Pull request
  * tab holds while it shows, its pull request, checks, conversation, and what
  * the agent published, by the number the tab names or the agent's own; one
- * agent's pull request's chapters, by the number its Pull request tab's own
- * read of it found; one task's cloud Browser tabs,
+ * task's cloud Browser tabs,
  * every one of its agents', or one agent's, which a side panel listing them
  * holds; the account's devices' beats, by the account, which every surface
  * drawing a device's standing holds; the account's hosts, by the account,
@@ -397,12 +395,6 @@ const HOST_READS = {
     // Note that the host holds the token of whoever is signed in, so neither act names an account.
     hold: () => askAct(ACT_KIND.GITHUB_TOKEN_FOLLOW),
     retry: () => tellAct(ACT_KIND.GITHUB_TOKEN_RETRY),
-  }),
-  [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
-    slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
-    path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
-    hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
-    retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
   }),
   [LIVE_READ.BROWSER_TABS]: hostRead(LIVE_READ.BROWSER_TABS, {
     slice: APP_SLICE.BROWSER_TABS,

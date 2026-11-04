@@ -433,19 +433,8 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   }
 }
 
-/** Which edge of what it stands beside a pane is docked at, and slides in from and out past. */
-export const PANE_EDGE = {
-  RIGHT: "right",
-  LEFT: "left",
-} as const;
-
-export type PaneEdge = (typeof PANE_EDGE)[keyof typeof PANE_EDGE];
-
 /** Where a pane stands once slid out past its edge. */
-const PAST_EDGE = {
-  [PANE_EDGE.RIGHT]: "translateX(100%)",
-  [PANE_EDGE.LEFT]: "translateX(-100%)",
-} as const satisfies Record<PaneEdge, string>;
+const PAST_EDGE = "translateX(100%)";
 
 /** A pane that slides as its owner shows and hides it: whether it is drawn, whether on its way out, and its box. */
 export interface PaneSlide {
@@ -455,8 +444,7 @@ export interface PaneSlide {
 }
 
 /**
- * A pane docked at the right of what it stands beside, or at its left
- * (`edge`), as the Chapters view's rail is, shown and hidden as
+ * A pane docked at the right of what it stands beside, shown and hidden as
  * the window's panes are (docs/DESIGN.md): it lands in the layout or leaves
  * it at once, so what stands beside it takes or gives its room on the frame
  * the toggle is pressed, and the pane slides in from its edge, or out
@@ -468,7 +456,7 @@ export interface PaneSlide {
  * frame is drawn. A pane its owner opens with stands at once, since nothing
  * was toggled.
  */
-export function usePaneSlide(open: boolean, edge: PaneEdge = PANE_EDGE.RIGHT): PaneSlide {
+export function usePaneSlide(open: boolean): PaneSlide {
   const pane = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(open);
   const [leaving, setLeaving] = useState(false);
@@ -498,15 +486,15 @@ export function usePaneSlide(open: boolean, edge: PaneEdge = PANE_EDGE.RIGHT): P
       return;
     }
     if (open) {
-      const start = from === "" || from === "none" ? PAST_EDGE[edge] : from;
+      const start = from === "" || from === "none" ? PAST_EDGE : from;
       element.animate([{ transform: start }, { transform: "none" }], timing);
       return;
     }
     const exit = element.animate(
-      [{ transform: from === "" ? "none" : from }, { transform: PAST_EDGE[edge] }],
+      [{ transform: from === "" ? "none" : from }, { transform: PAST_EDGE }],
       { ...timing, fill: "forwards" },
     );
     exit.onfinish = () => setLeaving(false);
-  }, [open, edge]);
+  }, [open]);
   return { drawn: open || leaving, leaving, pane };
 }

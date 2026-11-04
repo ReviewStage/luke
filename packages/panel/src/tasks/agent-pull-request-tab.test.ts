@@ -255,8 +255,6 @@ const DIFF_STAND_IN: DiffViewModule = {
       update: (next) => lists.push(next),
       reveal: (path) => listReveals.push(path),
       revealLine: (path, side, line) => listReveals.push(`${path}:${side}:${line}`),
-      revealLines: (range) =>
-        listReveals.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -1964,9 +1962,9 @@ test("each tab counts what Vespin holds of it: the conversation its comments, re
   });
   await settle();
   assert.equal(
-    option(tab, "Chapters").getAttribute("aria-selected"),
+    option(tab, "Files changed").getAttribute("aria-selected"),
     "true",
-    "the arrows move along the row, Chapters after Checks",
+    "the arrows move along the row, Files changed after Checks",
   );
 });
 

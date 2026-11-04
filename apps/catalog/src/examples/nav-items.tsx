@@ -131,12 +131,12 @@ function Links(): React.JSX.Element {
   );
 }
 
-/** A pull request's chapters as steps: a long title on two lines, its lines and threads under it, one viewed. */
+/** Steps read in order: a long title on two lines, its lines and threads under it, one viewed. */
 function Steps(): React.JSX.Element {
   const [shown, setShown] = useState(0);
   const step = (at: number) => ({
     variant: NAV_ITEM_VARIANT.STEP,
-    icon: <GLYPH.PULL_REQUEST_CHAPTERS />,
+    icon: <GLYPH.PULL_REQUEST_CHANGES />,
     current: shown === at ? NAV_CURRENT.PAGE : undefined,
     onClick: () => setShown(at),
   });

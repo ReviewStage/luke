@@ -176,15 +176,6 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
-  type ChaptersModelAnswerView,
-  type ChaptersModelWriteParams,
-  chaptersModelAnswerViewSchema,
-  type PullRequestChaptersAnswerView,
-  type PullRequestChaptersParams,
-  type PullRequestChaptersReadParams,
-  pullRequestChaptersAnswerViewSchema,
-} from "@repo/features/pull-request-chapters-view";
-import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
@@ -342,7 +333,6 @@ import type {
   AppAgentOrigins,
   AppAutomationReads,
   AppBrowserTabs,
-  AppChapters,
   AppDevicePresences,
   AppGitHubTokens,
   AppHistories,
@@ -806,20 +796,6 @@ export interface HostOperator {
   pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
   /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
   onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
-  /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
-  chaptersFollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** One agent's pull request's chapters let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  chaptersUnfollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** One agent's pull request's held chapters read again at once, as Try again asks. */
-  chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** Every agent's pull request's chapters the host holds for the windows, whole, each time any of them moves. */
-  onChaptersChanged(listener: (held: AppChapters) => void): () => void;
-  /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
-  pullRequestChaptersGenerate(
-    params: PullRequestChaptersParams,
-  ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -1059,13 +1035,6 @@ function pullRequestRead(params: AgentPullRequestReadParams): AgentPullRequestRe
 /** One part of a pull request held as the gateway carries it: the part, the agent, and the number where the tab names one. */
 function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
   return { part: params.part, ...pullRequestRead(params) };
-}
-
-/** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
-function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
-  return params.number === undefined
-    ? { agentId: params.agentId }
-    : { agentId: params.agentId, number: params.number };
 }
 
 /**
@@ -2124,7 +2093,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onAgentOriginsChanged: (listener) =>
       on(
         GATEWAY_EVENT.AGENT_ORIGINS_CHANGED,
-        // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held chapters are.
+        // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
         listener,
       ),
@@ -2177,44 +2146,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
         listener,
-      ),
-    chaptersFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    chaptersUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    chaptersRetry: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    onChaptersChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHAPTERS_CHANGED,
-        // Note that the held chapters are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppChapters>(payload) : undefined),
-        listener,
-      ),
-    pullRequestChaptersGenerate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
-        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chaptersModelWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
     installedSkillsFollow: (params) =>
       fire(

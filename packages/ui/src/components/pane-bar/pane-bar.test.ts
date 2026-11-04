@@ -64,7 +64,7 @@ const ignore = (): void => undefined;
 test("the left pane's toggle, the lead, the middle, the actions, the ⋯, and the right pane's toggle stand in that order", () => {
   const container = render(
     createElement(PaneBar, {
-      start: createElement("button", { type: "button", onClick: ignore }, "Show chapters"),
+      start: createElement("button", { type: "button", onClick: ignore }, "Show steps"),
       mark: createElement("svg", { "data-part": "mark", "aria-hidden": true }),
       title: TITLE,
       detail: "Version 2 of 3",
@@ -78,7 +78,7 @@ test("the left pane's toggle, the lead, the middle, the actions, the ⋯, and th
     (part) => part.getAttribute("data-part") ?? part.getAttribute("aria-label") ?? part.textContent,
   );
   assert.deepEqual(said, [
-    "Show chapters",
+    "Show steps",
     "mark",
     TITLE,
     "middle",

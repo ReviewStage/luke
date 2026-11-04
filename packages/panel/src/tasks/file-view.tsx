@@ -293,23 +293,18 @@ function floats(view: Element | null, toggles: Element | null): boolean {
  * to say, read off the toggle it draws (`useFloatsOver`); the pane over the tab
  * is an `OverPane`, which slides out as it slides in.
  */
-export function usePaneRoom(
-  shown: {
-    readonly open: boolean;
-    readonly onToggle: () => void;
-  },
-  /** The box the pane's toggles are read in where a host's bar draws them rather than the view's own, as a chapter's header does: the host's view, which holds that bar and resizes with the panel; none reads them in the view. */
-  host?: Element | null,
-): PaneRoom {
+export function usePaneRoom(shown: {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}): PaneRoom {
   const beside = usePaneSlide(shown.open);
   const [over, setOver] = useState<PaneFloat>(PANE_FLOAT.CLOSED);
   const [view, setView] = useState<HTMLElement | null>(null);
-  const toggled = host === undefined ? view : host;
   const overBox = useRef<HTMLSpanElement | null>(null);
   // Note that a phone floats the pane whatever its width, because its tab draws no bar, and so
   // neither toggle the stylesheet would otherwise say the place by (`useTabActions`).
   const phone = usePhoneRoom();
-  const narrow = useFloatsOver(toggled, OVER_TOGGLE, BESIDE_TOGGLE) || phone;
+  const narrow = useFloatsOver(view, OVER_TOGGLE, BESIDE_TOGGLE) || phone;
   const floating = over !== PANE_FLOAT.CLOSED;
   const closeOver = useCallback(() => setOver(PANE_FLOAT.CLOSED), []);
   // Note that a finger's arrival peeks nothing, because iOS plays a tap's
@@ -364,7 +359,7 @@ export function usePaneRoom(
     closeOver,
     // Note that the pane is shown beside the tab wherever it has room there,
     // a strip in its place being no float of its own.
-    toggle: () => (!phone && drawnIn(toggled, BESIDE_TOGGLE) ? shown.onToggle() : toggleOver()),
+    toggle: () => (!phone && drawnIn(view, BESIDE_TOGGLE) ? shown.onToggle() : toggleOver()),
     strip: {
       onPointerEnter: peek,
       onPointerLeave: (event) => {
@@ -399,7 +394,7 @@ export function usePaneRoom(
             beside.pane.current?.contains(event.target) === true ||
             event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {
-          if (floats(event.currentTarget.parentElement, toggled)) peek(event);
+          if (floats(event.currentTarget.parentElement, view)) peek(event);
           return;
         }
         if (over === PANE_FLOAT.PEEK && !atEdge && !onPane) unpeek();

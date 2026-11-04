@@ -41,8 +41,8 @@ export interface Transform {
  * The routes that stay off the hosted oRPC router whose public paths carry a
  * segment: each rewrite reads the segment into the route's query, so a route
  * sees `?id=` as it was written to, and the auth catch-all's carries its
- * whole path in `route-path`, which the dispatcher restores, as the one oRPC
- * path that needs a function of its own, a pull request's chapters, does. Every other
+ * whole path in `route-path`, which the dispatcher restores, as our MCP
+ * route's do. Every other
  * route file is reached by an exact rule of its key; every path that is no
  * route file's goes to the oRPC route through the fallback, and the router
  * matches its own public paths.
@@ -74,17 +74,6 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
-  // A pull request's chapters, through an agent and by the repository and number, are the oRPC router's, reached through route files of their own so a Generate runs in the long function (`function-durations.ts`); the dispatcher restores their public path from `route-path`.
-  {
-    src: "/api/agents/([^/]+)/chapters",
-    route: "agents/chapters",
-    query: `${DISPATCH_QUERY.PATH}=agents/$1/chapters`,
-  },
-  {
-    src: "/api/pull-requests/chapters",
-    route: "pull-requests/chapters",
-    query: `${DISPATCH_QUERY.PATH}=pull-requests/chapters`,
-  },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
     route: "inbox/attachment",

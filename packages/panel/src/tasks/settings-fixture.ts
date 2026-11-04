@@ -35,7 +35,6 @@ import {
   adminMetricsScope,
   adminMetricsWindow,
 } from "@repo/features/admin-wire";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
@@ -737,12 +736,11 @@ const STAGED_KEYS: AppProviderKeys = {
 /** The models the staged account is offered, as the host holds them. */
 const STAGED_MODELS: AppModels = { [ACCOUNT_ID]: { rows: { models: MODELS } } };
 
-/** The staged account's preferences row, as the host holds it: Opus on high, chapters on Sonnet, and Slack notifications on. */
+/** The staged account's preferences row, as the host holds it: Opus on high, and Slack notifications on. */
 const STAGED_PREFERENCES: AppAccountPreferences = {
   [ACCOUNT_ID]: {
     rows: {
       agent: { model: "anthropic/claude-opus-5.5", effort: "high" },
-      chaptersModel: CHAPTERS_MODEL.SONNET,
       slackNotifications: true,
     },
   },

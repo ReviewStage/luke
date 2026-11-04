@@ -6,12 +6,11 @@ import { Schema as EffectSchema } from "effect";
  * The snapshot is the settings vocabulary's (`@repo/settings`), which sits
  * above this boundary, so each part is declared here only as far as the wire
  * knows it: the shared `preferences` a record, the link choice, the coding
- * agents' default, the chapters model, and the experiments as whatever they carry, and the
+ * agents' default, and the experiments as whatever they carry, and the
  * instant the shared part was last written. Each part is read the rest of
  * the way by its owner: the settings readers on the service and in the
  * host's preferences client, `modelChoiceSchema` for the default
- * (`models-wire.ts`), `chaptersModelFrom` for the chapters model
- * (`chapters-model-choice.ts`). A write carries any of the seven parts and is read the
+ * (`models-wire.ts`). A write carries any of the six parts and is read the
  * same way, a part the service does not take refused there.
  */
 
@@ -22,7 +21,6 @@ export const accountPreferencesAnswerSchema = EffectSchema.Struct({
   agentEnter: EffectSchema.optionalKey(EffectSchema.Unknown),
   setupFinished: EffectSchema.optionalKey(EffectSchema.Unknown),
   agent: EffectSchema.optionalKey(EffectSchema.Unknown),
-  chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(
     EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
   ),
@@ -34,14 +32,13 @@ export const accountPreferencesAnswerSchema = EffectSchema.Struct({
 
 export type AccountPreferencesAnswerWire = typeof accountPreferencesAnswerSchema.Type;
 
-/** A write (PUT): any of the snapshot's seven parts, each read by its owner on the service. */
+/** A write (PUT): any of the snapshot's six parts, each read by its owner on the service. */
 export const accountPreferencesWriteSchema = EffectSchema.Struct({
   preferences: EffectSchema.optionalKey(EffectSchema.Unknown),
   linkOpen: EffectSchema.optionalKey(EffectSchema.Unknown),
   agentEnter: EffectSchema.optionalKey(EffectSchema.Unknown),
   setupFinished: EffectSchema.optionalKey(EffectSchema.Unknown),
   agent: EffectSchema.optionalKey(EffectSchema.Unknown),
-  chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(EffectSchema.Unknown),
 });
 

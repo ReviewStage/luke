@@ -271,23 +271,6 @@ export const AGENT_INBOX_ACT_KIND = {
 } as const;
 
 /**
- * A coding agent's Pull request tab's Chapters: a pull request's chapters
- * held followed as its workspace keeps them while the tab holds them, which
- * reach the panel on app state (`LIVE_READ.PULL_REQUEST_CHAPTERS`), and read
- * again as Try again asks; generated for its head on our own model key when
- * the developer presses Generate, the generation answered once it lands,
- * which may take minutes; and Settings' choice of the Claude model the
- * member's Generate runs on, written over the account's preferences, which
- * reach the panel on app state (`LIVE_READ.ACCOUNT_PREFERENCES`).
- */
-export const CHAPTERS_ACT_KIND = {
-  CHAPTERS_FOLLOW: "chapters.follow",
-  CHAPTERS_RETRY: "chapters.retry",
-  CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
-} as const;
-
-/**
  * Settings' Skills: the skills the account sees in a workspace held for the
  * window while it holds the stream open, a pasted `skills add` command or
  * skill text previewed, one of its skills' `SKILL.md` read, and installed
@@ -709,7 +692,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
-  ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
@@ -847,11 +829,6 @@ export const PORT_ACT_USE = {
 
   BROWSER_LIVE_ATTACH: ACT_USE.WRITE,
   BROWSER_LIVE_DETACH: ACT_USE.WRITE,
-
-  CHAPTERS_FOLLOW: ACT_USE.READ,
-  CHAPTERS_RETRY: ACT_USE.READ,
-  CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
   INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
   INSTALLED_SKILLS_RETRY: ACT_USE.READ,

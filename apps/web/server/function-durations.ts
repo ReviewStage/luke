@@ -3,10 +3,6 @@ import { LIVE_SOCKET } from "@repo/features/live-wire";
 import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { WORKSPACE_MCP_FUNCTION, WORKSPACE_MCP_PATH } from "@repo/service/agents/workspace-mcp/app";
 import {
-  PULL_REQUEST_CHAPTERS_FUNCTION,
-  PULL_REQUEST_CHAPTERS_ROUTE_PATHS,
-} from "@repo/service/chapters/chapters-function";
-import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@repo/service/maintenance/maintenance-bounds";
@@ -50,7 +46,6 @@ const FUNCTION_GROUP = {
   MEMBER_MCP: "member-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
   PAGE_SANDBOX: "page-sandbox",
-  PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -82,12 +77,6 @@ const GROUPS: readonly GroupDefinition[] = [
     file: FUNCTION_GROUP.MAINTENANCE_SWEEP,
     maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
-  },
-  // A Generate runs one model call of up to three minutes, past the platform's default duration.
-  {
-    file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
-    maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
-    routes: PULL_REQUEST_CHAPTERS_ROUTE_PATHS.map(routeKeyOf),
   },
   // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
   {

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN } from "@repo/features/link-open";
 import { AGENT_ENTER, EXPERIMENT } from "@repo/settings";
 import { eq, sql } from "drizzle-orm";
@@ -24,16 +23,11 @@ import {
  * nothing, it never moves the preferences' instant a Mac reads as a
  * snapshot to take, and one account's choices are no other's. The link
  * choice is a part of its own on the same terms: written alone, it moves no
- * instant, and the shared part's write leaves it standing. So is the
- * chapters model, which reads as Haiku until the account chooses and for a
- * stored value no build lists any more. The role is read off the account's
- * own row and no other's.
+ * instant, and the shared part's write leaves it standing. The role is
+ * read off the account's own row and no other's.
  *
  * Synthetic accounts throughout.
  */
-
-// SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
-const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -151,43 +145,6 @@ it.layer(getTestDB())("the account store's link and Enter choices and setup fini
           undefined,
         );
       }),
-  );
-});
-
-it.layer(getTestDB())("the account store's chapters model", (it) => {
-  it.effect(
-    "is written on its own, read back, stands through other writes, and moves no instant",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openAccount;
-        const chosen = yield* writeAccountPreferences(userId, {
-          chaptersModel: CHAPTERS_MODEL.OPUS,
-        });
-        assert.equal(chosen.chaptersModel, CHAPTERS_MODEL.OPUS);
-        assert.equal(chosen.updatedAt, undefined);
-
-        yield* writeAccountPreferences(userId, { preferences: {} });
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
-        assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.OPUS);
-
-        const other = yield* openAccount;
-        yield* writeAccountPreferences(other, { preferences: {} });
-        assert.equal((yield* readAccountPreferences(other))?.chaptersModel, CHAPTERS_MODEL.HAIKU);
-      }),
-  );
-
-  it.effect("a stored model no build lists any more reads as Haiku", () =>
-    Effect.gen(function* () {
-      const userId = yield* openAccount;
-      yield* writeAccountPreferences(userId, { chaptersModel: CHAPTERS_MODEL.SONNET });
-      const db = yield* Database;
-      yield* db
-        .update(accountPreference)
-        .set({ chaptersModel: RETIRED_MODEL })
-        .where(eq(accountPreference.userId, userId));
-
-      assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.HAIKU);
-    }),
   );
 });
 

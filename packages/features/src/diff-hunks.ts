@@ -1,7 +1,7 @@
 import { parsePatch } from "diff";
 
 /**
- * diff-hunks.ts -- a changed file's patch read as hunks, each row numbered on the side it stands on, as Files changed and a pull request's chapters both read one.
+ * diff-hunks.ts -- a changed file's patch read as hunks, each row numbered on the side it stands on, as Files changed reads one.
  *
  * A patch is the hunks of a unified diff from the first `@@` header on, as
  * GitHub sends a changed file's. Its lines are read by jsdiff
@@ -11,9 +11,8 @@ import { parsePatch } from "diff";
  * side as git wrote them, which is how a hunk is named apart from the rest
  * of its file (`oldStart`).
  *
- * The lockfiles package managers write are named here too, because both a
- * reader folding what is rarely read and one leaving it out of a chapter
- * read past the same files.
+ * The lockfiles package managers write are named here too, because a
+ * reader folding what is rarely read reads past them.
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */

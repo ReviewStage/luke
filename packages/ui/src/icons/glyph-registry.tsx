@@ -1,6 +1,5 @@
 import {
   AppWindow,
-  BookBookmark,
   BookOpen,
   Bot,
   CircleDashed,
@@ -117,7 +116,6 @@ export const GLYPH = {
   BRANCH: lucideGlyph(GitBranch),
   PULL_REQUEST_STACK: lucideGlyph(Layers),
   PULL_REQUEST_CHANGES: lucideGlyph(FileDiff),
-  PULL_REQUEST_CHAPTERS: lucideGlyph(BookBookmark),
   // A pull request's CI checks, GitHub's Checks tab and its summary.
   CHECKS: lucideGlyph(ClipboardCheck),
   ISSUE: lucideGlyph(CircleDot),

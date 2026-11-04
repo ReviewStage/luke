@@ -25,7 +25,7 @@ import { loadTasksFixture } from "./tasks-fixture-loader.js";
  * their agent's tabs ask through the act door, in place of main, which a
  * fixture run's service reads go to empty-handed: every answer one the act
  * port's contract would carry, the pull request queued with its checks
- * passed and approved, its chapters ready, and the Terminal's sandbox as each
+ * passed and approved, and the Terminal's sandbox as each
  * profile stages it. Every act the profiles do not stage still goes to main.
  */
 

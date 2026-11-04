@@ -6,14 +6,10 @@ import {
   APP_SHORTCUT_GROUPS,
   APP_SHORTCUTS,
   appCommandLabel,
-  CHAPTERS_KEYS,
-  CHAPTERS_SHORTCUTS,
   COMMAND_KEY,
-  chaptersKeyFor,
   commandForKey,
   FILES_CHANGED_KEYS,
   FILES_CHANGED_SHORTCUT_GROUPS,
-  filesChangedKeyFor,
   IN_CONTEXT_KEY,
   IN_CONTEXT_SHORTCUTS,
   installCommandKey,
@@ -106,23 +102,6 @@ test("every Files changed key stands in exactly one group of its sheet", () => {
   const listed = FILES_CHANGED_SHORTCUT_GROUPS.flatMap((group) => group.keys);
 
   assert.deepEqual([...listed].sort(), [...FILES_CHANGED_KEYS].sort());
-});
-
-test("no Chapters key is a Files changed key, whose list hears a press first and would take it", () => {
-  for (const key of CHAPTERS_KEYS) {
-    const chord: ShortcutChord = CHAPTERS_SHORTCUTS[key].chord;
-    const press = {
-      key: chord.key.key,
-      code: chord.key.code,
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: chord.shift === true,
-    };
-
-    assert.equal(chaptersKeyFor(press), key, `${key} answers its own chord`);
-    assert.equal(filesChangedKeyFor(press), undefined, `${key} is left to Chapters`);
-  }
 });
 
 test("⇧⌘A runs nothing, and Mark done, chordless, still answers to the id the menu bar sent for Archive", () => {

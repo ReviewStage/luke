@@ -33,7 +33,7 @@ function openedRow(
 
 /**
  * The account's own API key a call beside its agents spends on, such as an
- * agent's title, a pull request's chapters, or a replay's summary: the
+ * agent's title or a replay's summary: the
  * preferred provider's where the account saved one that opens, the other
  * provider's otherwise, and nothing where it holds neither, which leaves
  * the call unmade. Our own key is never one.

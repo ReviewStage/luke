@@ -592,9 +592,8 @@ provides per request from the context `runWeb` read. The routes the hosted
 oRPC route does not answer are converted this way: auth, the GitHub,
 automation, Slack, and Sentry webhooks, the maintenance sweep and key rewrap,
 the GitHub, integration, and Sentry redirects, the byte routes, the runner's
-routes, the workspace's MCP door, and the page sandbox. The two chapters
-routes are the hosted oRPC route itself in a function of its own, and the
-WebSocket routes export something else, the `http.Server` described under
+routes, the workspace's MCP door, and the page sandbox. The WebSocket
+routes export something else, the `http.Server` described under
 "WebSocket functions".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion

@@ -34,7 +34,6 @@ export const SETTINGS_SEARCH_ROW = {
   AGENT_MODEL: "agent-model",
   AGENT_EFFORT: "agent-effort",
   AGENT_FAST: "agent-fast",
-  CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
   /** Skills' Add a skill row. */

@@ -14,8 +14,6 @@ import {
 import type { Failure } from "@repo/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@repo/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { OWN_PULL_REQUEST } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload } from "@repo/host/contract";
@@ -561,37 +559,6 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
 
   await act(() => tab.control().readChanges(AGENT));
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
-});
-
-test("a pull request's chapters are generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
-  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  const generating = {
-    pullRequest: {
-      number: 41,
-      generatable: true,
-      chapters: {
-        status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
-        headSha: "c0ffee1",
-        baseSha: "ba5e000",
-        startedAt: 1_800_000_000_000,
-      },
-    },
-  };
-  tab.answer(ACT_KIND.CHAPTERS_GENERATE, generating);
-  await tab.mount();
-
-  assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
-  // Nothing more is queued, so the port refuses this one.
-  assert.deepEqual(await tab.control().generateChapters(AGENT), {
-    failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-  });
-  assert.deepEqual(
-    tab.asked.filter(({ kind }) => kind === ACT_KIND.CHAPTERS_GENERATE),
-    [
-      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT, number: 41 } },
-      { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT } },
-    ],
-  );
 });
 
 test("a pull request a tab names by its number is the one the host holds under that number, apart from the agent's own and from a read that failed or named none", async () => {

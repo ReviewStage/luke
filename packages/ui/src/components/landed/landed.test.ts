@@ -37,8 +37,8 @@ test("a place landed on stays lit until its own light ends", () => {
 test("a place landed on again while lit is lit afresh, where it is asked", () => {
   const row = document.body.appendChild(document.createElement("div"));
   land(row);
-  land(row, LANDED.HELD);
-  expect(row.getAttribute("data-landed")).toBe(LANDED.HELD);
+  land(row, LANDED.WITHIN);
+  expect(row.getAttribute("data-landed")).toBe(LANDED.WITHIN);
 
   ended(row, LANDED_ANIMATION);
   expect(row.hasAttribute("data-landed")).toBe(false);

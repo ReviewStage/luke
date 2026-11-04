@@ -1086,15 +1086,13 @@
   --color-voice-app: var(--voice-app);
   /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
      sides, as far in as the measure leaves them (`--pull-request-page-measure`,
-     tasks.css), never under a column's inset; the Chapters view's rail, as
-     wide as Files changed's tree stands by default and never over two
-     fifths of the view; and a reviewer's disc at a face's corner. */
+     tasks.css), never under a column's inset; and a reviewer's disc at a
+     face's corner. */
   --spacing-pull-request-page: max(
     var(--ui-space-12),
     (100cqi - var(--pull-request-page-measure)) /
     2
   );
-  --spacing-chapter-rail: min(calc(var(--ui-space-64) * 4), 40%);
   --spacing-review-badge: 10px; /* off-scale: a standing's disc at a face's corner */
   /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
      words' field growing from a few lines' height; a branch's chip at its

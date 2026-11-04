@@ -1,5 +1,5 @@
 /**
- * repository-pull-request-procedures.test.ts -- a pull request read, changed, or chaptered by its repository and number refuses a non-member exactly as it refuses a number the repository holds none under.
+ * repository-pull-request-procedures.test.ts -- a pull request read or changed by its repository and number refuses a non-member exactly as it refuses a number the repository holds none under.
  *
  * Over the real `GitHubApp`, a GitHub the test scripts, and the account and
  * workspace rows on a real dialect. The member reads the pull request and
@@ -23,7 +23,6 @@ import {
 import { HTTP_METHOD } from "@repo/wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
-import { pullRequestChaptersProcedures } from "../chapters/pull-request-chapters-procedures.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -36,7 +35,7 @@ const ORIGIN = "https://app.test";
 /** A change any pull request takes: a label put on it. */
 const LABEL = JSON.stringify({ action: PULL_REQUEST_ACTION.ADD_LABEL, label: "ready" });
 
-/** Every ask that reaches the pull request by its number, each naming it in its query: its reads, its change, and a Generate of its chapters. */
+/** Every ask that reaches the pull request by its number, each naming it in its query: its reads and its change. */
 const NUMBERED_ASKS = [
   { method: HTTP_METHOD.GET, path: "/api/pull-requests" },
   { method: HTTP_METHOD.GET, path: "/api/pull-requests/changes" },
@@ -45,7 +44,6 @@ const NUMBERED_ASKS = [
   { method: HTTP_METHOD.GET, path: "/api/pull-requests/overview/conversation" },
   { method: HTTP_METHOD.GET, path: "/api/pull-requests/viewed" },
   { method: HTTP_METHOD.POST, path: "/api/pull-requests/action", body: LABEL },
-  { method: HTTP_METHOD.POST, path: "/api/pull-requests/chapters" },
 ] as const;
 
 /** The review options' read, of the repository and so of no number: a member's missing one still answers. */
@@ -53,9 +51,6 @@ const REVIEW_OPTIONS_READ = {
   method: HTTP_METHOD.GET,
   path: "/api/pull-requests/review-options",
 } as const;
-
-/** The chapters' read, which asks GitHub nothing of the number, so a member's missing one answers as no chapters rather than as none found. */
-const CHAPTERS_READ = { method: HTTP_METHOD.GET, path: "/api/pull-requests/chapters" } as const;
 
 /** `acme/relay`'s pull request 42, open, its head's checks none, as GitHub's API answers each; nothing for any other read. */
 function relayRead(sent: { readonly url: string }): Response | undefined {
@@ -127,7 +122,6 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
         };
         const handle = hostedFetch({
           pullRequests: repositoryPullRequestProcedures(seams),
-          pullRequestChapters: pullRequestChaptersProcedures(seams),
         });
         const ask = (
           { method, path, body }: { method: string; path: string; body?: string },
@@ -178,7 +172,6 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
           assert.deepEqual(yield* ask(numbered, member, 99), notFound, numbered.path);
           assert.deepEqual(yield* ask(numbered, outsider, 42), notFound, numbered.path);
         }
-        assert.deepEqual(yield* ask(CHAPTERS_READ, outsider, 42), notFound);
         // The review options are the repository's, so a member's missing number answers and only a non-member is refused.
         const options = yield* ask(REVIEW_OPTIONS_READ, member, 99);
         assert.equal(options.status, HOSTED_HTTP_STATUS.OK);

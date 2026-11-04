@@ -850,7 +850,7 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * panel's `useHostRead`.
  */
 export const LIVE_READ = {
-  /** The account's preferences row, its default agent, chapters model, and Slack notifications as stored, by the account: the service's `accountPreferences` query, held for the signed-in session into the sync engine's pool, every write to one drawn over it the moment it is asked. */
+  /** The account's preferences row, its default agent and Slack notifications as stored, by the account: the service's `accountPreferences` query, held for the signed-in session into the sync engine's pool, every write to one drawn over it the moment it is asked. */
   ACCOUNT_PREFERENCES: "accountPreferences",
   /** The run of an automation that started one agent, by the agent: the service's `agentOriginLive` query, held for the windows that show the agent's page and a few they showed lately. */
   AGENT_ORIGINS: "agentOrigins",
@@ -878,8 +878,6 @@ export const LIVE_READ = {
   PULL_REQUEST: "pullRequest",
   /** The account's own GitHub token as its login, hint, and status, never the token, by the account: fetched by the host while a window holds it, and laid from each save's and removal's own answer. */
   GITHUB_TOKEN: "githubToken",
-  /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
-  PULL_REQUEST_CHAPTERS: "pullRequestChapters",
   /** The checks on one agent's pull request's head, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_CHECKS: "pullRequestChecks",
   /** One agent's pull request's conversation and where its reviewers stand, keyed and fetched as `PULL_REQUEST`. */

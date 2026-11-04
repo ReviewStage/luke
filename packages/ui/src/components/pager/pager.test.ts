@@ -66,8 +66,8 @@ test("an arrow with nowhere to go keeps the keyboard but steps nowhere, and the 
     createElement(Pager, {
       axis: PAGER_AXIS.HORIZONTAL,
       place: { at: 1, total: 3 },
-      previous: { label: "Previous chapter", onStep: undefined },
-      next: { label: "Next chapter", onStep: () => stepped.push("next") },
+      previous: { label: "Previous run", onStep: undefined },
+      next: { label: "Next run", onStep: () => stepped.push("next") },
     }),
   );
   const [previous, next] = [...container.querySelectorAll<HTMLButtonElement>("button")];

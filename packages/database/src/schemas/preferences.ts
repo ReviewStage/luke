@@ -1,5 +1,4 @@
 import type { AgentMachineKind, ContextWindow } from "@repo/features/agent-wire";
-import type { ChaptersModelId } from "@repo/features/chapters-model-choice";
 import type { LinkOpen } from "@repo/features/link-open";
 import type { AgentEnter, ExperimentChoices } from "@repo/settings";
 import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -48,13 +47,8 @@ export const accountPreference = pgTable("account_preference", {
   agentModel: text("agent_model"),
   agentEffort: text("agent_effort"),
   agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
-  /**
-   * The Claude model a Generate chapters this account presses runs on
-   * (`@repo/features/chapters-model-choice`); null until the account
-   * chooses, and a value no build lists any more, both read as Haiku.
-   * Written alone, it moves no `updated_at`.
-   */
-  chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
+  /** The Claude model a Generate chapters ran on, kept unread since chapters were taken out. */
+  chaptersModel: text("chapters_model"),
   /**
    * Each experiment the account turned on or back off, by its key
    * (`@repo/settings`'s `EXPERIMENT`); null on a row that never chose one,

@@ -9,15 +9,14 @@
  * input is read, so an unsigned caller is refused as unsigned whatever it
  * sent.
  *
- * The preferences snapshot is six parts: the settings preferences the
+ * The preferences snapshot is five parts: the settings preferences the
  * desktop syncs, where the account's app links open and what Enter does in
  * an agent's box while it works, synced settings each of its own part so a
  * build that predates it neither refuses the snapshot nor clears the choice
  * by writing the shared part back whole, the coding
  * agents' default model, effort, and context window, which Settings alone
  * writes and which reads, until it does, as the fallback a Start naming no
- * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
- * runs on, one of a fixed set (`@repo/features/chapters-model-choice`), and the experiments the account turned on in
+ * model runs on (`accountModelChoices`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
  * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
@@ -47,7 +46,6 @@ import type {
 import type { StandingSession } from "@repo/database/models/recorded-session";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import { contextWindowSchema } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@repo/features/chapters-model-choice";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
 import { failureKind } from "@repo/runtime/effect";
@@ -146,7 +144,6 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoi
   return {
     ...accountPreferencesParts(row?.preferences ?? {}),
     agent,
-    chaptersModel: row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
   };
@@ -277,7 +274,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * where the account's links open, `agentEnter`, what Enter does in an
      * agent's box while it works, `setupFinished`, whether the account
      * finished setup, `agent`, a choice the catalog
-     * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
+     * accepts, moved only to a model the account pays for, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
      */
@@ -290,7 +287,6 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         body.agentEnter === undefined &&
         body.setupFinished === undefined &&
         body.agent === undefined &&
-        body.chaptersModel === undefined &&
         body.experiments === undefined
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -319,12 +315,6 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }
       if (body.agent !== undefined) {
         write.agent = yield* acceptedAgentChoice(seams, context.userId, body.agent);
-      }
-      if (body.chaptersModel !== undefined) {
-        if (!isChaptersModel(body.chaptersModel)) {
-          return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-        }
-        write.chaptersModel = body.chaptersModel;
       }
       if (body.experiments !== undefined) {
         const experiments = experimentChoicesFrom(body.experiments);

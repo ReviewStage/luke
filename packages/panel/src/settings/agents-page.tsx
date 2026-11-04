@@ -70,7 +70,6 @@ import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
-import { ChaptersModelSection } from "./chapters-model-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
@@ -81,8 +80,7 @@ import { SwitchRow } from "./switch-row.js";
  * The page opens on one line of what it is for, then the harnesses' rows,
  * each saying how Claude Code or Codex is connected and opening the dialog
  * that connects it with a plan or an API key (`agent-auth-section.tsx`),
- * then this file's Default model, then the model a Generate chapters runs
- * on (`chapters-model-section.tsx`), then the page's schema rows. The
+ * then this file's Default model, then the page's schema rows. The
  * harnesses and the Default model share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
@@ -488,7 +486,6 @@ export function AgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Eleme
     <>
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <AgentsSection signedIn={signedIn} ownKeys={ownKeys} />
-      <ChaptersModelSection signedIn={signedIn} />
     </>
   );
 }

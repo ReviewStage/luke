@@ -15,10 +15,6 @@ import type {
   ModelChoice,
   ModelProvider,
 } from "@repo/features/models-wire";
-import {
-  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
-  type PullRequestChaptersAnswerView,
-} from "@repo/features/pull-request-chapters-view";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { ListedPullRequest, TaskMode } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -77,11 +73,6 @@ import type {
   InboxMessenger,
   InboxThreadStarter,
 } from "./use-task-inbox.js";
-
-/** A pull request's chapters the port refused to answer, as the tab hears any answer that never came. */
-const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
-  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-};
 
 /** Why a Start did not start, with the answer that said so, which a shown failure reports. */
 type StartFailure = Failure & { readonly cause?: unknown };
@@ -394,14 +385,6 @@ export interface AgentsControl {
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
-  /**
-   * One pull request's chapters generated for its head now, or the
-   * generation already under way; answers once the generation lands, which
-   * may take minutes, with whether chapters can be generated and the
-   * workspace's newest chapters, whatever head they were made for; or why
-   * there are none, a port that refused included.
-   */
-  generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
@@ -1449,14 +1432,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const generateChapters = useCallback<AgentsControl["generateChapters"]>(
-    (agentId, number) =>
-      act(ACT_KIND.CHAPTERS_GENERATE, pullRequestAsked(agentId, number)).catch(
-        (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
-      ),
-    [act],
-  );
-
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
     [act],
@@ -1569,7 +1544,6 @@ export function useAgents(input: {
     numberedPullRequests,
     readChanges,
     changesPeople,
-    generateChapters,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     answerInbox,

@@ -9,9 +9,8 @@ import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "./use-host-r
 /**
  * account-choices.ts -- the account's own choices as every surface draws them: its preferences row, which the host holds for the session, the models it is offered and its devices, which a surface holds while it draws one, and the default a new agent runs on, worked out from both.
  *
- * The host holds the preferences row on a live read, so a default or a
- * chapters model chosen on another device draws here within the service's
- * coalesce window, and a write draws at once. The models are a fetch the
+ * The host holds the preferences row on a live read, so a default chosen
+ * on another device draws here within the service's coalesce window, and a write draws at once. The models are a fetch the
  * host asks again as a window comes forward, as the account's keys move,
  * and every `MODEL_CATALOG_TTL`. Where the account stored no default, the
  * default drawn is the one the service answers for it

@@ -29,7 +29,6 @@ import { IDLE_TASKS_VIEW, type TASK_CALL_FAILURE, type TasksView } from "@repo/f
 import {
   type AppAutomationReads,
   type AppBrowserTabs,
-  type AppChapters,
   type AppDevicePresence,
   type AppGitHubToken,
   type AppHolderInboxes,
@@ -56,7 +55,6 @@ import {
   EVERY_WORKSPACE,
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
-  NO_CHAPTERS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
@@ -143,7 +141,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PULL_REQUEST]: NO_KEYS_HELD,
     [LIVE_READ.REPOSITORY_LISTS]: NO_KEYS_HELD,
     [LIVE_READ.GITHUB_TOKEN]: NO_KEYS_HELD,
-    [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.PULL_REQUEST_CHECKS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CONVERSATION]: NO_KEYS_HELD,
@@ -261,7 +258,6 @@ export interface HostReadsHanded {
   readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
-  readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
   readonly deliverComments: (next: AppPlanComments) => void;
@@ -296,7 +292,7 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 
 /**
  * Lays the host's reads as given, the account's feed of every item, the
- * holders' own inboxes, the pull requests' chapters, the servers' tools, the
+ * holders' own inboxes, the servers' tools, the
  * signed-in account's keys, preferences, and models, the workspaces' people and token
  * repositories, and the agents' transcripts, over whatever document the window was handed, its
  * experiments and the reads handed before among it, and answers with how
@@ -307,7 +303,6 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
-  readonly chapters?: AppChapters;
   readonly tools?: AppIntegrationTools;
   readonly keys?: AppHostRead<AppProviderKeyList>;
   readonly preferences?: AppHostRead<AccountPreferencesLive>;
@@ -337,9 +332,6 @@ export function handHostReads(first: {
         version: asked,
         ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
         ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
-        ...(first.chapters === undefined
-          ? undefined
-          : { [LIVE_READ.PULL_REQUEST_CHAPTERS]: first.chapters }),
         ...(first.tools === undefined ? undefined : { [LIVE_READ.INTEGRATION_TOOLS]: first.tools }),
         ...(first.keys === undefined
           ? undefined
@@ -383,7 +375,6 @@ export function handHostReads(first: {
     deliverItems: (next) => deliver({ [LIVE_READ.INBOX_ITEMS]: next }),
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
-    deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
     deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),

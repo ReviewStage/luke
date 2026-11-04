@@ -10,7 +10,6 @@ import {
 } from "@repo/database/models/account-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN } from "@repo/features/link-open";
 import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
@@ -44,9 +43,7 @@ import { accountProcedures } from "./account-procedures.js";
  * link choice: none until the account chooses, written on its own without
  * moving the instant a Mac reads as a snapshot to take, left standing by the
  * shared part a build that predates it writes back whole, and refused where
- * it names no choice. The chapters model: Haiku until the account chooses,
- * written on its own and read back, and refused where it names no model the
- * set offers. The agent default: GPT-6.1 Sol at high effort for an account
+ * it names no choice. The agent default: GPT-6.1 Sol at high effort for an account
  * only an OpenAI key pays for until it stores one, an Effort kept on a model
  * no credential of the account's pays for, and a move to another such model
  * refused, keeping what stood. The bearer names the account and nothing else does.
@@ -250,35 +247,6 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
         body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
       });
       assert.equal(partOf(yield* ask(request(owner)), "linkOpen"), LINK_OPEN.MAC_APP);
-    }),
-  );
-});
-
-it.layer(getTestDB())("the preferences snapshot's chapters model part", (it) => {
-  it.effect("is Haiku until the account chooses, and a choice written is the one read back", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts;
-      assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
-
-      const chosen = yield* ask(request(owner, { chaptersModel: CHAPTERS_MODEL.SONNET }));
-      assert.equal(partOf(chosen, "chaptersModel"), CHAPTERS_MODEL.SONNET);
-      assert.equal(partOf(chosen, "updatedAt"), undefined);
-      assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.SONNET);
-      assert.equal(partOf(yield* ask(request(other)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
-    }),
-  );
-
-  it.effect("refuses a model the set does not offer, and keeps what stood", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts;
-      yield* ask(request(owner, { chaptersModel: CHAPTERS_MODEL.OPUS }));
-      for (const offered of ["gpt-5.5", "anthropic/claude-opus-5.5", 3]) {
-        assert.deepEqual(yield* ask(request(owner, { chaptersModel: offered })), {
-          status: HOSTED_HTTP_STATUS.BAD_REQUEST,
-          body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
-        });
-      }
-      assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.OPUS);
     }),
   );
 });

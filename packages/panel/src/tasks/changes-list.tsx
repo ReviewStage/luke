@@ -78,8 +78,8 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * opened stays open, Collapse all and Expand all fold exactly the files the
  * filter keeps, and marking a file viewed folds it, or unmarking opens it,
  * whatever was chosen for it before. A file the filter leaves out, asked
- * for where every changed file is reached, as a chapter's key change asks
- * for one, clears the filter and is scrolled to once the list holds it.
+ * for where every changed file is reached, clears the filter and is
+ * scrolled to once the list holds it.
  */
 
 /** The fold keys' chords, for the hints of the controls that do the same. */
@@ -117,7 +117,7 @@ export const LIST_WORDS = {
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */
-export function typingInto(target: EventTarget | null): boolean {
+function typingInto(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches("input, textarea, select");
 }
@@ -322,7 +322,7 @@ export function useChangesList(
     choose(kept.map((file) => file.path));
     setChosen((was) => foldedAs(was, kept, !allCollapsed));
   }, [choose]);
-  // A file the filter leaves out is asked for, as a chapter's key change asks: the filter is cleared, and the list scrolled to it once it holds it again.
+  // A file the filter leaves out is asked for: the filter is cleared, and the list scrolled to it once it holds it again.
   const [revealing, setRevealing] = useState<string | undefined>(undefined);
   const go = useCallback(
     (path: string) => {

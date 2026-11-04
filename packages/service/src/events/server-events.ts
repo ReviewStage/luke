@@ -2,7 +2,6 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import { settledTurnAgent } from "@repo/database/models/agent-store";
 import { readWorkspaceFace, type WorkspaceFace } from "@repo/database/models/workspace-store";
 import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/models/writer";
-import { PULL_REQUEST_CHAPTERS_FAILURE } from "@repo/database/pull-request-chapters-vocabulary";
 import type { ConversationRuntime } from "@repo/database/storage-vocabulary";
 import type { AgentKind, AgentMachineKind } from "@repo/features/agent-wire";
 import type { AutomationFiringKind, AutomationTriggerKind } from "@repo/features/automation-wire";
@@ -80,7 +79,6 @@ export const SERVER_EVENT = {
   PULL_REQUEST_CREATE: "agent:pull_request_create",
   INBOX_ANSWER_SEND: "inbox:answer_send",
   AUTOMATION_CREATE: "automation:create",
-  PULL_REQUEST_CHAPTERS_GENERATE: "pull_request:chapters_generate",
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
@@ -209,12 +207,6 @@ const TURN_DURATION_BOUNDS = [
 export const SERVER_PULL_REQUEST_OPENER = {
   DEVELOPER: "developer",
   APP: "app",
-} as const;
-
-/** How a generation of a pull request's chapters came out: made, or the store's word for why it failed. */
-export const SERVER_CHAPTERS_OUTCOME = {
-  READY: "ready",
-  ...PULL_REQUEST_CHAPTERS_FAILURE,
 } as const;
 
 /** How an account signed in the first time: the provider's own id, or `unknown` where the request names none of ours. */
@@ -370,13 +362,6 @@ export interface ServerEventProperties {
   [SERVER_EVENT.AUTOMATION_CREATE]: {
     trigger_kind: AutomationTriggerKind;
     source: Values<typeof SERVER_AUTOMATION_SOURCE>;
-  };
-  /** Counts alone: how many chapters and hunks a generation told, how long it took, and how it came out. */
-  [SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE]: {
-    outcome: Values<typeof SERVER_CHAPTERS_OUTCOME>;
-    chapters: number;
-    hunks: number;
-    duration_ms: number;
   };
   [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
   [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };

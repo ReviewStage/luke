@@ -11,8 +11,8 @@ import { Tooltip } from "../tooltip/hint.js";
 /**
  * pager.tsx -- stepping one item at a time through a list the item stands apart from: where it stands, "2 of 8", and the arrows to the one before it and the one after.
  *
- * An item read on its own, an Inbox item standing alone, an agent among its
- * automation's runs, a chapter of a pull request, ends its bar in this pager,
+ * An item read on its own, an Inbox item standing alone or an agent among
+ * its automation's runs, ends its bar in this pager,
  * so every list stepped through one item at a time reads the same: its place
  * in the caption's muted ink, in figures that hold their width as they step,
  * and two glyph-alone arrows, up and down where the list stands as a column,

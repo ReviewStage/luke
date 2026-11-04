@@ -105,12 +105,6 @@ import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
-import {
-  chaptersModelWriteParamsSchema,
-  type PullRequestChaptersAnswerView,
-  pullRequestChaptersParamsSchema,
-  pullRequestChaptersReadParamsSchema,
-} from "@repo/features/pull-request-chapters-view";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import {
@@ -146,16 +140,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import {
-  agentDefaultWritten,
-  chaptersModelWritten,
-  heldAccountPreferences,
-} from "./account-preferences-follow.js";
+import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
   type AppAgentOrigins,
-  type AppChapters,
   type AppDevicePresence,
   type AppDevicePresences,
   type AppGitHubToken,
@@ -176,7 +165,6 @@ import {
   OWN_TRANSCRIPT,
   UNREAD,
 } from "./app-state.js";
-import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
@@ -277,10 +265,7 @@ import type { WindowFocus } from "./window-focus.js";
 /** The service's side of the agents, as this concern asks it. */
 export type AgentClient = Pick<
   HostedAgentClient,
-  | "pullRequestChaptersLive"
   | "agentOriginLive"
-  | "generateChapters"
-  | "writeChaptersModel"
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
@@ -521,14 +506,6 @@ export function composeAgents(
       tell: (held: AppHolderInboxes) =>
         dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
     });
-    const chapters = yield* heldChapters({
-      seal: (key, poll, userId, after) =>
-        asked(client.pullRequestChaptersLive(key.agentId, key.number, userId, poll, after)),
-      accountId: dependencies.accountId,
-      gate,
-      tell: (held: AppChapters) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
-    });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
         asked(client.agentOriginLive(agentId, userId, poll, after)),
@@ -581,7 +558,6 @@ export function composeAgents(
     });
     const hostsHold = yield* accountHeld(hosts, dependencies.accountId);
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
-    const chapterHolds = yield* FiberMap.make<ChaptersKey>();
     const memoryHolds = yield* FiberMap.make<string>();
     const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
@@ -608,7 +584,6 @@ export function composeAgents(
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
-      { chapters, holds: chapterHolds },
       { memories, holds: memoryHolds },
       { origins, holds: originHolds },
       { hosts, hold: hostsHold },
@@ -649,12 +624,6 @@ interface SessionReads {
   /** The account's preferences row, held for the session by `holdPreferences`. */
   readonly preferences: HeldSlice<string>;
   readonly holdPreferences: (userId: string) => Effect.Effect<void>;
-}
-
-/** The held lifetime over every agent's pull request's chapters the windows hold, and the windows' holds, one fiber per pull request held. */
-interface ChapterFollows {
-  readonly chapters: HeldSlice<ChaptersKey>;
-  readonly holds: FiberMap.FiberMap<ChaptersKey>;
 }
 
 /** The held lifetime over every workspace's memories the windows hold, and the windows' holds, one fiber per workspace held. */
@@ -841,8 +810,6 @@ function composed(
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches and its preferences among them. */
   { reads: sessionReads, followItems, preferences, holdPreferences }: SessionReads,
-  /** The pull requests' chapters the windows hold. */
-  { chapters, holds: chapterHolds }: ChapterFollows,
   /** The workspaces' memories Settings › Memory holds. */
   { memories, holds: memoryHolds }: MemoryFollows,
   /** The agents' origins the windows hold. */
@@ -1584,71 +1551,6 @@ function composed(
         const answer = yield* asked(client.changes(agentId, number));
         return carried<AgentChangesAnswerView>(answer);
       }),
-    // A pull request's chapters are held for a window while its Pull request tab reads them, and told only on the app state (`CHAPTERS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "following a pull request's chapters names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.run(
-          chapterHolds,
-          key,
-          Effect.scoped(Effect.andThen(chapters.hold(key), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "letting a pull request's chapters go names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.remove(chapterHolds, key);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "reading a pull request's chapters again names one agent and its pull request's number",
-          ),
-        );
-        yield* chapters.retry(key);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          pullRequestChaptersParamsSchema,
-          params,
-          "generating a pull request's chapters names one agent",
-        );
-        const answer = yield* asked(client.generateChapters(agentId, number));
-        return carried<PullRequestChaptersAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: declaredMethod(
-      dependencies.pool,
-      chaptersModelWritten(
-        (write) => asked(client.writeChaptersModel(write.model)),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          chaptersModelWriteParamsSchema,
-          params,
-          "the chapters model names one of the models Settings offers",
-        ),
-    ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1892,7 +1794,6 @@ function composed(
   const reset = Effect.gen(function* () {
     yield* transcriptSlice.end;
     yield* holders.end;
-    yield* chapters.end;
     yield* memories.end;
     yield* origins.end;
     yield* hosts.end;
@@ -1917,7 +1818,6 @@ function composed(
     yield* sessionReads.open(LIVE_READ.ACCOUNT_PREFERENCES, holdPreferences);
     yield* transcriptSlice.open;
     yield* holders.open;
-    yield* chapters.open;
     yield* memories.open;
     yield* origins.open;
     yield* presenceHold.open;

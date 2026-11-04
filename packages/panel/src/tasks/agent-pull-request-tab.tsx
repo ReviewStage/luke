@@ -90,7 +90,6 @@ import {
   Skeleton,
   SkeletonRegion,
   SPINNER_SIZE,
-  SpinnerRegion,
   SpinnerRing,
   STATUS_TONE,
   Stack,
@@ -117,7 +116,6 @@ import {
   MessagesSquareIcon,
   RotateCwIcon,
   ScanSearchIcon,
-  TriangleAlertIcon,
   XIcon,
 } from "@repo/ui/icons";
 import { landedMark } from "@repo/ui/landed";
@@ -126,7 +124,6 @@ import {
   type ComponentProps,
   createContext,
   type ReactNode,
-  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -150,7 +147,6 @@ import {
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
 import { pictureUnread, unreadShown } from "../failure-report.js";
-import { lazyRoute } from "../lazy-route.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
@@ -175,8 +171,6 @@ import {
   type AnnotationState,
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
-import { CHAPTERS_SHOWN, chapterPaths, chaptersShown, chapterViewed } from "./chapters-model.js";
-import { type ChaptersRead, useChaptersRead } from "./chapters-read.js";
 import {
   type ConversationFilters,
   type ConversationFiltersControl,
@@ -260,7 +254,7 @@ import {
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
 /**
- * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
+ * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.
  *
  * The overview is three parts the host holds while the tab shows
  * (`LIVE_READ.PULL_REQUEST` and its siblings), each read from GitHub by the
@@ -314,12 +308,9 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * and any other drawn as its link, as ReviewStage/stage draws them; Checks, its head's deployments, the newest of each
  * environment, each opening the address it serves, over every check on its
  * head, those that failed first, then those still running, each opening
- * its page, counted in the color of how they went; Chapters
- * (`agent-chapters-tab.tsx`), its diff told as chapters to review in order,
- * each over its own hunks in Files changed's list, its count saying
- * where they stand: being made, failed, out of date, or how many, and how
- * many viewed once any is; and Files changed (`AgentChangesTab`), its own bar and
- * tree, counted by its files as Chapters counts its chapters. A phone names
+ * its page, counted in the color of how they went; and Files changed
+ * (`AgentChangesTab`), its own bar and tree, counted by its files, and how
+ * many viewed once any is. A phone names
  * the chosen tab alone and draws the others by their glyphs and counts, and
  * a folded row leaves "viewed" out of every count. A review carries the
  * threads on lines it started, each on the card every annotation on code
@@ -342,17 +333,6 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  */
 
 /**
- * The Chapters view, loaded as a chunk of its own the first time it is
- * shown rather than with the window, as Settings is, because the renderer
- * bundle is parsed at every window open and the view, its rail, and the
- * chapter logic are opened seldom. What stands while
- * the chunk loads is the view's own wait, for a frame.
- */
-const CHAPTERS_TAB = lazyRoute(() =>
-  import("./agent-chapters-tab.js").then((loaded) => loaded.AgentChaptersTab),
-);
-
-/**
  * A view of the tab, filling the room under the header and the tabs, the
  * others kept drawn but hidden, so switching back draws what each last read.
  * Note that it hands the tab's band down as its scroller's own, so the fade
@@ -368,7 +348,6 @@ const PULL_REQUEST_WORDS = {
   READING_CHECKS: "Reading checks",
   READING_DESCRIPTION: "Reading description",
   READING_CONVERSATION: "Reading conversation",
-  READING_CHAPTERS: "Reading chapters",
   FAILED: "The pull request could not be read.",
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
@@ -660,7 +639,7 @@ interface SectionFold {
  * it. That row sticks to the top of the Conversation's scroller while its
  * section is in view, and the next section's pushes it off (tasks.css).
  */
-export function Section({
+function Section({
   title,
   count,
   fold,
@@ -2177,93 +2156,12 @@ function checksCount(
   ];
 }
 
-/** What the Chapters tab says of where they stand, beside its glyph, to a reader who cannot see it. */
-const CHAPTERS_TAB_WORDS = {
-  GENERATING: "generating",
-  FAILED: "failed",
-  STALE: "out of date",
-  VIEWED: "viewed",
-} as const;
-
 /** How many of how many a tab counts viewed, "1/4 viewed", its word left out where the row folds. */
 function viewedCount(viewed: number, total: number): readonly CountPart[] {
   return [
     { text: `${formatCount(viewed)}/${formatCount(total)}` },
-    { text: CHAPTERS_TAB_WORDS.VIEWED, folds: true },
+    { text: "viewed", folds: true },
   ];
-}
-
-/** The glyphs the Chapters tab wears for being made, a failed generation, and new commits since, as the Checks tab's are kept: made once, never in a draw. New commits since wear the merge box's Behind (`merge-box.tsx`), a branch its base moved on from. */
-const CHAPTERS_TAB_GLYPHS = {
-  GENERATING: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
-  FAILED: <XIcon />,
-  STALE: <TriangleAlertIcon aria-hidden="true" />,
-} as const;
-
-/**
- * What the Chapters tab counts, as the Chapters view tells their state
- * (`chaptersShown`): the ring every wait turns while they are made, a cross
- * in the danger tone where the generation failed, and once ready their count,
- * in the attention tone under the merge box's Behind where new commits came
- * since, else how many are viewed of how many where any is; nothing while
- * there are none. Note that viewed is read from the files
- * and the marks Files changed reads, so it stands only once either view has
- * read them; before then the files' head is taken as the pull request's,
- * which is the head the view will read them at, and once read it is
- * theirs, as the view takes it.
- */
-function chaptersTabCount(
-  chapters: ChaptersRead,
-  changes: ChangesReads,
-): readonly CountPart[] | undefined {
-  const files = changes.pullRequest ?? undefined;
-  // Note that once the files are read their own head is the one the view judges by, even where they name none.
-  const filesHead = files === undefined ? chapters.head : files.headSha;
-  const state = chaptersShown(chapters.answer, chapters.generating, {
-    pullRequest: chapters.head,
-    files: filesHead,
-  });
-  if (state.kind === CHAPTERS_SHOWN.GENERATING) {
-    return [
-      {
-        text: "",
-        glyph: CHAPTERS_TAB_GLYPHS.GENERATING,
-        glyphLabel: CHAPTERS_TAB_WORDS.GENERATING,
-      },
-    ];
-  }
-  if (state.kind === CHAPTERS_SHOWN.GENERATION_FAILED) {
-    return [
-      {
-        text: "",
-        tone: STATUS_TONE.DANGER,
-        glyph: CHAPTERS_TAB_GLYPHS.FAILED,
-        glyphLabel: CHAPTERS_TAB_WORDS.FAILED,
-      },
-    ];
-  }
-  if (state.kind !== CHAPTERS_SHOWN.READY) return undefined;
-  const total = state.chapters.length;
-  // Note that with neither the files nor the pull request's head read yet nothing says they are out of date, so they are counted as they stand.
-  if (state.stale && (files !== undefined || chapters.head !== undefined)) {
-    return [
-      {
-        text: formatCount(total),
-        tone: STATUS_TONE.ATTENTION,
-        glyph: CHAPTERS_TAB_GLYPHS.STALE,
-        glyphLabel: CHAPTERS_TAB_WORDS.STALE,
-      },
-    ];
-  }
-  const marks = changes.viewedFiles.marks;
-  const viewed =
-    files === undefined || marks === undefined
-      ? 0
-      : state.chapters.filter((chapter) =>
-          chapterViewed(chapterPaths(chapter, files.files), marks.viewed),
-        ).length;
-  if (viewed === 0) return [{ text: formatCount(total) }];
-  return viewedCount(viewed, total);
 }
 
 /** The lines the header counts: those left to review and, in its hint, the whole; or the whole alone. */
@@ -2316,9 +2214,8 @@ function linesOf(
 }
 
 /**
- * The files the Files changed tab counts, as the Chapters tab counts its
- * chapters: how many, then how many of them are viewed once any is, by the
- * marks Files changed draws, so a box ticked there counts at once. How many
+ * The files the Files changed tab counts: how many, then how many of them
+ * are viewed once any is, by the marks Files changed draws, so a box ticked there counts at once. How many
  * is what the agent published until the changes are read, then theirs, but
  * where the read stopped short of every file, which leaves the published
  * count the whole unless the read already holds more.
@@ -2364,19 +2261,17 @@ function conversationCount(conversation: AgentOverviewConversation): number {
 }
 
 /**
- * The four tabs under the header, each counting what the app has read of it
+ * The three tabs under the header, each counting what the app has read of it
  * so far: the conversation once read; the checks by how they went from the
- * first frame, as the pill's mark says it, and by how many once read; the
- * chapters by where they stand from their read, as the checks are
- * (`chaptersTabCount`); and the files by how many, and how many are viewed
- * once some are (`filesTabCount`).
+ * first frame, as the pill's mark says it, and by how many once read; and
+ * the files by how many, and how many are viewed once some are
+ * (`filesTabCount`).
  */
 function tabsOf(
   parts: OverviewParts,
   published: AgentPullRequest | undefined,
   held: HeaderPullRequest | undefined,
   changes: ChangesReads,
-  chapters: ChaptersRead,
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
@@ -2398,12 +2293,6 @@ function tabsOf(
               held.checks,
               checks === undefined ? undefined : summaryCountOf(checks.checks, held.checks),
             ),
-    },
-    {
-      value: PULL_REQUEST_VIEW.CHAPTERS,
-      icon: <GLYPH.PULL_REQUEST_CHAPTERS />,
-      label: "Chapters",
-      count: chaptersTabCount(chapters, changes),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -2863,14 +2752,12 @@ function useConversationAnchors(input: {
  * saying where it stands, its title and number, and, while it is open, the
  * merge control, in one row; then its branches, who opened it and
  * when, and its reviewers, in one line), then a row of tabs, Conversation,
- * Checks, Chapters, and Files changed (`AgentChangesTab`), each with its count, and
+ * Checks, and Files changed (`AgentChangesTab`), each with its count, and
  * Review at its end while it is open. Each tab stands once shown, the others hidden, so
  * switching draws what each last read rather than asking GitHub again. The
  * header's reads, the pull request and its conversation, whose reviews say
- * where each reviewer stands, and the chapters, whose state their tab
- * wears, are asked as the tab is shown; the checks and the files as their
- * tab is first shown, the files also as
- * Chapters is, whose diff draws them. Only a read saying there is no
+ * where each reviewer stands, are asked as the tab is shown; the checks and
+ * the files as their tab is first shown. Only a read saying there is no
  * pull request yet takes the header and the tabs away; a read that failed
  * says so in its own part, with its own Retry, the others standing. Files
  * changed draws the conversation's review threads on their lines.
@@ -2941,7 +2828,7 @@ function shownScroller(root: Element): Element | undefined {
 
 /**
  * Whether the view's own scroller stands at its view's top, nothing over it
- * (a chapter's bar, a notice), so the room the header folds away from can
+ * (a notice), so the room the header folds away from can
  * stand inside it and scroll away with what it holds.
  */
 function leadsView(box: Element): boolean {
@@ -2996,7 +2883,7 @@ interface HeaderFold {
  * top. The room it folds away is its height less that line's. Where the
  * view's scroller leads the view, that room stands at the top of what it
  * scrolls, so the header only ever uncovers what the view holds and never
- * moves it; where something stands over the scroller, a chapter's bar, the
+ * moves it; where something stands over the scroller, a notice, the
  * view gives the room up as the header folds (tasks.css). A scroll left to
  * rest part-way glides on to whichever end is nearer, unless it rests at
  * the view's end. The slide is written straight to the tab's root, never
@@ -3130,7 +3017,7 @@ function PullRequestTabBody({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's parts, the checks among them, and what the agent published; the chapters are held live, so Refresh does not read them.
+  // Refresh reads again the header's parts, the checks among them, and what the agent published.
   // It settles once the header's parts land, which a change waits on before its press lets go.
   const refresh = () => {
     const header = Promise.all([ask.pullRequest(), ask.conversation(), ask.checks()]);
@@ -3199,20 +3086,16 @@ function PullRequestTabBody({
           ...(phone && viewActions.held?.view === view ? viewActions.held.actions : []),
         ].filter((group) => group.length > 0),
   );
-  // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
-  // Chapters view draws the same files and marks; asked as either is first shown.
+  // Files changed's reads, held here so its tab's count reads the same marks it draws; asked as it is first shown.
   const changes = useChangesReads(
     agentId,
     source,
-    shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
+    shown && !none && view === PULL_REQUEST_VIEW.FILES,
   );
   refreshAllNow.current = () => {
     refresh();
     if (askedYet(changes)) changes.ask();
   };
-  // The Chapters view's chunk is asked for only once the view is first shown.
-  const [chaptersSeen, setChaptersSeen] = useState(false);
-  if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   const overview = landed(parts.pullRequest);
   // Note that Files changed is read again as the pull request's head moves, as a push moves it, where it was read, because a diff is too large to hold on app state and nothing else asks it again.
   const head = overview?.merging?.headSha;
@@ -3225,16 +3108,6 @@ function PullRequestTabBody({
     if (was === undefined || head === undefined || was === head) return;
     if (askedYet(changesNow.current)) changesNow.current.ask();
   }, [head]);
-  // The chapters, held while the tab is shown once the pull request's own read has answered, naming the number it found, so their tab says where they stand before their view is opened.
-  const chapters = useChaptersRead(
-    agentId,
-    source,
-    shown && overview !== undefined,
-    overview === undefined
-      ? undefined
-      : { number: overview.number, head: overview.merging?.headSha },
-    () => refreshAllNow.current(),
-  );
   const title = overview ?? published;
   // Review stands at the end of the tabs once the pull request is held, whatever it stands as, because GitHub takes a review of one merged or closed too; where GitHub refuses one, as on a locked conversation, the panel says why in GitHub's words.
   const reviewable = held !== undefined;
@@ -3356,7 +3229,7 @@ function PullRequestTabBody({
                   middle={
                     <ChoiceBar<PullRequestView>
                       label="Pull request"
-                      items={tabsOf(parts, published, held, changes, chapters)}
+                      items={tabsOf(parts, published, held, changes)}
                       value={view}
                       onChange={onView}
                       look={CHOICE_BAR_LOOK.FILL}
@@ -3412,35 +3285,6 @@ function PullRequestTabBody({
                       live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                     />
                   </DetailPage>
-                </Fill>
-                <Fill
-                  className={VIEW_CLASS}
-                  role="tabpanel"
-                  id={ids(PULL_REQUEST_VIEW.CHAPTERS).panel}
-                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHAPTERS).tab}
-                  hidden={view !== PULL_REQUEST_VIEW.CHAPTERS}
-                >
-                  {chaptersSeen ? (
-                    <Suspense
-                      fallback={<SpinnerRegion delay label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
-                    >
-                      <HandTabActionsContext.Provider
-                        value={viewActions.handFor(PULL_REQUEST_VIEW.CHAPTERS)}
-                      >
-                        <CHAPTERS_TAB.Route
-                          agentId={agentId}
-                          source={source}
-                          shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
-                          repository={repository}
-                          tree={tree}
-                          chapters={chapters}
-                          changes={changes}
-                          threads={changesThreads}
-                          lineComments={{ pending: pendingReview, onWritten: written }}
-                        />
-                      </HandTabActionsContext.Provider>
-                    </Suspense>
-                  ) : null}
                 </Fill>
               </>
             )}

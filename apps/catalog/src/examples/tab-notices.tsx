@@ -31,8 +31,8 @@ function TabNotices(): React.JSX.Element {
       <CatalogSection id="tab-notice-narrow" title="Long words in a narrow column">
         <div className="catalog-narrow">
           <TabNotice>
-            <p>New commits since these chapters were made. Their lines name an older head.</p>
-            <Button onClick={stay}>Regenerate</Button>
+            <p>New commits since these files were read. Their lines name an older head.</p>
+            <Button onClick={stay}>Refresh</Button>
           </TabNotice>
         </div>
       </CatalogSection>

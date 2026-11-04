@@ -25,18 +25,16 @@ import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
 import { ADMIN_ERROR } from "@repo/features/admin-wire";
 import { HOSTED_ERRORS, type hostedContract } from "@repo/features/contract";
-import { CHAPTERS_BOUNDS } from "@repo/service/chapters/chapters-generator";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import type { HostedContext } from "@repo/service/orpc/base";
 import { hostedFetch } from "@repo/service/orpc/handler";
 import { POSTHOG_ENVIRONMENT } from "@repo/service/providers/posthog";
 import { recordingSentry } from "@repo/service/testing/sentry-transport";
 import { HTTP_METHOD } from "@repo/wire";
-import { Duration, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers.js";
 import { ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
-import { functionDefinitions } from "../server/function-durations.js";
 import { apiRewrites } from "../server/function-rewrites.js";
 import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
@@ -416,29 +414,5 @@ test("every procedure the contract declares is reached through the committed fal
       resource === ADMIN_RESOURCE ? signedOut : unauthenticated,
       key,
     );
-  }
-});
-
-test("a pull request's chapters are reached at their public paths through the committed table, in a function that outlasts a generation, an unsigned caller refused on both methods", async () => {
-  const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
-  const workspace = "9c1e2f3a-4b5c-4d6e-8f70-112233445566";
-  // Through an agent, and by the repository and number for a pull request no agent opened.
-  const publicPaths = new Map([
-    ["agents/chapters", `/api/agents/${agent}/chapters?number=7`],
-    [
-      "pull-requests/chapters",
-      `/api/pull-requests/chapters?workspaceId=${workspace}&repository=acme/relay&number=7`,
-    ],
-  ]);
-  const routes = new Map([...publicPaths.keys()].map((route) => [route, orpcRoute]));
-  const serving = functionDefinitions([...publicPaths.keys(), "models"]);
-  for (const [route, path] of publicPaths) {
-    for (const method of [HTTP_METHOD.GET, HTTP_METHOD.POST]) {
-      const unsigned = await dispatched(new Request(`${ORIGIN}${path}`, { method }), routes);
-      assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, `${method} ${path}`);
-      assert.equal(await unsigned.text(), '{"error":"invalid-token"}', `${method} ${path}`);
-    }
-    const holding = serving.find((definition) => definition.routes.includes(route));
-    assert.ok((holding?.maxDuration ?? 0) > Duration.toSeconds(CHAPTERS_BOUNDS.TIMEOUT), route);
   }
 });

@@ -1,4 +1,4 @@
-import { and, eq, lt, ne, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, ne, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -7,7 +7,6 @@ import { agentTable } from "../schemas/agent.js";
 import { automation } from "../schemas/automation.js";
 import { githubRepository } from "../schemas/github-repository.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
-import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { task } from "../schemas/task.js";
 import { workspaceTokenRepository } from "../schemas/workspace-token-repository.js";
@@ -225,67 +224,6 @@ const deleteRelabeledReads = SqlSchema.void({
     ),
 });
 
-const otherChapters = alias(pullRequestChapters, "other_chapters");
-
-/**
- * The chapters of the old name that would stand twice on one head once
- * relabeled: each one where the workspace already holds that head's under
- * the new name, and of several spellings of the old name, every one but
- * the first made. The pull request's chapters stand under the new name.
- */
-const deleteDuplicateChapters = SqlSchema.void({
-  Request: RelabelSchema,
-  execute: ({ from, to }) =>
-    Database.use((db) =>
-      db.delete(pullRequestChapters).where(
-        and(
-          namedAs(pullRequestChapters.repository, from),
-          ne(pullRequestChapters.repository, to),
-          sql`exists ${queryBuilder
-            .select({ one: otherChapters.id })
-            .from(otherChapters)
-            .where(
-              and(
-                eq(otherChapters.organizationId, pullRequestChapters.organizationId),
-                eq(otherChapters.pullRequestNumber, pullRequestChapters.pullRequestNumber),
-                eq(otherChapters.headSha, pullRequestChapters.headSha),
-                ne(otherChapters.id, pullRequestChapters.id),
-                or(
-                  eq(otherChapters.repository, to),
-                  and(
-                    namedAs(otherChapters.repository, from),
-                    or(
-                      lt(otherChapters.createdAt, pullRequestChapters.createdAt),
-                      and(
-                        eq(otherChapters.createdAt, pullRequestChapters.createdAt),
-                        lt(otherChapters.id, pullRequestChapters.id),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            )}`,
-        ),
-      ),
-    ),
-});
-
-const relabelChapters = SqlSchema.void({
-  Request: RelabelSchema,
-  execute: ({ from, to }) =>
-    Database.use((db) =>
-      db
-        .update(pullRequestChapters)
-        .set({ repository: to })
-        .where(
-          and(
-            namedAs(pullRequestChapters.repository, from),
-            ne(pullRequestChapters.repository, to),
-          ),
-        ),
-    ),
-});
-
 const otherTokenRepository = alias(workspaceTokenRepository, "other_token_repository");
 
 /** A workspace's token repository under the old name where it already holds the new one: the new one stands, and the table holds one per name in any case. */
@@ -340,8 +278,6 @@ function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
       yield* copyReads(move);
       yield* deleteRelabeledReads(move);
     }
-    yield* deleteDuplicateChapters(move);
-    yield* relabelChapters(move);
     yield* deleteDuplicateTokenRepositories(move);
     yield* relabelTokenRepositories(move);
   });

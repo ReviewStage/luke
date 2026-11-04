@@ -789,201 +789,6 @@
   container: pull-request-tab / inline-size;
 }
 
-/* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
-   its left, as Files changed's tree docks at its right, and the chapter
-   chosen beside it, its head over its own Files changed list. The rail is
-   as wide as the tree stands by default, slides in past the view's left
-   edge and out over the chapter (`usePaneSlide`), so the body clips what
-   stands past it, with `clip` rather than `hidden`, and leaves a strip of
-   one mark a chapter while hidden. */
-.chapters-view {
-  --chapter-rail-width: calc(var(--ui-space-64) * 4);
-  /* The least the chapter reads at: its bar, three lines of its brief, and
-     the least of its files (below). Its strip is as wide as keeps each mark
-     clear of the edge it stands at, a window's or the panel's. */
-  --chapter-brief-least: calc(3 * var(--ui-type-body-leading) + var(--ui-list-inset));
-  --chapter-reading-least: calc(
-    2 *
-    var(--ui-pane-bar-height) +
-    var(--ui-row-inset) +
-    var(--chapter-brief-least)
-  );
-  --chapter-strip-width: var(--ui-space-20);
-}
-
-/* Note that the body never stands shorter than the chapter's least, so a
-   window too short for it lets the Pull request tab scroll (below) rather
-   than slicing the brief or pushing its files out past the body's clip. */
-.chapters-body {
-  position: relative;
-  min-height: var(--chapter-reading-least);
-}
-
-/* A window too short for the header, the tabs and the chapter's least
-   scrolls the Pull request tab as one while Chapters is shown, the header
-   leaving the top, so every part of the chapter reads whole. Any view
-   with no least of its own fills the room as before and never scrolls it. */
-.pull-request-tab:has(> .pull-request-view:not([hidden]) > .chapters-view) {
-  overflow-y: auto;
-}
-
-.chapter-rail {
-  display: flex;
-  width: min(var(--chapter-rail-width), 40%);
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-right: 1px solid var(--ui-color-border);
-}
-
-/* Which model told the chapters, quiet under the rail's rows at its foot,
-   its words where a row's title stands. */
-.chapter-rail-credit {
-  flex: none;
-  padding: var(--ui-tight-gap) calc(var(--ui-list-inset) + var(--ui-row-inset)) var(--ui-list-inset);
-}
-
-.chapter-rail[data-leaving] {
-  position: absolute;
-  z-index: 1;
-  inset-block: 0;
-  left: 0;
-  background: var(--ui-color-well);
-}
-
-/* Note that the rail hidden beside the chapter is hidden only where it can
-   stand beside it, so a panel narrowed since still floats it when asked. */
-@container side-panel (width >= 640px) {
-  .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
-    display: none;
-  }
-}
-
-/* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
-   mark for each chapter in its risk's color, as Files changed's strip
-   stands for its tree; this box says when it is drawn and its edge. */
-.chapter-strip {
-  display: none;
-}
-
-.chapters-view[data-rail-beside="false"] .chapter-strip {
-  display: flex;
-  width: var(--chapter-strip-width);
-  flex: none;
-  border-right: 1px solid var(--ui-color-border);
-}
-
-.chapter-rail-toggle {
-  display: flex;
-}
-
-.chapter-rail-toggle[data-place="over"] {
-  display: none;
-}
-
-/* The chapter's files under the brief keep at least a bar's height of
-   the diff, so in a short window the brief gives way to them rather than
-   squeezing them out past the body, and whatever they still cannot fit is
-   cut at their own edge, never drawn over it. */
-.chapter-reading > .file-view {
-  min-height: var(--ui-pane-bar-height);
-  overflow: clip;
-}
-
-/* The chapter's bar holds its list's own tools (`ChangesBarHost`), spaced
-   as the bar's actions are, and nothing while the chapter draws no list. */
-.chapter-list-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-2);
-}
-
-.chapter-list-tools:empty {
-  display: none;
-}
-
-/* The brief lines up with the chapter's bar over it: its fold's chevron
-   under the rail toggle's glyph, which stands a control's inset in from the
-   bar's edge, and its heading and its words under the chapter's title,
-   which stands a control's gap past the toggle. */
-.chapter-brief {
-  --chapter-glyph-inset: calc((var(--ui-control-height) - var(--ui-control-icon)) / 2);
-  --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--ui-control-gap));
-
-  padding-inline: calc(var(--ui-list-inset) + var(--chapter-glyph-inset) - var(--ui-tight-gap))
-    var(--ui-list-inset);
-}
-
-.chapter-brief .pull-request-section-fold > .ui-disclosure-summary {
-  gap: var(--chapter-words-gap);
-}
-
-.chapter-brief-body {
-  padding-inline-start: calc(
-    var(--ui-tight-gap) +
-    var(--ui-control-icon) +
-    var(--chapter-words-gap)
-  );
-}
-
-/* A panel too narrow for the rail beside the chapter floats it over the
-   chapter's left edge instead (`OverPane`), away until its toggle or its
-   strip opens it; the strip always stands for it. */
-@container side-panel (width < 640px) {
-  .chapters-view .chapter-strip {
-    display: flex;
-    width: var(--chapter-strip-width);
-    flex: none;
-    border-right: 1px solid var(--ui-color-border);
-  }
-
-  .chapter-rail-toggle[data-place="beside"] {
-    display: none;
-  }
-
-  .chapter-rail-toggle[data-place="over"] {
-    display: flex;
-  }
-}
-
-/* A Pull request tab as narrow as a phone's folds the chapter's risk chip
-   away, so its title keeps room beside Viewed, the pager, and the list's
-   tools; the rail's row still marks the risk in its color and says it. */
-/* off-scale: 480px, where the bar's controls leave the title no room beside the chip */
-@container pull-request-tab (width < 480px) {
-  .chapter-risk {
-    display: none;
-  }
-}
-
-/* The list's tree toggle in the chapter's bar moves to the place that opens
-   the tree as the File view's own does (above): over the list below a 550px
-   panel, and in a narrow room. */
-/* off-scale: 550px, the File view's own fold for its tree */
-@container side-panel (width < 550px) {
-  .chapter-list-tools .file-tree-toggle[data-place="beside"] {
-    display: none;
-  }
-
-  .chapter-list-tools .file-tree-toggle[data-place="over"] {
-    display: flex;
-  }
-}
-
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .chapter-list-tools
-  .file-tree-toggle[data-place="beside"] {
-  display: none;
-}
-
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell
-  .chapter-list-tools
-  .file-tree-toggle[data-place="over"] {
-  display: flex;
-}
-
 /* The tabs' row under the header, Review at its end while the pull request
    is open, gives way in steps as the tab narrows, so every tab keeps its
    name for as long as it can and none is named while the others are not:
@@ -1136,7 +941,7 @@
   content: "";
 }
 
-/* Where something stands over the scroller, a chapter's bar or a notice,
+/* Where something stands over the scroller, a notice,
    the view itself opens with the room and gives it up as the header folds,
    so what stands there is never under the header. */
 .pull-request-tab[data-header-fold]:not([data-fold-lead]) > .pull-request-view {
@@ -1589,7 +1394,7 @@
    stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
-  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
     border-radius: 0;
     background: var(--ui-color-fill-hover);
   }

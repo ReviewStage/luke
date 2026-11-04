@@ -2,7 +2,7 @@
  * over-pane.tsx -- a pane that floats over a tab while the tab has no room to dock it beside: slid in from its edge as it opens, out past it as it closes, and put away by Escape or a press outside it.
  *
  * A narrow window floats what a wide one docks beside the work: a File tab's
- * tree, a Terminal tab's shells, the Chapters view's rail. Each is this one
+ * tree, a Terminal tab's shells. Each is this one
  * pane, so each comes and goes the same way. `open` drives it. Opened, it
  * slides in from its edge on the pane's motion tokens and takes the
  * keyboard, onto the control its owner names or else its first, and holds
@@ -57,7 +57,7 @@ export type OverPaneEdge = (typeof OVER_PANE_EDGE)[keyof typeof OVER_PANE_EDGE];
 export const OVER_PANE_WIDTH = {
   /** The tab's width less a strip to press it away by, so a long path reads whole: a File tab's tree. */
   SHEET: "sheet",
-  /** A column's width, or the sheet's where the tab is narrower: a Terminal tab's shells, the Chapters rail. */
+  /** A column's width, or the sheet's where the tab is narrower: a Terminal tab's shells. */
   COLUMN: "column",
   /** The tab's whole width, with no strip beside it, as a phone's screen stands one place at a time: a File tab's tree on a phone. */
   FULL: "full",

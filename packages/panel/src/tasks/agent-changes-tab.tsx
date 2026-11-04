@@ -22,7 +22,6 @@ import {
   INSET,
   LAYOUT_ELEMENT,
   type PaneBarMenu,
-  type ScrollOverscroll,
   SpinnerRegion,
   Stack,
   TabNotice,
@@ -52,7 +51,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useDraft } from "../composer-drafts.js";
@@ -62,7 +60,6 @@ import { useTabActions } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
-  type DiffLineSpan,
   type DiffListSelection,
   type DiffSelection,
   FILE_NOTE_LINE,
@@ -113,7 +110,6 @@ import {
 } from "./comment-drafts.js";
 import {
   type DiffListEntry,
-  type DiffListFlash,
   type DiffListReveal,
   type DiffNote,
   PierreDiffList,
@@ -127,7 +123,6 @@ import {
   gitHubAction,
   paneToggleAction,
   type TreeShown,
-  TreeToggle,
   usePaneRoom,
   useTreeEdge,
 } from "./file-view.js";
@@ -174,11 +169,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
  * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
  * saved, and the changes read again), and the tree's toggle, which shows
- * and hides the tree for every File and Changes tab alike. A view a host
- * draws inside its own page, as a chapter is (`agent-chapters-tab.tsx`),
- * draws no bar of its own: the host's bar holds its diff settings,
- * Collapse all, and the tree's toggle (`ChangesBarHost`), and nothing that
- * acts on the whole pull request, and its closed tree leaves no strip. The tree is a File
+ * and hides the tree for every File and Changes tab alike. The tree is a File
  * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
  * every folder open, each row lettered A, M, D, or R, and ending, as
  * stage-cli's do, in how many review threads stand on its file, the lines
@@ -900,7 +891,7 @@ const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
  * it is, its refusal said as a gap's is.
  */
 function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole {
-  const { read, refused, whole } = texts;
+  const { read, refused } = texts;
   const [held, setHeld] = useState<{
     readonly of: unknown;
     readonly files: ReadonlyMap<string, DiffFileTexts>;
@@ -933,7 +924,7 @@ function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole 
     doors.current.set(file.path, door);
     return {
       texts: files.get(file.path),
-      offered: read !== undefined && whole(file) && wholeable(file) && !refused.has(file.path),
+      offered: read !== undefined && wholeable(file) && !refused.has(file.path),
       toggle: door,
     };
   };
@@ -1445,8 +1436,6 @@ function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
 /** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
 interface FileTexts {
   readonly expandable: (file: AgentChangedFile) => boolean;
-  /** Whether a file is the answer's own, every hunk of it drawn, rather than one a chapter cut down, which is never read whole. */
-  readonly whole: (file: AgentChangedFile) => boolean;
   readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   readonly refused: ReadonlyMap<string, ExpansionRefusal>;
 }
@@ -1529,15 +1518,11 @@ function useFileTexts(
       return reading;
     };
   }, [act, taskId, repository, pullRequest, files]);
-  // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
-  const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
-  const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);
   const offered = useCallback(
-    (file: AgentChangedFile) =>
-      read !== undefined && whole(file) && expandable(file) && !refused.has(file.path),
-    [read, whole, refused],
+    (file: AgentChangedFile) => read !== undefined && expandable(file) && !refused.has(file.path),
+    [read, refused],
   );
-  return { expandable: offered, read, refused, whole };
+  return { expandable: offered, read, refused };
 }
 
 /**
@@ -1598,8 +1583,6 @@ function FilesList({
   roomy,
   boxRef,
   reveal,
-  flash,
-  overscroll,
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
@@ -1615,10 +1598,6 @@ function FilesList({
   boxRef: (element: HTMLDivElement | null) => void;
   /** The review thread to bring into view, once, and its file; none brings none. */
   reveal: ListReveal | undefined;
-  /** The lines to bring into view and light a moment, once; none lights none. */
-  flash: DiffListFlash | undefined;
-  /** Whether a swipe past the list's end is handed on to the box the tab stands in. */
-  overscroll: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
   const box = useRef<HTMLDivElement | null>(null);
@@ -1677,8 +1656,6 @@ function FilesList({
             readTexts={texts.read}
             reveal={landing.reveal}
             onDrawn={opened.onDrawn}
-            flash={flash}
-            overscroll={overscroll}
           />
         </ThreadLandingProvider>
       )}
@@ -1749,31 +1726,6 @@ export function useChangesReads(
   return { answer, refreshFailed, out, ask, count: reads.current.count, pullRequest, viewedFiles };
 }
 
-/** A file to bring into view in the list, as a chapter's key change asks: counted, so each ask is its own. */
-export interface FileReveal {
-  readonly path: string;
-  readonly ask: number;
-  /** Its lines to scroll to and light a moment, each one the list draws (`drawnLines`); none scrolls to its header. */
-  readonly lines?: DiffLineSpan | undefined;
-}
-
-/**
- * A bar of the host's that draws the view's tools in place of its own
- * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
- * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
- * bar's very end past its ⋯, as every tab's bar stands it; the view's count of files
- * viewed, its pull request on GitHub, and its ⋯ over the whole pull request
- * left to the host, and no strip standing in the closed tree's place.
- */
-export interface ChangesBarHost {
-  /** The box in the host's bar the tools are drawn into; none until it is drawn. */
-  readonly tools: HTMLElement | null;
-  /** The box at the host's bar's very end the tree's toggle is drawn into; none until it is drawn. */
-  readonly end: HTMLElement | null;
-  /** The host's view, which holds that bar and the list alike and resizes with the panel, the tree's toggles read in it; none until it is drawn. */
-  readonly view: HTMLElement | null;
-}
-
 export function AgentChangesTab({
   agentId,
   source,
@@ -1784,10 +1736,6 @@ export function AgentChangesTab({
   lineComments,
   reveal,
   reads,
-  files,
-  fileReveal,
-  overscroll,
-  host,
 }: {
   agentId: string;
   /** Where the tab reads the pull request, whose task its files' texts are read through. */
@@ -1806,27 +1754,18 @@ export function AgentChangesTab({
   reveal?: ChangesReveal | undefined;
   /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
   reads: ChangesReads;
-  /** The files drawn in the place of every file the read answered, as a chapter draws its own (`chapterPatches`); none draws them all. */
-  files?: readonly AgentChangedFile[] | undefined;
-  /** A file to bring into view, once, among those drawn. */
-  fileReveal?: FileReveal | undefined;
-  /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
-  overscroll?: ScrollOverscroll | undefined;
-  /** The host's bar the view's tools are drawn into in place of its own; none draws its own. */
-  host?: ChangesBarHost | undefined;
 }): React.JSX.Element {
   const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
-  const room = usePaneRoom(tree, host?.view);
+  const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
-  // Note that the lists are kept while the answer and the files given are the same, because
-  // fresh ones would have the tree draw itself anew.
+  // Note that the lists are kept while the answer is the same, because fresh ones would have the tree draw itself anew.
   const changed = useMemo(() => {
-    const drawn = files ?? pullRequest?.files ?? [];
+    const drawn = pullRequest?.files ?? [];
     const paths = drawn.map((file) => file.path);
     return { files: drawn, paths, ordered: treeOrder(drawn), folders: changedFolders(paths) };
-  }, [pullRequest, files]);
+  }, [pullRequest]);
   const viewSettings = useFileViewSettings();
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
@@ -1849,7 +1788,7 @@ export function AgentChangesTab({
   useEffect(() => {
     if (!shown) hideKeys();
   }, [shown, hideKeys]);
-  const { go, expand } = list;
+  const { go } = list;
   const openTab = useOpenFileTab();
   // A file chosen with ⌘ or Ctrl opens in a File tab of its own, as a File tab's tree opens one,
   // where the panel offers one; a file chosen in the tree floating over the list takes the tree down, to show the file.
@@ -1861,20 +1800,6 @@ export function AgentChangesTab({
     },
     [closeOver, go, openTab],
   );
-  // A file asked for is opened and scrolled to, each ask once; one asked for at its lines is stood on, and the list scrolls to them once it draws the file open.
-  const latestFileReveal = useRef({ fileReveal, expand, go, stand: list.stand });
-  latestFileReveal.current = { fileReveal, expand, go, stand: list.stand };
-  useEffect(() => {
-    const { fileReveal, expand, go, stand } = latestFileReveal.current;
-    if (fileReveal === undefined) return;
-    expand(fileReveal.path);
-    if (fileReveal.lines === undefined) go(fileReveal.path);
-    else stand(fileReveal.path);
-  }, [fileReveal?.ask]);
-  const flash =
-    fileReveal?.lines === undefined
-      ? undefined
-      : { ask: fileReveal.ask, range: { path: fileReveal.path, ...fileReveal.lines } };
   const shownFile = shownFileOf(changed.files, list.current);
   const refresh = () => {
     ask();
@@ -1882,30 +1807,27 @@ export function AgentChangesTab({
   };
   const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
-  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files;
-  // a host's own bar says its count, and offers nothing that acts on the whole pull request.
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
   const phone = usePhoneRoom();
   const url = pullRequest?.url;
   useTabActions(
     phone && shown && url !== undefined && shownFileOf(changed.files, list.current) !== undefined
-      ? host === undefined
-        ? [
-            [
-              paneToggleAction(
-                room,
-                undefined,
-                viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
-              ),
-              {
-                ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
-                label: OPEN_FILES_ON_GITHUB,
-              },
-              settings.action,
-              foldAllAction(list),
-            ],
-            ...barMenuItems(changesMenu),
-          ]
-        : [[paneToggleAction(room), settings.action, foldAllAction(list)]]
+      ? [
+          [
+            paneToggleAction(
+              room,
+              undefined,
+              viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
+            ),
+            {
+              ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
+              label: OPEN_FILES_ON_GITHUB,
+            },
+            settings.action,
+            foldAllAction(list),
+          ],
+          ...barMenuItems(changesMenu),
+        ]
       : undefined,
   );
   const texts = useFileTexts(source.place.taskId, repository, pullRequest, changed.files);
@@ -1967,19 +1889,6 @@ export function AgentChangesTab({
     >
       {phone ? (
         settings.sheet
-      ) : host !== undefined ? (
-        <>
-          {host.tools === null
-            ? null
-            : createPortal(
-                <>
-                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
-                  <FoldAllButton list={list} />
-                </>,
-                host.tools,
-              )}
-          {host.end === null ? null : createPortal(<TreeToggle toggles={room.toggles} />, host.end)}
-        </>
       ) : (
         <FileViewBar
           lead={
@@ -2029,8 +1938,6 @@ export function AgentChangesTab({
               ? undefined
               : { ...reveal, file: revealFile }
           }
-          flash={flash}
-          overscroll={overscroll}
         />
         <FileTreePane
           file={shownFile.path}
@@ -2048,7 +1955,7 @@ export function AgentChangesTab({
           width={tree.width?.width}
           edge={edge}
         />
-        {tree.open || host !== undefined ? null : (
+        {tree.open ? null : (
           <ChangesStrip
             files={changed.ordered}
             current={shownFile.path}

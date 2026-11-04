@@ -20,7 +20,6 @@ import {
   automationProcedures,
 } from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
-import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import {
   type InstalledSkillProceduresDependencies,
   installedSkillProcedures,
@@ -106,7 +105,6 @@ export interface ActPortDependencies {
   readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
-  readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   readonly macCommands: MacCommandProceduresDependencies;
@@ -138,7 +136,6 @@ export function createActPortHandler<Sender>(
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
-    ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
     ...macCommandProcedures(dependencies.macCommands),

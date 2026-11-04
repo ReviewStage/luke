@@ -9,7 +9,6 @@ import { installedSkillsLiveStatement } from "@repo/database/models/installed-sk
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
-import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import {
   slackChannelRepositoriesLiveStatement,
@@ -78,9 +77,6 @@ function liveStatements() {
           taskCommentsLiveStatements(USER_ID, { taskId: randomUUID(), pageId: randomUUID() }),
         ),
       ).map(([part, query]) => [`task.comments.${part}`, query]),
-    ),
-    "agent.pullRequestChapters": Option.getOrThrow(
-      pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
     ),
     "account.integrations": Option.getOrThrow(
       integrationStatusesLiveStatement(USER_ID, new Date(0)),

@@ -53,7 +53,6 @@
     "./models/github-repositories": "./src/models/github-repositories.js",
     "./models/github-repository-reads": "./src/models/github-repository-reads.js",
     "./models/github-token-store": "./src/models/github-token-store.js",
-    "./models/pull-request-chapters-store": "./src/models/pull-request-chapters-store.js",
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/repository-pin-store": "./src/models/repository-pin-store.js",

@@ -321,7 +321,6 @@ function portDependencies(
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
-    chapters: { host },
     installedSkills: { host },
     integrations: { host },
     macCommands: { host },

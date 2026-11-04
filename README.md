@@ -31,7 +31,7 @@ to-do, or your review, and you reply there.
 - Built-in task management: agents break work into sub-tasks and hand them to other agents.
 - Agents that work together: they start other agents, message each other, and manage your task board.
 - Cloud agents that run Claude Code or Codex, open pull requests, and fix failing checks.
-- Pull request review in the app, with the diff split into chapters.
+- Pull request review in the app.
 - Your own subscription: agents run on your Claude or ChatGPT plan or API key.
 
 ## Get started

@@ -20,7 +20,7 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  *   hovered or shown.
  * - `identity`, who or where: an account's picture and name, a
  *   workspace's tile and who shares it, a row tall enough for a face.
- * - `step`, a step of something read in order, a pull request's chapter:
+ * - `step`, a step of something read in order:
  *   its name on up to two lines, cut short with an ellipsis past them, and
  *   its `detail` under it as a muted meta line rather than after it, so
  *   neither gives way to the other; its glyph and its end stand level with

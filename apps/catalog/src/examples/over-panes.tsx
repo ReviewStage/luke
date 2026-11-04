@@ -1,5 +1,5 @@
 /**
- * over-panes.tsx -- a pane floated over a narrow tab by its toggle, sliding in from its edge and back out past it: a sheet at the tab's right, as a File tab's tree floats, a column at its left, as the Chapters rail does, and the tab's whole width, as the tree fills a phone; Escape or a press anywhere outside it puts it away.
+ * over-panes.tsx -- a pane floated over a narrow tab by its toggle, sliding in from its edge and back out past it: a sheet at the tab's right, as a File tab's tree floats, a column at its left, and the tab's whole width, as the tree fills a phone; Escape or a press anywhere outside it puts it away.
  */
 
 import {
@@ -89,7 +89,7 @@ function OverPanes(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="over-pane-column" title="A column at the left">
         <Room
-          label="Chapters"
+          label="Steps"
           edge={OVER_PANE_EDGE.LEFT}
           width={OVER_PANE_WIDTH.COLUMN}
           rows={["The sign-in loop", "Where the token is kept", "The fix"]}

@@ -16,10 +16,6 @@ import { getTestDB, openWorkspace } from "../../testing/index.js";
 import { createAgent, readAgent } from "../agent-store.js";
 import { createAutomation, readAutomation } from "../automation-store.js";
 import { noteGitHubRepository } from "../github-repositories.js";
-import {
-  claimChapterGeneration,
-  latestPullRequestChapters,
-} from "../pull-request-chapters-store.js";
 import { listRepositoryPins, setRepositoryPin } from "../repository-pin-store.js";
 import { createTask, readTask } from "../task-store.js";
 import {
@@ -118,15 +114,6 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
           readable: true,
           checkedAt: now,
         });
-        yield* claimChapterGeneration({
-          organizationId: workspace,
-          repository: relay,
-          pullRequestNumber: 7,
-          baseSha: "base",
-          headSha: "head",
-          requestedBy: owner,
-          now,
-        });
 
         yield* noteGitHubRepository({ id, fullName: relay, updatedAt: at(0) });
         assert.equal(yield* taskRepository(owner, relayTask.id), relay);
@@ -161,7 +148,6 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
             .where(eq(githubRepositoryRead.userId, stranger))).map((row) => row.repository),
           [rocket.toLowerCase()],
         );
-        assert.ok(Option.isSome(yield* latestPullRequestChapters(workspace, rocket, 7)));
       }),
   );
 

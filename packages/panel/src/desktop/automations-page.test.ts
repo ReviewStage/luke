@@ -19,7 +19,6 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
-import { CHAPTERS_MODEL_DEFAULT } from "@repo/features/chapters-model-choice";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -268,11 +267,7 @@ function holdChoices(): void {
     preferences: defaultRefused
       ? { failed: true }
       : {
-          rows: {
-            agent: DEFAULT_CHOICE,
-            chaptersModel: CHAPTERS_MODEL_DEFAULT,
-            slackNotifications: true,
-          },
+          rows: { agent: DEFAULT_CHOICE, slackNotifications: true },
         },
   }).deliverModels;
 }

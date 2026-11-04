@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { AGENT_BOUNDS } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL_DEFAULT } from "@repo/features/chapters-model-choice";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -114,11 +113,7 @@ beforeEach(() => {
   // Note that the chip names the account's default as the host holds it.
   handHostReads({
     preferences: {
-      rows: {
-        agent: DEFAULT_CHOICE,
-        chaptersModel: CHAPTERS_MODEL_DEFAULT,
-        slackNotifications: true,
-      },
+      rows: { agent: DEFAULT_CHOICE, slackNotifications: true },
     },
   });
   fakeActPort({});

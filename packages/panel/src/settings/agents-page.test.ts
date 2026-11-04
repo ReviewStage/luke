@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -78,9 +77,8 @@ const OWN_ANTHROPIC: ProviderKeySummary = {
 /** The models the test's service offers, and the keys it holds for the account. */
 let models: readonly CatalogModel[] = [OPUS, OPUS_FAST];
 let keys: readonly ProviderKeySummary[] = [];
-/** The default and the chapters model the test's service holds. */
+/** The default the test's service holds. */
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
-let chapters: ChaptersModelId = CHAPTERS_MODEL.HAIKU;
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
@@ -102,14 +100,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.CHAPTERS_MODEL_WRITE:
-      if (refuseWrite) {
-        return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      }
-      chapters = request.payload.model;
-      // Note that the host draws the write over the account's row as it is pressed, before the service answers.
-      deliverPreferences(preferencesHeld());
-      return Promise.resolve(done({ model: request.payload.model }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
       // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
       // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
@@ -138,7 +128,6 @@ beforeEach(() => {
   // jsdom runs no motion, so a Saved tick would be taken the moment it stood.
   motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
   stored = { model: OPUS.id, effort: "high" };
-  chapters = CHAPTERS_MODEL.HAIKU;
   models = [OPUS, OPUS_FAST];
   keys = [];
   sent = [];
@@ -174,7 +163,7 @@ const modelsHeld = () => (refuseModels ? { failed: true as const } : { rows: { m
 
 /** The account's row as the host holds it from what the test's service stores. */
 const preferencesHeld = () => ({
-  rows: { agent: stored, chaptersModel: chapters, slackNotifications: true },
+  rows: { agent: stored, slackNotifications: true },
 });
 
 /** The account's keys, models, and row as they stand, laid where the host holds them. */
@@ -264,7 +253,6 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   assert.deepEqual(placeholders(page), [
     ["Reading your keys", 2],
     ["Reading your default", 3],
-    ["Reading your chapters model", 1],
   ]);
   await settle();
   assert.deepEqual(placeholders(page), []);
@@ -409,16 +397,6 @@ test("on an OpenAI key alone, the GPT-6.1 Sol default the account never chose re
     [marksIn(rowOf(page, "Default model")), marksIn(rowOf(page, "Effort"))],
     [[], []],
   );
-});
-
-test("the Chapters model ticks Saved beside Model once its write lands, within the page", async () => {
-  const page = await mount();
-  assert.deepEqual(marksIn(rowOf(page, "Model")), []);
-
-  act(() => segment(segmentedGroup(page, "Chapters model"), "Sonnet 5.5").click());
-  await settle();
-
-  assert.deepEqual(marksIn(rowOf(page, "Model")), ["Modified", "Saved"]);
 });
 
 /** The Fast row's words under its name, which describe its switch. */

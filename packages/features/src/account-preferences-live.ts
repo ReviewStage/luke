@@ -1,6 +1,5 @@
 import { Schema as EffectSchema } from "effect";
 import { CONTEXT_WINDOW } from "./agent-wire.js";
-import { type ChaptersModelId, chaptersModelFrom } from "./chapters-model-choice.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import {
   AGENT_DEFAULT_CHOICE,
@@ -14,8 +13,7 @@ import {
  *
  * The service answers one statement, the account's own row as stored, or
  * none for an account that stored nothing: the coding agents' default as
- * its three columns stand, the chapters model, and whether our Slack bot
- * writes the account. Each is read here as the preferences snapshot reads
+ * its three columns stand and whether our Slack bot writes the account. Each is read here as the preferences snapshot reads
  * it (`account-store.ts`'s `snapshotOf` calls `storedAgentChoice`), so the
  * live read and `/api/account/preferences` never disagree. Where the account
  * stored no default, the default a surface draws is worked out from the
@@ -32,15 +30,14 @@ export type AccountPreferencesLiveAnswer = typeof accountPreferencesLiveAnswerSc
 
 /**
  * The account's row as the statement delivers it, each column as stored and
- * null where never chosen. Note that the context window and the chapters
- * model are read as text, because a value a later build adds or an older
- * one dropped reads as the default rather than failing the row.
+ * null where never chosen. Note that the context window is read as text,
+ * because a value a later build adds or an older one dropped reads as the
+ * default rather than failing the row.
  */
 const accountPreferencesLiveRowSchema = EffectSchema.Struct({
   agentModel: EffectSchema.NullOr(EffectSchema.String),
   agentEffort: EffectSchema.NullOr(EffectSchema.String),
   agentContextWindow: EffectSchema.NullOr(EffectSchema.String),
-  chaptersModel: EffectSchema.NullOr(EffectSchema.String),
   slackNotifications: EffectSchema.NullOr(EffectSchema.Boolean),
 });
 
@@ -55,8 +52,6 @@ export const accountPreferencesLiveRowsSchema = EffectSchema.Struct({
 export interface AccountPreferencesLive {
   /** The coding agents' default the account stored; none until it chooses, where a surface draws the fallback (`agentDefaultOf`). */
   readonly agent: ModelChoice | undefined;
-  /** What a Generate chapters the account presses runs on; Haiku until the account chooses. */
-  readonly chaptersModel: ChaptersModelId;
   /** Whether our Slack bot writes the account the threads that wait on it; on until the account chooses. */
   readonly slackNotifications: boolean;
 }
@@ -94,8 +89,6 @@ export function accountPreferencesOfLiveRows(
   const [row] = rows;
   return {
     agent: row === undefined ? undefined : storedAgentChoice(row),
-    // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
-    chaptersModel: chaptersModelFrom(row?.chaptersModel),
     // Note that a switch never chosen reads as on, as the Slack bot reads it (`slackNotificationsOn`).
     slackNotifications: row?.slackNotifications !== false,
   };

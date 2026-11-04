@@ -3,7 +3,6 @@ import type {
   AgentPullRequestWriteAnswerView,
 } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentPullRequest } from "@repo/features/agent-wire";
-import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import type { PullRequestActionRequest } from "@repo/features/pull-request-write-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { createContext, useContext, useMemo } from "react";
@@ -16,10 +15,9 @@ import type { AgentsControl } from "./use-agents.js";
 /**
  * pull-request-source.ts -- where a Pull request tab reads and writes the pull request it shows: one door in front of the reads the tab asks itself and every change it and its parts make.
  *
- * The tab and its parts, its header, Conversation, Checks, Chapters, and
- * Files changed, ask through a `PullRequestSource` for the pull request as
- * last read, its changed files, and its chapters' Generate, and make every
- * change through it, a review's among them. What the host holds for the tab
+ * The tab and its parts, its header, Conversation, Checks, and Files
+ * changed, ask through a `PullRequestSource` for the pull request as last
+ * read and its changed files, and make every change through it, a review's among them. What the host holds for the tab
  * apart from these, its parts, the pickers' options, and the viewed marks,
  * each part draws through `useHostRead`, under the agent and the number the
  * source names. A tab is an agent's for now (`agentPullRequestSource`), so each read
@@ -41,8 +39,6 @@ export interface PullRequestSource {
   readonly number: number | undefined;
   /** Its changed files, as Files changed draws them. */
   readonly readChanges: () => Promise<AgentChangesAnswerView>;
-  /** Its chapters generated for its head now, answering once they land. */
-  readonly generateChapters: () => Promise<PullRequestChaptersAnswerView>;
   /** One change to it, a viewed mark and a review among them. */
   readonly write: (request: PullRequestActionRequest) => Promise<AgentPullRequestWriteAnswerView>;
 }
@@ -86,15 +82,14 @@ export function useAgentPullRequestSource(
   const taskId = agent?.planId ?? null;
   const { workspaceId } = control;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const { readChanges, generateChapters } = control;
+  const { readChanges } = control;
   // Note that the doors are kept while what they name stands, because every part under the tab that hears the source draws anew on a new one.
   const doors = useMemo(
     () => ({
       readChanges: () => readChanges(agentId, number),
-      generateChapters: () => generateChapters(agentId, number),
       write: agentPullRequestWrite(act, agentId, number),
     }),
-    [act, agentId, number, readChanges, generateChapters],
+    [act, agentId, number, readChanges],
   );
   // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
   const place = useMemo(() => ({ taskId, workspaceId }), [taskId, workspaceId]);

@@ -90,7 +90,7 @@ interface ReachedPullRequest {
  * where the workspace no longer reaches the repository. Nothing about the
  * number is read here.
  */
-export const reachedRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
+const reachedRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   query: PullRequestQuery,
 ) {
@@ -114,7 +114,7 @@ export const reachedRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
  * there by the query's number on the token minted for it; not found where
  * the account is no member or `read` finds nothing, so neither says which.
  */
-export const reachedByNumber = <A, R>(
+const reachedByNumber = <A, R>(
   userId: string,
   query: PullRequestQuery,
   read: (

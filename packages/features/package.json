@@ -52,7 +52,6 @@
     "./workspace-tools-model": "./src/workspace-tools-model.js",
     "./workspace-tools-wire": "./src/workspace-tools-wire.js",
     "./agent-failure-words": "./src/agent-failure-words.js",
-    "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./agent-status": "./src/agent-status.js",
     "./agent-view": "./src/agent-view.js",
     "./agent-queue-wire": "./src/agent-queue-wire.js",
@@ -112,10 +111,6 @@
     "./task-wire": "./src/task-wire.js",
     "./tasks-view": "./src/tasks-view.js",
     "./pull-request-write-wire": "./src/pull-request-write-wire.js",
-    "./pull-request-chapters": "./src/pull-request-chapters.js",
-    "./pull-request-chapters-wire": "./src/pull-request-chapters-wire.js",
-    "./pull-request-chapters-view": "./src/pull-request-chapters-view.js",
-    "./pull-request-chapters-live": "./src/pull-request-chapters-live.js",
     "./diff-hunks": "./src/diff-hunks.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./github-token-wire": "./src/github-token-wire.js",
@@ -195,8 +190,7 @@
     "ai": "catalog:",
     "diff": "9.0.0",
     "effect": "catalog:",
-    "fractional-indexing": "3.2.0",
-    "ignore": "7.0.14"
+    "fractional-indexing": "3.2.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

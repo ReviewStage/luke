@@ -147,7 +147,7 @@ async function accountWithSetupToken() {
   return userId;
 }
 
-test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none, holds only a Claude setup-token, or none opens, never Vespin's", async () => {
+test("a call beside an account's agents, such as a title or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none, holds only a Claude setup-token, or none opens, never Vespin's", async () => {
   const both = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
     [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,

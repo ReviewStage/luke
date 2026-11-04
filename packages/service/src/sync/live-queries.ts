@@ -15,7 +15,6 @@ import { sentryInstallationsLiveStatement } from "@repo/database/models/integrat
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
-import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import {
   slackChannelRepositoriesLiveStatement,
@@ -64,7 +63,6 @@ import {
   planCommentThreadSync,
   planPageVersionSync,
   planRevisionSync,
-  pullRequestChaptersSync,
   repositoryPinSync,
   slackChannelRepositorySync,
   slackInstallationSync,
@@ -257,9 +255,9 @@ export const macCommandsLive = defineLiveQuery({
 });
 
 /**
- * The account's preferences row, its default agent, chapters model, and
- * Slack notifications as stored, woken by a write to any column a view
- * reads, which names the account. Note that a Start with Runs on, an
+ * The account's preferences row, its default agent and Slack
+ * notifications as stored, woken by a write to any column a view reads,
+ * which names the account. Note that a Start with Runs on, an
  * enroll, and a register write only the row's runs-on pick, and a settings
  * push that changes nothing writes only its instant; the capture ignores
  * both, so none of them wakes this read or the account's other reads.
@@ -818,49 +816,6 @@ export const agentBrowserTabsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
-/** A pull request's number a read's param binds, as its procedure wrote it; zero, which numbers no pull request, where it names none. */
-function pullRequestNumberParam(param: string): number {
-  const number = Number(param);
-  return Number.isSafeInteger(number) && number > 0 ? number : 0;
-}
-
-/**
- * One coding agent's pull request's newest chapters, by the number the
- * reader names, as the agent's read answers them, woken by a claim, finish,
- * or failure in the agent's workspace (`workspaceId`, which the procedure
- * binds from the agent's own row), all of which name its chapters topic, by
- * the agent's own row, and by what admits the reader to its workspace or
- * repository. The agent's task is read for the reader's reach of it
- * (`agentVisibleTo`) and wakes nothing, as a task's reach moves with what
- * admits the reader. Note that whether the reader can generate them comes
- * from their own keys, which no statement reads, so the procedure answers it
- * beside the rows on every poll, and a key saved while the read is held
- * shows on the next.
- */
-export const pullRequestChaptersLive = defineLiveQuery({
-  name: LIVE_READ.PULL_REQUEST_CHAPTERS,
-  params: ["userId", "agentId", "number", "workspaceId"],
-  reads: [
-    pullRequestChaptersSync,
-    agentSync,
-    taskSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-  ],
-  topics: ({ userId, agentId, workspaceId }) => [
-    [TOPIC.WORKSPACE_CHAPTERS, workspaceId],
-    [TOPIC.AGENT, agentId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, agentId, number }) =>
-    Option.map(
-      pullRequestChaptersLiveStatement(userId, agentId, pullRequestNumberParam(number)),
-      (chapters) => ({ chapters }),
-    ),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
 /**
  * A coding agent's transcript, or one of its workers' (`conversationId`,
  * under the agent's own `parentConversationId`), started by `ownerId` and
@@ -967,6 +922,5 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskCommentsLive,
   taskBrowserTabsLive,
   agentBrowserTabsLive,
-  pullRequestChaptersLive,
   agentTranscriptLive,
 ]);

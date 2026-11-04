@@ -438,22 +438,6 @@ export const GATEWAY_METHOD = {
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   AGENTS_CHANGES: "agents.changes",
   /**
-   * One agent's pull request's newest chapters, by the agent and the pull
-   * request's number, held followed for a window from now until it is let
-   * go, over the service's held poll, and a while after among those let go
-   * lately. What they hold is heard as `CHAPTERS_CHANGED` events, on the app
-   * state every window draws, never answered.
-   */
-  AGENTS_CHAPTERS_FOLLOW: "agents.chaptersFollow",
-  /** One agent's pull request's chapters let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  AGENTS_CHAPTERS_UNFOLLOW: "agents.chaptersUnfollow",
-  /** One agent's pull request's held chapters read again at once, as Try again asks; never answered. */
-  AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
-  /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
-  AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
-  /** The Claude model the account's Generate chapters runs on, drawn over the account's preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
-  /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
    * forward, and a while after among the reads let go lately. What it holds
@@ -787,8 +771,6 @@ export const GATEWAY_EVENT = {
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   LINK_STANDINGS_CHANGED: "linkStandings.changed",
-  /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  CHAPTERS_CHANGED: "chapters.changed",
   /** One of the Pull request tabs' held parts, every agent's pull request's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   PULL_REQUEST_PARTS_CHANGED: "pullRequestParts.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
