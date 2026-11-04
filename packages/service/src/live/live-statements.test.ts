@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
@@ -102,6 +103,9 @@ function liveStatements() {
     ),
     "workspace-invitations.invitations": Option.getOrThrow(
       workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
+    ),
+    "workspace-memories.memories": Option.getOrThrow(
+      workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
     ),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(

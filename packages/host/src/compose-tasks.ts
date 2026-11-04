@@ -476,7 +476,7 @@ export interface TasksDependencies {
   pool: EntityPool;
   /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
   member: () => { readonly userId: string; readonly name: string } | undefined;
-  /** GitHub's standing as an integration asked again, as a GitHub connect or disconnect that answered asks (`compose-integrations.ts`). */
+  /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
 }
 
@@ -999,19 +999,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
     return followTaskList({
-      live: (poll, after) =>
+      live: (sync) =>
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
-          : Effect.map(served(client.listLive(userId, poll, after)), (sealed) =>
+          : Effect.map(served(client.listLive(userId, sync)), (sealed) =>
               sealed.ok
                 ? sealed.answer
                 : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
             ),
       // Note that an answer's read standing rides the list it draws, so a window is told both at once.
-      take: (rows) =>
+      take: (rows, standing) =>
         Effect.suspend(() => {
           view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
-          return taskList.collections.answer(rows);
+          return taskList.collections.answer(rows, standing);
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
@@ -2583,14 +2583,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return edited.answer;
       }),
     // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection whatever the bound says, and GitHub's
-    // standing as an integration is asked again once either answers.
+    // forward again reads the connection whatever the bound says.
     [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        yield* dependencies.githubMoved;
         return carried<TasksGitHubPageAnswer>(
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
         );
@@ -2602,6 +2600,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
         const disconnected = yield* served(client.github.disconnect());
         githubAskedAt = undefined;
+        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
         if (!disconnected.ok) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });

@@ -5,7 +5,7 @@ import type {
   GitHubTokenAnswerView,
   GitHubTokenSaveParams,
   MemoriesAnswerView,
-  MemoriesReadParams,
+  MemoriesFollowParams,
   MemoryForgetParams,
   ProviderKeyForAgentsParams,
   ProviderKeyRemoveParams,
@@ -25,9 +25,9 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * other window, in its own sentence. A save's key and a dictated
  * clip each pass through to the host once and are noted nowhere, and what
  * the service answers comes back as the panel's own answer, or why there is
- * none. The account's provider keys are held at the host while a panel holds
- * their stream open, and reach every panel on app state; how many streams
- * stand open is all that is held here.
+ * none. The account's provider keys, and each workspace's memories, are held
+ * at the host while a panel holds their stream open, and reach every panel on
+ * app state; how many streams stand open is all that is held here.
  */
 export interface AccountAskProceduresDependencies {
   host: {
@@ -44,7 +44,11 @@ export interface AccountAskProceduresDependencies {
     githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
     githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
     githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
-    memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
+    /** A workspace's memories held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
+    memoriesUnfollow(params: MemoriesFollowParams): Effect.Effect<void>;
+    /** A workspace's held memories asked again at once, as Try again asks; done once the ask has landed. */
+    memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
     memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
     dictationTranscribe(
       params: DictationTranscribeParams,
@@ -61,6 +65,8 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
   const { host } = dependencies;
   /** The account's keys while a window holds a stream open of them, so the host lets them go only with the last. */
   const openKeys: OpenFollows<never> = MutableHashMap.empty();
+  /** Each workspace's memories while a window holds a stream open of them, by the workspace. */
+  const openMemories: OpenFollows<never> = MutableHashMap.empty();
   return {
     [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actPort[
       ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
@@ -134,10 +140,28 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.githubTokenRemove();
     }),
-    [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_READ].effect(
+    [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.memoriesRead(input);
+        // Note that nothing is heard down the hold, since the held memories reach the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: (held: MemoriesFollowParams) => held.workspaceId,
+            follow: host.memoriesFollow,
+            unfollow: host.memoriesUnfollow,
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openMemories,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.memoriesRetry(input);
       },
     ),
     [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET].effect(

@@ -4,16 +4,28 @@ import {
   taskListLiveRowsSchema,
 } from "@repo/features/task-list-live";
 import { Effect, Option, Schema, Stream } from "effect";
-import { LIVE_GONE, LiveBroken, liveRows, restarting, type TxWait } from "./live-follow.js";
+import {
+  LIVE_GONE,
+  LiveBroken,
+  liveRows,
+  restarting,
+  type SyncStanding,
+  syncStandingOf,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
- * task-list-follow.ts -- the task list followed over the service's held poll, each answer's rows taken the moment its poll answers.
+ * task-list-follow.ts -- the task list followed by sync id over the service's held poll, each answer's rows taken the moment its poll answers.
  *
- * The read is fetched from the service and followed (`live-follow.ts`); the
- * rows are decoded where they arrive and handed on whole
- * (`task-list-collections.ts` keeps them and builds the list), before the
- * follow carries the answer's txids on to a write waiting for them, so a
- * write confirmed on the list finds its rows already taken.
+ * The read is fetched from the service and followed by sync id
+ * (`live-follow.ts`, `LIVE_POLL.SYNC`): its first answer, and any while it
+ * is too far behind, is every plan and agent whole, and each poll after is
+ * held until something moves past the id the last answer named, and
+ * answered only the rows that moved, with the ids of those that stand no
+ * longer. The rows are decoded where they arrive and handed on with where
+ * the answer stands (`task-list-collections.ts` joins them and builds the
+ * list), before the follow carries the answer's txids on to a write waiting
+ * for them, so a write confirmed on the list finds its rows already taken.
  *
  * A read the service did not answer is asked for again, and a follow that
  * stops for good started again, after `LIVE_RESTART`. Each says so as it
@@ -27,10 +39,10 @@ import { LIVE_GONE, LiveBroken, liveRows, restarting, type TxWait } from "./live
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
 
 export interface TaskListFollowDependencies {
-  /** The read with its rows inline, fetched from the service, held past `after` where it names one. */
-  readonly live: (poll: boolean, after?: string) => Effect.Effect<Sealed>;
-  /** Takes each answer's rows, both parts, decoded, as its poll answers. */
-  readonly take: (rows: TaskListLiveRows) => Effect.Effect<void>;
+  /** The read with its rows inline, fetched from the service, past the sync id named, whole where it is empty or none. */
+  readonly live: (sync: string | undefined) => Effect.Effect<Sealed>;
+  /** Takes each answer's rows, both parts, decoded, as its poll answers, with where it stands by sync id. */
+  readonly take: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<void>;
   /** That the list could not be read, each time a read goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
   /**
@@ -45,7 +57,7 @@ export interface TaskListFollowDependencies {
 
 const decodeRows = Schema.decodeUnknownOption(taskListLiveRowsSchema);
 
-/** An answer's rows decoded; none where it carries none inline, and failed where a row does not decode. */
+/** An answer's rows decoded; none where it carries none inline, and failed where a row does not decode. Note that its issues part carries none, for a released desktop alone. */
 function rowsOf(read: TaskListLiveAnswer): Option.Option<TaskListLiveRows> | "undecoded" {
   const { plans, agents } = read.queries;
   if (plans.rows === undefined || agents.rows === undefined) return Option.none();
@@ -53,7 +65,7 @@ function rowsOf(read: TaskListLiveAnswer): Option.Option<TaskListLiveRows> | "un
   return Option.isSome(rows) ? rows : "undecoded";
 }
 
-/** The rows each answer carries taken as its poll answers, for as long as the follow stands; it fails where the read is gone or a first row does not decode. */
+/** The rows each answer carries taken as its poll answers, with where it stands by sync id, for as long as the follow stands; it fails where the read is gone or a first row does not decode. */
 function followRows(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
@@ -62,13 +74,13 @@ function followRows(
     const rows = rowsOf(read);
     if (rows === "undecoded") return Effect.succeed(false);
     return Option.isSome(rows)
-      ? Effect.as(dependencies.take(rows.value), true)
+      ? Effect.as(dependencies.take(rows.value, syncStandingOf(read)), true)
       : Effect.succeed(true);
   };
   return Effect.gen(function* () {
     if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
-    const poll = (after: string | undefined) =>
-      Effect.flatMap(dependencies.live(true, after), (read) =>
+    const poll = (_after: string | undefined, _cursor?: string, sync?: string) =>
+      Effect.flatMap(dependencies.live(sync), (read) =>
         "failure" in read
           ? Effect.succeed(read)
           : Effect.map(taken(read), (decoded) =>
@@ -85,7 +97,7 @@ function followRows(
 /** The task list, followed live until interrupted or until the service says it never will again. */
 export function followTaskList(dependencies: TaskListFollowDependencies): Effect.Effect<void> {
   const attempt = Effect.gen(function* () {
-    const sealed = yield* dependencies.live(false);
+    const sealed = yield* dependencies.live("");
     if ("failure" in sealed) {
       if (sealed.gone === true) return false;
       dependencies.failed();

@@ -63,6 +63,12 @@
  *   connection mended at the provider reads as mended at once. A provider
  *   the account has not connected is refused before any token is read.
  *
+ * A Connect, a Cancel that ended a sign-in, a Disconnect that deleted a
+ * row, and a rename each answer the transaction they wrote in as `txid`,
+ * which a desktop following the account's live read of its integrations
+ * waits to carry before it answers its window; one that wrote nothing
+ * answers none.
+ *
  * A provider's route names it as a path segment, read as words so a
  * provider this build has no route for is not found, as it was; every
  * procedure resolves its caller before it reads its input, and a rename's
@@ -698,7 +704,9 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
       (row) =>
         row.state === undefined
           ? Effect.void
-          : hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
+          : Effect.asVoid(
+              hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
+            ),
       { discard: true },
     );
     // Note that the rows are read again, so a sign-in restarted, or an account added, while these were let go keeps its name and its place.
@@ -832,10 +840,10 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
           ),
           Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
         );
-      const begun = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
+      const txid = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
       // Another sign-in took the name meanwhile: this one would settle a grant no row names, so it is refused.
-      if (!begun) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return { url, connection: account.connectionName };
+      if (txid === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return { url, connection: account.connectionName, txid };
     }),
     /**
      * GET: the tools one provider's server offers the account's agents. A
@@ -907,11 +915,15 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       const named = (rows: readonly IntegrationConnectionRow[]) =>
         rows.find((each) => each.connectionName === connectionName);
       const row = named(yield* hostedStoreOrUnavailable(seams.readConnections(userId)));
-      if (row?.state !== undefined) {
-        yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
-      }
+      const txid =
+        row?.state === undefined
+          ? undefined
+          : yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
       const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-      return { status: storedStanding(seams, named(after)) };
+      return {
+        status: storedStanding(seams, named(after)),
+        ...(txid === undefined ? undefined : { txid }),
+      };
     }),
     /**
      * POST: ends one account's connection at a provider; every other account
@@ -931,18 +943,18 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       }
       const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
       const row = rows.find((each) => each.connectionName === connectionName);
-      if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
-        if (row !== undefined) {
-          yield* revokeIntegrationGrant(row);
-          yield* recordServerEvent(
-            SERVER_EVENT.INTEGRATION_CONNECTION_DELETE,
-            { userId },
-            {
-              provider: row.provider,
-            },
-          );
-        }
-        return { status: INTEGRATION_STATUS.DISCONNECTED };
+      if (row === undefined) return { status: INTEGRATION_STATUS.DISCONNECTED };
+      const txid = yield* hostedStoreOrUnavailable(seams.deleteAccount(row));
+      if (txid !== undefined) {
+        yield* revokeIntegrationGrant(row);
+        yield* recordServerEvent(
+          SERVER_EVENT.INTEGRATION_CONNECTION_DELETE,
+          { userId },
+          {
+            provider: row.provider,
+          },
+        );
+        return { status: INTEGRATION_STATUS.DISCONNECTED, txid };
       }
       // Note that only the row read is deleted and revoked, so an account added since under the same name stands, and is answered as it stands.
       const standing = (yield* hostedStoreOrUnavailable(seams.readConnections(userId))).find(
@@ -960,11 +972,11 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
     rename: integrations.rename.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;
-      const renamed = yield* hostedStoreOrUnavailable(
+      const txid = yield* hostedStoreOrUnavailable(
         seams.renameConnection(userId, connectionName, input.body.label),
       );
-      if (!renamed) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* accountAnswer(seams, userId, provider, connectionName);
+      if (txid === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { ...(yield* accountAnswer(seams, userId, provider, connectionName)), txid };
     }),
   };
 }
