@@ -17,7 +17,6 @@ import {
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
-import { ACT_KIND } from "@repo/host/acts";
 import { SERVER_MENTION_NOTE } from "@repo/ui/agent-servers-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
@@ -26,7 +25,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handHostReads, holdIntegrationTools } from "../testing/app-state.js";
+import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testing/app-state.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -105,10 +104,9 @@ beforeEach(() => {
   installEditorLayout();
   // The main process answers the panel where the integrations stand, and holds Linear's tools; nothing else here.
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: integrationStatuses() }),
-  });
+  fakeActPort({});
   holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: TOOLS }));
+  holdIntegrations(() => ({ rows: { integrations: integrationStatuses() } }));
 });
 
 afterEach(() => {

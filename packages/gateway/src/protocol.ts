@@ -436,8 +436,19 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
-  /** Where every one of the account's integrations stands, read from the service now. */
-  INTEGRATIONS_STATUS: "integrations.status",
+  /**
+   * Where every one of the account's integrations stands, held for a window
+   * from now until it is let go, followed on the service's live read with
+   * GitHub's standing asked beside it, and a while after among the reads let
+   * go lately; while a sign-in stands pending, the host settles it on its
+   * own. What it holds is heard as `INTEGRATIONS_CHANGED` events, on the app
+   * state every window draws, never answered.
+   */
+  INTEGRATIONS_FOLLOW: "integrations.follow",
+  /** The account's integrations let go by the window that held them. */
+  INTEGRATIONS_UNFOLLOW: "integrations.unfollow",
+  /** The account's held integrations read again at once, as Try again asks. */
+  INTEGRATIONS_RETRY: "integrations.retry",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
   /**
@@ -660,6 +671,8 @@ export const GATEWAY_EVENT = {
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
   BROWSER_TABS_CHANGED: "browserTabs.changed",
+  /** The account's integrations the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

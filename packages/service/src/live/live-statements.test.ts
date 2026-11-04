@@ -20,6 +20,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -71,6 +72,9 @@ function liveStatements() {
     ),
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
+    ),
+    "account.integrations": Option.getOrThrow(
+      integrationStatusesLiveStatement(USER_ID, new Date(0)),
     ),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),

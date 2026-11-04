@@ -301,7 +301,7 @@ export const INTEGRATION_ACCOUNTS_MAX = 5;
 export const INTEGRATION_LABEL_MAX = 64;
 
 /** One account the user account holds at a provider, as the statuses read answers it. */
-export const integrationAccountSchema = EffectSchema.Struct({
+const integrationAccountSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
   connection: integrationConnectionNameSchema,
   /** Its name at the provider, or the developer's own for it, where either is known. */
@@ -378,7 +378,7 @@ export const INTEGRATION_SIGN_IN_FAILURE = {
 } as const;
 
 /** One provider's sign-in that ended without a grant, and why, with Connect's own line where it carried no credential. */
-export const integrationSignInFailureSchema = EffectSchema.Struct({
+const integrationSignInFailureSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
   /** The account whose sign-in it was, where the service names one. */
   connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
