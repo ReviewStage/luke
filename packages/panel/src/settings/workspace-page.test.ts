@@ -46,7 +46,7 @@ import {
   WORKSPACE_ACT_KIND,
 } from "@repo/host/contract";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { SETTINGS_SECTION, type SettingsLink } from "@repo/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -216,9 +216,6 @@ const SAVED_TOKEN = {
   addedAt: 1,
   expiresAt: null,
 };
-
-/** Every place in Settings the page was asked to open, in order. */
-let opened: SettingsLink[] = [];
 
 /** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
 let tokenReach: string[] = [];
@@ -519,7 +516,6 @@ beforeEach(() => {
   tokenReadFails = false;
   tokenSaved = true;
   heldTokenRepositories = NO_KEYS_HELD;
-  opened = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   fakeActPort({
@@ -614,7 +610,7 @@ async function mount(
             null,
             createElement(
               OpenSettingsProvider,
-              { value: (link: SettingsLink) => opened.push(link) },
+              { value: (_link: SettingsLink) => undefined },
               openPerson === undefined
                 ? createElement(WorkspacePage, { control, readerId: READER_ID })
                 : createElement(
@@ -1788,21 +1784,18 @@ test("Add repository offers the token's repositories from a service older than a
   ]);
 });
 
-test("with no token saved, Add repository says to add a token and links to the Account page, rather than saying there are no repositories", async () => {
+test("with no token saved, GitHub's row offers no Add repository, to an owner, an admin, or a member", async () => {
   tokenSaved = false;
-  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  const expected = {
+    [WORKSPACE_ROLE.OWNER]: ["Manage on GitHub"],
+    [WORKSPACE_ROLE.ADMIN]: ["Manage on GitHub"],
+    [WORKSPACE_ROLE.MEMBER]: [],
+  };
+  for (const role of Object.values(WORKSPACE_ROLE)) {
+    const { page } = await mount({ ...SEVERAL, role });
 
-  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
-  await settle();
-  const menu = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("no menu");
-
-  assert.match(
-    menu.textContent ?? "",
-    /Add a GitHub token in Account settings to add repositories\./u,
-  );
-  assert.doesNotMatch(menu.textContent ?? "", /No repositories/u);
-  act(() => button(menu, "Account").click());
-  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.ACCOUNT }]);
+    assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), expected[role], `a ${role}'s controls`);
+  }
 });
 
 test("with a token saved and nothing left to add, Add repository still says there are no repositories", async () => {

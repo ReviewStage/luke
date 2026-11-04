@@ -207,17 +207,6 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
   );
 });
 
-test("with no token the row says what the token is for, and with one it says the token's facts instead", async () => {
-  await mountAndOpen(false);
-  const purpose = /Lets agents work in repositories Vespin's GitHub App does not reach/u;
-  assert.match(document.body.textContent ?? "", purpose);
-
-  stored = KEPT;
-  document.body.innerHTML = "";
-  await mountAndOpen(false);
-  assert.doesNotMatch(document.body.textContent ?? "", purpose);
-});
-
 test("the dialog opens with the token field focused, and Remove's question going back to a form leaves it there", async () => {
   await mountAndOpen();
   assert.ok(document.activeElement === tokenField(), "the field takes focus as the card opens");
