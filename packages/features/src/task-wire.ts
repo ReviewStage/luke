@@ -16,7 +16,7 @@ import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
-import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { chosenIdSchema, countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
@@ -354,9 +354,12 @@ function relationsEachOnce(request: {
  * service refuses from an account without the Pilot experiment, and which
  * stands as the task was started.
  * A released desktop may still send `linearIssueId` or `issues`, from when a
- * task could link issues, which are accepted and ignored.
+ * task could link issues, which are accepted and ignored. An `id` makes the
+ * task under the id its maker chose (`chosenIdSchema`); one sent again
+ * answers the task it made, its agent started under the agent's own key.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
+  id: EffectSchema.optionalKey(chosenIdSchema),
   name: EffectSchema.optionalKey(
     EffectSchema.Trim.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
   ),
