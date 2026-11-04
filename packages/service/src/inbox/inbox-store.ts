@@ -2091,7 +2091,7 @@ const findReachedItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
+/** Every item the account's Inbox lists that is unread for it, or whose snooze came due, in the one workspace named or in all of them, marked read through its last change and no longer snoozed: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
   Result: MarkedSchema,
@@ -2831,9 +2831,10 @@ export function snoozeInboxItem(
 /**
  * Every item the member's Inbox lists marked read for them, open or
  * settled, in the one workspace named or in every workspace of theirs
- * where none is: how many were unread, and the transaction that marked
- * them, none where none was. An item already read is not written, and
- * another member's markers are never touched.
+ * where none is: how many were unread, an item back from a snooze counted
+ * among them, and the transaction that marked them, none where none was. An
+ * item already read is not written, and another member's markers are never
+ * touched.
  */
 export function markInboxRead(
   userId: string,

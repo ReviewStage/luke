@@ -4,7 +4,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction, MenuEntry } from "../desktop/action-menu.js";
 import { closeAction } from "./inbox-close.js";
 import { isUnread } from "./inbox-model.js";
-import { type InboxSnoozer, snoozeEntries } from "./inbox-snooze.js";
+import { type SnoozeDoors, snoozeEntries } from "./inbox-snooze.js";
 import { markReadItem } from "./task-menu-items.js";
 
 /**
@@ -27,10 +27,8 @@ interface InboxItemDoors {
   readonly onAskClose: ((item: InboxItem) => void) | undefined;
   /** Whether U marks this item, so its Mark names the chord, and H snoozes it, so its Snooze does. */
   readonly keyed: boolean;
-  /** Snoozes the item, and opens the date picker for a time of the reader's own; none where the surface offers no snooze. */
-  readonly snooze?:
-    | { readonly onSnooze: InboxSnoozer; readonly onPick: (item: InboxItem) => void }
-    | undefined;
+  /** Snoozes the item, and opens the date picker for a time of the reader's own where the surface holds one; none where it offers no snooze. */
+  readonly snooze?: SnoozeDoors | undefined;
 }
 
 /** An item's acts as a menu draws them. */

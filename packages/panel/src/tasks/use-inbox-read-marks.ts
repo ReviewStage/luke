@@ -70,8 +70,11 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What a toast says of a snooze the service did not take. */
-const SNOOZE_REFUSED = "Could not snooze the item";
+/** What a toast says of a snooze, or the end of one, that the service did not take. */
+const SNOOZE_REFUSED = {
+  SNOOZE: "Could not snooze the item",
+  UNSNOOZE: "Could not unsnooze the item",
+} as const;
 
 /** What a mark the act channel refused hears, as the service not answering. */
 const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
@@ -148,19 +151,24 @@ export function useInboxReadMarks({
         .catch(unreached)
         .then((answer) => {
           if ("failure" in answer) {
-            refused(SNOOZE_REFUSED, answer, { inboxItemId: item.id, workspaceId });
+            refused(until === null ? SNOOZE_REFUSED.UNSNOOZE : SNOOZE_REFUSED.SNOOZE, answer, {
+              inboxItemId: item.id,
+              workspaceId,
+            });
             return;
           }
           if (until !== null) {
             toast(
-              undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () =>
-                onSnooze(item, null),
-              ),
+              // Note that snoozing marked the item read, so Undo marks an item that was unread unread again.
+              undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () => {
+                onSnooze(item, null);
+                if (isUnread(item)) void onMark(item, true);
+              }),
             );
           }
         });
     },
-    [act, workspaceId, refused, toast],
+    [act, workspaceId, refused, toast, onMark],
   );
   return useMemo(
     () => ({ onMark, onMarkAll, onMarkEach, onSnooze }),

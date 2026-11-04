@@ -1137,9 +1137,12 @@ export const inboxReadStateSchema = EffectSchema.Struct({
   ...writtenIn,
 });
 
+/** The latest instant a JavaScript date holds, in epoch milliseconds, past which a snooze names no moment. */
+const LATEST_INSTANT = 8_640_000_000_000_000;
+
 /** Snoozing an item for the member until an instant, in epoch milliseconds, or ending its snooze where none is named. */
 export const inboxSnoozeRequestSchema = EffectSchema.Struct({
-  until: EffectSchema.NullOr(countedNumber),
+  until: EffectSchema.NullOr(countedNumber.check(EffectSchema.isLessThanOrEqualTo(LATEST_INSTANT))),
 });
 
 export type InboxSnoozeRequest = typeof inboxSnoozeRequestSchema.Type;

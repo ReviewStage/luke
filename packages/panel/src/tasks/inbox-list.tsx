@@ -175,7 +175,8 @@ import { cardTitle } from "./tool-call-model.js";
  * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists.
  * The head names the Inbox, whatever it lists, and, at its right, offers the view's
  * menu: first what the list shows, Open, every thread still open, a
- * question or an update not yet opened, or All, every item; then Addressed
+ * question or an update not yet opened, All, every item, each leaving out
+ * what the developer snoozed, or Snoozed, those items alone; then Addressed
  * to, the developer's own, anyone's, or one teammate's by face and name,
  * which a chip over the list then says, its × listing the developer's own
  * again. Open addressed to the developer is Needs you, the threads the
@@ -578,7 +579,7 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Open or All, the one shown checked; then Addressed to, a
+ * it shows, Open, All, or Snoozed, the one shown checked; then Addressed to, a
  * submenu of Anyone, Me, or a teammate by face and name, its choice checked.
  */
 function ViewOptions({

@@ -1,11 +1,12 @@
 import { dateChipText, readerZone } from "@repo/features/date-mention";
-import type { InboxItem } from "@repo/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { dropBelowStart, useMenu } from "@repo/ui";
+import { dropBelowStart, STATUS_TONE, useMenu } from "@repo/ui";
 import { GLYPH, InboxIcon } from "@repo/ui/icons";
 import { type RefObject, useCallback } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { DATE_PICKER_CLOSE, type DatePicked, useDatePicker } from "./date-picker.js";
 import { isSnoozed } from "./inbox-model.js";
 
@@ -34,6 +35,7 @@ const WORDS = {
   NEXT_WEEK: "Next week",
   PICK: "Pick a date and time…",
   UNSNOOZE: "Unsnooze",
+  PAST: "Pick a time after now to snooze until",
 } as const;
 
 /** One time a snooze menu offers: its words, and when it wakes, counted from the moment it is chosen. */
@@ -71,23 +73,33 @@ export function snoozeWords(at: number, now: number): string {
   return dateChipText({ start: momentOf(at) }, now, readerZone());
 }
 
-/** The instant a picked date names: its time, or 9 AM on a day picked alone; none where it was cleared, names none, or is not ahead of `now`. */
-function pickedInstant(picked: DatePicked, now: number): number | undefined {
-  if (picked.how === DATE_PICKER_CLOSE.CLEAR || picked.date === undefined) return undefined;
+/** What a pick names: nothing, where the picker closed as it opened, was cleared, or holds no date; a time not ahead of now; or the instant to snooze until. */
+const PICKED = { NONE: "none", PAST: "past", AT: "at" } as const;
+
+type Picked =
+  | { readonly kind: typeof PICKED.NONE | typeof PICKED.PAST }
+  | { readonly kind: typeof PICKED.AT; readonly at: number };
+
+/** What a pick names at `now`, a day picked alone meaning 9 AM. Note that a picker closed as it opened names the day it showed, which nobody picked. */
+function pickedInstant(picked: DatePicked, now: number): Picked {
+  if (!picked.changed || picked.how === DATE_PICKER_CLOSE.CLEAR || picked.date === undefined) {
+    return { kind: PICKED.NONE };
+  }
   const { start } = picked.date;
   const at = /T/u.test(start)
     ? Date.parse(start)
     : new Date(`${start}T${String(MORNING_HOUR).padStart(2, "0")}:00`).getTime();
-  return Number.isNaN(at) || at <= now ? undefined : at;
+  if (Number.isNaN(at)) return { kind: PICKED.NONE };
+  return at <= now ? { kind: PICKED.PAST } : { kind: PICKED.AT, at };
 }
 
 /** How an item is snoozed: until an instant, or no longer where it is null. */
 export type InboxSnoozer = (item: InboxItem, until: number | null) => void;
 
-/** What a snooze menu acts through: the snooze, and the date picker for a time of the reader's own. */
-interface SnoozeDoors {
+/** What a snooze menu acts through: the snooze, and the date picker for a time of the reader's own, where the menu's surface holds one. */
+export interface SnoozeDoors {
   readonly onSnooze: InboxSnoozer;
-  readonly onPick: (item: InboxItem) => void;
+  readonly onPick?: ((item: InboxItem) => void) | undefined;
 }
 
 /** The times a menu offers for `item`, each saying when it wakes. */
@@ -108,20 +120,23 @@ function unsnoozeActions(item: InboxItem, onSnooze: InboxSnoozer): MenuAction[] 
 }
 
 /**
- * An item's row menu's snooze entries: Snooze, a submenu of the times and a
- * time of the reader's own, printing H where `keyed`, and Unsnooze on an
- * item snoozed already.
+ * An item's menu's snooze entries: Snooze, a submenu of the times and,
+ * where the menu's surface holds a picker, a time of the reader's own,
+ * printing H where `keyed`, on an open item; and Unsnooze on an item
+ * snoozed already.
  */
 export function snoozeEntries(item: InboxItem, doors: SnoozeDoors, keyed: boolean): MenuEntry[] {
-  const pick: MenuAction = {
-    label: WORDS.PICK,
-    icon: <GLYPH.TIME />,
-    onSelect: () => doors.onPick(item),
-  };
+  // Note that a settled item waits on nobody, so it offers no snooze, only the end of one standing.
+  if (item.status !== INBOX_STATUS.OPEN) return unsnoozeActions(item, doors.onSnooze);
+  const { onPick } = doors;
+  const pick: MenuAction[] =
+    onPick === undefined
+      ? []
+      : [{ label: WORDS.PICK, icon: <GLYPH.TIME />, onSelect: () => onPick(item) }];
   const snooze: MenuEntry = {
     label: WORDS.SNOOZE,
     icon: <GLYPH.TIME />,
-    items: [...timeActions(item, doors.onSnooze), pick],
+    items: [...timeActions(item, doors.onSnooze), ...pick],
     ...(keyed ? { command: APP_COMMAND.SNOOZE } : undefined),
   };
   return [snooze, ...unsnoozeActions(item, doors.onSnooze)];
@@ -148,6 +163,7 @@ export function useInboxSnoozing({
   onSnooze: InboxSnoozer | undefined;
 }): { readonly popover: React.ReactNode; readonly onPick: (item: InboxItem) => void } {
   const picker = useDatePicker(room);
+  const toast = useToast();
   const menu = useMenu(active);
   const { open } = picker;
   const onPick = useCallback(
@@ -158,12 +174,14 @@ export function useInboxSnoozing({
         at: row,
         date: undefined,
         onClose: (picked) => {
-          const at = pickedInstant(picked, Date.now());
-          if (at !== undefined) onSnooze(item, at);
+          const named = pickedInstant(picked, Date.now());
+          if (named.kind === PICKED.AT) onSnooze(item, named.at);
+          if (named.kind === PICKED.PAST)
+            toast({ words: WORDS.PAST, tone: STATUS_TONE.ATTENTION, hold: TOAST_HOLD.FAILED });
         },
       });
     },
-    [rowOf, onSnooze, open],
+    [rowOf, onSnooze, open, toast],
   );
   const { show } = menu;
   useAppCommand(

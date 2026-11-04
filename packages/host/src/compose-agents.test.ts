@@ -1287,6 +1287,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, { itemId: ITEM.id, until: 5_000 }),
+      { id: ITEM.id, unread: false },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
         workspaceId: WORKSPACE_ID,
         itemIds: [],
@@ -1336,6 +1340,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-start:${AGENT_ID}:Annual plan copy:Draft the annual plan's line too.:start-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
+      `inbox-snooze:${ITEM.id}:5000`,
       `inbox-read-all:${WORKSPACE_ID}`,
     ]);
   }),

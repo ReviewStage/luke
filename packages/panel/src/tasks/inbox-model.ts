@@ -1707,7 +1707,8 @@ export function isDone(item: InboxItem): boolean {
  * Whether a scope lists the item: Open every open thread, a question or an
  * update not yet opened, which narrowed to the reader's own (`needsYou`)
  * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
- * all of them. Note that a thread of theirs settled and unread is left to
+ * all of them, each leaving out what the reader snoozed (`isSnoozed`),
+ * which Snoozed alone lists. Note that a thread of theirs settled and unread is left to
  * All, because main counts no settled item.
  */
 function showsItem(show: InboxShow, item: InboxItem): boolean {

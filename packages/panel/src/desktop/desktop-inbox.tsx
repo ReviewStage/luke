@@ -550,6 +550,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                 }),
                 onMark: markItem,
                 onClose: closeItem,
+                onSnooze: marks.onSnooze,
               }}
             />
           </TaskMentions>
