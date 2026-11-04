@@ -443,7 +443,7 @@ function AgentsSection({
 
 /**
  * The harnesses and the Default model group, over the keys the harnesses'
- * rows hold: the model row's note says which provider runs on the account's
+ * rows hold: Fast's link to ask Anthropic for fast mode stands on the account's
  * own key, so it reads them from the rows that change them rather than from
  * a read of its own that a save there would leave behind.
  */

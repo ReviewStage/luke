@@ -126,7 +126,7 @@ const SKILL_GROUP_SKELETON: SettingsSectionSkeletonShape = {
  * personal one, which draws no group of its own, is not yet known.
  */
 const SKILLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
-  { headed: false, rows: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] }] },
+  { headed: false, rows: [{ described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] }] },
   SKILL_GROUP_SKELETON,
   SKILL_GROUP_SKELETON,
 ];

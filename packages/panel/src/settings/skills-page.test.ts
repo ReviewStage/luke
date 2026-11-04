@@ -607,7 +607,9 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /Pasted/u);
+  const row = rowOf("pr-style");
+  assert.match(row.textContent ?? "", /Pasted/u);
+  assert.equal(row.closest("section")?.querySelector("h2")?.textContent, "Only you");
 });
 
 test("Share is never offered in a personal workspace", async () => {
