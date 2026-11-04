@@ -1,4 +1,5 @@
 import type { HostedIntegrationsClient } from "@repo/features";
+import type { IntegrationLiveRow } from "@repo/features/integration-live";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -9,6 +10,7 @@ import {
   integrationRenameParamsSchema,
 } from "@repo/features/integration-view";
 import {
+  INTEGRATION_STATUS,
   type IntegrationToolsAnswer,
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
@@ -44,7 +46,11 @@ import type { WindowFocus } from "./window-focus.js";
  * address, which begins a grant for the account, never reaches a window or
  * a report; the window hears only whether the browser was sent, and the
  * held read draws how the sign-in settled once the service's callback, or
- * the host's own settling while it stands pending, writes it. Each server's
+ * the host's own settling while it stands pending, writes it. A Connect, a
+ * Cancel, a Disconnect, and a rename each answer the window only once the
+ * held read carries the transaction the service wrote it in, where it moves
+ * what that read shows, so the window draws the write from the read as the
+ * answer lands, with no overlay of its own. Each server's
  * tools are fetched for the windows that hold them (`held-fetch.ts`), by the
  * server's name, asked as a window first holds them, again as a window comes
  * forward, which is how the developer comes back from mending a connection
@@ -76,7 +82,7 @@ export interface IntegrationsComposer extends Composer {
   readonly open: Effect.Effect<void>;
   /** Every server's tools and the held integrations let go, as a sign-out lets them go; the windows' holds stand. */
   readonly reset: Effect.Effect<void>;
-  /** GitHub's standing asked again, as a GitHub connect or disconnect that answered asks. */
+  /** GitHub's standing asked again, as a GitHub disconnect that answered asks; done once each ask has landed. */
   readonly githubMoved: Effect.Effect<void>;
 }
 
@@ -190,7 +196,25 @@ function composed(
         );
   });
 
-  /** A sign-in begun and its address opened; the window hears whether it was, and the account it signs in, and nothing of the address. */
+  /** A write to one account confirmed once the held read carries it, where it moves what that read shows of the account (`HeldIntegrations.confirmed`). */
+  const confirmed = (
+    connection: string,
+    txid: string | undefined,
+    moves: (row: IntegrationLiveRow | undefined) => boolean,
+  ) =>
+    Effect.suspend(() => {
+      const userId = dependencies.accountId();
+      return userId === undefined
+        ? Effect.void
+        : integrations.confirmed(userId, connection, txid, moves);
+    });
+
+  /**
+   * A sign-in begun and its address opened; the window hears whether it
+   * was, and the account it signs in, and nothing of the address, once the
+   * held read draws it pending. Note that an account standing connected
+   * stays so while it signs in again, so its sign-in moves nothing to wait on.
+   */
   const connect = ({
     provider,
     connection,
@@ -201,6 +225,11 @@ function composed(
       if ("failure" in answer) return answer;
       const opened = yield* openExternal(answer.url);
       if (!opened) return { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED };
+      yield* confirmed(
+        answer.connection ?? connection ?? provider,
+        answer.txid,
+        (row) => row?.status !== INTEGRATION_STATUS.CONNECTED,
+      );
       return answer.connection === undefined
         ? { opened: true }
         : { opened: true, connection: answer.connection };
@@ -253,17 +282,28 @@ function composed(
         yield* tools.retry(serverName(yield* targetOf(params)));
         return {};
       }),
+    // A Cancel answers once the held read draws the account where the Cancel left it.
     [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: (params) =>
       Effect.gen(function* () {
         const { provider, connection } = yield* targetOf(params);
-        return carried<IntegrationStatusView>(
-          yield* asked(client.cancel(provider, { connection })),
-        );
+        const answer = yield* asked(client.cancel(provider, { connection }));
+        if (!("failure" in answer)) {
+          yield* confirmed(
+            connection ?? provider,
+            answer.txid,
+            (row) => (row?.status ?? INTEGRATION_STATUS.DISCONNECTED) !== answer.status,
+          );
+        }
+        return carried<IntegrationStatusView>(answer);
       }),
+    // A Disconnect answers once the held read no longer holds the account.
     [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: (params) =>
       Effect.gen(function* () {
         const { provider, connection } = yield* targetOf(params);
         const answer = yield* asked(client.disconnect(provider, { connection }));
+        if (!("failure" in answer)) {
+          yield* confirmed(connection ?? provider, answer.txid, (row) => row !== undefined);
+        }
         return carried<IntegrationStatusView>(answer);
       }),
     [GATEWAY_METHOD.INTEGRATIONS_RENAME]: (params) =>
@@ -274,9 +314,16 @@ function composed(
           "the ask names an account and a label",
         );
         const { provider, connection, label } = read;
-        return carried<IntegrationAccountView>(
-          yield* asked(client.rename(provider, connection, label)),
-        );
+        const answer = yield* asked(client.rename(provider, connection, label));
+        // A rename answers once the held read carries the label the service kept.
+        if (!("failure" in answer)) {
+          yield* confirmed(
+            connection,
+            answer.txid,
+            (row) => row !== undefined && row.label !== answer.account.label,
+          );
+        }
+        return carried<IntegrationAccountView>(answer);
       }),
   };
 

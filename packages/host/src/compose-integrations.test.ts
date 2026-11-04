@@ -20,7 +20,7 @@ import {
 } from "@repo/gateway";
 import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppIntegrations } from "./app-state.js";
 import { composeIntegrations, type IntegrationsClient } from "./compose-integrations.js";
@@ -33,14 +33,18 @@ import { windowFocus } from "./window-focus.js";
  * a closed account gate nothing is asked or opened; a server's tools a
  * window holds are kept from their last read; and where the integrations
  * stand, which a window holds, is followed live, the service asked to
- * settle a sign-in only while a row stands pending. Synthetic accounts and
- * rows throughout.
+ * settle a sign-in only while a row stands pending, and a disconnect
+ * answered only once that read carries it. Synthetic accounts and rows
+ * throughout.
  */
 
 /** The sign-in address the service answers, which must reach the browser and no window. */
 const SIGN_IN = "https://vercel.com/connect/authorize/request-1";
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
+
+/** The transaction the service deletes a disconnected account in. */
+const DISCONNECT_TXID = "4815";
 
 /** The account signed in, which the held integrations are followed under. */
 const USER_ID = "user-dana";
@@ -103,7 +107,7 @@ function fakeService(script: ServiceScript) {
       Effect.sync(() => {
         asked.push(provider);
         script.status = INTEGRATION_STATUS.DISCONNECTED;
-        return { status: script.status };
+        return { status: script.status, txid: DISCONNECT_TXID };
       }),
     rename: (provider, connection, label) =>
       Effect.sync(() => {
@@ -241,4 +245,38 @@ it.effect("the held integrations are settled only while a row stands pending", (
     assert.equal(settles(), 2, "a sign-in settled is settled no more");
     yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
   }),
+);
+
+it.effect(
+  "a disconnect answers only once the held read carries its transaction, gone from it",
+  () =>
+    Effect.gen(function* () {
+      const { call, integrations, live } = yield* subject({ status: INTEGRATION_STATUS.CONNECTED });
+      const listed = () =>
+        integrations.at(-1)?.[USER_ID]?.rows?.accounts?.map((account) => account.connection) ?? [];
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* after(Duration.millis(500));
+      assert.deepEqual(listed(), ["linear"]);
+
+      let answered = false;
+      const disconnecting = yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, LINEAR), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* after(Duration.seconds(1));
+      assert.equal(answered, false, "the read does not carry the disconnect yet");
+
+      live.set({ connections: [] }, [DISCONNECT_TXID]);
+      yield* after(Duration.millis(500));
+      assert.deepEqual(yield* Fiber.join(disconnecting), {
+        status: INTEGRATION_STATUS.DISCONNECTED,
+        txid: DISCONNECT_TXID,
+      });
+      assert.deepEqual(listed(), [], "the answer lands with the account gone from the read");
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+    }),
 );

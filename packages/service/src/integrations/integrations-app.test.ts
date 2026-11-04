@@ -15,7 +15,7 @@ import {
   integrationLandingPath,
   integrationStatusesAnswerSchema,
 } from "@repo/features/integration-wire";
-import type { WireBoundaryInput } from "@repo/wire";
+import { isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { fakeHttpClientLayer, noNetwork } from "@repo/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
@@ -345,6 +345,14 @@ const UNAVAILABLE_REFUSAL = {
   body: { error: HOSTED_API_ERROR.UNAVAILABLE },
 };
 
+/** A write's answer as the service sent it, the transaction it wrote in, which every write answers, taken off. */
+function written(body: WireBoundaryInput): WireBoundaryInput {
+  const read = unparsedWire(body);
+  assert.ok(isRecord(read) && typeof read.txid === "string", "the write answers its transaction");
+  const { txid: _txid, ...rest } = read;
+  return rest;
+}
+
 it.layer(getTestDB())("the integrations an account is offered", (it) => {
   it.effect("with no allowlist set, a connector is offered to every account", () =>
     Effect.gen(function* () {
@@ -352,10 +360,9 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       const anyone = yield* openAccount("riley@elsewhere.example");
 
       assert.equal(yield* group.slackStatus(anyone), INTEGRATION_STATUS.DISCONNECTED);
-      assert.deepEqual(yield* group.connectSlack(anyone), {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: { url: GRANTING_SIGN_IN_URL, connection: SLACK },
-      });
+      const begun = yield* group.connectSlack(anyone);
+      assert.equal(begun.status, HOSTED_HTTP_STATUS.OK);
+      assert.deepEqual(written(begun.body), { url: GRANTING_SIGN_IN_URL, connection: SLACK });
     }),
   );
 
@@ -572,7 +579,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, { declines: true });
         const account = yield* openAccount("ana@never-back.example");
         const begun = yield* group.connectSlack(account);
-        assert.deepEqual(begun.body, { url: GRANTING_SIGN_IN_URL, connection: SLACK });
+        assert.deepEqual(written(begun.body), { url: GRANTING_SIGN_IN_URL, connection: SLACK });
 
         assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
         yield* TestClock.adjust("14 minutes");
@@ -653,12 +660,15 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           method: "POST",
           userId,
         });
-        assert.deepEqual(first.body, { url: GRANTING_SIGN_IN_URL, connection: NOTION });
+        assert.deepEqual(written(first.body), { url: GRANTING_SIGN_IN_URL, connection: NOTION });
         const second = yield* group.ask(notion(`${NOTION}/connect?add=true`), {
           method: "POST",
           userId,
         });
-        assert.deepEqual(second.body, { url: GRANTING_SIGN_IN_URL, connection: "notion-2" });
+        assert.deepEqual(written(second.body), {
+          url: GRANTING_SIGN_IN_URL,
+          connection: "notion-2",
+        });
 
         // The read settles both sign-ins: a Connect that grants every subject holds a grant for each.
         const settled = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
@@ -674,7 +684,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
           body: JSON.stringify({ label: "  Personal " }),
         });
-        assert.deepEqual(renamed.body, {
+        assert.deepEqual(written(renamed.body), {
           account: {
             provider: NOTION,
             connection: "notion-2",
@@ -762,7 +772,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.equal(accountsIn(read.body).length, 0);
         assert.ok(addableIn(read.body).includes(NOTION));
         // The sign-ins left behind are let go, so the account added takes the provider's own name and stands first.
-        assert.deepEqual((yield* add("?add=true")).body, {
+        assert.deepEqual(written((yield* add("?add=true")).body), {
           url: GRANTING_SIGN_IN_URL,
           connection: NOTION,
         });
@@ -783,12 +793,13 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           {
             endSignIn: (owner, connectionName, state) =>
               connectionName === NOTION
-                ? Effect.asVoid(
+                ? Effect.as(
                     beginIntegrationSignIn(
                       owner,
                       firstIntegrationAccount(owner, NOTION),
                       "restarted-state",
                     ),
+                    undefined,
                   )
                 : endIntegrationSignIn(owner, connectionName, state),
           },
@@ -801,7 +812,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         yield* add("");
         yield* TestClock.adjust("16 minutes");
 
-        assert.deepEqual((yield* add("?add=true")).body, {
+        assert.deepEqual(written((yield* add("?add=true")).body), {
           url: GRANTING_SIGN_IN_URL,
           connection: "notion-2",
         });
@@ -823,12 +834,13 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           {
             endSignIn: (owner, connectionName, state) =>
               Effect.andThen(endIntegrationSignIn(owner, connectionName, state), () =>
-                Effect.asVoid(
+                Effect.as(
                   beginIntegrationSignIn(
                     owner,
                     { provider: NOTION, connectionName, connectSubject: `${connectionName}-raced` },
                     `${connectionName}-raced-state`,
                   ),
+                  undefined,
                 ),
               ),
           },

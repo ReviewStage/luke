@@ -563,36 +563,26 @@ function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Elem
 /**
  * Disconnects one account: a Connect grant at the service, and GitHub by
  * unlinking the account's GitHub under the Mac's session, whose refusal is
- * the window's toast, so the dialog closes either way. Where it then stands
- * is drawn at once, until the host's read moves past it, so an account past
- * the provider's first leaves the page with its row.
+ * the window's toast, so the dialog closes either way. Each answers once the
+ * host's read carries where the account then stands, so an account past the
+ * provider's first leaves the page with its row as the answer lands.
  */
 function disconnectAccount(
   act: ActHandle["act"],
   github: GitHubConnectControl,
   row: ServerRow,
-  statuses: IntegrationStatuses,
 ): Promise<ActionResult> {
   const { provider, connection, name } = row;
   const refused: ActionResult = {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: `${name} could not be disconnected. Try again.`,
   };
-  if (grantedBySignIn(provider)) {
-    return github.disconnect().then((disconnected) => {
-      if (disconnected) statuses.settle(provider, INTEGRATION_STATUS.DISCONNECTED);
-      return ACCEPTED;
-    });
-  }
+  if (grantedBySignIn(provider)) return github.disconnect().then(() => ACCEPTED);
   return act(ACT_KIND.INTEGRATIONS_DISCONNECT, {
     provider,
     ...(connection === provider ? undefined : { connection }),
   }).then(
-    (answer: IntegrationStatusView) => {
-      if ("failure" in answer) return refused;
-      statuses.settle(connection, answer.status);
-      return ACCEPTED;
-    },
+    (answer: IntegrationStatusView) => ("failure" in answer ? refused : ACCEPTED),
     () => refused,
   );
 }
@@ -691,7 +681,7 @@ function IntegrationRow({
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
     { subject: connected, surfaceOpen: true },
-    () => disconnectAccount(act, github, row, statuses),
+    () => disconnectAccount(act, github, row),
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 

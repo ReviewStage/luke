@@ -8,7 +8,7 @@ import {
 import type { IntegrationStatusView } from "@repo/features/integration-view";
 import { INTEGRATION_STATUS, type IntegrationStatus } from "@repo/features/integration-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { Duration, Effect, Option, Queue, Schedule, type Scope, Stream } from "effect";
+import { Duration, Effect, Queue, Schedule, Schema, type Scope, Stream } from "effect";
 import { type AppIntegrations, NO_KEYS_HELD } from "./app-state.js";
 import {
   answeredCollection,
@@ -17,11 +17,11 @@ import {
   heldSlice,
   rowsOf,
 } from "./live-collection.js";
-import { pushLive } from "./live-push.js";
+import { confirmWrite, followTakingRows, restarting, type TxWait } from "./live-follow.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
- * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into a collection by their ids, GitHub's standing asked beside them, and a sign-in that stands pending settled while it does.
+ * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into a collection by their ids, GitHub's standing asked beside them, a sign-in that stands pending settled while it does, and a write confirmed once the rows carry it.
  *
  * The host follows the account's integration rows while any window holds
  * them and a while after (`heldSlice`), so a sign-in the developer finishes
@@ -31,9 +31,9 @@ import type { WindowFocus } from "./window-focus.js";
  * ride beside the rows on every answer, since no statement reads them.
  * GitHub's standing comes from the account's GitHub sign-in rather than a
  * row, so it is asked beside the rows: as the follow starts, again as a
- * window comes forward, and again once a GitHub connect or disconnect
- * answers (`githubMoved`). Nothing is drawn until both have answered, and a
- * GitHub ask that fails keeps the standing it last answered.
+ * window comes forward, and again once a GitHub disconnect answers
+ * (`githubMoved`), which waits on it. Nothing is drawn until both have
+ * answered, and a GitHub ask that fails keeps the standing it last answered.
  *
  * A browser returned anywhere but the service's own callback completes
  * nothing, so while a row stands pending the host asks the service to
@@ -41,6 +41,10 @@ import type { WindowFocus } from "./window-focus.js";
  * nothing while none does; what it settles arrives on the rows. A settle
  * also labels a connected account that carries no label, from its grant or
  * its provider, so one is asked once for each such row a follow meets.
+ *
+ * The rows are taken the moment each poll answers, before the follow
+ * carries the answer's txids on, so a write confirmed on the read
+ * (`confirmed`) finds the rows that carry it already drawn.
  */
 
 /**
@@ -76,8 +80,27 @@ export interface IntegrationsFollowDependencies {
 
 /** The account's integrations the windows hold, by the account, and what the host does for them. */
 export interface HeldIntegrations extends HeldSlice<string> {
-  /** GitHub's standing asked again on every follow, as a GitHub connect or disconnect that answered asks. */
+  /** GitHub's standing asked again on every follow, as a GitHub disconnect that answered asks; done once each ask has landed. */
   readonly githubMoved: Effect.Effect<void>;
+  /**
+   * A write to one of `userId`'s accounts, by its connection name, confirmed
+   * once its transaction reaches the rows the windows hold, where `moves`
+   * says it moves what those rows show of that account; at once where it
+   * does not, where it wrote nothing, or where no window holds the rows.
+   */
+  readonly confirmed: (
+    userId: string,
+    connection: string,
+    txid: string | undefined,
+    moves: (row: IntegrationLiveRow | undefined) => boolean,
+  ) => Effect.Effect<void>;
+}
+
+/** One follow as a write to it is confirmed: the rows it holds, its wait for a write's transaction where it hands one, and its ask of GitHub's standing. */
+interface Followed {
+  readonly rows: () => readonly IntegrationLiveRow[];
+  readonly txWait: () => TxWait | undefined;
+  readonly github: Effect.Effect<void>;
 }
 
 /** The providers that ride beside the rows on an answer. */
@@ -95,19 +118,24 @@ function sameBeside(held: Beside | undefined, next: Beside): boolean {
   );
 }
 
+/** The one statement's rows, each read alone later (`integrationLiveRowsOf`). */
+const LiveRowsSchema = Schema.Struct({ connections: Schema.Array(Schema.Unknown) });
+
 /**
  * Follows `userId`'s integrations until let go, each change told through
  * `answers`: the rows as the read last answered them, drawn with the
  * providers beside them and GitHub's standing once both have answered;
- * GitHub's asked again on each of `githubAgain`'s asks and each window
- * coming forward; and the service asked to settle while a row stands
- * pending, and once for each connected row it meets with no label.
+ * GitHub's asked again as each window comes forward, and as `followed`'s
+ * own ask is run; and the service asked to settle while a row stands
+ * pending, and once for each connected row it meets with no label. A read
+ * the service did not answer is followed again after `LIVE_RESTART`, and
+ * one refused as signed out, the session another account's now, no more.
  */
 function followIntegrations(
   dependencies: IntegrationsFollowDependencies,
   userId: string,
   answers: HeldAnswers<IntegrationStatusesAnswer>,
-  githubAgain: Queue.Queue<void>,
+  followed: (follow: Followed) => void,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.gen(function* () {
     const connections = yield* answeredCollection<IntegrationLiveRow, string>({
@@ -120,6 +148,7 @@ function followIntegrations(
     let beside: Beside | undefined;
     let github: IntegrationStatus | undefined;
     let taken = false;
+    let txWait: TxWait | undefined;
     const draw = () => {
       if (!taken || beside === undefined || github === undefined) return;
       const rows = rowsOf(connections.collection);
@@ -143,9 +172,14 @@ function followIntegrations(
         draw();
       } else if (github === undefined) answers.unanswered();
     });
+    followed({
+      rows: () => rowsOf(connections.collection),
+      txWait: () => txWait,
+      github: askGithub,
+    });
     yield* Effect.forkScoped(
       Stream.make(undefined).pipe(
-        Stream.concat(Stream.merge(Stream.fromQueue(githubAgain), yield* dependencies.focus.heard)),
+        Stream.concat(yield* dependencies.focus.heard),
         Stream.runForEach(() => askGithub),
       ),
     );
@@ -161,32 +195,53 @@ function followIntegrations(
         Stream.runForEach(() => dependencies.settle),
       ),
     );
-    yield* pushLive({
-      seal: (poll, after) =>
-        dependencies.gate()
-          ? Effect.map(dependencies.seal(userId, poll, after), (sealed) => {
-              if ("failure" in sealed) {
-                return {
-                  failure: sealed.failure,
-                  gone: sealed.failure === LIVE_SIGNED_OUT.failure,
-                };
-              }
-              const next = { offered: sealed.offered, multiple: sealed.multiple };
-              if (!sameBeside(beside, next)) {
-                beside = next;
-                draw();
-              }
-              return sealed;
-            })
-          : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
-      decode: (parts) => Option.some(integrationLiveRowsOf(parts.connections)),
-      publish: (rows) => {
-        if (rows === undefined) return answers.unanswered();
-        connections.answer(rows);
+    /** Whether the service refused the read for good, the session another account's now. */
+    let gone = false;
+    const sealed = (poll: boolean, after?: string) =>
+      dependencies.gate()
+        ? Effect.map(dependencies.seal(userId, poll, after), (answer) => {
+            if ("failure" in answer) {
+              gone ||= answer.failure === LIVE_SIGNED_OUT.failure;
+              return { failure: answer.failure, gone };
+            }
+            const next = { offered: answer.offered, multiple: answer.multiple };
+            if (!sameBeside(beside, next)) {
+              beside = next;
+              draw();
+            }
+            return answer;
+          })
+        : Effect.sync(() => {
+            gone = true;
+            return { ...LIVE_SIGNED_OUT, gone };
+          });
+    const take = (parts: typeof LiveRowsSchema.Type) =>
+      Effect.sync(() => {
+        connections.answer(integrationLiveRowsOf(parts.connections));
         taken = true;
         draw();
-      },
-    });
+      });
+    yield* restarting(
+      Effect.gen(function* () {
+        const first = yield* sealed(false);
+        if ("failure" in first) {
+          answers.unanswered();
+          return !gone;
+        }
+        yield* followTakingRows(
+          {
+            poll: (after) => sealed(true, after),
+            onTxWait: (wait) => {
+              txWait = wait;
+            },
+          },
+          first,
+          LiveRowsSchema,
+          take,
+        ).pipe(Effect.catch(() => Effect.void));
+        return !gone;
+      }),
+    );
   });
 }
 
@@ -201,8 +256,8 @@ export function heldIntegrations(
   dependencies: IntegrationsFollowDependencies,
 ): Effect.Effect<HeldIntegrations, never, Scope.Scope> {
   return Effect.gen(function* () {
-    /** Each standing follow's GitHub asks, which a GitHub connect or disconnect asks on. */
-    const githubAsks = new Set<Queue.Queue<void>>();
+    /** Each standing follow as a write to it is confirmed, by the account. */
+    const follows = new Map<string, Followed>();
     const slice = yield* heldSlice<typeof LIVE_READ.INTEGRATIONS, string>({
       empty: NO_KEYS_HELD,
       path: (userId) => [userId],
@@ -210,19 +265,37 @@ export function heldIntegrations(
       follow: (userId, answers) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const githubAgain = yield* Queue.sliding<void>(1);
-            githubAsks.add(githubAgain);
-            yield* Effect.addFinalizer(() => Effect.sync(() => githubAsks.delete(githubAgain)));
-            yield* followIntegrations(dependencies, userId, answers, githubAgain);
+            let standing: Followed | undefined;
+            // Note that a follow lets go only of its own entry, since one started over may stand first.
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                if (follows.get(userId) === standing) follows.delete(userId);
+              }),
+            );
+            yield* followIntegrations(dependencies, userId, answers, (follow) => {
+              standing = follow;
+              follows.set(userId, follow);
+            });
           }),
         ),
       tell: dependencies.tell,
     });
     return {
       ...slice,
-      githubMoved: Effect.sync(() => {
-        for (const asks of githubAsks) Queue.offerUnsafe(asks, undefined);
-      }),
+      githubMoved: Effect.suspend(() =>
+        Effect.forEach([...follows.values()], (follow) => follow.github, {
+          concurrency: "unbounded",
+          discard: true,
+        }),
+      ),
+      confirmed: (userId, connection, txid, moves) =>
+        Effect.suspend(() => {
+          const follow = follows.get(userId);
+          if (follow === undefined || txid === undefined) return Effect.void;
+          const row = follow.rows().find((each) => each.connection === connection);
+          // Note that a write that moves nothing the rows show is never carried by an answer that moved, so it is not waited on.
+          return moves(row) ? confirmWrite(follow.txWait(), txid) : Effect.void;
+        }),
     };
   });
 }

@@ -472,7 +472,7 @@ export interface TasksDependencies {
   focus: WindowFocus;
   /** The sync engine's pool, which the task list's plans and agents stand in. */
   pool: EntityPool;
-  /** GitHub's standing as an integration asked again, as a GitHub connect or disconnect that answered asks (`compose-integrations.ts`). */
+  /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
 }
 
@@ -2815,14 +2815,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return edited.answer;
       }),
     // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection whatever the bound says, and GitHub's
-    // standing as an integration is asked again once either answers.
+    // forward again reads the connection whatever the bound says.
     [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        yield* dependencies.githubMoved;
         return carried<TasksGitHubPageAnswer>(
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
         );
@@ -2834,6 +2832,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
         const disconnected = yield* served(client.github.disconnect());
         githubAskedAt = undefined;
+        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
         if (!disconnected.ok) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
