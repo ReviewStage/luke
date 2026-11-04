@@ -99,9 +99,13 @@ import {
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceLeaveAnswer,
+  type TasksWorkspaceMemberRemoveParams,
+  type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
+  type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSlackBotAnswer,
+  type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
@@ -228,6 +232,7 @@ import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
+import { type TokenRepositoryWrites, tokenRepositoryWrites } from "./token-repository-writes.js";
 import type { WindowFocus } from "./window-focus.js";
 import {
   heldWorkspaceIntegrations,
@@ -238,7 +243,12 @@ import {
   slackBotRepository,
 } from "./workspace-integrations-follow.js";
 import { workspaceInvitationsReads } from "./workspace-invitations-read.js";
-import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
+import {
+  type MemberMoved,
+  type MemberWritten,
+  workspaceMembersReads,
+} from "./workspace-members-read.js";
+import { type WorkspaceWritten, workspaceRows, workspaceWrite } from "./workspace-rows.js";
 import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
 
 /**
@@ -1274,8 +1284,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's workspaces, from the account gate opening, at a launch or a sign-in, until a sign-out. */
   const workspacesFollow = yield* FiberHandle.make<void>();
-  /** How many times the follow or a write's answer has moved each workspace, so an answer that lands after a newer move of it is not drawn over it. */
-  const workspaceMoves = new Map<string, number>();
 
   /**
    * Each listed workspace's photo, by the workspace, told on the app state
@@ -1331,6 +1339,30 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /**
+   * The account's workspaces in the sync engine's pool
+   * (`workspace-rows.ts`), drawn on the view with every write standing over
+   * them, from a launch or a sign-in until a sign-out closes their scope, so
+   * a rename still out for the account signed out draws on nothing the next
+   * account sees.
+   */
+  const openWorkspaces = Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const rows = yield* Scope.provide(scope)(
+      workspaceRows({
+        pool: dependencies.pool,
+        draw: (workspaces) =>
+          Effect.andThen(
+            Effect.sync(() => write({ workspaces })),
+            photosListed,
+          ),
+      }),
+    );
+    return { scope, rows };
+  });
+  let workspaceList = yield* openWorkspaces;
+  yield* Effect.addFinalizer(() => Scope.close(workspaceList.scope, Exit.void));
+
+  /**
    * Follows the account's workspaces over Realtime where nothing follows
    * them yet (`workspaces-follow.ts`), polled while Realtime fails them, and
    * draws each change as it lands, a teammate's and the browser's among
@@ -1358,7 +1390,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.gen(function* () {
-          const drawn = new Map(view.workspaces.map((each) => [each.id, JSON.stringify(each)]));
+          const drawn = new Set(view.workspaces.map((each) => each.id));
           const installed = new Map(
             view.workspaces.map((each) => [
               each.id,
@@ -1376,13 +1408,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           );
           const listed = new Set(workspaces.map((each) => each.id));
           // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
-          if ([...drawn.keys()].some((id) => !listed.has(id))) yield* kept.clear;
-          for (const each of workspaces) {
-            if (drawn.get(each.id) === JSON.stringify(each)) continue;
-            workspaceMoves.set(each.id, (workspaceMoves.get(each.id) ?? 0) + 1);
+          if ([...drawn].some((id) => !listed.has(id))) yield* kept.clear;
+          yield* workspaceList.rows.answer(workspaces);
+          if (view.workspacesStatus !== TASKS_READ.READY) {
+            write({ workspacesStatus: TASKS_READ.READY });
           }
-          write({ workspaces, workspacesStatus: TASKS_READ.READY });
-          yield* photosListed;
           yield* dependencies.entities()?.keep(KEPT_READ.WORKSPACES, workspaces) ?? Effect.void;
           if (reinstalled.size > 0) yield* repositoriesMovedIn(reinstalled);
         }),
@@ -1444,10 +1474,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Each workspace's people the windows draw, and the few drawn latest, told
    * on the app state every window draws (`LIVE_READ.WORKSPACE_MEMBERS`):
    * followed from the first window's hold, so a surface drawn again draws
-   * them from where they stand, and drawn over by a member write's answer
-   * until the read carries it (`workspace-members-read.ts`). A workspace the
-   * account no longer reaches is followed no longer, until every window lets
-   * it go and one holds it anew.
+   * them from where they stand, in the sync engine's pool, where a member
+   * write is drawn over them until the read carries it
+   * (`workspace-members-read.ts`). A workspace the account no longer
+   * reaches is followed no longer, until every window lets it go and one
+   * holds it anew.
    */
   const membersReads = yield* workspaceMembersReads({
     gate,
@@ -1456,6 +1487,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         client.workspaces.peopleLive(workspaceId, userId, poll, after),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
+    pool: dependencies.pool,
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
   const memberHolds = yield* FiberMap.make<string>();
@@ -1467,6 +1499,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * and on Try again, and laid from each addition's or removal's own
    * answer, since nothing wakes them as a live read is woken.
    */
+  /** The token repositories as the fetch last told them, which every addition or removal standing is drawn over as they are told. */
+  let tokenRepositoriesFetched: AppTokenRepositories = NO_KEYS_HELD;
+  const tellTokenRepositories = (): void =>
+    kernel.emit(
+      GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
+      carried(tokenRepositoryWritten.drawn(tokenRepositoriesFetched)),
+    );
   const tokenRepositories = yield* heldFetch<typeof LIVE_READ.TOKEN_REPOSITORIES, string>({
     empty: NO_KEYS_HELD,
     path: (workspaceId) => [workspaceId],
@@ -1476,11 +1515,51 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.map(served(client.workspaces.tokenRepositories(workspaceId)), (listed) =>
         listed.ok ? Option.some(listed.answer) : Option.none(),
       ),
-    tell: (held: AppTokenRepositories) =>
-      kernel.emit(GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED, carried(held)),
+    tell: (held: AppTokenRepositories) => {
+      tokenRepositoriesFetched = held;
+      tellTokenRepositories();
+    },
   });
   /** The windows' hold on each workspace's token repositories, one fiber standing until let go. */
   const tokenRepositoryHolds = yield* FiberMap.make<string>();
+  /**
+   * Each token repository added or removed, drawn over its workspace's
+   * list at once and kept until the service answers the list
+   * (`token-repository-writes.ts`).
+   */
+  const tokenRepositoryWritten: TokenRepositoryWrites = yield* tokenRepositoryWrites({
+    pool: dependencies.pool,
+    fetched: () => tokenRepositoriesFetched,
+    tell: Effect.sync(() => tellTokenRepositories()),
+    answered: (workspaceId, repositories) => tokenRepositories.answered(workspaceId, repositories),
+  });
+  /** A token repository added or removed, sent where the gate stands open; the workspace reaches other repositories once the service took it. */
+  const tokenRepositorySet = tokenRepositoryWritten.set<WireValue>(
+    ({ workspaceId, repository, added }) =>
+      gate()
+        ? Effect.gen(function* () {
+            const changed = yield* served(
+              client.workspaces.setTokenRepository(workspaceId, repository, added),
+            );
+            if (!changed.ok) {
+              return {
+                refused: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+                  failure: changed.failure,
+                }),
+              };
+            }
+            yield* repositoriesMovedIn(new Set([workspaceId]));
+            return {
+              answer: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+                repositories: changed.answer,
+              }),
+              repositories: changed.answer,
+            };
+          })
+        : Effect.succeed({
+            refused: carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
+          }),
+  );
 
   /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
   const slackBotOf = (
@@ -1569,11 +1648,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Each workspace's pending invitations an owner's or an admin's windows
    * draw, and the few drawn latest, told on the app state every window draws
    * (`LIVE_READ.WORKSPACE_INVITATIONS`): followed from the first window's
-   * hold, built again as each expires, and drawn over by an invite's or a
-   * cancel's answer until the read carries it
-   * (`workspace-invitations-read.ts`). A workspace the account no longer
-   * owns or administers is followed no longer, as one it left is, until
-   * every window lets it go and one holds it anew.
+   * hold, built again as each expires, in the sync engine's pool, where a
+   * cancel, and an invite's answer, is drawn over them until the read
+   * carries it (`workspace-invitations-read.ts`). A workspace the account
+   * no longer owns or administers is followed no longer, as one it left is,
+   * until every window lets it go and one holds it anew.
    */
   const invitationsReads = yield* workspaceInvitationsReads({
     gate,
@@ -1582,9 +1661,73 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         client.workspaces.invitationsLive(workspaceId, userId, poll, after),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
+    pool: dependencies.pool,
   });
   /** The windows' hold on each workspace's invitations, one fiber standing until let go. */
   const invitationHolds = yield* FiberMap.make<string>();
+
+  /**
+   * A member write's call carried to the service where the gate stands open:
+   * the members it answers, and what it says of each of `userIds`, or why it
+   * refused.
+   */
+  function memberWritten(
+    call: Effect.Effect<
+      WorkspaceCallResult<readonly WorkspaceMember[]>,
+      never,
+      HttpClient.HttpClient
+    >,
+    userIds: readonly string[],
+  ): Effect.Effect<MemberWritten<WireValue>> {
+    if (!gate()) {
+      return Effect.succeed({
+        refused: carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED),
+      });
+    }
+    return Effect.map(workspaceCall(call), (written) =>
+      written.ok
+        ? {
+            answer: carried<TasksWorkspaceMembersAnswer>({ members: written.answer }),
+            moved: membersMoved(written.answer, userIds),
+          }
+        : { refused: carried<TasksWorkspaceMembersAnswer>({ failure: written.failure }) },
+    );
+  }
+
+  /** A member's role changed, drawn on their row at once, kept until the people's read carries it. */
+  const memberRoleChanged = membersReads.write<TasksWorkspaceMemberRoleParams, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    moves: ({ userId, role }) => [{ userId, role }],
+    send: ({ workspaceId, userId, role }) =>
+      memberWritten(client.workspaces.changeRole(workspaceId, userId, role), [userId]),
+  });
+
+  /** A member removed, drawn gone at once, kept until the people's read no longer carries them. */
+  const memberRemoved = membersReads.write<TasksWorkspaceMemberRemoveParams, WireValue>({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    moves: ({ userId }) => [{ userId, gone: true }],
+    send: ({ workspaceId, userId }) =>
+      memberWritten(client.workspaces.removeMember(workspaceId, userId), [userId]),
+  });
+
+  /**
+   * An invitation canceled, drawn gone at once, kept until the invitations'
+   * read no longer carries it. Note that the list it answers is never laid
+   * whole, since the read alone says what stands.
+   */
+  const invitationCanceled = invitationsReads.cancel<WireValue>(({ workspaceId, invitationId }) =>
+    gate()
+      ? Effect.map(
+          served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
+          (pending) =>
+            pending.ok
+              ? {
+                  answer: carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer }),
+                }
+              : { refused: carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure }) },
+        )
+      : Effect.succeed({ refused: carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED) }),
+  );
 
   /**
    * When whether GitHub is connected was last asked, none since a sign-out;
@@ -1721,8 +1864,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     }
     const workspaces = entities.stored(KEPT_READ.WORKSPACES);
     if (workspaces !== undefined && view.workspacesStatus !== TASKS_READ.READY) {
-      write({ workspaces, workspacesStatus: TASKS_READ.READY });
-      yield* photosListed;
+      yield* workspaceList.rows.answer(workspaces);
+      write({ workspacesStatus: TASKS_READ.READY });
     }
   });
 
@@ -2021,30 +2164,50 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * A write whose answer is the workspace as it then stands, drawn at once
-   * unless the follow or another write's answer moved that workspace while
-   * the write was out, since the view may then already hold a newer change, a
-   * teammate's or a later edit's; the follow carries this write's change a
-   * moment later either way.
+   * A workspace write's call carried to the service where the gate stands
+   * open: the workspace as it then stands, or why it refused.
    */
-  function workspaceWrite(
+  function workspaceWritten(
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<TasksWorkspaceAnswer> {
-    return Effect.gen(function* () {
-      const movedBefore = new Map(workspaceMoves);
-      const written = yield* served(call);
-      if (!written.ok) return { failure: written.failure };
-      const answered = written.answer;
-      if (workspaceMoves.get(answered.id) === movedBefore.get(answered.id)) {
-        workspaceMoves.set(answered.id, (workspaceMoves.get(answered.id) ?? 0) + 1);
-        write({
-          workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
-        });
-        yield* photosListed;
-      }
-      return { workspace: answered };
-    });
+  ): Effect.Effect<WorkspaceWritten<WireValue>> {
+    if (!gate()) {
+      return Effect.succeed({ refused: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED) });
+    }
+    return Effect.map(served(call), (written) =>
+      written.ok
+        ? {
+            answer: carried<TasksWorkspaceAnswer>({ workspace: written.answer }),
+            workspace: written.answer,
+          }
+        : { refused: carried<TasksWorkspaceAnswer>({ failure: written.failure }) },
+    );
   }
+
+  /** A workspace renamed, its name drawn at once and kept until the follow moves it. */
+  const workspaceRenamed = workspaceWrite<TasksWorkspaceRenameParams, WireValue>(
+    {
+      workspaceId: ({ workspaceId }) => workspaceId,
+      change:
+        ({ name }) =>
+        (row) => ({ ...row, name }),
+      send: ({ workspaceId, name }) =>
+        workspaceWritten(client.workspaces.rename(workspaceId, name)),
+    },
+    () => workspaceList.rows,
+  );
+
+  /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
+  const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams, WireValue>(
+    {
+      workspaceId: ({ workspaceId }) => workspaceId,
+      change:
+        ({ slug }) =>
+        (row) => ({ ...row, slug }),
+      send: ({ workspaceId, slug }) =>
+        workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
+    },
+    () => workspaceList.rows,
+  );
 
   /**
    * A task renamed, its name drawn on its row at once and kept once the list
@@ -3252,40 +3415,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
       }),
-    // A rename moves no task: the answered workspace lands at once, and the
-    // follow carries the same name a moment later.
-    [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // A rename moves no task: its name is drawn at once, and the follow
+    // carries the same name a moment later.
+    [GATEWAY_METHOD.WORKSPACES_RENAME]: declaredMethod(
+      dependencies.pool,
+      workspaceRenamed,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceRenameParamsSchema,
           params,
           "renaming a workspace names it and its new name",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, name } = read;
-        return carried<TasksWorkspaceAnswer>(
-          yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
-        );
-      }),
+        ),
+    ),
     // A slug moves no task either: links resolve by id, or by a former
-    // slug the workspace keeps, so the answered workspace lands as a
-    // rename's does.
-    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // slug the workspace keeps, so it is drawn at once as a rename is.
+    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: declaredMethod(
+      dependencies.pool,
+      workspaceSlugSet,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceSlugSetParamsSchema,
           params,
           "changing a workspace's slug names it and its new slug",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, slug } = read;
-        return carried<TasksWorkspaceAnswer>(
-          yield* workspaceWrite(client.workspaces.setSlug(workspaceId, slug)),
-        );
-      }),
-    // A photo moves no task either, so it is a rename's twin: the answered
-    // workspace, its photo's new version or none, lands, and the photo at
-    // that version is fetched for the windows' tiles (`photosListed`).
+        ),
+    ),
+    // A photo moves no task either, but it uploads, so its workspace is
+    // drawn once the service answers it, its photo's new version or none,
+    // and the photo at that version is fetched for the windows' tiles
+    // (`photosListed`).
     [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3295,9 +3452,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, photo } = read;
-        return carried<TasksWorkspaceAnswer>(
-          yield* workspaceWrite(client.workspaces.setPhoto(workspaceId, photo)),
-        );
+        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
+        if (!written.ok) return carried<TasksWorkspaceAnswer>({ failure: written.failure });
+        yield* workspaceList.rows.answered(written.answer);
+        return carried<TasksWorkspaceAnswer>({ workspace: written.answer });
       }),
     // The install address is answered to the caller that opens it and held
     // nowhere: the connection lands in the browser, and the follow carries
@@ -3646,59 +3804,49 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* tokenRepositories.retry(workspaceId);
         return {};
       }),
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceTokenRepositorySetParamsSchema,
-          params,
-          "adding or removing a token repository names the workspace, the repository, and which",
-        );
-        if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, repository, added } = read;
-        const changed = yield* served(
-          client.workspaces.setTokenRepository(workspaceId, repository, added),
-        );
-        if (changed.ok) {
-          yield* tokenRepositories.answered(workspaceId, changed.answer);
-          yield* repositoriesMovedIn(new Set([workspaceId]));
-        }
-        return carried<TasksWorkspaceTokenRepositoriesAnswer>(
-          changed.ok ? { repositories: changed.answer } : { failure: changed.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // An addition is drawn as the reader's own, newest first and removable,
+    // until the service answers the list as it then stands.
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: declaredMethod(
+      dependencies.pool,
+      tokenRepositorySet,
+      (params: WireRecord) =>
+        Effect.all({
+          read: readParams(
+            tasksWorkspaceTokenRepositorySetParamsSchema,
+            params,
+            "adding or removing a token repository names the workspace, the repository, and which",
+          ),
+          addedAt: Clock.currentTimeMillis,
+        }).pipe(
+          Effect.map(({ read, addedAt }) => ({
+            ...read,
+            addedBy: dependencies.accountId() ?? "",
+            addedAt,
+          })),
+        ),
+    ),
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: declaredMethod(
+      dependencies.pool,
+      memberRemoved,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceMemberRemoveParamsSchema,
           params,
           "removing a member names the workspace and the member",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read;
-        const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
-        if (!remaining.ok)
-          return carried<TasksWorkspaceMembersAnswer>({ failure: remaining.failure });
-        yield* membersReads.moved(workspaceId, [{ userId, gone: true }]);
-        return carried<TasksWorkspaceMembersAnswer>({ members: remaining.answer });
-      }),
+        ),
+    ),
     // A role changed moves no task; the people's read carries it, as a
-    // removal's, drawn from its answer until then.
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // removal's, drawn at once until then.
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: declaredMethod(
+      dependencies.pool,
+      memberRoleChanged,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceMemberRoleParamsSchema,
           params,
           "changing a role names the workspace, the member, and the role",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId, role } = read;
-        const changed = yield* workspaceCall(
-          client.workspaces.changeRole(workspaceId, userId, role),
-        );
-        if (!changed.ok) return carried<TasksWorkspaceMembersAnswer>({ failure: changed.failure });
-        yield* membersReads.moved(workspaceId, membersMoved(changed.answer, [userId]));
-        return carried<TasksWorkspaceMembersAnswer>({ members: changed.answer });
-      }),
+        ),
+    ),
     // Note that a handover changes the account's own role in the workspace,
     // which the view's workspaces carry and every owner's and admin's act is
     // drawn from, and which the follow carries; it moves no task. The heir's
@@ -3758,8 +3906,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return carried<TasksWorkspaceLeaveAnswer>({ left: true });
       }),
     // An invitation made or canceled moves no workspace or task, so nothing
-    // else is read with it; the invitations' read carries it, drawn from its
-    // answer until then where a window holds them.
+    // else is read with it; the invitations' read carries it, an invitation
+    // made drawn from its answer until then where a window holds them.
     [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3771,28 +3919,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, email, role } = read;
         const made = yield* served(client.workspaces.invite(workspaceId, email, role));
         if (!made.ok) return carried<TasksWorkspaceInvitationAnswer>({ failure: made.failure });
-        yield* invitationsReads.moved(workspaceId, { made: made.answer });
+        yield* invitationsReads.made(workspaceId, made.answer);
         return carried<TasksWorkspaceInvitationAnswer>({ invitation: made.answer });
       }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: declaredMethod(
+      dependencies.pool,
+      invitationCanceled,
+      (params: WireRecord) =>
+        readParams(
           tasksWorkspaceInvitationCancelParamsSchema,
           params,
           "canceling an invitation names the workspace and the invitation",
-        );
-        if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, invitationId } = read;
-        const pending = yield* served(
-          client.workspaces.cancelInvitation(workspaceId, invitationId),
-        );
-        if (!pending.ok) {
-          return carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure });
-        }
-        // Note that the list it answers is never laid whole, since the read alone says what stands.
-        yield* invitationsReads.moved(workspaceId, { canceled: invitationId });
-        return carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer });
-      }),
+        ),
+    ),
   };
 
   return {
@@ -3859,6 +3998,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(githubOpened);
       yield* Scope.close(sidebar.scope, Exit.void);
       sidebar = yield* openSidebar;
+      yield* Scope.close(workspaceList.scope, Exit.void);
+      workspaceList = yield* openWorkspaces;
       sidebarAnswered = false;
       listKeptAt = undefined;
       yield* serial(

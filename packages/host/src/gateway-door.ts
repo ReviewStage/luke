@@ -266,13 +266,6 @@ const GATEWAY_ACT = {
 
 /** The row writes still served by hand, by the change that declares each; only ever cut. */
 const UNDECLARED_ROW_WRITES = [
-  // Workspace, member, and invitation writes, declared by W5.
-  GATEWAY_METHOD.WORKSPACES_RENAME,
-  GATEWAY_METHOD.WORKSPACES_SLUG_SET,
-  GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE,
-  GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE,
-  GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL,
-  GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET,
   // The agent queue's writes, declared by W7 once its rows ride a held read.
   GATEWAY_METHOD.AGENTS_QUEUE,
 ] as const satisfies readonly RowWriteOf<typeof GATEWAY_ACT>[];

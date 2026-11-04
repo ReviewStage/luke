@@ -261,6 +261,12 @@ interface FakeService extends TasksClient {
   renamedAgain: string | undefined;
   /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
   renameAnswered: Effect.Effect<void>;
+  /** What a role change's answer waits on once the store has answered, so a test can see what is drawn before it. */
+  roleAnswered: Effect.Effect<void>;
+  /** A slug another workspace holds, which the service refuses as taken; none where every slug is free. */
+  slugTaken: string | undefined;
+  /** What a slug change's answer waits on, so a test can see what is drawn before it. */
+  slugAnswered: Effect.Effect<void>;
   /** Whether the workspaces' follow misses the store's changes, the live read answering none of them. */
   followMisses: boolean;
   /**
@@ -669,6 +675,9 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
+    roleAnswered: Effect.void,
+    slugTaken: undefined,
+    slugAnswered: Effect.void,
     members: {},
     invitations: {},
     photos: {},
@@ -786,8 +795,10 @@ function fakeService(tasks: Task[]): FakeService {
       setSlug: (workspaceId, slug) =>
         Effect.sync(() => {
           service.reads.push(`slugSet:${workspaceId}:${slug}`);
-          return UNANSWERED_WORKSPACE;
-        }),
+          return slug === service.slugTaken
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN } as const)
+            : UNANSWERED_WORKSPACE;
+        }).pipe(Effect.tap(() => service.slugAnswered)),
       // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {
@@ -883,7 +894,7 @@ function fakeService(tasks: Task[]): FakeService {
           );
           service.members[workspaceId] = changed;
           return { ok: true, answer: changed } as const;
-        }),
+        }).pipe(Effect.tap(() => service.roleAnswered)),
       // A handover makes the heir the owner and the account, the owner until then, an admin.
       transfer: (workspaceId, userId) =>
         Effect.sync(() => {
@@ -2818,7 +2829,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename's answer that lands after the follow delivered a newer name is not drawn over it",
+  "a rename stands while it is out over a newer name the follow delivers, which stands once it is answered",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2834,7 +2845,7 @@ it.effect(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
-      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       yield* Deferred.succeed(answered, undefined);
       yield* Fiber.join(renaming);
       yield* settled;
@@ -2902,7 +2913,7 @@ it.effect(
 );
 
 it.effect(
-  "of two renames out at once, the first one's answer landing last is not drawn over the second's, where the follow answers neither",
+  "of two renames asked at once, the second is sent once the first is answered and stands over it, where the follow answers neither",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2913,18 +2924,54 @@ it.effect(
       service.followMisses = true;
       const firstAnswered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(firstAnswered);
+      const before = service.reads.length;
 
       const first = yield* Effect.forkChild(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Alpha" }),
       );
       yield* settled;
       service.renameAnswered = Effect.void;
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" });
+      const second = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" }),
+      );
+      yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
+      assert.deepEqual(service.reads.slice(before), [`rename:${ACME.id}:Alpha`]);
       yield* Deferred.succeed(firstAnswered, undefined);
       yield* Fiber.join(first);
+      yield* Fiber.join(second);
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `rename:${ACME.id}:Alpha`,
+        `rename:${ACME.id}:Beta`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a slug another workspace holds is drawn, then taken back with the service's refusal",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.slugTaken = "acme-labs";
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.slugAnswered = Deferred.await(answered);
+
+      const setting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, { workspaceId: ACME.id, slug: "acme-labs" }),
+      );
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, slug: "acme-labs" }]);
+      yield* Deferred.succeed(answered, undefined);
+      const refused = yield* Fiber.join(setting);
+
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     }),
 );
 
@@ -3065,7 +3112,7 @@ function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]
 }
 
 it.effect(
-  "a role change, a removal, and a handover stand from their answers until the held read carries them, through a poll answered before them",
+  "a role change, a removal, and a handover stand until the held read carries them, through a poll answered before them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -3084,7 +3131,7 @@ it.effect(
       assert.deepEqual(shown(), standing([DANA, ALAN, GRACE]));
       const before = service.reads.length;
 
-      // A role change stands from its answer, through a poll read before it that lands after it.
+      // A role change stands, through a poll read before it that lands after its answer.
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
         workspaceId: ACME.id,
         userId: GRACE.userId,
@@ -3107,7 +3154,7 @@ it.effect(
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([DANA, ALAN, GRACE], [LEE]));
 
-      // A removal stands from its answer until the read no longer carries the member.
+      // A removal stands until the read no longer carries the member.
       people.set({ members: [DANA, admin, ALAN].map((each) => memberRow(each)) });
       yield* nextPoll(settled);
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
@@ -3142,6 +3189,41 @@ it.effect(
         `transfer:${ACME.id}:${GRACE.userId}`,
       ]);
     }),
+);
+
+it.effect("a role change draws before the service answers, and one it refuses is taken back", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
+    service.members[ACME.id] = [DANA, GRACE];
+    const { call, pushed, settled } = yield* subject(service);
+    const shown = () => heldMembers(pushed).at(-1);
+    const standing = (members: readonly WorkspaceMember[]) => ({
+      [ACME.id]: { rows: { members } },
+    });
+    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+    service.live.people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
+    yield* settled;
+    const answered = yield* Deferred.make<void>();
+    service.roleAnswered = Deferred.await(answered);
+    service.notPermitted = true;
+
+    const giving = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+        role: WORKSPACE_ROLE.ADMIN,
+      }),
+    );
+    yield* settled;
+    assert.deepEqual(shown(), standing([DANA, { ...GRACE, role: WORKSPACE_ROLE.ADMIN }]));
+    yield* Deferred.succeed(answered, undefined);
+    const refused = yield* Fiber.join(giving);
+
+    assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(shown(), standing([DANA, GRACE]));
+  }),
 );
 
 it.effect(
@@ -3406,7 +3488,7 @@ function pendingInvitation(id: string, expiresAt: number): WorkspaceInvitation {
 const HOUR = 3_600_000;
 
 it.effect(
-  "an invitation made and one canceled stand from their answers until the held read carries them, through a poll answered before them",
+  "an invitation made and one canceled stand until the held read carries them, through a poll answered before them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -3449,10 +3531,10 @@ it.effect(
           "https://app.test/accept-invitation?id=inv-alan%40example.com&email=alan%40example.com",
       };
       assert.deepEqual(shown(), standing([grace, alan]));
-      // A poll read before the invite and answered after it puts nothing back, and what it moved lands once the read carries the invitation.
+      // A poll read before the invite and answered after it takes nothing away, and what else it moved lands at once.
       invitations.set({ invitations: [graceRow, leeRow] });
       yield* nextPoll(settled);
-      assert.deepEqual(shown(), standing([grace, alan]));
+      assert.deepEqual(shown(), standing([grace, lee, alan]));
       invitations.set({
         invitations: [
           graceRow,
@@ -3467,7 +3549,7 @@ it.effect(
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([grace, lee]));
 
-      // A cancel stands from its answer until the read no longer carries the invitation, whatever list it answered.
+      // A cancel stands until the read no longer carries the invitation, whatever list it answered.
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
         workspaceId: ACME.id,
         invitationId: "lee",
@@ -3494,6 +3576,35 @@ it.effect(
         `cancel:${ACME.id}:lee`,
         `invite:${ACME.id}:ada@example.com`,
       ]);
+    }),
+);
+
+it.effect(
+  "an invitation canceled while its invite still waits on the read stays gone once that wait gives up",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, pushed, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      service.live.invitations.set({ invitations: [] });
+      yield* settled;
+
+      // The read never carries the invitation, so the invite stands until its wait gives up, past the cancel that answered after it.
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+        workspaceId: ACME.id,
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+      });
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+        workspaceId: ACME.id,
+        invitationId: "inv-alan@example.com",
+      });
+      yield* TestClock.adjust(Duration.seconds(11));
+      yield* settled;
+
+      assert.deepEqual(heldInvitations(pushed).at(-1), { [ACME.id]: { rows: [] } });
     }),
 );
 
