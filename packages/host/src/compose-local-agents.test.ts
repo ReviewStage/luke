@@ -5,8 +5,10 @@
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
  * token at each ask, answers each claim as a test says, its first answer
  * lost where it says, and whose beat answers the launches it holds the
- * device to, on the test's clock. The device converges to that answer on
- * every beat: a launch it runs nothing for is settled, a settle not taken
+ * device to, on the test's clock. The device beats on time whatever an
+ * answer sets off, a settle slower than a beat among it, sends a beat left
+ * unanswered again within seconds, and converges to that answer on every
+ * beat: a launch it runs nothing for is settled, a settle not taken
  * is asked again, a runner whose launch is no longer named is stopped as a
  * stop line stops it, its process group killed, and neither a launch
  * claimed after the beat was sent nor one still starting is touched; a
@@ -180,15 +182,18 @@ const followingDevice = (
     /**
      * The service as the test steers it: the launches it holds the device
      * to, which a claim adds and a settle it takes removes; how many settles
-     * it refuses next, and the ids of those it refused; how long a beat
-     * takes to answer, its answer read as it was asked; and the release it
-     * names on each beat's answer, where it publishes one newer.
+     * it refuses next, and the ids of those it refused; how long a settle
+     * takes to answer; how long a beat takes to answer, its answer read as
+     * it was asked; how many beats it leaves unanswered next; and the release
+     * it names on each beat's answer, where it publishes one newer.
      */
     const service = {
       held: new Set<string>(),
       refusing: 0,
       refused: [] as string[],
+      settleTakes: Duration.zero as Duration.Input,
       beatTakes: Duration.zero as Duration.Input,
+      unanswered: 0,
       release: undefined as DeviceAgentRelease | undefined,
     };
     let launched = false;
@@ -204,6 +209,10 @@ const followingDevice = (
           const answer =
             options.listsNoLaunches === true ? {} : { openLaunches: [...service.held] };
           const { release } = service;
+          if (service.unanswered > 0) {
+            service.unanswered -= 1;
+            return yield* Effect.never;
+          }
           yield* Effect.sleep(service.beatTakes);
           return release === undefined ? answer : { ...answer, release };
         }),
@@ -229,20 +238,23 @@ const followingDevice = (
         exitCode?: number,
         refusal?: DeviceLaunchRefusal,
       ) =>
-        Effect.sync(() => {
-          if (service.refusing > 0) {
-            service.refusing -= 1;
-            service.refused.push(id);
-            return false;
-          }
-          service.held.delete(id);
-          settled.push({
-            id,
-            ...(exitCode === undefined ? undefined : { exitCode }),
-            ...(refusal === undefined ? undefined : { refusal }),
-          });
-          return true;
-        }),
+        Effect.andThen(
+          Effect.sleep(service.settleTakes),
+          Effect.sync(() => {
+            if (service.refusing > 0) {
+              service.refusing -= 1;
+              service.refused.push(id);
+              return false;
+            }
+            service.held.delete(id);
+            settled.push({
+              id,
+              ...(exitCode === undefined ? undefined : { exitCode }),
+              ...(refusal === undefined ? undefined : { refusal }),
+            });
+            return true;
+          }),
+        ),
       requests: () => Effect.never,
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
@@ -736,6 +748,40 @@ it.effect(
 
         assert.deepEqual(service.refused, [GONE_LINE_ID]);
         assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
+      }),
+    ),
+);
+
+it.effect("a settle that takes longer than a beat holds up none of the beats after it", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { service, beats } = yield* followingDevice(() => Effect.void, { lines: [] });
+      // Note that the device runs nothing for the launch the service holds it to, so a beat's answer has it settled, and each settle takes forty seconds.
+      service.held.add(GONE_LINE_ID);
+      service.settleTakes = Duration.seconds(40);
+      yield* until(() => beats.length > 0);
+      const before = beats.length;
+      yield* beatsOn(3);
+      yield* until(() => beats.length >= before + 3);
+    }),
+  ),
+);
+
+it.effect(
+  "a beat left unanswered is given up and sent again within seconds, before the next is due",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, beats } = yield* followingDevice(() => Effect.void, { lines: [] });
+        yield* until(() => beats.length > 0);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const before = beats.length;
+        service.unanswered = 1;
+        yield* TestClock.adjust(Duration.seconds(14));
+        yield* until(() => beats.length === before + 1);
+        // Note that the beat is given up five seconds in and sent again about two seconds later, so eight seconds on, well before the next is due.
+        yield* TestClock.adjust(Duration.seconds(8));
+        yield* until(() => beats.length === before + 2);
       }),
     ),
 );
