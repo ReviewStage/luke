@@ -18,7 +18,7 @@ import { Effect, Option } from "effect";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 
 /** What a bearer header leads with before the bearer. */
-const BEARER_PREFIX = "Bearer ";
+export const BEARER_PREFIX = "Bearer ";
 
 /** The digest the store keeps of a runner's bearer, which a launch records and every call compares: its SHA-256, in hex. */
 export function runnerTokenDigest(bearer: string): string {

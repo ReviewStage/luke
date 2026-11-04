@@ -100,7 +100,9 @@ const MCP_SERVER = "workspace";
 
 /**
  * The variables no command the agent runs may see: the plan's token, every
- * other way the CLI could be handed one, and the runner's own bearer. Denied
+ * other way the CLI could be handed one, and the runner's own bearer, or the
+ * placeholder a sandbox's firewall swaps for it, which acts as the agent from
+ * anywhere in the sandbox just the same. Denied
  * rather than masked, as P00 found, because no command the agent runs has a
  * reason to reach Anthropic or the service as the agent.
  */

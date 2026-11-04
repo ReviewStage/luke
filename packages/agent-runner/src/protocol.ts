@@ -26,7 +26,9 @@ import type { ServerNotification } from "./codex-protocol/index.js";
 
 /**
  * The environment the runner reads. The bearer authenticates it to the service, its
- * events and its MCP server alike. The plan token is never read by the runner
+ * events and its MCP server alike; in a sandbox it is a placeholder, which the
+ * sandbox's firewall swaps for the bearer on the service's host, and the runner
+ * presents it as it would the bearer. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
  * with the bearer, to every command the agent runs. An Anthropic API key
  * stands in its place for an agent the account's key pays for. In a sandbox

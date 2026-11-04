@@ -31,7 +31,10 @@
  * (`HarnessLaunch`'s `held`) is set there before the runner starts, its
  * placeholder in the environment in its place, and is taken off with every
  * other at the place's stop, or alone at a launch's end that leaves the place
- * up, for a Terminal or for the launch that hands its lines on. The config
+ * up, for a Terminal or for the launch that hands its lines on. In a sandbox
+ * the bearer goes no further than its firewall either: the runner is handed
+ * a placeholder for it, which the firewall swaps for the bearer on requests
+ * to our host (`heldBearer`), set and taken off on the same terms. The config
  * line and the first message are its first lines.
  * The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
@@ -121,7 +124,7 @@ import {
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
-import type { AgentMachineKind } from "@repo/features/agent-wire";
+import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { causeKind, failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
@@ -184,6 +187,8 @@ import {
   type FirewallEntry,
   type FirewallSlot,
   githubEntry,
+  newPlaceholder,
+  placeholderSwap,
   RUNNER_SLOTS,
 } from "../sandbox-firewall.js";
 import {
@@ -193,7 +198,7 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
-import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
+import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
@@ -217,7 +222,12 @@ export type RunnerServices =
 export interface RunnerSessionsOptions {
   /** The account the sessions act for: the agent's starter, whose conversation and key they read. */
   readonly userId: string;
-  /** Where the runner posts its events: the events route, which the composing edge names. */
+  /**
+   * Where the runner posts its events: the events route, which the composing
+   * edge names. Every address the runner reaches us at is under its origin
+   * (`native-agent-sessions.ts`), whose host a sandbox's firewall swaps the
+   * runner's bearer in on (`heldBearer`).
+   */
   readonly eventsUrl: string;
   /** Where a runner on a machine that has it read its lines reads them (`RUNNER_LINES`), which the composing edge names. */
   readonly linesUrl: string;
@@ -320,6 +330,39 @@ function sessionIdOf(prefix: string, mintedAt: number): string {
 
 /** The bearer's bytes before it is spelled, as many as a session key. */
 const BEARER_BYTES = 32;
+
+/** The header the runner presents its bearer in, named in lower case as the firewall matches it. */
+const BEARER_HEADER = "authorization";
+
+/** The bearer as a launch hands it to its runner, and the swap its machine's firewall carries for it, where it carries one. */
+interface HeldBearer {
+  readonly handed: string;
+  readonly swap: FirewallEntry | undefined;
+}
+
+/**
+ * The runner's bearer as its launch holds it. In a sandbox, whose firewall
+ * holds a launch's secrets, the runner is handed a placeholder minted for
+ * the launch, and the firewall sets the bearer in its place on requests to
+ * our host that present it, so the bearer's bytes never enter the machine.
+ * Note that the swap matches the placeholder and not our host alone, because
+ * every process in the sandbox reaches us through that firewall, a
+ * Terminal's shell and a page in the agent's browser among them, and only
+ * one that reads the placeholder, the runner's own user, may act as the
+ * agent. A Mac has no firewall of ours, and its runner is handed the bearer
+ * itself.
+ */
+function heldBearer(bearer: string, agent: Agent, host: string): HeldBearer {
+  if (agent.machine === AGENT_MACHINE.DEVICE) return { handed: bearer, swap: undefined };
+  const placeholder = Redacted.value(newPlaceholder());
+  const swap = placeholderSwap({
+    domain: host,
+    header: BEARER_HEADER,
+    placeholder: Redacted.make(`${BEARER_PREFIX}${placeholder}`),
+    value: Redacted.make(`${BEARER_PREFIX}${bearer}`),
+  });
+  return { handed: placeholder, swap };
+}
 
 /** How a file written for the agent is kept: readable by every user, written by none but the API's. */
 const ATTACHMENT_MODE = 0o644;
@@ -672,6 +715,7 @@ export const runnerSessions = <
     const context = yield* Effect.context<RunnerServices>();
     const machine: AgentMachineService = yield* AgentMachine;
     const { userId } = options;
+    const serviceHost = new URL(options.eventsUrl).hostname;
 
     /** The agent whose conversation the message is for. */
     const agentOf = (conversationId: string) =>
@@ -718,8 +762,10 @@ export const runnerSessions = <
     /**
      * One launch of the runner in the running place: a fresh bearer
      * recorded, the launch's record written, its config read, and the caller's
-     * own steps (`alongside`) run, all at once beside the machine's own, since
-     * none waits on another and the runner waits on them all; then the runner
+     * own steps (`alongside`) run, and the bearer's swap set at the place's
+     * firewall where its machine holds it there (`heldBearer`), all at once
+     * beside the machine's own, since none waits on another and the runner
+     * waits on them all; then the runner
      * started, recorded by the machine before it reads anything, and its
      * config line and first message handed to it as its first lines. On a
      * machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
@@ -748,6 +794,7 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
+        const runnerBearer = heldBearer(bearer, agent, serviceHost);
         const recorded = {
           machine: place.running.machine,
           session: place.running.session,
@@ -803,7 +850,10 @@ export const runnerSessions = <
             // An earlier launch's lines go but its untaken messages in the window, which this launch is handed.
             layout.linesRead ? clearedForLaunch(userId, agent.id) : Effect.void,
             recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
-            // The held credential's swap stands before the runner starts, so its first request carries the real value.
+            // The held credential's swap and the bearer's stand before the runner starts, so its
+            // first request carries the real value: the machine starts the runner once every step
+            // here, each firewall write's settle included, is done. Note that a post refused for
+            // want of its bearer is refused for good.
             credential.held === undefined
               ? Effect.void
               : machine.firewall.set(
@@ -811,6 +861,14 @@ export const runnerSessions = <
                   agent.userId,
                   credential.held.slot,
                   credential.held.entry,
+                ),
+            runnerBearer.swap === undefined
+              ? Effect.void
+              : machine.firewall.set(
+                  place.running,
+                  agent.userId,
+                  FIREWALL_SLOT.RUNNER,
+                  runnerBearer.swap,
                 ),
             alongside,
           ],
@@ -820,7 +878,11 @@ export const runnerSessions = <
           handle,
           ready: { firstSequence, rewind, opening },
         } = yield* machine.launchRunner(place.running, {
-          env: { ...credential.env, ...credential.held?.env, [RUNNER_ENV.BEARER]: bearer },
+          env: {
+            ...credential.env,
+            ...credential.held?.env,
+            [RUNNER_ENV.BEARER]: runnerBearer.handed,
+          },
           agentId: agent.id,
           name: place.name,
           ready,
@@ -1966,14 +2028,16 @@ export const RUNNER_ENDED = {
 } as const;
 
 /**
- * A launch's end, as its END event tells it, for either harness: the
- * place stopped, its repository credential taken off the firewall first,
- * unless a developer's Terminal holds it, and nothing for an END older than
- * the launch its place runs now. Decided and stopped under the agent's
- * runner lease, read again once it is held, so a `send` relaunching the
- * runner either finishes first, and its newer launch makes this END stale,
- * or starts after the stop and resumes the place. Fails where the machine or
- * the store could not be asked, or the lease stayed held past its wait.
+ * A launch's end, as its END event tells it, for either harness: the place
+ * stopped, every credential taken off the firewall first, unless a
+ * developer's Terminal holds it or a message waits for the launch that hands
+ * it on, either of which takes off only the credentials the ended runner
+ * alone sent (`RUNNER_SLOTS`), and nothing for an END older than the launch
+ * its place runs now. Decided and stopped under the agent's runner lease,
+ * read again once it is held, so a `send` relaunching the runner either
+ * finishes first, and its newer launch makes this END stale, or starts after
+ * the stop and resumes the place. Fails where the machine or the store could
+ * not be asked, or the lease stayed held past its wait.
  */
 export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: RunnerEnding) {
   const machine = yield* deploymentLifecycle;

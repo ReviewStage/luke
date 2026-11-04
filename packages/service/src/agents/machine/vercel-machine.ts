@@ -17,8 +17,9 @@
  * installs the bundle where only root writes, checks its digest, shares the
  * checkout with the `agent` user, and drops to that user with every
  * capability gone (`../sandbox-capabilities.ts`). The harness's credential
- * and the bearer are in that command's environment and nowhere else: never
- * in its argv, its config line, a file, or a tag. Its config line is
+ * and the placeholder the firewall swaps for the runner's bearer
+ * (`../coder-host/runner-sessions.ts`) are in that command's environment
+ * and nowhere else: never in its argv, its config line, a file, or a tag. Its config line is
  * written to its stdin, which carries nothing more: the runner reads every
  * later line from the service (`../coder-host/runner-sessions.ts`), so this machine
  * writes no line to it.
