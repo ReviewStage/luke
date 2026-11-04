@@ -217,6 +217,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
   /** The account's devices' beats let go by the window that held them. */
   HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */

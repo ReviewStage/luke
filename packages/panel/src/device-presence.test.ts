@@ -66,6 +66,16 @@ test("a beat delayed by 25 seconds still reads online, and a device quiet for fo
   assert.equal(container.textContent, `${DEVICE_STANDING.ONLINE},${DEVICE_STANDING.OFFLINE}`);
 });
 
+test("a device a read found online is not called offline because the next read is late, only once a read that landed lately finds it quiet", async () => {
+  fakeActPort({});
+  // The read 31 seconds ago found the beat 50 seconds old, so the window alone reckons it 81 seconds old now.
+  handBeats({ [deviceOf(1)]: 81_000 }, { askedAgoMs: 31_000 });
+  assert.equal((await draw([deviceOf(1)])).textContent, DEVICE_STANDING.UNKNOWN);
+
+  handBeats({ [deviceOf(1)]: 81_000 });
+  assert.equal((await draw([deviceOf(1)])).textContent, DEVICE_STANDING.OFFLINE);
+});
+
 test("a device the read does not name as the account's own has no standing", async () => {
   fakeActPort({});
   handBeats({ [deviceOf(1)]: 1_000 });

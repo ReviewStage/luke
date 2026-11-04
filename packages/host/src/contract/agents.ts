@@ -108,6 +108,11 @@ export const agentActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH]: actProcedure(
+    "Could not read your devices' beats again on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),

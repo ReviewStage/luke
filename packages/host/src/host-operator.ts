@@ -677,6 +677,8 @@ export interface HostOperator {
   hostsPresenceFollow(): Effect.Effect<void>;
   /** The account's devices' beats let go by the windows. */
   hostsPresenceUnfollow(): Effect.Effect<void>;
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  hostsPresenceRefresh(): Effect.Effect<void>;
   /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
@@ -1755,6 +1757,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
     hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
+    hostsPresenceRefresh: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH, {})),
     onDevicePresenceChanged: (listener) =>
       on(
         GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
