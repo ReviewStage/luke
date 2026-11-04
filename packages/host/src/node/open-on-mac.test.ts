@@ -24,7 +24,7 @@ import {
  * holder's lock, once it has waited its bound; a transfer from a remote that
  * never answers fails rather than hangs; a make that fails or was cut off
  * leaves nothing that blocks the next; and a removal finds work in an agent's
- * folder only where it has changes not committed.
+ * folder only where it has changes not committed or commits on no branch.
  */
 
 const GIT_ENVIRONMENT = {
@@ -556,13 +556,13 @@ test(
 );
 
 test(
-  "a removal finds work in an agent's worktree only where it has changes not committed, tracked or untracked, and never in a commit, a branch, a stash, an ignored file, or another agent's worktree; and in a folder with no repository only where it has files",
+  "a removal finds work in an agent's worktree only where it has changes not committed, tracked or untracked, or commits on its head alone, and never in a branch, a stash, an ignored file, a head fetched from GitHub, or another agent's worktree; and in a folder with no repository only where it has files",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
     const clone = cloneFolder(state, "acme/app");
     const agent = (name: string) => path.join(scratch, "agents", name, "repository");
-    for (const name of ["one", "other"]) {
+    const launched = (name: string, branch: string | null) =>
       run(
         scratch,
         shell,
@@ -570,11 +570,14 @@ test(
           repository: "acme/app",
           clone,
           worktree: agent(name),
-          branch: "agent/fix-relay",
+          branch,
           remote: origin,
         }),
       );
-    }
+    launched("one", "agent/fix-relay");
+    // Note that the other starts from GitHub's default branch, moved since, which only the head fetched into refs/agent holds.
+    push("second\n");
+    launched("other", null);
     const worktree = agent("one");
     const found = (folder: string) =>
       runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: folder })).printed.trim();
@@ -585,6 +588,11 @@ test(
     };
 
     assert.equal(found(worktree), "", "a clean worktree holds nothing");
+    assert.equal(
+      found(agent("other")),
+      "",
+      "a head fetched from GitHub's default branch holds nothing",
+    );
 
     // Note that the developer's own Git setting that hides untracked files must not hide them here.
     git(worktree, ["config", "status.showUntrackedFiles", "no"]);
@@ -595,16 +603,18 @@ test(
     assert.match(found(worktree), /changes not committed/u, "a tracked edit");
     assert.equal(found(agent("other")), "", "another agent's changes keep no folder but theirs");
 
-    // Note that commits, branches, and stashes stand in the shared clone, which outlives the folder.
     git(worktree, ["stash", "--quiet"]);
-    git(worktree, ["switch", "--quiet", "-c", "unpushed"]);
     committed(".gitignore", "build/\n");
+    assert.match(found(worktree), /commits on no branch/u, "a commit on the detached head alone");
+
+    // Note that branches and stashes stand in the shared clone, which outlives the folder.
+    git(worktree, ["switch", "--quiet", "-c", "unpushed"]);
     mkdirSync(path.join(worktree, "build"));
     writeFileSync(path.join(worktree, "build", "out.js"), "built\n");
     assert.equal(
       found(worktree),
       "",
-      "a stash, an unpushed branch, and an ignored file keep nothing",
+      "an unpushed branch, a stash, and an ignored file keep nothing",
     );
 
     const plain = path.join(scratch, "agents", "plain", "repository");

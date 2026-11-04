@@ -223,8 +223,9 @@ export function agentWorktreeScript(input: {
  * The script, its path quoted, that says what removing a local agent's
  * folder would lose (`@repo/host`'s `compose-local-agents.ts`): it prints
  * one line, and exits 0, where its worktree has changes not committed,
- * tracked or untracked but never ignored, or the folder has files and no
- * repository. Commits are not looked for, since the branches they stand on
+ * tracked or untracked but never ignored, commits on its head that no
+ * branch, remote branch, or head we fetched holds, or the folder has files
+ * and no repository. Commits on a branch need no check, since the branches
  * are the shared clone's, which outlives the folder. It prints nothing and
  * exits 0 where there is nothing to lose, or no folder at all, and exits 1
  * where Git could not say, which the caller takes as work to keep.
@@ -246,6 +247,9 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     // Note that untracked files are asked for by name, since the developer's own `status.showUntrackedFiles` would hide them.
     'changes="$(git status --porcelain --untracked-files=all)" || exit 1',
     '[ -z "$changes" ] || echo "it has changes not committed"',
+    // Note that a commit made on a detached head stands on no branch, so the folder's removal would lose it; another agent's branch only ever counts it saved, and the heads we fetched into refs/agent are GitHub's.
+    `ahead="$(git rev-list --max-count=1 HEAD --not --branches --remotes --glob='refs/agent/*')" || exit 1`,
+    '[ -z "$ahead" ] || echo "it has commits on no branch"',
     "exit 0",
     "",
   ].join("\n");
