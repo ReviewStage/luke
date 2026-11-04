@@ -157,6 +157,8 @@ import {
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
+  type AnyWrite,
+  anyWrite,
   declaredMethod,
   type EntityPool,
   type FieldChange,
@@ -215,6 +217,7 @@ import {
 } from "./plan-comment-reads.js";
 import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
+import { type OfflineRefused, untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
@@ -509,6 +512,8 @@ export interface TasksDependencies {
   pool: EntityPool;
   /** The signed-in account's lists kept on disk, which the gate opening draws before the service answers and each answer keeps; none where nothing keeps them. */
   entities: () => EntityStore | undefined;
+  /** The count of changes made offline the service refused as they were sent again, which a window clears once it has said so. */
+  offlineRefused: Pick<OfflineRefused, "clear">;
   /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
   member: () => { readonly userId: string; readonly name: string } | undefined;
   /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
@@ -533,6 +538,8 @@ export interface TasksComposer extends Composer {
    * waits for nothing.
    */
   listed: (txid: string | undefined) => Effect.Effect<void>;
+  /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
+  queueable: readonly AnyWrite[];
 }
 
 /** The statuses a task stands finished in, which the service stamps `completedAt` as it enters. */
@@ -1089,6 +1096,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The sync id the list drawn from disk was kept at, which the next follow reads past once; none once it has. */
   let listKeptAt: string | undefined;
 
+  /**
+   * The row writes waiting for the service sent again, one round at a time,
+   * as each answer of the list lands: its first after a launch, after a
+   * failed read started again, and after the network came back
+   * (`TASKS_RESYNC`), each of which says the service answers again.
+   */
+  const resending = yield* FiberHandle.make<void>();
+  const resendQueued = Effect.suspend(() =>
+    dependencies.pool.queued().length === 0
+      ? Effect.void
+      : Effect.asVoid(
+          FiberHandle.run(resending, dependencies.pool.resend, { onlyIfMissing: true }),
+        ),
+  );
+
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
@@ -1120,7 +1142,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     at: standing.next,
                   }),
                 );
-          return Effect.andThen(collections.answer(rows, standing), kept);
+          return Effect.andThen(
+            Effect.andThen(collections.answer(rows, standing), kept),
+            resendQueued,
+          );
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
@@ -1387,8 +1412,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   const sidebarWritten = sidebarWrites({
     gate,
-    pinRepository: (repository, pinned) => serial(served(client.pinRepository(repository, pinned))),
-    writeSection: (each) => serial(served(client.writeTaskSection(each))),
+    pinRepository: (repository, pinned, key) =>
+      serial(served(client.pinRepository(repository, pinned, key))),
+    writeSection: (each, key) => serial(served(client.writeTaskSection(each, key))),
     collections: () => sidebar.collections,
   });
 
@@ -1802,12 +1828,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     change:
       ({ name }) =>
       () => ({ name }),
-    send: ({ taskId, name }) =>
+    send: ({ taskId, name }, { key }) =>
       gate()
         ? serial(
             Effect.gen(function* () {
-              const written = yield* served(client.rename(taskId, { name }));
-              if (written === undefined) return { refused: { renamed: false } };
+              const renamedAs = yield* served(client.rename(taskId, { name }, key));
+              if (!renamedAs.ok) {
+                return untaken(renamedAs.failure, {
+                  kept: { renamed: true },
+                  refused: { renamed: false },
+                });
+              }
+              const written = renamedAs.answer;
               const answered = written.task;
               documentTook(taskId, answered, (held) => ({
                 ...held,
@@ -1822,6 +1854,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             }),
           )
         : Effect.succeed({ refused: { renamed: false } }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_RENAME,
+      input: tasksRenameParamsSchema,
+      queued: () => ({ renamed: true }),
+    },
   };
 
   /**
@@ -1861,12 +1898,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               assigneeName: standing.assigneeId === null ? null : (assigneeName ?? ""),
             }),
       }),
-    send: ({ taskId, assigneeName: _named, ...standing }) =>
+    send: ({ taskId, assigneeName: _named, ...standing }, { key }) =>
       gate()
         ? serial(
             Effect.gen(function* () {
-              const answered = yield* served(client.setStanding(taskId, standing));
-              if (answered === undefined) return { refused: { changed: false } };
+              const stoodAs = yield* served(client.setStanding(taskId, standing, key));
+              if (!stoodAs.ok) {
+                return untaken(stoodAs.failure, {
+                  kept: { changed: true },
+                  refused: { changed: false },
+                });
+              }
+              const answered = stoodAs.answer;
               const { task } = answered;
               documentTook(taskId, task, (held) => ({ ...withoutAssignee(held), ...task }));
               return {
@@ -1877,6 +1920,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             }),
           )
         : Effect.succeed({ refused: { changed: false } }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_SET_STANDING,
+      input: tasksSetStandingParamsSchema,
+      queued: () => ({ changed: true }),
+    },
   };
 
   /**
@@ -1901,17 +1949,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               pinPosition: position ?? (row.pinnedAt === null ? null : row.pinPosition),
             }
           : { pinnedAt: null, pinPosition: null },
-    send: ({ taskId, pinned: pin, position }) =>
+    send: ({ taskId, pinned: pin, position }, { key }) =>
       gate()
         ? serial(
             Effect.gen(function* () {
-              const marked = yield* served(
+              const markedAs = yield* served(
                 client.mark(
                   taskId,
                   position === undefined ? { pinned: pin } : { pinned: pin, pinPosition: position },
+                  key,
                 ),
               );
-              if (marked === undefined) return { refused: { changed: false } };
+              if (!markedAs.ok) {
+                return untaken(markedAs.failure, {
+                  kept: { changed: true },
+                  refused: { changed: false },
+                });
+              }
+              const marked = markedAs.answer;
               takeMarks(marked.task);
               return {
                 answer: { changed: true },
@@ -1921,6 +1976,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             }),
           )
         : Effect.succeed({ refused: { changed: false } }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_PIN,
+      input: tasksPinParamsSchema,
+      queued: () => ({ changed: true }),
+    },
   };
 
   /**
@@ -2169,6 +2229,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         resyncedAt = at;
         write({ live: HOST_LIVE.CATCHING_UP });
         yield* FiberHandle.run(listFollow, followList);
+        return {};
+      }),
+    // A window said the changes made offline the service refused, so the count it said is cleared for every window.
+    [GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR]: () =>
+      Effect.sync(() => {
+        dependencies.offlineRefused.clear();
         return {};
       }),
     // The panel coming forward, which may follow GitHub connected in the
@@ -3426,6 +3492,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
     }),
     listed,
+    queueable: [
+      anyWrite(renamed),
+      anyWrite(stood),
+      anyWrite(pinned),
+      anyWrite(sidebarWritten.pinned),
+      anyWrite(sidebarWritten.sectionsWritten),
+    ],
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);

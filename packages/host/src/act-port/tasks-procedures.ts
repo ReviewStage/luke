@@ -88,6 +88,7 @@ export interface TasksProceduresDependencies {
     tasksRefresh(): Effect.Effect<void>;
     tasksOpen(taskId: string): Effect.Effect<boolean>;
     tasksClose(): Effect.Effect<void>;
+    tasksOfflineRefusedClear(): Effect.Effect<void>;
     tasksDelete(taskId: string): Effect.Effect<boolean>;
     tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
     tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
@@ -222,6 +223,12 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksClose();
+    }),
+    [TASKS_ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR]: actPort[
+      TASKS_ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.tasksOfflineRefusedClear();
     }),
     [TASKS_ACT_KIND.TASKS_START]: actPort[TASKS_ACT_KIND.TASKS_START].effect(function* ({
       input,

@@ -5,10 +5,11 @@ import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS } from "./agent-wire.js";
+import { WRITE_UNTAKEN } from "./keyed-write.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
-import { HOSTED_API_ERROR } from "./service-wire.js";
+import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS, TASK_FILE_REFUSAL } from "./task-wire.js";
 import {
@@ -230,7 +231,37 @@ it.effect(
 );
 
 it.effect(
-  "a change the service refuses answers why as the window names it: a repository out of reach, its reason beside it, and a move of a plan gone; anything else, a deleted plan's delete among it, as unanswered",
+  "a rename sent under its key carries it, and answers a server error as unanswered and a key taken already as written",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`PATCH /api/plans/${TASK_ID}`]: { status: 503, answer: () => ({}) },
+        [`PATCH /api/plans/${OTHER_TASK}`]: {
+          status: 409,
+          answer: () => ({ error: HOSTED_API_ERROR.ALREADY_WRITTEN }),
+        },
+      });
+
+      const unanswered = yield* Effect.provide(
+        client().rename(TASK_ID, { name: "Invitation expiry" }, "key-1"),
+        api.layer,
+      );
+      const written = yield* Effect.provide(
+        client().rename(OTHER_TASK, { name: "Invitation expiry" }, "key-2"),
+        api.layer,
+      );
+
+      assert.deepEqual(unanswered, { ok: false, failure: WRITE_UNTAKEN.UNANSWERED });
+      assert.deepEqual(written, { ok: false, failure: WRITE_UNTAKEN.ALREADY_WRITTEN });
+      assert.deepEqual(
+        api.requests().map((request) => request.headers.get(IDEMPOTENCY_KEY.HEADER)),
+        ["key-1", "key-2"],
+      );
+    }),
+);
+
+it.effect(
+  "a change the service refuses answers why as the window names it: a repository out of reach, its reason beside it, a move of a plan gone, and a rename refused; anything else, a deleted plan's delete among it, as unanswered",
   () =>
     Effect.gen(function* () {
       const unreached = {
@@ -269,7 +300,7 @@ it.effect(
         failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
       assert.deepEqual(moved, { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND });
-      assert.equal(renamed, undefined);
+      assert.deepEqual(renamed, { ok: false, failure: WRITE_UNTAKEN.REFUSED });
       assert.equal(deleted, undefined);
       assert.deepEqual(
         api.requests().map((request) => JSON.parse(request.body ?? "null")),

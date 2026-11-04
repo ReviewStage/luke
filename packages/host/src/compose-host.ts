@@ -15,6 +15,7 @@ import {
 import { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
 import {
   carried,
+  GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
@@ -65,6 +66,7 @@ import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { liveSocketClient } from "./live-socket.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
+import { offlineRefusedCount } from "./queued-writes.js";
 import { createGatewayService } from "./service.js";
 import { windowFocus } from "./window-focus.js";
 
@@ -175,8 +177,25 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
     /** A window coming forward, raised by the workspaces' refresh it already sends and heard by every read the host asks again on focus. */
     const focus = yield* windowFocus;
-    /** Every row the composers' reads hold, once, and the writes drawn over them (`@repo/sync`). */
-    const pool = yield* entityPool();
+    /** The changes made offline the service refused as they were sent again, told to the windows each time the count moves. */
+    const offlineRefused = offlineRefusedCount((count) =>
+      kernel.emit(GATEWAY_EVENT.OFFLINE_REFUSED_CHANGED, carried({ count })),
+    );
+    /**
+     * Every row the composers' reads hold, once, and the writes drawn over
+     * them (`@repo/sync`). Where the lists may be kept on disk, a row write
+     * that may wait for the service is sent under a key of the host's own
+     * minting and waits while the service does not answer; a browser tab
+     * or a fixture run keeps none waiting, as it keeps no lists.
+     */
+    const pool = yield* entityPool(
+      tokenCipher !== undefined && kernel.runMode.requiresAccount
+        ? {
+            mintKey: kernel.createId,
+            replayRefused: Effect.sync(() => offlineRefused.raise()),
+          }
+        : undefined,
+    );
     /** The signed-in account's lists kept on disk (`entity-store.ts`), from the account gate opening until it closes; none where nothing seals them. */
     let entities: { readonly store: EntityStore; readonly scope: Scope.Closeable } | undefined;
     yield* Effect.addFinalizer(() =>
@@ -216,6 +235,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         focus,
         pool,
         entities: () => entities?.store,
+        offlineRefused,
         githubMoved: integrations.githubMoved,
         client: Object.assign(
           new HostedTaskClient({
@@ -253,6 +273,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         client: agentClient,
         listed: tasks.listed,
         pool,
+        agentListed: (agentId) => {
+          const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
+          const onTask = taskAgents.find((agent) => agent.id === agentId);
+          if (onTask !== undefined) return onTask;
+          const taskless = tasklessAgents.find((agent) => agent.id === agentId);
+          if (taskless === undefined) return undefined;
+          // Note that an agent no automation started names none, which a summary leaves out rather than nulls.
+          const { automationId, ...agent } = taskless;
+          return automationId === null ? agent : { ...agent, automationId };
+        },
       }),
     );
     const automations = yield* served(
@@ -375,14 +405,19 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         directory: kernel.stateRoot,
         cipher: tokenCipher,
         accountId: signedInId,
+        queued: pool.queued,
       }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
       entities = { store, scope };
+      // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
+      yield* pool.requeue(store.queue, [...tasks.queueable, ...agents.queueable]);
     });
 
     /** The store forgotten, its file deleted, as a sign-out does; a file no store stands over is deleted too. */
     const forgetEntities = Effect.gen(function* () {
       const standing = entities;
       entities = undefined;
+      yield* pool.letGoQueued;
+      offlineRefused.clear();
       if (standing !== undefined) {
         yield* standing.store.forget;
         yield* Scope.close(standing.scope, Exit.void);

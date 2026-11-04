@@ -109,6 +109,11 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_CLOSE]: actProcedure("Could not leave that task on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
+  [TASKS_ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR]: actProcedure(
+    "Could not clear the changes made offline on this system.",
+  )
+    .input(takesNothing)
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_START]: actProcedure("Could not start that task on this system.")
     .input(exactInput(tasksStartRequestSchema))
     .output(EffectSchema.flip(tasksStartAnswerSchema)),

@@ -37,7 +37,7 @@ export const linkNetworkWatch = /* @__PURE__ */ Effect.fn("client/linkNetworkWat
   const probe = Effect.suspend(() => {
     const online = isOnline();
     if (state.snapshot().network.online === online) return Effect.void;
-    state.update({ network: { online } });
+    state.update({ network: { ...state.snapshot().network, online } });
     return online ? Effect.asVoid(Effect.forkIn(regained, scope)) : Effect.void;
   });
   yield* Effect.forkScoped(Effect.repeat(probe, Schedule.spaced(NETWORK_PROBE_INTERVAL)));

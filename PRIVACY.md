@@ -8,7 +8,7 @@ what we collect, who we send it to, and how to turn it off.
 ## In short
 
 - **What Vespin stores.** On your Mac, only its window layout, the messages
-  you have not sent yet, and, sealed, a copy of your workspaces' lists. On our service: your account, your tasks and their
+  you have not sent yet, and, sealed, a copy of your workspaces' lists with the changes you made offline. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
   in sandboxes on our service, not on your Mac. An agent you run on This Mac
   or on a host instead runs straight on that machine, as you or the user Vespin's
@@ -64,9 +64,13 @@ workspaces' lists as our service last sent them, so the app opens on them
 before it reaches us: your tasks and their agents as the task list shows
 them, your sidebar's sections and the tasks and agents you keep in them,
 your pinned repositories, and your workspaces with their GitHub
-installations. The copy is one file, `entities.sealed`, beside the
-settings, sealed under a key held in the macOS Keychain, and deleted when
-you sign out. It holds no transcript, inbox item, plan, page, comment,
+installations; and the changes you made to them while our service could
+not be reached (a task's name, standing, or pin, a pinned repository, a
+section, or an agent's name or pin), each with a random key it is sent
+again under, until our service takes it. Our service keeps that key for 30
+days, so a change sent twice lands once. The copy is one file,
+`entities.sealed`, beside the settings, sealed under a key held in the
+macOS Keychain, and deleted when you sign out. It holds no transcript, inbox item, plan, page, comment,
 browser tab, command or its output, picture, or credential, and it is sent
 nowhere. Vespin in a browser keeps none of it.
 
