@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { user } from "@repo/database/schemas/auth";
-import { getTestDB, startTask } from "@repo/database/testing";
+import { fakeWorkspaceSeams, getTestDB, startTask } from "@repo/database/testing";
 import {
   LIVE_USER_QUERY,
   type LiveSocketAnswer,
@@ -101,7 +101,12 @@ it.layer(getTestDB())("the live socket", (it) => {
           const eliTask = yield* startTask(eli, { name: "Billing export" });
           const context = yield* Effect.context<SqlClient.SqlClient | Database>();
           const answerer = {
-            fetch: hostedFetch({ live: liveProcedures({ resolveUserId: bearerUserId }) }),
+            fetch: hostedFetch({
+              live: liveProcedures({
+                resolveUserId: bearerUserId,
+                workspaces: yield* fakeWorkspaceSeams,
+              }),
+            }),
             // SAFETY: the live procedures read only the store of the web runtime's services.
             services: context as Context.Context<WebServices>,
             origin: ORIGIN,

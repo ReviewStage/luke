@@ -25,11 +25,13 @@ import {
   writeSlackDefaultRepository,
 } from "@repo/database/models/slack-installation-store";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
+  fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openTaskAgent,
@@ -220,6 +222,7 @@ const ask = (options: {
           bearer.startsWith("Bearer ") ? Option.some(bearer.slice(7)) : Option.none(),
         );
       },
+      workspaces: yield* fakeWorkspaceSeams,
     });
     const response = yield* hostedAnswer(
       { live: procedures },
@@ -430,6 +433,7 @@ const askTask = (options: {
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+      workspaces: yield* fakeWorkspaceSeams,
     });
     const url = readOf(
       options.taskId === undefined ? LIVE_INBOX : (options.path ?? "/api/live/task-record"),
@@ -950,6 +954,7 @@ const askTranscript = (options: {
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+      workspaces: yield* fakeWorkspaceSeams,
     });
     const url = readOf(
       options.path ?? "/api/live/agent-transcript",
@@ -1143,6 +1148,7 @@ const askScope = (options: {
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+      workspaces: yield* fakeWorkspaceSeams,
     });
     const url = new URL(options.path, ORIGIN);
     url.searchParams.set("id", options.id);
@@ -1225,7 +1231,9 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
     () =>
       Effect.gen(function* () {
         const dana = yield* openUser;
-        const workspaceId = yield* openWorkspace(dana);
+        const personal = yield* ensurePersonalWorkspace(dana, yield* fakeWorkspaceSeams);
+        assert.ok(Option.isSome(personal));
+        const workspaceId = personal.value;
         const path = "/api/live/workspaces";
         const polled = yield* ask({ bearer: dana, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
@@ -1249,6 +1257,22 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
           body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
         });
       }),
+  );
+  it.effect("an account with no workspace is answered its first, made by the read", () =>
+    Effect.gen(function* () {
+      const fay = yield* openUser;
+      const path = "/api/live/workspaces";
+      const workspaceIds = Effect.map(ask({ bearer: fay, path }), (polled) => {
+        const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
+        return Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
+          workspaces: answer.queries.workspaces.rows,
+          installations: answer.queries.installations.rows,
+        }).workspaces.map(({ id }) => id);
+      });
+      const first = yield* workspaceIds;
+      assert.equal(first.length, 1);
+      assert.deepEqual(yield* workspaceIds, first, "a second read makes no second workspace");
+    }),
   );
 });
 
@@ -1668,6 +1692,7 @@ const askChapters = (options: {
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+      workspaces: yield* fakeWorkspaceSeams,
     });
     const url = new URL("/api/live/pull-request-chapters", ORIGIN);
     url.searchParams.set("id", options.agentId);
@@ -1810,7 +1835,10 @@ const askLive = (bearer: string, path: string, sync?: string) =>
       // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
-    const procedures = liveProcedures({ resolveUserId: () => Effect.succeed(Option.some(bearer)) });
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(bearer)),
+      workspaces: yield* fakeWorkspaceSeams,
+    });
     const url = readOf(path, bearer);
     url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     if (sync !== undefined) url.searchParams.set(LIVE_POLL.SYNC, sync);

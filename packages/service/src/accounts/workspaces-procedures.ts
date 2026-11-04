@@ -121,7 +121,7 @@ export interface WorkspacesProcedureSeams {
  * same outage the Mac may retry, logged by its kind alone, since what the
  * plugin threw may quote what it was asked to write.
  */
-function pluginWriteOrUnavailable<A, R>(
+export function pluginWriteOrUnavailable<A, R>(
   effect: Effect.Effect<A, StoreFailure | Cause.UnknownError, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
   return Effect.catch(effect, (failure) =>

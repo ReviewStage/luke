@@ -1,3 +1,5 @@
+import { workspaceSeams } from "@repo/database/models/workspace-seams";
+import { auth } from "@repo/service/auth/auth";
 import { authDeployment } from "@repo/service/auth/auth-deployment";
 import { resolveHostedUserId, resolveRelayUserId } from "@repo/service/auth/bearer";
 import { browserLiveDependencies } from "@repo/service/browser-live/production";
@@ -78,7 +80,12 @@ function standLive(live: RelayServer): void {
           server: live,
           ownOrigins: new Set(deployment.ownOrigins),
           resolveUserId: resolveRelayUserId,
-          fetch: hostedFetch({ live: liveProcedures({ resolveUserId: resolveHostedUserId }) }),
+          fetch: hostedFetch({
+            live: liveProcedures({
+              resolveUserId: resolveHostedUserId,
+              workspaces: workspaceSeams(auth.api),
+            }),
+          }),
           origin: new URL(deployment.baseURL).origin,
         });
         return yield* Effect.never;
