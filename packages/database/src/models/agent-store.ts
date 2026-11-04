@@ -28,6 +28,7 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
+import { type TaskStatus, taskStatusSchema } from "@repo/features/task-wire";
 import { TURN_STATUS, type WireValue, WireValueSchema } from "@repo/wire";
 import {
   and,
@@ -64,6 +65,7 @@ import {
 } from "../schemas/agent.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
+import { automationRun } from "../schemas/automation.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
@@ -74,7 +76,7 @@ import {
   MESSAGE_SENDER,
   messageSenderSchema,
 } from "../storage-vocabulary.js";
-import { agentAutomationNameSql } from "./agent-name.js";
+import { agentAutomationNameSql, agentAutomationRunSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
 import { reopenAgentInboxItems, settleAgentInboxItems } from "./inbox-settle.js";
 import {
@@ -1633,22 +1635,73 @@ const AgentsOfWorkspaceSchema = Schema.Struct({
   taskId: Schema.NullOr(Schema.String),
   words: Schema.NullOr(Schema.String),
   includeArchived: Schema.Boolean,
+  archivedOnly: Schema.Boolean,
   ownOnly: Schema.Boolean,
+  startedBy: Schema.NullOr(Schema.String),
+  automation: Schema.NullOr(Schema.Boolean),
+  automationId: Schema.NullOr(Schema.String),
+  taskStatus: Schema.NullOr(taskStatusSchema),
   except: Schema.NullOr(Schema.String),
   around: Schema.NullOr(AgentAroundSchema),
   offset: Schema.Number,
   limit: Schema.Number,
 });
 
+/** The condition that an automation's run started the agent, or that it belongs to a run, as a helper a run's agent started does. */
+function ofAnyAutomation(): SQL {
+  return sql`(${agentAutomationRunSql(agentTable)} or ${agentTable.automationRunId} is not null)`;
+}
+
+/**
+ * The condition that the automation named started the agent, or that it
+ * belongs to one of that automation's runs. Note that the run is read too,
+ * because a helper a run's agent started, and an agent a same-agent
+ * automation adopted, name the run but not the automation.
+ */
+function ofAutomation(automationId: string): SQL {
+  return (
+    or(
+      eq(agentTable.automationId, automationId),
+      exists(
+        queryBuilder
+          .select({ one: automationRun.id })
+          .from(automationRun)
+          .where(
+            and(
+              eq(automationRun.id, agentTable.automationRunId),
+              eq(automationRun.automationId, automationId),
+            ),
+          ),
+      ),
+    ) ?? eq(agentTable.automationId, automationId)
+  );
+}
+
 /** The condition that an agent is one of the workspace's the account reaches, narrowed as the request asks. */
 function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
-  const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly, except } =
-    request;
+  const { userId, organizationId, repository, taskId, words, except } = request;
   return and(
     agentVisibleTo(userId),
     eq(AGENT_WORKSPACE, organizationId),
-    ownOnly ? eq(agentTable.userId, userId) : undefined,
-    includeArchived ? undefined : isNull(agentTable.archivedAt),
+    request.ownOnly ? eq(agentTable.userId, userId) : undefined,
+    request.startedBy === null ? undefined : eq(agentTable.userId, request.startedBy),
+    request.includeArchived ? undefined : isNull(agentTable.archivedAt),
+    request.archivedOnly ? isNotNull(agentTable.archivedAt) : undefined,
+    request.automation === null
+      ? undefined
+      : request.automation
+        ? ofAnyAutomation()
+        : sql`not ${ofAnyAutomation()}`,
+    request.automationId === null ? undefined : ofAutomation(request.automationId),
+    // Note that an agent on no task stands on no status, so it never matches one.
+    request.taskStatus === null
+      ? undefined
+      : exists(
+          queryBuilder
+            .select({ one: task.id })
+            .from(task)
+            .where(and(eq(task.id, agentTable.taskId), eq(task.status, request.taskStatus))),
+        ),
     taskId === null ? undefined : eq(agentTable.taskId, taskId),
     words === null ? undefined : agentNamed(words),
     except === null ? undefined : ne(agentTable.id, except),
@@ -2335,8 +2388,18 @@ interface WorkspaceAgentsAsked {
   readonly taskId?: string;
   readonly words?: string;
   readonly includeArchived?: boolean;
+  /** Only the archived agents; `includeArchived` must ask for them too. */
+  readonly archivedOnly?: boolean;
   /** Only the agents the account started, by hand or through any of its agents; every member's where unsaid. */
   readonly ownOnly?: boolean;
+  /** Only the agents this member started, by their account's id; every member's where unsaid. */
+  readonly startedBy?: string;
+  /** Only the agents an automation's run started where true, only those started otherwise where false; both where unsaid. */
+  readonly automation?: boolean;
+  /** Only the agents the runs of this automation started, by its id. */
+  readonly automationId?: string;
+  /** Only the agents on a task standing at this status; an agent on no task matches none. */
+  readonly taskStatus?: TaskStatus;
   /** The one agent left out, the one asking. */
   readonly except?: string;
   /** The agent whose own come first: those on its task, its starter, and those it started. */
@@ -2355,7 +2418,12 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
     taskId: options.taskId ?? null,
     words: options.words ?? null,
     includeArchived: options.includeArchived ?? false,
+    archivedOnly: options.archivedOnly ?? false,
     ownOnly: options.ownOnly ?? false,
+    startedBy: options.startedBy ?? null,
+    automation: options.automation ?? null,
+    automationId: options.automationId ?? null,
+    taskStatus: options.taskStatus ?? null,
     except: options.except ?? null,
     around: options.around ?? null,
     offset: options.offset ?? 0,

@@ -55,7 +55,6 @@ function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSea
                 activeDays: 3,
                 lastActiveDay: null,
                 lastSeenAt: null,
-                calls: 12,
                 favorite: false,
               },
             ],

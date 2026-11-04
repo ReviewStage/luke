@@ -30,16 +30,17 @@ import {
 } from "@repo/database/models/task-block-store";
 import {
   createTaskCommitted,
+  createTaskCommittedOnce,
   type NewTask,
   readTask,
   readTaskHeader,
-  type StoredTask,
   setTaskParent,
   type TaskAssigneeNotMember,
-  type TaskCommitted,
+  type TaskIdTaken,
   type TaskParentCycle,
   TaskParentRepositoryDiffers,
   type TaskParentUnreached,
+  type TaskStartCommitted,
 } from "@repo/database/models/task-store";
 import {
   TASK_CREATE_RELATION_KIND,
@@ -197,28 +198,49 @@ export function relationWritten(
   );
 }
 
+/** The task a start makes, holding `holding` as it does: under the id its maker chose where it names one (`createTaskCommittedOnce`), else under one the store mints, which this start always makes. */
+function taskStarted(
+  userId: string,
+  started: NewTask & { readonly id?: string },
+  holding: readonly string[],
+): Effect.Effect<
+  TaskStartCommitted,
+  StoreFailure | TaskAssigneeNotMember | TaskIdTaken,
+  DatabaseServices
+> {
+  const { id } = started;
+  if (id !== undefined) return createTaskCommittedOnce(userId, { ...started, id }, holding);
+  return Effect.map(createTaskCommitted(userId, started, holding), (created) => ({
+    ...created,
+    made: true,
+  }));
+}
+
 /**
- * Starts the task as `createTaskCommitted` starts one and writes every
- * relation asked beside it in one transaction, through the doors a relation
- * added later goes through (`setTaskParent`, `addTaskBlock`), so their rules
- * hold and the task and its relations land together or not at all, one
- * refused taking back the task and every relation before it; the task alone
- * where none is asked. The task is read again once the relations stand,
- * since the window opens the answer without reading it again, so it must
- * carry them. Note that the row's transaction id is the
- * outer transaction's, which a nested write only marks a savepoint in, so
- * the answer's `txid` still names the one commit a follower waits for.
+ * Starts the task as `createTaskCommitted` starts one, or under the id its
+ * maker chose as `createTaskCommittedOnce` does, and writes every relation
+ * asked beside it in one transaction, through the doors a relation added
+ * later goes through (`setTaskParent`, `addTaskBlock`), so their rules hold
+ * and the task and its relations land together or not at all, one refused
+ * taking back the task and every relation before it; the task alone where
+ * none is asked. A start sent again under its id answers the task the first
+ * made, whose relations that one wrote, and writes none again. The task is
+ * read again once the relations stand, since the window opens the answer
+ * without reading it again, so it must carry them. Note that the row's
+ * transaction id is the outer transaction's, which a nested write only marks
+ * a savepoint in, so the answer's `txid` still names the one commit a
+ * follower waits for.
  */
 export function createTaskRelated(
   userId: string,
-  started: NewTask,
+  started: NewTask & { readonly id?: string },
   asked: readonly TaskCreateRelationAsked[],
 ): Effect.Effect<
-  TaskCommitted<StoredTask>,
-  StoreFailure | TaskAssigneeNotMember | TaskCreateRelationRefused,
+  TaskStartCommitted,
+  StoreFailure | TaskAssigneeNotMember | TaskIdTaken | TaskCreateRelationRefused,
   DatabaseServices
 > {
-  if (asked.length === 0) return createTaskCommitted(userId, started);
+  if (asked.length === 0) return taskStarted(userId, started, []);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -226,11 +248,12 @@ export function createTaskRelated(
         // its parent among them, because each relation's write locks its own task in turn, and a relation
         // change between two of them locks both in id order, so the two would each hold a row the other waits on.
         const touched = asked.map((relation) => relation.taskId);
-        const created = yield* createTaskCommitted(
+        const created = yield* taskStarted(
           userId,
           started,
           started.parentTaskId === undefined ? touched : [started.parentTaskId, ...touched],
         );
+        if (!created.made) return created;
         const taskId = created.task.task.id;
         for (const relation of asked) yield* relationWritten(userId, taskId, relation);
         const read = yield* readTask(userId, taskId);
@@ -238,8 +261,8 @@ export function createTaskRelated(
         if (Option.isNone(read))
           return yield* Effect.die(new Error("the task started did not read"));
         return created.txid === undefined
-          ? { task: read.value }
-          : { task: read.value, txid: created.txid };
+          ? { task: read.value, made: true }
+          : { task: read.value, txid: created.txid, made: true };
       }),
     ),
   );

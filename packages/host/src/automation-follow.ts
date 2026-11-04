@@ -1,26 +1,8 @@
-import {
-  type AutomationRunsLiveAnswer,
-  type AutomationsLiveAnswer,
-  type AutomationsLiveRows,
-  type AutomationWorkspaceRunsLiveAnswer,
-  automationRunsGraceEdge,
-  automationRunsLiveRowsSchema,
-  automationRunsOfLiveRows,
-  automationsLiveRowsSchema,
-  automationWorkspaceRunsGraceEdge,
-  automationWorkspaceRunsLiveRowsSchema,
-  automationWorkspaceRunsOfLiveRows,
-} from "@repo/features/automation-live";
-import {
-  AUTOMATION_CALL_FAILURE,
-  AUTOMATION_FOLLOW,
-  type AutomationFollow,
-  type AutomationFollowed,
-} from "@repo/features/automation-view";
+import { AUTOMATION_CALL_FAILURE } from "@repo/features/automation-view";
 import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
+import { Effect, Option, Schema, type Scope, Stream } from "effect";
+import { drawnAtEdges } from "./live-collection.js";
 import {
-  decodedLiveRows,
   LIVE_GONE,
   LiveBroken,
   liveRows,
@@ -30,73 +12,38 @@ import {
 } from "./live-follow.js";
 
 /**
- * automation-follow.ts -- a workspace's automations, an automation's runs, or a workspace's runs, followed on the service's live read for the windows that draw them, built again whenever the rows move and whenever the clock alone moves a run's agent.
+ * automation-follow.ts -- a workspace's automations, an automation's runs, or a workspace's runs, followed on the service's live read for as long as the windows hold them, their rows taken as each poll answers them, and a history built again whenever its rows move and whenever the clock alone moves a run's agent.
  *
  * The live read is fetched from the service and followed over its held poll
- * (`live-follow.ts`). The rows are decoded where they arrive. A workspace's
- * automations are taken the moment their poll answers
- * (`automation-collections.ts` keeps them and builds the list), before the
- * follow carries the answer's txids on to a write waiting for them, so a
- * write confirmed on the list finds its rows already taken. A history is
- * built from its rows (`@repo/features/automation-live`) at the host's own
- * instant, and again at the one instant the clock alone moves a run's
- * agent, the end of a grace. Only what is built from the rows leaves here.
+ * (`live-follow.ts`). The rows are decoded where they arrive and taken the
+ * moment their poll answers, before the follow carries the answer's txids
+ * on to a write waiting for them, so a write confirmed on a read finds its
+ * rows already taken: a workspace's automations by the collection that
+ * builds the list (`automation-collections.ts`), and a history by
+ * `historyAtEdges`, which builds it (`@repo/features/automation-live`) at
+ * the host's own instant, and again at the one instant the clock alone
+ * moves a run's agent, the end of a grace.
  *
- * A read the service did not answer is told as unanswered, which the window
- * says while it holds nothing, and asked for again, as a follow that stops
- * for good is started again, after `LIVE_RESTART`. One the account does not
- * reach is told not found and ends the follow; one refused because the
- * session is no longer the account the follow started for ends it unsaid,
- * and the next sign-in's window follows it again.
+ * A read the service did not answer is told as unanswered, and asked for
+ * again, as a follow that stops for good is started again, after
+ * `LIVE_RESTART`. One the account does not reach is told unanswered and
+ * ends the follow; one refused because the session is no longer the
+ * account the follow started for ends it unsaid, and the next sign-in
+ * follows it again.
  */
 
 /** A live read as the follow asks for it, its rows inline; a failure where the service answered none. */
 type Sealed<Answer> = Answer | { readonly failure: string };
 
-export interface AutomationFollowDependencies {
-  /** A workspace's automations as a live read, or with `poll` their rows inline, held past `after`. */
-  readonly liveList: (
-    workspaceId: string,
-    poll: boolean,
-    after?: string,
-  ) => Effect.Effect<Sealed<AutomationsLiveAnswer>>;
-  /** An automation's runs as a live read, or with `poll` their rows inline, held past `after`. */
-  readonly liveRuns: (
-    automationId: string,
-    poll: boolean,
-    after?: string,
-  ) => Effect.Effect<Sealed<AutomationRunsLiveAnswer>>;
-  /** Every run of a workspace's automations the account reads, as a live read, or with `poll` their rows inline, held past `after`. */
-  readonly liveWorkspaceRuns: (
-    workspaceId: string,
-    poll: boolean,
-    after?: string,
-  ) => Effect.Effect<Sealed<AutomationWorkspaceRunsLiveAnswer>>;
-  /** Takes a workspace's automations, decoded, as each poll answers them, which draws its list. */
-  readonly takeList: (rows: AutomationsLiveRows) => Effect.Effect<void>;
-  /** A history followed, each time it moves, and why there is nothing to draw where a follow says so. */
-  readonly publish: (followed: AutomationFollowed) => void;
+export interface AutomationFollowDependencies<Part extends string, Rows> {
+  /** The read as a live read, or with `poll` its rows inline, held past `after`. */
+  readonly live: (poll: boolean, after?: string) => Effect.Effect<Sealed<SealedRead<Part>>>;
+  /** Takes the read's rows, decoded, as each poll answers them. */
+  readonly take: (rows: Rows) => Effect.Effect<void>;
+  /** Tells that the read did not answer, or that the account no longer reaches it. */
+  readonly unanswered: () => void;
   /** Hears the follow's wait for a write's transaction where it has one, and none once it is let go. */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
-}
-
-/** How a follow's rows are followed from its first answer, its polls asked through `poll`, until the read breaks. */
-type RowsFollow<Part extends string> = (
-  first: SealedRead<Part>,
-  poll: (
-    after: string | undefined,
-  ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone: boolean }>,
-  onTxWait: AutomationFollowDependencies["onTxWait"],
-) => Effect.Effect<void, LiveBroken>;
-
-/** One kind of follow: how it is read, how its rows are followed, and how it says there is nothing to draw. */
-interface FollowKind<Part extends string> {
-  readonly live: (poll: boolean, after?: string) => Effect.Effect<Sealed<SealedRead<Part>>>;
-  readonly rows: RowsFollow<Part>;
-  /** Why there is nothing to draw, told as the view says it. */
-  readonly failed: (
-    failure: typeof AUTOMATION_CALL_FAILURE.UNANSWERED | typeof AUTOMATION_CALL_FAILURE.NOT_FOUND,
-  ) => void;
 }
 
 /** A read with one the account no longer reaches marked gone, so its follow ends rather than asks again. */
@@ -108,94 +55,66 @@ function goneWhereNotFound<Part extends string>(
     : read;
 }
 
-/** The view the rows make now, and again at each instant the clock alone moves it, until the rows move. */
-function viewsOf<Rows, View>(
-  rows: Rows,
-  build: (rows: Rows, now: number) => View,
-  edge: (rows: Rows, now: number) => number | undefined,
-): Stream.Stream<View> {
-  return Stream.unwrap(
-    Effect.map(Clock.currentTimeMillis, (at) => {
-      const now = Stream.succeed(build(rows, at));
-      const next = edge(rows, at);
-      if (next === undefined) return now;
-      const later = Stream.fromEffect(Effect.sleep(Duration.millis(next - at)));
-      return Stream.concat(
-        now,
-        Stream.flatMap(later, () => viewsOf(rows, build, edge)),
-      );
-    }),
-  );
-}
-
-/** Rows followed as each answer is handed on, the view they make built and published, and again at each instant the clock alone moves it. */
-function builtViews<Part extends string, Rows, View>(
-  schema: Schema.Codec<Rows, unknown>,
-  build: (rows: Rows, now: number) => View,
-  edge: (rows: Rows, now: number) => number | undefined,
-  publish: (view: View) => void,
-): RowsFollow<Part> {
-  return (first, poll, onTxWait) =>
-    Stream.runForEach(
-      Stream.switchMap(decodedLiveRows({ poll, onTxWait }, first, schema), (decoded) =>
-        viewsOf(decoded, build, edge),
-      ),
-      (view) => Effect.sync(() => publish(view)),
-    );
-}
-
-/** Rows taken, decoded, the moment each poll answers them, before the follow carries the answer's txids on to a write waiting for them. */
+/**
+ * Rows followed from the first answer, taken, decoded, the moment each poll
+ * answers them, before the follow carries the answer's txids on to a write
+ * waiting for them, until the read breaks.
+ */
 function takenRows<Part extends string, Rows>(
   schema: Schema.Codec<Rows, unknown>,
-  take: (rows: Rows) => Effect.Effect<void>,
-): RowsFollow<Part> {
+  dependencies: AutomationFollowDependencies<Part, Rows>,
+  first: SealedRead<Part>,
+  poll: (
+    after: string | undefined,
+  ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone: boolean }>,
+): Effect.Effect<void, LiveBroken> {
   const decode = Schema.decodeUnknownOption(schema);
   /** Takes an answer's rows, answering whether they decoded; one carrying none inline takes nothing. */
   const taken = (read: SealedRead<Part>) => {
     const parts = Object.entries<{ readonly rows?: readonly unknown[] }>(read.queries);
     if (parts.some(([, query]) => query.rows === undefined)) return Effect.succeed(true);
     const rows = decode(Object.fromEntries(parts.map(([part, query]) => [part, query.rows])));
-    return Option.isSome(rows) ? Effect.as(take(rows.value), true) : Effect.succeed(false);
+    return Option.isSome(rows)
+      ? Effect.as(dependencies.take(rows.value), true)
+      : Effect.succeed(false);
   };
-  return (first, poll, onTxWait) =>
-    Effect.gen(function* () {
-      if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
-      const takenPoll = (after: string | undefined) =>
-        Effect.flatMap(poll(after), (read) =>
-          "failure" in read
-            ? Effect.succeed(read)
-            : Effect.map(taken(read), (decoded) =>
-                decoded ? read : { failure: "a row did not decode" },
-              ),
-        );
-      yield* Stream.runDrain(
-        liveRows(
-          { poll: takenPoll, ...(onTxWait === undefined ? undefined : { onTxWait }) },
-          first,
-        ),
+  return Effect.gen(function* () {
+    if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
+    const takenPoll = (after: string | undefined) =>
+      Effect.flatMap(poll(after), (read) =>
+        "failure" in read
+          ? Effect.succeed(read)
+          : Effect.map(taken(read), (decoded) =>
+              decoded ? read : { failure: "a row did not decode" },
+            ),
       );
-    });
+    const onTxWait = dependencies.onTxWait;
+    yield* Stream.runDrain(
+      liveRows({ poll: takenPoll, ...(onTxWait === undefined ? undefined : { onTxWait }) }, first),
+    );
+  });
 }
 
-/** One follow until interrupted or until the service says it never will again. */
-function followed<Part extends string>(
-  dependencies: AutomationFollowDependencies,
-  kind: FollowKind<Part>,
+/**
+ * One read followed, its rows taken as `schema` decodes them, until
+ * interrupted or until the service says it never will again: one the
+ * account does not reach is told unanswered and ends, and one refused as
+ * signed out ends unsaid.
+ */
+export function followAutomationRead<Part extends string, Rows>(
+  schema: Schema.Codec<Rows, unknown>,
+  dependencies: AutomationFollowDependencies<Part, Rows>,
 ): Effect.Effect<void> {
   const attempt = Effect.gen(function* () {
-    const sealed = yield* kind.live(false);
+    const sealed = yield* dependencies.live(false);
     if ("failure" in sealed) {
       if (sealed.failure === LIVE_SIGNED_OUT.failure) return false;
-      if (sealed.failure === AUTOMATION_CALL_FAILURE.NOT_FOUND) {
-        kind.failed(AUTOMATION_CALL_FAILURE.NOT_FOUND);
-        return false;
-      }
-      kind.failed(AUTOMATION_CALL_FAILURE.UNANSWERED);
-      return true;
+      dependencies.unanswered();
+      return sealed.failure !== AUTOMATION_CALL_FAILURE.NOT_FOUND;
     }
     /**
      * Why the follow ended for good, the first poll's terminal failure, kept
-     * whatever answers after it, so a follow that ends is told as not found
+     * whatever answers after it, so a follow that ends is told unanswered
      * or ended unsaid.
      */
     let endedBy: string | undefined;
@@ -211,16 +130,14 @@ function followed<Part extends string>(
       return goneWhereNotFound(read);
     };
     // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
-    const gone = yield* kind
-      .rows(sealed, (after) => Effect.map(kind.live(true, after), noted), dependencies.onTxWait)
-      .pipe(
-        Effect.as(false),
-        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
-      );
+    const gone = yield* takenRows(schema, dependencies, sealed, (after) =>
+      Effect.map(dependencies.live(true, after), noted),
+    ).pipe(
+      Effect.as(false),
+      Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
+    );
     if (gone) {
-      if (endedBy === AUTOMATION_CALL_FAILURE.NOT_FOUND) {
-        kind.failed(AUTOMATION_CALL_FAILURE.NOT_FOUND);
-      }
+      if (endedBy === AUTOMATION_CALL_FAILURE.NOT_FOUND) dependencies.unanswered();
       return false;
     }
     return true;
@@ -228,39 +145,29 @@ function followed<Part extends string>(
   return restarting(attempt);
 }
 
-/** What the window follows, followed until interrupted or signed out: a list's rows taken, a history's each change published under what it is of. */
-export function followAutomations(
-  dependencies: AutomationFollowDependencies,
-  scope: AutomationFollow,
-): Effect.Effect<void> {
-  switch (scope.kind) {
-    case AUTOMATION_FOLLOW.WORKSPACE:
-      return followed(dependencies, {
-        live: (poll, after) => dependencies.liveList(scope.id, poll, after),
-        rows: takenRows(automationsLiveRowsSchema, dependencies.takeList),
-        failed: (failure) => dependencies.publish({ scope, view: { failure } }),
+/**
+ * A history's rows taken as its follow answers them, and the history they
+ * make told through `answered` at the host's own instant, and again at
+ * each instant the clock alone moves a run's agent, for as long as the
+ * scope stands; nothing is told before the rows are first taken. Answers
+ * the door the rows are taken by.
+ */
+export function historyAtEdges<Rows, History>(
+  build: (rows: Rows, now: number) => History,
+  edge: (rows: Rows, now: number) => number | undefined,
+  answered: (history: History) => void,
+): Effect.Effect<(rows: Rows) => Effect.Effect<void>, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    let taken: Option.Option<Rows> = Option.none();
+    const drawn = yield* drawnAtEdges((at) => {
+      if (Option.isNone(taken)) return undefined;
+      answered(build(taken.value, at));
+      return edge(taken.value, at);
+    });
+    return (rows) =>
+      Effect.suspend(() => {
+        taken = Option.some(rows);
+        return drawn;
       });
-    case AUTOMATION_FOLLOW.RUNS:
-      return followed(dependencies, {
-        live: (poll, after) => dependencies.liveRuns(scope.id, poll, after),
-        rows: builtViews(
-          automationRunsLiveRowsSchema,
-          (rows, now) => ({ runs: automationRunsOfLiveRows(rows, now) }),
-          automationRunsGraceEdge,
-          (view) => dependencies.publish({ scope, view }),
-        ),
-        failed: (failure) => dependencies.publish({ scope, view: { failure } }),
-      });
-    case AUTOMATION_FOLLOW.WORKSPACE_RUNS:
-      return followed(dependencies, {
-        live: (poll, after) => dependencies.liveWorkspaceRuns(scope.id, poll, after),
-        rows: builtViews(
-          automationWorkspaceRunsLiveRowsSchema,
-          (rows, now) => ({ runs: automationWorkspaceRunsOfLiveRows(rows, now) }),
-          automationWorkspaceRunsGraceEdge,
-          (view) => dependencies.publish({ scope, view }),
-        ),
-        failed: (failure) => dependencies.publish({ scope, view: { failure } }),
-      });
-  }
+  });
 }

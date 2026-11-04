@@ -28,8 +28,8 @@ import { IssueMark } from "./issue-mark.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { SkillMark } from "./skill-ref.js";
-import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { useTaskStatus } from "./use-known-names.js";
+import { AgentGlyph, AgentMark, PlanGlyph } from "./tab-look.js";
+import { useAgentStatus, useTaskStatus } from "./use-known-names.js";
 import type { LinkStanding } from "./use-link-standing.js";
 
 /**
@@ -97,12 +97,15 @@ function harnessMark(model: string | undefined): ReactNode {
 }
 /**
  * The mark of an agent the place holds no tile of: the harness the window
- * last read it running on, and where the window holds no model of it, an
- * archived agent's or one past the few its task's row names, the one the
- * task list carries for it (`ReadAgentModel`).
+ * last read it running on, giving way to the working mark while the window
+ * lists it working, as its row does; and where the window holds no model of
+ * it, an archived agent's or one past the few its task's row names, the one
+ * the task list carries for it (`ReadAgentModel`).
  */
 function KnownAgentMark({ agentId, at }: { agentId: string; at: ThingMarkAt }): ReactNode {
   const model = at.known.agentModels.get(agentId);
+  const status = useAgentStatus(agentId);
+  if (model !== undefined && status !== undefined) return <AgentGlyph agent={{ model, status }} />;
   if (model !== undefined) return harnessMark(model);
   return <ReadAgentModel agentId={agentId}>{harnessMark}</ReadAgentModel>;
 }

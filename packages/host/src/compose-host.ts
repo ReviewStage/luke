@@ -22,7 +22,7 @@ import {
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
@@ -60,8 +60,10 @@ import {
 } from "./host-concerns.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { liveSocketClient } from "./live-socket.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
+import { windowFocus } from "./window-focus.js";
 
 /**
  * The order the launch has to keep: the account is read before anything
@@ -126,6 +128,23 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
+    // Note that the socket a live read goes over is opened as a terminal's
+    // is, so it stands where the assembly has the terminals concern's seam.
+    const openSocket = platform.has(HOST_PLATFORM_CONCERN.TERMINALS)
+      ? yield* TerminalSocket
+      : undefined;
+    const http =
+      openSocket === undefined
+        ? yield* HttpClient.HttpClient
+        : yield* liveSocketClient({
+            http: yield* HttpClient.HttpClient,
+            openSocket,
+            credential: account.credential,
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          });
+    /** A composer built over the client with each live read on one socket (`live-socket.ts`), which it captures for every call it makes. */
+    const served = <A, E, R>(composing: Effect.Effect<A, E, R>) =>
+      Effect.provideService(composing, HttpClient.HttpClient, http);
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
@@ -142,135 +161,156 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     };
     /** Content read under a key it never changes under, kept in this process for the account signed in until the agents' reset lets it go at a sign-out. */
     const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
-    const tasks = yield* composeTasks({
-      kernel,
-      account,
-      accountId,
-      kept,
-      client: Object.assign(
-        new HostedTaskClient({
+    /** A window coming forward, raised by the workspaces' refresh it already sends and heard by every read the host asks again on focus. */
+    const focus = yield* windowFocus;
+    const tasks = yield* served(
+      composeTasks({
+        kernel,
+        account,
+        accountId,
+        kept,
+        focus,
+        client: Object.assign(
+          new HostedTaskClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            credential: account.credential,
+          }),
+          {
+            workspaces: workspaceClient,
+            github: new HostedGitHubConnectionClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              credential: account.credential,
+              sessionCredential: account.sessionCredential,
+            }),
+            admin: new HostedAdminClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              sessionCredential: account.sessionCredential,
+            }),
+          },
+        ),
+      }),
+    );
+    const agents = yield* served(
+      composeAgents({
+        kernel,
+        account,
+        accountId,
+        kept,
+        focus,
+        reader: () => {
+          const signedIn = account.session.snapshot();
+          return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined
+            ? { userId: signedIn.id, name: signedIn.name ?? signedIn.email }
+            : undefined;
+        },
+        client: agentClient,
+        listed: tasks.listed,
+        writeAgent: tasks.writeAgent,
+      }),
+    );
+    const automations = yield* served(
+      composeAutomations({
+        kernel,
+        account,
+        accountId,
+        client: new HostedAutomationClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
         }),
-        {
-          workspaces: workspaceClient,
-          github: new HostedGitHubConnectionClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            credential: account.credential,
-            sessionCredential: account.sessionCredential,
-          }),
-          admin: new HostedAdminClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            sessionCredential: account.sessionCredential,
-          }),
-        },
-      ),
-    });
-    const agents = yield* composeAgents({
-      kernel,
-      account,
-      accountId,
-      kept,
-      reader: () => {
-        const signedIn = account.session.snapshot();
-        return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined
-          ? { userId: signedIn.id, name: signedIn.name ?? signedIn.email }
-          : undefined;
-      },
-      client: agentClient,
-      listed: tasks.listed,
-      writeAgent: tasks.writeAgent,
-    });
-    const automations = yield* composeAutomations({
-      kernel,
-      account,
-      accountId,
-      client: new HostedAutomationClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
       }),
-    });
-    const integrations = yield* composeIntegrations({
-      kernel,
-      account,
-      client: new HostedIntegrationsClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
+    );
+    const integrations = yield* served(
+      composeIntegrations({
+        kernel,
+        account,
+        client: new HostedIntegrationsClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
+        // Note that a refusal's reason is not reported, because it may carry the address.
+        openExternal: (url) =>
+          Effect.map(
+            kernel.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
+            (result) => result.status === NODE_CAPABILITY_STATUS.OK,
+          ),
       }),
-      // Note that a refusal's reason is not reported, because it may carry the address.
-      openExternal: (url) =>
-        Effect.map(
-          kernel.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
-          (result) => result.status === NODE_CAPABILITY_STATUS.OK,
-        ),
-    });
+    );
     const macCommands = platform.has(HOST_PLATFORM_CONCERN.MAC_COMMANDS)
-      ? yield* composeMacCommands({
-          kernel,
-          account,
-          accountId,
-          mode: Effect.map(
-            Effect.orDie(settings.store.snapshot()),
-            (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
-          ),
-          allowAlways: Effect.map(
-            settings.settingsWrite(
-              () =>
-                settings.store.set(APP_SETTING_SCHEMA.macCommands.field, MAC_COMMAND_MODE.ALWAYS),
-              () => Effect.void,
-              "Could not save that setting on this system.",
-              undefined,
+      ? yield* served(
+          composeMacCommands({
+            kernel,
+            account,
+            accountId,
+            mode: Effect.map(
+              Effect.orDie(settings.store.snapshot()),
+              (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
             ),
-            (saved) => saved.reason === undefined,
-          ),
-          client: new HostedMacCommandClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            credential: account.credential,
+            allowAlways: Effect.map(
+              settings.settingsWrite(
+                () =>
+                  settings.store.set(APP_SETTING_SCHEMA.macCommands.field, MAC_COMMAND_MODE.ALWAYS),
+                () => Effect.void,
+                "Could not save that setting on this system.",
+                undefined,
+              ),
+              (saved) => saved.reason === undefined,
+            ),
+            client: new HostedMacCommandClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              credential: account.credential,
+            }),
           }),
-        })
+        )
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
     const localAgents = platform.has(HOST_PLATFORM_CONCERN.LOCAL_AGENTS)
-      ? yield* composeThisMacHost({
-          kernel,
-          account,
-          accountId,
-          experimentOn: (experiment) =>
-            Effect.map(
-              Effect.orElseSucceed(settings.store.snapshot(), () => ({
-                experiments: NO_EXPERIMENTS,
-              })),
-              (snapshot) => experimentOn(snapshot.experiments, experiment),
-            ),
-          hostListed: (deviceId) =>
-            Effect.map(agentClient.hosts(), (answer) =>
-              "failure" in answer
-                ? Option.none()
-                : Option.some(answer.hosts.some((host) => host.id === deviceId)),
-            ),
-          client: new HostedDeviceAgentClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            credential: account.credential,
+      ? yield* served(
+          composeThisMacHost({
+            kernel,
+            account,
+            accountId,
+            experimentOn: (experiment) =>
+              Effect.map(
+                Effect.orElseSucceed(settings.store.snapshot(), () => ({
+                  experiments: NO_EXPERIMENTS,
+                })),
+                (snapshot) => experimentOn(snapshot.experiments, experiment),
+              ),
+            hostListed: (deviceId) =>
+              Effect.map(agentClient.hosts(), (answer) =>
+                "failure" in answer
+                  ? Option.none()
+                  : Option.some(answer.hosts.some((host) => host.id === deviceId)),
+              ),
+            client: new HostedDeviceAgentClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              credential: account.credential,
+            }),
           }),
-        })
+        )
       : unavailableConcern(HOST_PLATFORM_CONCERN.LOCAL_AGENTS);
-    const terminals: TerminalsComposer = platform.has(HOST_PLATFORM_CONCERN.TERMINALS)
-      ? yield* composeTerminals({
-          kernel,
-          account,
-          client: new HostedTerminalClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            credential: account.credential,
-          }),
-          openSocket: yield* TerminalSocket,
-        })
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
+    const terminals: TerminalsComposer =
+      openSocket !== undefined
+        ? yield* served(
+            composeTerminals({
+              kernel,
+              account,
+              client: new HostedTerminalClient({
+                serviceBaseUrl: kernel.hostedServiceBaseUrl,
+                credential: account.credential,
+              }),
+              openSocket,
+            }),
+          )
+        : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
     const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
-      ? yield* composeChatGptSignIn({
-          kernel,
-          account,
-          client: agentClient,
-          openConsent: (yield* SignInConsent).open,
-        })
+      ? yield* served(
+          composeChatGptSignIn({
+            kernel,
+            account,
+            client: agentClient,
+            openConsent: (yield* SignInConsent).open,
+          }),
+        )
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
 
     /**
@@ -284,6 +324,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* account.refreshAccess;
         yield* tasks.open;
         yield* agents.open;
+        yield* automations.open;
       }
       yield* settings.emitSettings();
     });
@@ -308,14 +349,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
-    const installedSkills = yield* composeInstalledSkills({
-      kernel,
-      account,
-      client: new HostedInstalledSkillClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
+    const installedSkills = yield* served(
+      composeInstalledSkills({
+        kernel,
+        account,
+        client: new HostedInstalledSkillClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
       }),
-    });
+    );
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,

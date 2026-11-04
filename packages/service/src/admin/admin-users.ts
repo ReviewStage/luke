@@ -14,16 +14,15 @@ import {
 } from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
-import { dayStart } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * The whole account roster behind the Users tab, one row per user row the
- * service holds, whether or not the account ever touched the hosted tier —
+ * service holds, whether or not the account ever took a meaningful action —
  * which is exactly what the dashboard's most-active table cannot say. The
- * rows carry the same fields the overview already names and the same
- * window aggregates, read from the same tables behind the same admin gate.
+ * rows count active days through the same meaningful actions the overview's
+ * table ranks by, read from the same tables behind the same admin gate.
  */
 
 /**
@@ -34,6 +33,14 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
  * account past the bound is still findable by name or email.
  */
 export const ADMIN_USERS_LIMIT = 200;
+
+/**
+ * How many UTC days back, today included, a roster row's last-active day
+ * reads: a trailing year, well past the widest window, so an account quiet
+ * for the window still says when it last worked, while every arm of the
+ * actions union stays cut at a bound.
+ */
+export const ADMIN_USERS_LAST_ACTIVE_DAYS = 365;
 
 /**
  * An `ILIKE` pattern matching the term as a literal substring: Postgres's
@@ -61,26 +68,6 @@ export interface AdminUserListSource {
   total: number;
   signIn: AdminSignIn;
   rows: readonly AdminUserListRow[];
-}
-
-/**
- * When one account last touched the service at all: its freshest auth-session
- * write or, when later, the start of its most recent hosted-usage day. The
- * session write alone cannot say it — the desktop spends the hosted tier over
- * OAuth bearer tokens that never touch a session row, so an account can be
- * active every day while its sessions age — and folding the usage day in is
- * what keeps the roster's "Last seen" from trailing the account page's own
- * "Last active". Null only when there is neither: every session pruned and no
- * hosted use ever.
- */
-export function lastSeenInstant(
-  sessionSeenAt: Date | null,
-  lastUsageDay: string | null,
-): number | null {
-  const usageDayStart = lastUsageDay === null ? null : dayStart(lastUsageDay).getTime();
-  if (sessionSeenAt === null) return usageDayStart;
-  if (usageDayStart === null) return sessionSeenAt.getTime();
-  return Math.max(sessionSeenAt.getTime(), usageDayStart);
 }
 
 /** Stamps the queried roster with the window its aggregates cover and the search that scoped it. */

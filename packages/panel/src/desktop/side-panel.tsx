@@ -52,7 +52,6 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { ListIcon } from "@repo/ui/icons";
-import { usePlanComments } from "@repo/ui/plan-comments";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -156,6 +155,7 @@ import {
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
+import { usePlanComments } from "../tasks/use-plan-comments.js";
 import {
   DRAWN_KINDS,
   type DrawnTabs,
@@ -1851,8 +1851,9 @@ function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefi
 /** What the chosen tab shows. */
 /**
  * A page's tab, with the page's comment threads where it stands on a task,
- * read and written through the plan's comment doors naming the page; a page
- * an agent on no task showed has none.
+ * held on the task and the page and written through the plan's comment
+ * doors naming the page, beside the open task or an Inbox item's alike; a
+ * page an agent on no task showed has none.
  */
 function TaskPagePane({
   doors,
@@ -1860,15 +1861,11 @@ function TaskPagePane({
 }: Omit<Parameters<typeof PagePane>[0], "comments"> & {
   doors: NonNullable<Parameters<typeof PagePane>[0]["comments"]>["doors"];
 }): React.JSX.Element {
-  const { act } = useAct();
-  const control = usePlanComments({
-    planId: "taskId" in pane.place ? pane.place.taskId : undefined,
-    pageId: pane.page.id,
-    shown: true,
-    readComments: (params) => act(ACT_KIND.TASKS_COMMENTS, params),
-    startComment: (params) => act(ACT_KIND.TASKS_COMMENT_START, params),
-    actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
-  });
+  const taskId = "taskId" in pane.place ? pane.place.taskId : undefined;
+  const pageId = pane.page.id;
+  const control = usePlanComments(
+    useMemo(() => (taskId === undefined ? undefined : { taskId, pageId }), [taskId, pageId]),
+  );
   return <PagePane {...pane} comments={control === undefined ? undefined : { control, doors }} />;
 }
 

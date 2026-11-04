@@ -33,7 +33,6 @@ import { planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
-  planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
@@ -1148,22 +1147,19 @@ const planCommentFailedSchema = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(PLAN_COMMENT_CALL_FAILURE)),
 });
 
-/** A plan's comments, or one of its task's pages', past a cursor, as the window asks it: the plan, the page where it names one, and where the window stands. */
-export const tasksCommentsParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
+/** What a task's comment threads stand on: its plan, or one of its pages. */
+export const COMMENT_SUBJECT = {
+  PLAN: "plan",
+  PAGE: "page",
+} as const;
+
+/** One task's comments held by a window while a surface of it draws them: its plan's own threads, or one of its pages' where it names one. */
+export const tasksCommentsFollowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
   pageId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  after: EffectSchema.NonEmptyString,
 });
 
-export type TasksCommentsParams = typeof tasksCommentsParamsSchema.Type;
-
-/** A plan's comments as the window hears them: every thread and the cursor to read on from, or why there are none. */
-export const tasksCommentsAnswerSchema = EffectSchema.Union([
-  planCommentsAnswerSchema,
-  planCommentFailedSchema,
-]);
-
-export type TasksCommentsAnswer = typeof tasksCommentsAnswerSchema.Type;
+export type TasksCommentsFollow = typeof tasksCommentsFollowSchema.Type;
 
 /** A thread started on a plan, as the window asks it. */
 export const tasksCommentStartParamsSchema = EffectSchema.Struct({

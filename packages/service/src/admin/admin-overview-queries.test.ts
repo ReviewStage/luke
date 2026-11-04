@@ -24,7 +24,12 @@ import {
   REACH_FEATURE,
 } from "@repo/features/admin-overview-vocabulary";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import {
+  AGENT_KIND,
+  AGENT_SOURCE,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -37,6 +42,7 @@ import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integra
 import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
+import { readAdminDaySource } from "./admin-day-queries.js";
 import { readAdminOverviewSource } from "./admin-overview-queries.js";
 
 /**
@@ -45,8 +51,9 @@ import { readAdminOverviewSource } from "./admin-overview-queries.js";
  * agent started, and nothing else makes an account active; each
  * daily count lands on its own UTC day; the funnel counts what the window's
  * new accounts ever did; reach counts the week's active developers alone;
- * the most active accounts carry their own counts; and hiding admins leaves
- * an admin's rows out of every number.
+ * the most active accounts carry their own counts; hiding admins leaves
+ * an admin's rows out of every number; and the Day page reads one UTC day of
+ * those same rows, naming who was active by a meaningful action.
  *
  * Synthetic accounts throughout, read on Wednesday 2026-10-21 at noon UTC over
  * a 7-day window: the recent run is 10-15 to 10-21, the prior 10-08 to 10-14.
@@ -363,6 +370,95 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           [ada, root],
         );
         assert.equal(everyone.accountCounts.tasks.get(root), 1);
+      }),
+  );
+
+  it.effect("count each agent under the first origin that fits, and pilots beside them", () =>
+    Effect.gen(function* () {
+      const dee = yield* openAccount("dee", "2026-09-01T09:00:00Z");
+      const workspace = yield* openWorkspace(dee);
+      // Every agent here starts on 10-16, a day the shared seed leaves empty.
+      const day = "2026-10-16";
+      const when = `${day}T10:00:00Z`;
+      const slack = { source: { kind: AGENT_SOURCE.SLACK } };
+      const automationOrigin = {
+        name: "Synthetic automation",
+        firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: Date.parse(when) },
+        prompt: "",
+      };
+      const pilot = yield* startAgent(dee, workspace, when, { kind: AGENT_KIND.PILOT });
+      const startedByPilot = { startedByAgentId: pilot };
+      yield* startAgent(dee, workspace, when, { automationOrigin, ...slack });
+      yield* startAgent(dee, workspace, when, slack);
+      yield* startAgent(dee, workspace, when, { ...slack, ...startedByPilot });
+      yield* startAgent(dee, workspace, when, startedByPilot);
+      yield* startAgent(dee, workspace, when);
+
+      const source = yield* readAdminOverviewSource({
+        now: NOW,
+        scope: ADMIN_METRICS_SCOPE.ALL,
+        windowDays: ADMIN_METRICS_WINDOW.WEEK,
+      });
+      const on = (count: DailyCount) => source.daily.get(count)?.get(day) ?? 0;
+
+      // Six started: the pilot and the plain coder by hand, the rest by the first origin that fits.
+      assert.equal(on(DAILY_COUNT.AGENTS_STARTED), 6);
+      assert.equal(on(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS), 1);
+      assert.equal(on(DAILY_COUNT.AGENTS_FROM_SLACK), 2);
+      assert.equal(on(DAILY_COUNT.AGENTS_FROM_AGENTS), 1);
+      assert.equal(on(DAILY_COUNT.PILOTS_STARTED), 1);
+    }),
+  );
+});
+
+it.layer(getTestDB())("one day's reads", (it) => {
+  it.effect(
+    "a day of agents and tasks with no hosted usage counts the chart's bar and lists who was active",
+    () =>
+      Effect.gen(function* () {
+        const { ada, root } = yield* seedService;
+        // Note that the next day's first instant is past the day's bound.
+        yield* createTask(ada, yield* openWorkspace(ada), "2026-10-21T00:00:00Z");
+
+        const day = yield* readAdminDaySource({
+          day: "2026-10-20",
+          scope: ADMIN_METRICS_SCOPE.NON_ADMINS,
+        });
+
+        // Bob's notetaker revision is in the bar, as the chart counts it, but makes him no active account.
+        assert.deepEqual(day.activity.features, {
+          agentsStarted: 1,
+          planRevisions: 1,
+          inboxAnswered: 1,
+          automationRuns: 1,
+        });
+        assert.equal(day.activity.activeDevelopers, 1);
+        assert.deepEqual(
+          day.activity.accounts.map((account) => [account.id, account.counts]),
+          [
+            [
+              ada,
+              {
+                tasksCreated: 1,
+                planRevisions: 0,
+                agentsStarted: 1,
+                inboxAnswered: 1,
+                automationRuns: 1,
+              },
+            ],
+          ],
+        );
+        assert.deepEqual(day.hosted, { accounts: [], totals: { accounts: 0, calls: 0 } });
+
+        const everyone = yield* readAdminDaySource({
+          day: "2026-10-20",
+          scope: ADMIN_METRICS_SCOPE.ALL,
+        });
+        assert.equal(everyone.activity.activeDevelopers, 2);
+        assert.deepEqual(
+          everyone.activity.accounts.map((account) => account.id),
+          [ada, root],
+        );
       }),
   );
 });

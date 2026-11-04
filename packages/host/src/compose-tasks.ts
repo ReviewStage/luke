@@ -45,7 +45,6 @@ import {
   type TasksBrowserTabsAnswer,
   type TasksChangeRelationAnswer,
   type TasksCommentAnswer,
-  type TasksCommentsAnswer,
   type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
@@ -86,7 +85,7 @@ import {
   tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentStartParamsSchema,
-  tasksCommentsParamsSchema,
+  tasksCommentsFollowSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksFindParamsSchema,
@@ -181,11 +180,17 @@ import {
   type TxWait,
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
+import {
+  type CommentSubjectKey,
+  commentSubjectOf,
+  planCommentReads,
+} from "./plan-comment-reads.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections } from "./sidebar-collections.js";
 import { type AgentRow, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import { type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
+import type { WindowFocus } from "./window-focus.js";
 import {
   followSidebarRows,
   invitationsMoves,
@@ -366,7 +371,7 @@ export type TasksClient = Pick<
   | "readPageVersion"
   | "readPicture"
   | "keepPicture"
-  | "comments"
+  | "commentsLive"
   | "startComment"
   | "actOnComment"
   | "restore"
@@ -423,6 +428,8 @@ export interface TasksDependencies {
   accountId: () => string | undefined;
   /** The content this host keeps under keys it never changes under, which a picture's, a page version's, and a file's read at a commit answer from (`kept-content.ts`). */
   kept: KeptContent;
+  /** The windows coming forward, raised here as the panel's focus reaches the host and heard by every read asked again on it. */
+  focus: WindowFocus;
 }
 
 export interface TasksComposer extends Composer {
@@ -775,6 +782,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each owner's pages, one fiber standing until let go. */
   const pageHolds = yield* FiberMap.make<PageOwnerKey>();
+
+  /**
+   * Each plan's or page's comments the windows show, and the few let go
+   * latest, each as its read stands with the windows' writes laid over it,
+   * told whole on the app state every window draws
+   * (`LIVE_READ.PLAN_COMMENTS`), on the terms the pages are held.
+   */
+  const comments = yield* planCommentReads({
+    seal: (subject, userId, poll, after) =>
+      Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
+        sealed.ok
+          ? sealed.answer
+          : {
+              failure: sealed.failure,
+              gone:
+                sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                sealed.failure === LIVE_SIGNED_OUT.failure,
+            },
+      ),
+    accountId: dependencies.accountId,
+    gate,
+    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_COMMENTS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each subject's comments, one fiber standing until let go. */
+  const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
 
   /** The document of `taskId` as held now, if the held one is that task's. */
   function heldTaskOf(taskId: string): TasksDocument["task"] {
@@ -1682,9 +1714,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // The panel coming forward, which may follow GitHub connected in the
     // browser, reads the connection no oftener than the bound allows; the
-    // workspaces are followed and need no read.
+    // workspaces are followed and need no read. It is also the host's one
+    // word that a window came forward, which every read asked again on
+    // focus hears (`window-focus.ts`).
     [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
       Effect.gen(function* () {
+        yield* dependencies.focus.raise;
         if (gate()) yield* readGithubWhenStale;
         return {};
       }),
@@ -2052,17 +2087,46 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksPictureAnswer>(picture);
       }),
-    // A plan's comments are read past the window's cursor, held by the service while nothing changed.
-    [GATEWAY_METHOD.TASKS_COMMENTS]: (params) =>
+    // A plan's comments, or a page's, are held for a window while it shows
+    // them, the open task's plan's, or a page tab's beside the task or an
+    // Inbox item, and told only on the app state (`PLAN_COMMENTS_CHANGED`).
+    // Note that the windows' hold is one fiber standing until let go, so a
+    // window holding it again holds nothing anew.
+    [GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
-          tasksCommentsParamsSchema,
+          tasksCommentsFollowSchema,
           params,
-          "reading a plan's comments names the plan, the page where it reads one's, and a cursor",
+          "following comments names the task and the page where it follows one's",
         );
-        if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.comments(read.planId, read.after, read.pageId));
-        return carried<TasksCommentsAnswer>(answer);
+        const subject = commentSubjectOf(read);
+        yield* FiberMap.run(
+          commentHolds,
+          subject,
+          Effect.scoped(Effect.andThen(comments.hold(subject), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksCommentsFollowSchema,
+          params,
+          "letting comments go names the task and the page where it held one's",
+        );
+        yield* FiberMap.remove(commentHolds, commentSubjectOf(read));
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENTS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksCommentsFollowSchema,
+          params,
+          "reading comments again names the task and the page where it reads one's",
+        );
+        yield* comments.retry(commentSubjectOf(read));
+        return {};
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
       Effect.gen(function* () {
@@ -2073,6 +2137,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const answer = yield* served(client.startComment(read.planId, read.start));
+        comments.answered(read.planId, answer);
         return carried<TasksCommentAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
@@ -2084,6 +2149,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const answer = yield* served(client.actOnComment(read.planId, read.threadId, read.action));
+        comments.answered(read.planId, answer);
         return carried<TasksCommentAnswer>(answer);
       }),
     // The picture is kept and its id answered to the editor that took it;
@@ -3097,6 +3163,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // asking; GitHub's connection is read beside them where the last read is stale.
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
+      yield* comments.open;
       if (!gate()) return;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
@@ -3110,8 +3177,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
       yield* FiberHandle.clear(openedRead);
-      // Note that the windows' holds on pages stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages and comments stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
+      yield* comments.end;
       yield* FiberMap.clear(browserTabsFollows);
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);

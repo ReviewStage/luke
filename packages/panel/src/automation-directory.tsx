@@ -9,12 +9,13 @@ import { useAutomations } from "./desktop/use-automations.js";
  * An agent's summary names the automation whose run started it by id
  * alone, so the card reads it against the workspace's automations for its
  * name, schedule, and last run, and opens its page on a press. The list is
- * read only while the place holds an agent an automation started
- * (`wanted`), and each minute after, as the Automations page reads it. The window stands one around everything for
- * the listed workspace (`listed-automations.tsx`), for Home's rows and ⌘K,
- * and a place of its own, the open task or the Inbox, shares that read
- * where it is of the same workspace. Outside a directory no automation is
- * known, and an agent's card says nothing of one.
+ * held only while the place holds an agent an automation started
+ * (`wanted`), as the Automations page holds it. The window stands one
+ * around everything for the listed workspace (`listed-automations.tsx`),
+ * for Home's rows and ⌘K, and a place of its own, the open task or the
+ * Inbox, holds that read too where it is of the same workspace, which
+ * costs no second follow. Outside a directory no automation is known, and
+ * an agent's card says nothing of one.
  */
 
 /** The workspace's automations as read, which workspace's and whose they are, whether a read of them stands, and the way to one's page. */
@@ -39,10 +40,9 @@ export interface KnownAutomation {
 const ShelfContext = createContext<Shelf | undefined>(undefined);
 
 /**
- * Reads the workspace's automations for everything inside it while
- * `wanted` holds, unless a directory standing around it already
- * reads the same workspace's, whose read it shares rather than asking for a
- * second.
+ * Holds the workspace's automations for everything inside it while
+ * `wanted` holds, or while a directory standing around it holds the same
+ * workspace's.
  */
 export function AutomationDirectory({
   workspace,
@@ -59,13 +59,10 @@ export function AutomationDirectory({
 }): React.JSX.Element {
   const outer = useContext(ShelfContext);
   const workspaceId = workspace?.id;
-  const shared = outer?.reading === true && outer.workspaceId === workspaceId;
-  const reads = wanted && !shared;
-  const { read } = useAutomations(reads ? workspaceId : undefined);
-  const own = read !== undefined && "automations" in read ? read.automations : undefined;
-  const automations = shared ? outer?.automations : own;
-  const reading = reads || shared;
-  const settled = shared ? outer?.settled === true : read !== undefined;
+  const reading = wanted || (outer?.reading === true && outer.workspaceId === workspaceId);
+  const { read } = useAutomations(reading ? workspaceId : undefined);
+  const automations = read !== undefined && "automations" in read ? read.automations : undefined;
+  const settled = read !== undefined;
   const workspaceName = workspace?.name;
   const shelf = useMemo(
     () => ({ automations, workspaceId, workspaceName, reading, settled, onOpen }),

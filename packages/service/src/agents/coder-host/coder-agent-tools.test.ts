@@ -314,6 +314,14 @@ async function tasklessAgentOn(
 
 /** The id of a run, fired by hand, of an automation the account makes in the workspace. */
 async function automationRunIn(userId: string, workspaceId: string): Promise<string> {
+  return (await automationRunOf(userId, workspaceId)).runId;
+}
+
+/** A run, fired by hand, of an automation the account makes in the workspace: the run's id and the automation's. */
+async function automationRunOf(
+  userId: string,
+  workspaceId: string,
+): Promise<{ readonly runId: string; readonly automationId: string }> {
   const made = await database.run(
     createAutomation(userId, {
       organizationId: workspaceId,
@@ -326,14 +334,15 @@ async function automationRunIn(userId: string, workspaceId: string): Promise<str
       webhookSecretHash: null,
     }),
   );
+  const automation = Option.getOrThrow(made);
   const run = await database.run(
-    recordAutomationRun(Option.getOrThrow(made), {
+    recordAutomationRun(automation, {
       dedupeKey: randomUUID(),
       firing: { kind: AUTOMATION_FIRING.MANUAL },
       firedAt: new Date(NOW),
     }),
   );
-  return Option.getOrThrow(run).id;
+  return { runId: Option.getOrThrow(run).id, automationId: automation.id };
 }
 
 /** The agent the start made, its eve session recorded as the store hook records it. */
@@ -731,6 +740,48 @@ test("list_agents names every other agent of the caller's workspace, on any task
     reason: AGENT_LIST_FILTER_REFUSAL.BOTH,
   });
   assert.equal(eve.sent.length, 0, "a list sends nothing");
+});
+
+test("list_agents narrows by archive, by whose agents, by an automation's runs, and by where their task stands, refusing a starter named both ways or by no person", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(), agents.caller, eve.services);
+  const { runId, automationId } = await automationRunOf(agents.caller.userId, workspaceId);
+  const sweeper = await tasklessAgentOn(agents.caller.userId, workspaceId, runId);
+  assert.ok(
+    Option.isSome(
+      await database.run(
+        updateTask(agents.teammates.userId, tasks.billing, { status: TASK_STATUS.DONE }),
+      ),
+    ),
+  );
+  const idsOf = async (narrowed: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_AGENTS, narrowed);
+    assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
+    assert.ok(Array.isArray(listed.agents), JSON.stringify(listed));
+    return listed.agents.map((agent) => (isRecord(agent) ? agent.id : assert.fail()));
+  };
+  const bobsLink = `[@Bob](https://vespin.dev/workspace-${workspaceId}/person/${agents.teammates.userId})`;
+
+  // The caller's own task's agents come first, then the rest newest first.
+  assert.deepEqual(await idsOf({}), [agents.archived.id, sweeper.id, agents.teammates.id]);
+  assert.deepEqual(await idsOf({ archived: true }), [agents.archived.id]);
+  assert.deepEqual(await idsOf({ archived: false }), [sweeper.id, agents.teammates.id]);
+  assert.deepEqual(await idsOf({ mine: true }), [agents.archived.id, sweeper.id]);
+  assert.deepEqual(await idsOf({ startedBy: bobsLink }), [agents.teammates.id]);
+  assert.deepEqual(await idsOf({ automation: true }), [sweeper.id]);
+  assert.deepEqual(await idsOf({ automation: false }), [agents.archived.id, agents.teammates.id]);
+  assert.deepEqual(await idsOf({ automationId }), [sweeper.id]);
+  assert.deepEqual(await idsOf({ taskStatus: TASK_STATUS.DONE }), [agents.teammates.id]);
+  assert.deepEqual(await idsOf({ mine: true, archived: false }), [sweeper.id]);
+  assert.deepEqual(await call(CODER_TOOL.LIST_AGENTS, { mine: true, startedBy: bobsLink }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: AGENT_LIST_FILTER_REFUSAL.BOTH_STARTERS,
+  });
+  assert.deepEqual(await call(CODER_TOOL.LIST_AGENTS, { startedBy: "Bob" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: AGENT_LIST_FILTER_REFUSAL.NO_MEMBER,
+  });
 });
 
 test("list_agents from an agent another started names its starter first, ahead of newer agents on its own task past the list's bound, pages the rest by nextOffset, and searches the workspace by words of a title or a task's name", async () => {

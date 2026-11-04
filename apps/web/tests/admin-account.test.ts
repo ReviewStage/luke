@@ -5,7 +5,7 @@ import {
   ADMIN_PULL_REQUEST,
   ADMIN_WORKSPACE_KIND,
 } from "@repo/features/admin-account-wire";
-import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
+import type { AdminActionDay, AdminUserDetail } from "@repo/features/admin-answer-wire";
 import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@repo/features/integration-row-wire";
@@ -21,7 +21,8 @@ import { underWebAdminDoors } from "./support/admin-doors";
 /**
  * admin-account.test.ts -- one account's page names the account, marks an
  * admin in words, says when it joined, was last seen, and how it signs in,
- * states its daily use and its volume under their own headings, lays out
+ * leads with its activity by meaningful actions, keeps the retired hosted
+ * tier's daily use and volume last, lays out
  * what a maintainer supports it from (its work, agents, workspaces, keys and
  * connections, defaults, and failures), and leads its toolbar with the way
  * back to the users, which moves in place, loading or loaded. The network,
@@ -32,7 +33,23 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ID = "account-ada";
 
-/** A synthetic admin account read on a fixed day, with a week of hosted use. */
+/**
+ * The account's trailing year of actions, as the read folds it: one task on
+ * Jan 7, then a task and an agent on each of the last nine days, ending on
+ * the fixed day. Every figure below is worked from it by hand.
+ */
+const ACTIONS_YEAR: AdminActionDay[] = Array.from({ length: 371 }, (_, index) => {
+  const day = new Date(Date.UTC(2026, 9, 14 - 370 + index)).toISOString().slice(0, 10);
+  const streak = index >= 362;
+  return {
+    day,
+    tasksCreated: streak || day === "2026-01-07" ? 1 : 0,
+    planRevisions: 0,
+    agentsStarted: streak ? 1 : 0,
+  };
+});
+
+/** A synthetic admin account read on a fixed day, with two days of actions and of hosted use. */
 function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserDetail {
   return {
     generatedAt: Date.UTC(2026, 9, 14, 12),
@@ -46,6 +63,19 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
       createdAt: Date.UTC(2026, 0, 5),
       signInMethods: ["github", "google"],
       ...overrides,
+    },
+    actions: {
+      daily: ACTIONS_YEAR.slice(-30),
+      calendarDaily: ACTIONS_YEAR.map((day) => ({
+        day: day.day,
+        count: day.tasksCreated + day.planRevisions + day.agentsStarted,
+      })),
+      actionsTrend: { days: 7, recent: 14, prior: 4 },
+      activeDaysWindow: 9,
+      activeDaysTrend: { days: 7, recent: 7, prior: 2 },
+      currentStreakDays: 9,
+      firstActiveDay: "2026-01-07",
+      lastActiveDay: "2026-10-14",
     },
     activity: {
       daily: [
@@ -270,15 +300,43 @@ test("an account that is no admin and links no provider says neither", async () 
   expect(page.textContent).toContain("Joined Jan 5, 2026");
 });
 
+/** The section the heading `title` names. */
+function section(page: HTMLElement, title: string): HTMLElement {
+  const found = Array.from(page.querySelectorAll("section")).find(
+    (candidate) => candidate.querySelector("h2")?.textContent === title,
+  );
+  if (found === undefined) throw new Error(`no section headed ${title}`);
+  return found;
+}
+
+test("the account's activity by meaningful actions leads the page", async () => {
+  const { page } = await openAccount(answer(detail()));
+
+  expect(headings(page, "h2")[0]).toBe("Activity");
+  const activity = section(page, "Activity");
+  expect(activity.textContent).toContain("Active days · 30 days9of 30 window days");
+  expect(activity.textContent).toContain("Current streak9 days");
+  expect(activity.textContent).toContain("Active days · 7 days72 the week before");
+  expect(activity.textContent).toContain("Last activeOct 14first active Jan 7");
+  expect(activity.textContent).toContain("14 in the last 7 days, against 4 before");
+  for (const kind of ["Tasks created", "Plan revisions", "Agents started"]) {
+    expect(activity.textContent).toContain(kind);
+  }
+  expect(
+    activity.querySelector('[aria-label="Oct 14 (so far today) — 2 meaningful actions"]'),
+  ).not.toBeNull();
+});
+
 test("the account's hosted-tier use stands last, under a retired heading", async () => {
   const { page } = await openAccount(answer(detail()));
 
   expect(headings(page, "h2").at(-1)).toBe("Hosted tier · retired");
-  expect(page.textContent).toContain("Active days · 30 days12of 30 window days");
-  expect(page.textContent).toContain("Current streak1 day");
-  expect(page.textContent).toContain("Last activeOct 14first active Jan 6");
-  expect(page.textContent).toContain("Hosted calls · 30 days1,234,5672,345,678 all time");
-  expect(page.textContent).toContain("Active days · all time48");
+  const hosted = section(page, "Hosted tier · retired");
+  expect(hosted.textContent).toContain("Active days · 30 days12of 30 window days");
+  expect(hosted.textContent).toContain("Current streak1 day");
+  expect(hosted.textContent).toContain("Last activeOct 14first active Jan 6");
+  expect(hosted.textContent).toContain("Hosted calls · 30 days1,234,5672,345,678 all time");
+  expect(hosted.textContent).toContain("Active days · all time48");
 });
 
 test("the support sections say what the account did and what broke, by the service's own words", async () => {

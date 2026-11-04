@@ -276,6 +276,7 @@ function transcriptAnswer(
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.ranDirectly === undefined ? undefined : { ranDirectly: page.ranDirectly }),
+    ...(page.hostLost === undefined ? undefined : { hostLost: page.hostLost }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
     ...(page.queue === undefined ? undefined : { queue: page.queue }),

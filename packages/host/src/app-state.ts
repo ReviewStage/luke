@@ -2,11 +2,18 @@ import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { AgentOrigin } from "@repo/features/agent-wire";
+import type {
+  AutomationRunSummary,
+  AutomationSummary,
+  AutomationWorkspaceRun,
+} from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
-import type { TasksView } from "@repo/features/tasks-view";
+import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import type { MicrophoneRoute, MicrophoneStatus } from "@repo/settings/microphone";
@@ -342,6 +349,73 @@ export type AppChapters = Readonly<
 
 /** No chapters held, as the host stands before any window shows a pull request's and after the session ends. */
 export const NO_CHAPTERS: AppChapters = {};
+/** One of the account's own devices' last beat, at the host's instant: its age as the service answered it, taken from the host's clock as the answer landed. */
+interface AppDeviceBeat {
+  deviceId: string;
+  beatAt: number;
+}
+
+/**
+ * The account's own devices' last beats as the host last asked for them
+ * (`compose-agents.ts`): each beat at the host's instant, so a window ages
+ * it on its own clock, which is the host's machine's; and the instant of
+ * the latest ask, which moves with every ask, so a surface judging the beats
+ * by the clock draws again as often as they are asked. Where the latest ask
+ * failed after one had answered, the beats it answered stand and say so
+ * (`stale`), since a window that could not ask must not say a device is away.
+ */
+export interface AppDevicePresence {
+  beats: readonly AppDeviceBeat[];
+  askedAt: number;
+  stale?: true;
+}
+
+/** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
+export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
+
+/** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
+export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
+
+/** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
+export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
+
+/**
+ * One read the host holds for the windows by one id, as each held as its
+ * own read stands: those a window chose, and the few let go lately. One
+ * absent is held by nobody.
+ */
+export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
+
+/** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
+export type AppAutomationReads = Pick<
+  AppState,
+  | typeof LIVE_READ.AUTOMATIONS
+  | typeof LIVE_READ.AUTOMATION_WORKSPACE_RUNS
+  | typeof LIVE_READ.AUTOMATION_RUNS
+>;
+
+/** What a task's comment threads stand on: its plan, or one of its pages. */
+type CommentSubjectKind = (typeof COMMENT_SUBJECT)[keyof typeof COMMENT_SUBJECT];
+
+/** One subject's comment threads, as the host's read of them stands: every thread, the oldest started first, resolved ones among them, once it answered, with the windows' writes laid over them until the read holds them. */
+type AppSubjectComments = AppHostRead<readonly PlanCommentThread[]>;
+
+/**
+ * Each task's comments the host holds for the windows
+ * (`plan-comment-reads.ts`): a plan's own threads by its task's id, and a
+ * page's by the page's id, never its version, those a window chose and the
+ * few let go lately, each as its own read stands. One absent is held by
+ * nobody.
+ */
+export type AppPlanComments = {
+  readonly [Kind in CommentSubjectKind]: Readonly<Record<string, AppSubjectComments>>;
+};
+
+/** No comments held, as the host stands before any window shows a plan or a page and after the session ends. */
+export const NO_PLAN_COMMENTS: AppPlanComments = {
+  [COMMENT_SUBJECT.PLAN]: {},
+  [COMMENT_SUBJECT.PAGE]: {},
+};
 
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
@@ -350,6 +424,12 @@ export interface AppHostReads {
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
+  [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
+  [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
+  [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
+  [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
 }
 
 /**
@@ -446,6 +526,18 @@ export interface AppState {
   [LIVE_READ.PAGES]: AppPages;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
+  /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
+  [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
+  [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
+  /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
+  [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;
+  /** Each workspace's runs the windows chose, by the workspace, newest fired first, held as the automations are: what the Runs tab and the sidebar's Automations row read. */
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: AppHeldById<readonly AutomationWorkspaceRun[]>;
+  /** Each automation's runs the windows chose, by the automation, newest fired first, held as the automations are: what its editor and an agent its run started read. */
+  [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
+  /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
+  [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -462,6 +554,12 @@ export interface AppState {
  */
 export interface AppWindowFacts {
   fullScreen: boolean;
+  /**
+   * Whether a development build's label, the branch it was cut from, is
+   * hidden for now, as View > Developer > Show Build Label leaves it for a
+   * demo; absent while it is drawn, and in every build that draws none.
+   */
+  buildLabelHidden?: boolean;
 }
 
 /**
@@ -560,6 +658,11 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PLAN_COMMENTS]: {
+    keys: READ_KEYS.TWO,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof PlanCommentThread,
+  },
   tasks: {
     keys: READ_KEYS.PARTS,
     on: KEYS_ON.SLICE,
@@ -570,6 +673,23 @@ export const HOST_READ_SLICE = {
       taskPullRequests: "taskId" satisfies keyof TasksRows<"taskPullRequests">[number],
       agentPullRequests: "agentId" satisfies keyof TasksRows<"agentPullRequests">[number],
     } satisfies { readonly [Part in keyof TasksView]?: string },
+  },
+  [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.AUTOMATIONS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationSummary,
+  },
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationWorkspaceRun,
+  },
+  [LIVE_READ.AUTOMATION_RUNS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AutomationRunSummary,
   },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 

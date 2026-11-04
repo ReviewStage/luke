@@ -67,7 +67,6 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
-  type AgentWorkspaceToolsAnswerView,
   agentAccountInboxAnswerViewSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
@@ -95,13 +94,10 @@ import {
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
-  agentWorkspaceToolsAnswerViewSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
-  type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
-  devicePresenceAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
@@ -127,18 +123,11 @@ import {
   type AutomationCreateParams,
   type AutomationDeletedView,
   type AutomationFollow,
-  type AutomationFollowed,
   type AutomationIdParams,
-  type AutomationListParams,
-  type AutomationListView,
   type AutomationRunParams,
-  type AutomationRunsView,
   type AutomationRunView,
   type AutomationView,
   automationDeletedViewSchema,
-  automationFollowedSchema,
-  automationListViewSchema,
-  automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
 } from "@repo/features/automation-view";
@@ -230,8 +219,7 @@ import {
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
-  type TasksCommentsAnswer,
-  type TasksCommentsParams,
+  type TasksCommentsFollow,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -310,7 +298,6 @@ import {
   tasksBrowserTabsAnswerSchema,
   tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
-  tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksFindAnswerSchema,
@@ -388,11 +375,15 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAgentOrigins,
+  AppAutomationReads,
   AppChapters,
+  AppDevicePresences,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
   AppPages,
+  AppPlanComments,
+  AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
 import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
@@ -545,8 +536,14 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's comment threads past a cursor, held by the service while nothing changed; or why there are none. */
-  tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One held plan's or page's comments read again at once, as Try again asks. */
+  tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
+  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
   /** A comment thread started on one task's plan, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
@@ -677,7 +674,14 @@ export interface HostOperator {
   agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts, as Settings lists them; or why there is no list. */
   hostsList(): Effect.Effect<HostsAnswerView>;
-  hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
+  /** The account's devices' beats held for the windows from now until let go, asked again every `MAC_PRESENCE.POLL_MS` while held; what they hold is heard through `onDevicePresenceChanged`. */
+  hostsPresenceFollow(): Effect.Effect<void>;
+  /** The account's devices' beats let go by the windows. */
+  hostsPresenceUnfollow(): Effect.Effect<void>;
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  hostsPresenceRefresh(): Effect.Effect<void>;
+  /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
+  onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
   /** A box's pending pairing read by the code its link named; the box, or why not. */
@@ -721,8 +725,6 @@ export interface HostOperator {
   agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
   /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
   onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
-  /** The account's automations, or one task's or one workspace's; or why there are none. */
-  automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
   automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
   /** One automation changed; the automation as it then stands, or why it is unchanged. */
@@ -731,16 +733,16 @@ export interface HostOperator {
   automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
   /** One automation run now under the window's key; the run as it came out, or why there is none. */
   automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
-  /** One automation's runs, newest first; or why there are none. */
-  automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
-  /** A workspace's automations, or an automation's runs, followed from now until let go or signed out, heard through `onAutomationsChanged`; following again starts over. */
+  /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
   automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A followed list or history let go: nothing more is heard of it until it is followed again. */
+  /** A held list or history let go, kept followed a while among those let go lately. */
   automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A followed list or history as it now stands, each time it moves while followed. */
-  onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
+  /** A held list or history read again at once, as Try again asks. */
+  automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
+  /** One of the automations' held reads, whole, by its name, each time any of its keys moves. */
+  onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
@@ -807,8 +809,14 @@ export interface HostOperator {
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
-  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
-  agentWorkspaceTools(params: AgentPullRequestParams): Effect.Effect<AgentWorkspaceToolsAnswerView>;
+  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
+  agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** One agent's own tools let go by the windows. */
+  agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
+  agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
+  /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
+  onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -1015,6 +1023,13 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
+/** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
+function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
+  return scope.pageId === undefined
+    ? { taskId: scope.taskId }
+    : { taskId: scope.taskId, pageId: scope.pageId };
+}
+
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
@@ -1353,14 +1368,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
         answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksComments: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
-          planId: params.planId,
-          ...(params.pageId === undefined ? undefined : { pageId: params.pageId }),
-          after: params.after,
-        }),
-        answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),
+    tasksCommentsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
+    tasksCommentsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
+    tasksCommentsRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
+    onPlanCommentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        listener,
       ),
     tasksCommentStart: (params) =>
       Effect.map(
@@ -1745,10 +1764,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.HOSTS_LIST),
         answerOf(hostsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    hostsPresence: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_PRESENCE),
-        answerOf(devicePresenceAnswerViewSchema, AGENT_UNANSWERED),
+    hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
+    hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
+    hostsPresenceRefresh: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH, {})),
+    onDevicePresenceChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
+        // Note that the held beats are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
+        listener,
       ),
     hostsRemove: (id) =>
       Effect.map(
@@ -1899,11 +1923,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
         listener,
       ),
-    automationList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, params),
-        answerOf(automationListViewSchema, AUTOMATION_UNANSWERED),
-      ),
     automationCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
@@ -1924,11 +1943,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
         answerOf(automationRunViewSchema, AUTOMATION_UNANSWERED),
       ),
-    automationRuns: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, params),
-        answerOf(automationRunsViewSchema, AUTOMATION_UNANSWERED),
-      ),
     automationNewWebhookSecret: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
@@ -1936,13 +1950,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
     automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
+    automationsRetry: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_RETRY, scope)),
     onAutomationsChanged: (listener) =>
       on(
         GATEWAY_EVENT.AUTOMATIONS_CHANGED,
+        // Note that the held reads are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) =>
-          Result.getOrUndefined(
-            readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+          isRecord(payload) ? answered<Partial<AppAutomationReads>>(payload) : undefined,
         listener,
       ),
     agentPullRequest: (params) =>
@@ -2076,10 +2090,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
         answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentWorkspaceTools: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS, { agentId: params.agentId }),
-        answerOf(agentWorkspaceToolsAnswerViewSchema, AGENT_UNANSWERED),
+    agentWorkspaceToolsFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),
+    agentWorkspaceToolsUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_UNFOLLOW, { agentId: params.agentId }),
+      ),
+    agentWorkspaceToolsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId: params.agentId })),
+    onWorkspaceToolsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED,
+        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
+        listener,
       ),
     agentOverviewChecks: (params) =>
       Effect.map(

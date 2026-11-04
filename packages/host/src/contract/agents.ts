@@ -55,8 +55,6 @@ import {
   agentTranscriptOlderAnswerSchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
-  agentWorkspaceToolsAnswerViewSchema,
-  devicePresenceAnswerViewSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   hostsAnswerViewSchema,
@@ -104,11 +102,17 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.HOSTS_LIST]: actProcedure("Could not read your hosts on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(hostsAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_PRESENCE]: actProcedure(
-    "Could not read your devices' beats on this system.",
+  // Note that the hold's stream carries nothing: the held beats reach the panel on app state, and the stream is the window's hold on them.
+  [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actProcedure(
+    "Could not follow your devices' beats on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(devicePresenceAnswerViewSchema)),
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH]: actProcedure(
+    "Could not read your devices' beats again on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
@@ -222,11 +226,17 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]: actProcedure(
-    `Could not read the agent's ${PRODUCT_NAME} tools on this system.`,
+  // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actProcedure(
+    `Could not follow the agent's ${PRODUCT_NAME} tools on this system.`,
   )
     .input(exactInput(agentPullRequestParamsSchema))
-    .output(EffectSchema.flip(agentWorkspaceToolsAnswerViewSchema)),
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY]: actProcedure(
+    `Could not read the agent's ${PRODUCT_NAME} tools again on this system.`,
+  )
+    .input(exactInput(agentPullRequestParamsSchema))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actProcedure(
     "Could not read the pull request's checks on this system.",
   )

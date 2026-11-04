@@ -3,25 +3,31 @@
  */
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
+  type AppAutomationReads,
   type AppChapters,
+  type AppDevicePresence,
   type AppHolderInboxes,
   type AppHolderPages,
   type AppHostRead,
   type AppInboxItems,
   type AppPages,
+  type AppPlanComments,
   type AppStateDelivery,
   type AppStateSnapshot,
   NO_AGENT_ORIGINS,
   NO_CHAPTERS,
   NO_HOLDER_INBOXES,
+  NO_KEYS_HELD,
   NO_PAGES,
+  NO_PLAN_COMMENTS,
   UNREAD,
 } from "@repo/host/app-state";
-import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
+import { AUTOMATION_ACT_KIND, SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
@@ -34,6 +40,7 @@ import {
   fakeActPortCalls,
   fakeAppBridge,
   fakeAppBridgeCalls,
+  heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
 
@@ -77,6 +84,12 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
+    [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -168,6 +181,8 @@ export interface HostReadsHanded {
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
   readonly deliverChapters: (next: AppChapters) => void;
+  readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
+  readonly deliverComments: (next: AppPlanComments) => void;
 }
 
 /**
@@ -210,6 +225,94 @@ export function handHostReads(first: {
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
+    deliverAutomations: (next) => deliver(next),
+    deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
+  };
+}
+
+/** The automations' read each kind of hold names, by the kind. */
+const AUTOMATIONS_READ_OF = {
+  [AUTOMATION_FOLLOW.WORKSPACE]: LIVE_READ.AUTOMATIONS,
+  [AUTOMATION_FOLLOW.RUNS]: LIVE_READ.AUTOMATION_RUNS,
+  [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+} as const satisfies Record<AutomationFollow["kind"], keyof AppAutomationReads>;
+
+/** What a test's host reads of each of the automations' holds, by its kind: the key's read, none while it answers nothing. */
+export type AutomationReadsOf = {
+  readonly [Kind in AutomationFollow["kind"]]?: (
+    id: string,
+  ) => AppAutomationReads[(typeof AUTOMATIONS_READ_OF)[Kind]][string] | undefined;
+};
+
+/** One hold the window asked of the automations' reads, and whether it has let it go. */
+export interface AutomationsHold {
+  readonly held: AutomationFollow;
+  closed: boolean;
+}
+
+/**
+ * Answers the window's holds on the automations' reads as the host does,
+ * beside whatever acts the test answers by now: each key `readsOf`
+ * answers laid on the document through `deliver` as it is held, as a
+ * window opened anew draws it where it stands, and again as Try again
+ * reads it, and every key held since laid again as `lay` asks, as the host
+ * lays a read that moved, each staying laid once let go; a read that
+ * fails over rows keeps them, as the host keeps them. Answers with every
+ * hold asked for, in order, and every read asked for, by a hold or a Try
+ * again, in order.
+ */
+export function holdAutomations(
+  deliver: HostReadsHanded["deliverAutomations"],
+  readsOf: AutomationReadsOf,
+): {
+  readonly holds: readonly AutomationsHold[];
+  readonly asked: readonly AutomationFollow[];
+  readonly lay: () => void;
+} {
+  const holds: AutomationsHold[] = [];
+  const asked: AutomationFollow[] = [];
+  const laid: Record<keyof AppAutomationReads, Readonly<Record<string, object>>> = {
+    [LIVE_READ.AUTOMATIONS]: {},
+    [LIVE_READ.AUTOMATION_RUNS]: {},
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: {},
+  };
+  /** Lays the key's read as the test's host reads it now, answering whether it read any. */
+  const layKey = ({ kind, id }: AutomationFollow) => {
+    const read = readsOf[kind]?.(id);
+    if (read === undefined) return false;
+    const slice = AUTOMATIONS_READ_OF[kind];
+    const held: { readonly rows?: unknown } | undefined = laid[slice][id];
+    if (read.rows === undefined && held?.rows !== undefined) return false;
+    laid[slice] = { ...laid[slice], [id]: read };
+    return true;
+  };
+  // SAFETY: each read's keys hold what its kind's `readsOf` answered, which is that read's (`AutomationReadsOf`).
+  const delivered = () => deliver({ ...laid } as Partial<AppAutomationReads>);
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: (held) => {
+      const hold: AutomationsHold = { held, closed: false };
+      holds.push(hold);
+      asked.push(held);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      if (layKey(held)) void Promise.resolve().then(delivered);
+      return heldUntilClosed(() => {
+        hold.closed = true;
+      });
+    },
+    [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: (held) => {
+      asked.push(held);
+      if (layKey(held)) delivered();
+      return Promise.resolve();
+    },
+  });
+  return {
+    holds,
+    asked,
+    lay: () => {
+      for (const { held } of holds) layKey(held);
+      delivered();
+    },
   };
 }
 
@@ -250,4 +353,52 @@ export function handInboxItems(
   first: AppHostRead<AppInboxItems>,
 ): (next: AppHostRead<AppInboxItems>) => void {
   return handHostReads({ items: first }).deliverItems;
+}
+
+/** The id the account a test's beats are held for goes by, where the document handed names none. */
+const BEATING_ACCOUNT_ID = "user-beating";
+
+/**
+ * Lays the signed-in account's beats as the host holds them over whatever
+ * document the window was handed: each device named having beat `ageMs` ago
+ * on the window's clock, by a read that landed `askedAgoMs` ago (now where
+ * not given), the latest ask failed after it as `stale` says, or, where none
+ * are given, the read failed before it ever answered. The account
+ * is given an id where the document names none, since the beats are held by
+ * it.
+ */
+export function handBeats(
+  ages: Readonly<Record<string, number>> | undefined,
+  { askedAgoMs = 0, ...options }: { readonly stale?: true; readonly askedAgoMs?: number } = {},
+): void {
+  const handed = fakeAppBridgeCalls().requestAppState;
+  const now = Date.now();
+  const read: AppHostRead<AppDevicePresence> =
+    ages === undefined
+      ? { failed: true }
+      : {
+          rows: {
+            beats: Object.entries(ages).map(([deviceId, ageMs]) => ({
+              deviceId,
+              beatAt: now - ageMs,
+            })),
+            askedAt: now - askedAgoMs,
+            ...options,
+          },
+        };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: fakeAppBridgeCalls().onAppState ?? (() => () => undefined),
+    requestAppState: async () => {
+      const snapshot = handed === undefined ? snapshotWith({}) : await handed();
+      const { account } = snapshot;
+      if (account.status !== ACCOUNT_STATUS.SIGNED_IN) return snapshot;
+      const id = account.id ?? BEATING_ACCOUNT_ID;
+      return {
+        ...snapshot,
+        account: { ...account, id },
+        [LIVE_READ.DEVICE_PRESENCE]: { [id]: read },
+      };
+    },
+  });
 }

@@ -266,7 +266,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
 const read = (userId: string) =>
   Effect.map(
     readAdminAccountSource({ userId, now: NOW, windowDays: ADMIN_METRICS_WINDOW.MONTH }),
-    (source) => buildAdminAccountSupport(source, NOW, WINDOW_START, null),
+    (source) => buildAdminAccountSupport(source, NOW, WINDOW_START),
   );
 
 it.layer(getTestDB())("one account's support sections", (it) => {

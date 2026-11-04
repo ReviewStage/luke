@@ -303,9 +303,28 @@ export const DEVICE_BEAT = {
 export const MAC_PRESENCE = {
   /** How lately a device must have beaten to count as there: `MISSED_BEATS` beats' time. */
   FRESH_MS: DEVICE_BEAT.EVERY_MS * DEVICE_BEAT.MISSED_BEATS,
-  /** How often a window reads the beats of the devices it draws: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
+  /** How often the host reads the beats of the account's devices while a window draws them: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
+  /**
+   * How long one read of the beats may take before it counts as failed: past
+   * the hosted call's own ten-second deadline, so an answer that is merely
+   * slow still lands, and short enough that a wedged read (a body that never
+   * ends, a credential renewed and asked again) says unknown well inside a
+   * poll rather than letting every device age past `FRESH_MS` meanwhile.
+   */
+  READ_TIMEOUT_MS: 12_000,
 } as const;
+
+/**
+ * How long the latest read of the beats stands as evidence that a device is
+ * away: the next read is asked `POLL_MS` after one and lands, or fails, within
+ * `READ_TIMEOUT_MS`, so a read older than both together was not followed by
+ * one the window heard. It is the window that could not ask then (a timer
+ * throttled while hidden, a sleep, a read wedged past its bound), not the
+ * device that went quiet, and a window that cannot ask must not say a device
+ * is away.
+ */
+export const PRESENCE_READ_STANDS_MS = MAC_PRESENCE.POLL_MS + MAC_PRESENCE.READ_TIMEOUT_MS;
 
 /**
  * A device's lease on the runs it holds: its beat is the lease, renewed every
@@ -321,7 +340,7 @@ export const DEVICE_LEASE = {
 export const DEVICE_STANDING = {
   ONLINE: "online",
   OFFLINE: "offline",
-  /** The last beat is too old to say it is there and the read that would say otherwise failed, so nothing is known. */
+  /** The last beat is too old to say it is there, and no read the window heard lately says it is away: the read failed, or is late. */
   UNKNOWN: "unknown",
   /** The first read of the beats is still out. */
   CHECKING: "checking",
@@ -329,16 +348,30 @@ export const DEVICE_STANDING = {
 
 export type DeviceStanding = (typeof DEVICE_STANDING)[keyof typeof DEVICE_STANDING];
 
+/** A device's last beat as a window holds it, on that window's own clock: how long ago it beat, and how long ago the read that told it landed. */
+export interface BeatReading {
+  readonly sinceBeatMs: number;
+  readonly sinceReadMs: number;
+}
+
 /**
- * Where a device stands given how long ago it last beat on the service's own
- * clock (`ageMs`, none where the service named no beat): online within
- * `MAC_PRESENCE.FRESH_MS`; otherwise unknown where the latest read failed
- * (`readFailed`), since a window that cannot ask must not say a device is
- * away, and offline where it did not.
+ * Where a device stands given its last beat (`BeatReading`): online while
+ * that beat is within `MAC_PRESENCE.FRESH_MS` now; otherwise unknown where
+ * the latest read failed (`readFailed`), and offline only on evidence, a read
+ * that landed within `PRESENCE_READ_STANDS_MS` and already found the beat
+ * past `FRESH_MS` as it was answered. A beat that aged past `FRESH_MS` only on
+ * the window's own reckoning since the read, or a read too old to stand, is
+ * unknown, since a window that cannot ask must not say a device is away: a
+ * read late or slow, a throttled timer, or a beat that came late though the
+ * service still takes a start on the device.
  */
-export function deviceStanding(ageMs: number | undefined, readFailed: boolean): DeviceStanding {
-  if (ageMs !== undefined && ageMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
-  return readFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
+export function deviceStanding(beat: BeatReading, readFailed: boolean): DeviceStanding {
+  if (beat.sinceBeatMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
+  if (readFailed) return DEVICE_STANDING.UNKNOWN;
+  const ageAtRead = beat.sinceBeatMs - beat.sinceReadMs;
+  return beat.sinceReadMs <= PRESENCE_READ_STANDS_MS && ageAtRead > MAC_PRESENCE.FRESH_MS
+    ? DEVICE_STANDING.OFFLINE
+    : DEVICE_STANDING.UNKNOWN;
 }
 
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
@@ -2452,6 +2485,14 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * from a service older than it.
    */
   ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
+  /**
+   * The host a failed agent's run was lost with, by its name, where the
+   * host stopped beating while its turn ran and the run was taken from it.
+   * Its `failureReason` is `other`, which a panel older than this key words
+   * as a run that ended without saying why; absent for every other failure,
+   * and from a service older than it.
+   */
+  hostLost: EffectSchema.optionalKey(EffectSchema.Struct({ host: EffectSchema.String })),
   usage: EffectSchema.optionalKey(agentUsageSchema),
   /**
    * Who pays for the agent (`AGENT_PAYER`), as its row recorded it at

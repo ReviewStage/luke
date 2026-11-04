@@ -70,18 +70,18 @@ export const ACCOUNT_ASK_ACT_KIND = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
 } as const;
 
-/** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
+/** The Automations pages' asks: the account's automations made, changed, deleted, and run now, and a workspace's automations, its runs, or one's runs held and read again. */
 export const AUTOMATION_ACT_KIND = {
-  AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
-  AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  /** A workspace's automations, its runs, or one's runs held for the window while it holds the stream open; what they hold reaches it on app state. */
   AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A held list or history read again at once, as Try again asks. */
+  AUTOMATIONS_RETRY: "automations.retry",
 } as const;
 
 /**
@@ -107,11 +107,20 @@ export const AGENT_ACT_KIND = {
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts as Settings › Hosts reads and changes
-   * them: listed, the beats of the account's devices read, and one removed; and a box's pairing, by the code its link
+   * them: listed, the beats of the account's devices held, and one removed; and a box's pairing, by the code its link
    * named, read, approved, or denied.
    */
   HOSTS_LIST: "hosts.list",
-  HOSTS_PRESENCE: "hosts.presence",
+  /**
+   * When the account's own devices last beat, held for the window while it
+   * holds the stream open and a while after among those let go lately, asked
+   * again every `MAC_PRESENCE.POLL_MS` while held: what it holds reaches the
+   * panel on app state (`LIVE_READ.DEVICE_PRESENCE`), so the stream carries
+   * nothing.
+   */
+  HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
+  /** The beats a window holds asked again now, as the window comes back online. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
@@ -167,7 +176,15 @@ export const AGENT_ACT_KIND = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /**
+   * Our own tools one agent is offered, held for the window while it holds
+   * the stream open and a while after among those let go lately, asked again
+   * as a window comes forward: what it holds reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_TOOLS`), so the stream carries nothing.
+   */
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
+  /** One agent's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
+  AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -390,11 +407,14 @@ export const TASKS_ACT_KIND = {
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * The open plan's comment threads: read past a cursor (held open by the
-   * service while nothing changed), one started on words of the plan, and
-   * one thing done to one thread. The window holds what it draws.
+   * A task's comment threads, its plan's own or one page's: held followed
+   * while a window shows them, what they hold reaching the panel on app
+   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
+   * one started on words of the plan or on a page, and one thing done to
+   * one thread, each answered with the thread as it stands.
    */
-  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
 } as const;
@@ -643,7 +663,8 @@ export const PORT_ACT_USE = {
   AGENTS_DEFAULT_READ: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
   HOSTS_LIST: ACT_USE.READ,
-  HOSTS_PRESENCE: ACT_USE.READ,
+  HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
+  HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.READ,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
@@ -674,7 +695,8 @@ export const PORT_ACT_USE = {
   AGENTS_CHANGES: ACT_USE.FETCH,
   AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
   AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
-  AGENTS_WORKSPACE_TOOLS: ACT_USE.READ,
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
+  AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
   AGENTS_OVERVIEW_CHECKS: ACT_USE.READ,
   AGENTS_OVERVIEW_CONVERSATION: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
@@ -694,14 +716,13 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
   AGENTS_PICTURE: ACT_USE.FETCH,
 
-  AUTOMATIONS_LIST: ACT_USE.READ,
   AUTOMATIONS_CREATE: ACT_USE.WRITE,
   AUTOMATIONS_CHANGE: ACT_USE.WRITE,
   AUTOMATIONS_DELETE: ACT_USE.WRITE,
   AUTOMATIONS_RUN: ACT_USE.WRITE,
-  AUTOMATIONS_RUNS: ACT_USE.READ,
   AUTOMATIONS_NEW_WEBHOOK_SECRET: ACT_USE.WRITE,
   AUTOMATIONS_FOLLOW: ACT_USE.READ,
+  AUTOMATIONS_RETRY: ACT_USE.READ,
 
   BROWSER_LIVE_ATTACH: ACT_USE.WRITE,
   BROWSER_LIVE_DETACH: ACT_USE.WRITE,
@@ -780,7 +801,8 @@ export const PORT_ACT_USE = {
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,
-  TASKS_COMMENTS: ACT_USE.READ,
+  TASKS_COMMENTS_FOLLOW: ACT_USE.READ,
+  TASKS_COMMENTS_RETRY: ACT_USE.READ,
   TASKS_COMMENT_START: ACT_USE.WRITE,
   TASKS_COMMENT_ACT: ACT_USE.WRITE,
 

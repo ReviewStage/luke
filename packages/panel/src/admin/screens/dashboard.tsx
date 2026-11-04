@@ -21,6 +21,8 @@ import { ActivityChart, ActivityChartSkeleton } from "../charts/activity-chart.j
 import { CHART_PAIR_WIDE, TrendMove } from "../charts/chart-frame.js";
 import { RetentionGrid, RetentionGridSkeleton } from "../charts/retention-grid.js";
 import {
+  AgentOriginsChart,
+  AgentOriginsChartSkeleton,
   FunnelChart,
   FunnelChartSkeleton,
   ReachChart,
@@ -29,7 +31,13 @@ import {
 import { SignupsChart, SignupsChartSkeleton } from "../charts/signups-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
-import { ActivityNote, RetentionNote, retiredTitle, TopAccountsNote } from "../chrome/notes.js";
+import {
+  ActivityNote,
+  AgentOriginsNote,
+  RetentionNote,
+  retiredTitle,
+  TopAccountsNote,
+} from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
@@ -140,10 +148,6 @@ const HEADLINE_STATS: readonly StatSpec<AdminOverview["headline"]>[] = [
     "agents-started",
     (headline) => `Agents started · ${headline.activeDevelopers.days} days`,
     (headline) => headline.agentsStarted,
-    ({ agentsStarted, agentsFromAutomations }) =>
-      agentsStarted.recent === 0
-        ? undefined
-        : `${percentOf(agentsFromAutomations, agentsStarted.recent)} from automations`,
   ),
   trendTile(
     "prs-merged",
@@ -178,13 +182,18 @@ function DashboardSections({
     windowDays: metrics?.windowDays ?? windowDays,
     minWidth: ACCOUNTS_TABLE_MIN_WIDTH.ROSTER,
     onOpen: onOpenAccount,
-    hostedColumns: false,
     trailingColumns: OVERVIEW_ACCOUNT_COLUMNS,
   };
   return (
     <>
       <AdminSection title="This week">
         <StatCards layout={STAT_LAYOUT.GROUP} stats={HEADLINE_STATS} data={overview?.headline} />
+        {overview === undefined ? (
+          <AgentOriginsChartSkeleton />
+        ) : (
+          <AgentOriginsChart origins={overview.agentOrigins} />
+        )}
+        <AgentOriginsNote />
       </AdminSection>
 
       <AdminSection title="Activity by feature">

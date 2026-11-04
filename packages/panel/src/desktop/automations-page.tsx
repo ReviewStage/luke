@@ -16,7 +16,6 @@ import type { AutomationScope, AutomationSummary } from "@repo/features/automati
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { momentText } from "@repo/features/time-format";
-import { REFRESH_FAILED_WORDS } from "@repo/features/words";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -606,7 +605,7 @@ function ListPage({
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, refreshFailed, reload, toggle, remove } = automations;
+  const { read, reload, toggle, remove } = automations;
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
@@ -642,12 +641,6 @@ function ListPage({
         )
       }
     >
-      {/* A refresh that failed after the list was read leaves it drawn, with a line over it. */}
-      {refreshFailed ? (
-        <ErrorState failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_REFRESH)} onRetry={reload}>
-          {REFRESH_FAILED_WORDS}
-        </ErrorState>
-      ) : null}
       {groups.length === 0 ? (
         <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>

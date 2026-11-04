@@ -13,7 +13,9 @@
  * follower from before the kind fails its whole held read on one; an agent
  * in a sandbox is asked nothing. An agent unarchived after its discard
  * launches again on a fresh worktree of the shared clone, so what it never
- * pushed is gone with its folder.
+ * pushed is gone with its folder, but for the salvage a host writes on the
+ * box of a folder it kept a week for that work (`@repo/host`'s
+ * `local-agent-salvage.ts`).
  */
 
 import { type Agent, readAgent } from "@repo/database/models/agent-store";

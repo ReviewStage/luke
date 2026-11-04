@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
-import { agentUnsavedWorkScript, agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
+import {
+  agentSalvageScript,
+  agentUnsavedWorkScript,
+  agentWorktreeScript,
+  cloneFolder,
+  WORKTREE_LOCK_BUSY,
+} from "./open-on-mac.js";
 
 /**
  * A local agent's scripts over real Git and bash, an origin on disk standing
@@ -12,9 +19,13 @@ import { agentUnsavedWorkScript, agentWorktreeScript, cloneFolder } from "./open
  * made from the app's shared clone, which a clone over HTTPS that fails makes
  * over SSH; two launches at once before the clone is made each bring in their
  * own branch, none taking the lock from one that took it after the holder it
- * read let go; one waits on a clone another holds while it lives, and takes
- * the lock over once it is gone; and a discard finds work in an agent's
- * repository only where something of it is nowhere else.
+ * read let go; one waits on a clone another holds while it lives, takes the
+ * lock over once it is gone, and gives up, leaving a live holder's lock, once
+ * it has waited its bound; a transfer from a remote that never answers fails
+ * rather than hangs; a discard finds work in an agent's
+ * repository only where something of it is nowhere else; and a salvage keeps
+ * an agent's changes as a diff that applies, and past its bound keeps its
+ * commits and changes but not its untracked files, saying so.
  */
 
 const GIT_ENVIRONMENT = {
@@ -191,6 +202,87 @@ test(
     await ended;
 
     assert.equal(git(own, ["rev-parse", "HEAD"]), head);
+    assert.equal(existsSync(`${clone}.lock`), false);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a launch gives up waiting on a clone a live holder keeps past its bound, and leaves the holder's lock",
+  async (t) => {
+    const { scratch, origin, shell, state } = await fixture(t);
+    const clone = cloneFolder(state, "acme/app");
+    const lock = `${clone}.lock`;
+    const holder = spawn("sleep", ["60"]);
+    t.onTestFinished(() => void holder.kill());
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(path.join(lock, "pid"), String(holder.pid));
+
+    const ended = runEnded(
+      scratch,
+      shell,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone,
+        worktree: path.join(scratch, "agents", "agent", "repository"),
+        branch: "agent/fix-relay",
+        remotes: { https: origin, ssh: origin },
+        seconds: { stall: 60, lockWait: 1 },
+      }),
+    );
+
+    assert.equal(ended.code, WORKTREE_LOCK_BUSY);
+    assert.equal(readFileSync(path.join(lock, "pid"), "utf8"), String(holder.pid));
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a clone from a remote that never answers fails once its transfer stalls, and the launch ends",
+  async (t) => {
+    const { scratch, shell, state } = await fixture(t);
+    // A server that takes every connection and says nothing, as a dead network does.
+    const sockets = new Set<Socket>();
+    const silent = createServer((socket) => sockets.add(socket));
+    t.onTestFinished(() => {
+      for (const socket of sockets) socket.destroy();
+      silent.close();
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const address = silent.address();
+    assert.ok(address !== null && typeof address === "object");
+    const clone = cloneFolder(state, "acme/app");
+    const file = path.join(scratch, "open.sh");
+    writeFileSync(
+      file,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone,
+        worktree: path.join(scratch, "agents", "agent", "repository"),
+        branch: "agent/fix-relay",
+        remotes: {
+          https: `http://127.0.0.1:${address.port}/acme/app.git`,
+          ssh: path.join(scratch, "nowhere"),
+        },
+        seconds: { stall: 1, lockWait: 60 },
+      }),
+      { mode: 0o700 },
+    );
+
+    // Note that a script that hangs is killed by the test's own bound, which reads as a signal rather than a code.
+    const code = await new Promise<number | null>((resolve) => {
+      const child = spawn("/bin/bash", [file], {
+        env: { ...GIT_ENVIRONMENT, HOME: scratch, SHELL: shell },
+        stdio: "ignore",
+      });
+      const bound = setTimeout(() => child.kill("SIGKILL"), 15_000);
+      child.on("exit", (status) => {
+        clearTimeout(bound);
+        resolve(status);
+      });
+    });
+
+    assert.equal(code, 1);
     assert.equal(existsSync(`${clone}.lock`), false);
   },
   GIT_DEADLINE,
@@ -412,6 +504,48 @@ test(
       { printed: "", code: 0 },
       "an agent that never had a worktree holds nothing",
     );
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a salvage keeps an agent's changes as a diff that applies, and past its bound keeps its commits and changes but not its untracked files, saying so",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = path.join(scratch, "agents", "one", "repository");
+    run(
+      scratch,
+      shell,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "agent/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+    writeFileSync(path.join(worktree, "fix.md"), "unpushed\n");
+    git(worktree, ["add", "fix.md"]);
+    git(worktree, ["commit", "--quiet", "-m", "fix"]);
+    writeFileSync(path.join(worktree, "README.md"), "changed\n");
+    writeFileSync(path.join(worktree, "big.bin"), "x".repeat(64 * 1024));
+    const salvage = path.join(state, "salvage", "one", "1");
+
+    const ran = runEnded(
+      scratch,
+      shell,
+      agentSalvageScript({ worktree, salvage, maxBytes: 32 * 1024 }),
+    );
+
+    assert.equal(ran.code, 0);
+    assert.match(ran.printed, /^commits commits\.bundle$/mu);
+    assert.match(ran.printed, /^changes changes\.diff$/mu);
+    assert.match(ran.printed, /^skipped the untracked files/mu);
+    assert.equal(existsSync(path.join(salvage, "untracked.tar")), false);
+    git(worktree, ["checkout", "--quiet", "--", "README.md"]);
+    git(worktree, ["apply", path.join(salvage, "changes.diff")]);
+    assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "changed\n");
   },
   GIT_DEADLINE,
 );

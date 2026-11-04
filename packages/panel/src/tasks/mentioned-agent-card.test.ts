@@ -33,7 +33,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { MentionNodeChip } from "./mention-chip.js";
-import { MentionedAgents } from "./mentioned-agent-card.js";
+import { MentionedAgents } from "./mentioned-place.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 

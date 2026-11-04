@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -34,7 +35,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handInboxItems, handState } from "../testing/app-state.js";
+import { handHostReads, handState, holdAutomations } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -247,11 +248,6 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: () => {
-      if (automationsHeld) return new Promise(() => undefined);
-      if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
-      return Promise.resolve({ automations: AUTOMATIONS });
-    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
       if (membersHeld) {
         return new Promise((resolve) => {
@@ -325,7 +321,14 @@ function mountWith(
   away?: { label: string; onPress: () => void },
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
-  handInboxItems(feedNow());
+  const reads = handHostReads({ items: feedNow() });
+  // Note that the workspace's automations are laid as the page holds them, unless the test holds or refuses them.
+  holdAutomations(reads.deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => {
+      if (automationsHeld) return undefined;
+      return automationsRefused ? { failed: true } : { rows: AUTOMATIONS };
+    },
+  });
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
       me: DEAN.userId,

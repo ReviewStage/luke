@@ -251,11 +251,12 @@ function spansOf(text: string, find: string): readonly Span[] {
 
 /**
  * The one place a phrase stands in a text, or nothing where it stands
- * nowhere or more than once. Note that a phrase standing twice is never read
- * as its first place, because a correction landing on the wrong line is the
- * edit a note must never make.
+ * nowhere or more than once, as a note's replacement and a comment an agent
+ * starts on a plan's words (`member-mcp/tools.ts`) find it. Note that a
+ * phrase standing twice is never read as its first place, because a
+ * correction landing on the wrong line is the edit a note must never make.
  */
-function located(text: string, find: string): Span | undefined {
+export function locatedPhrase(text: string, find: string): Span | undefined {
   const spans = spansOf(text, find);
   return spans.length === 1 ? spans[0] : undefined;
 }
@@ -350,7 +351,7 @@ function replacedInText(
   text: string,
   note: Extract<PlanNote, { kind: typeof NOTE_KIND.REPLACE }>,
 ): string | undefined {
-  const at = located(text, note.find);
+  const at = locatedPhrase(text, note.find);
   if (at === undefined) return undefined;
   if (note.text === "") return deletedFromText(text, at);
   // A replacement inside a fence is code, written as given rather than contained as prose.

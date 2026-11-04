@@ -101,8 +101,18 @@ export const GATEWAY_METHOD = {
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
-  /** One task's plan's comment threads past a cursor, held open by the service while nothing changed. */
-  TASKS_COMMENTS: "tasks.comments",
+  /**
+   * One task's comments, its plan's own threads or one page's, held followed
+   * for a window from now until it is let go, over Neon Realtime, and a
+   * while after among those let go lately: the open task's plan's, or a page
+   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * app state every window draws, never answered.
+   */
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  /** One task's plan's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
+  /** One held plan's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   /** A comment thread started on one task's plan, answered with the thread as it stands. */
   TASKS_COMMENT_START: "tasks.commentStart",
   /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
@@ -197,8 +207,18 @@ export const GATEWAY_METHOD = {
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /** The account's hosts, as Settings lists them, read from the service now. */
   HOSTS_LIST: "hosts.list",
-  /** How long ago the account's own devices last beat, read from the service now; the ages, or why not. */
-  HOSTS_PRESENCE: "hosts.presence",
+  /**
+   * When the account's own devices last beat, held for a window from now
+   * until it is let go, asked of the service at once and again every
+   * `MAC_PRESENCE.POLL_MS` while held, and a while after among the reads let
+   * go lately. What it holds is heard as `DEVICE_PRESENCE_CHANGED` events, on
+   * the app state every window draws, never answered.
+   */
+  HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
+  /** The account's devices' beats let go by the window that held them. */
+  HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
+  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
+  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
@@ -259,23 +279,24 @@ export const GATEWAY_METHOD = {
   AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
   /** One agent's held origin read again at once, as Try again asks; never answered. */
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
-  AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
-  AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   /**
-   * A workspace's automations, or an automation's runs, followed from now
-   * until let go or signed out, on the service's live read. What it holds
-   * is heard as `AUTOMATIONS_CHANGED` events, never answered; following
-   * again starts over, from the list or history as it stands.
+   * A workspace's automations, a workspace's runs, or an automation's runs
+   * held followed for the windows from now until let go, and a while after
+   * among those let go lately, on the service's live read. What they hold
+   * is heard as `AUTOMATIONS_CHANGED`, never answered; holding again holds
+   * nothing anew.
    */
   AUTOMATIONS_FOLLOW: "automations.follow",
-  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  /** A held list or history let go, kept followed a while among those let go lately. */
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
+  /** A held list or history read again at once, as Try again asks. */
+  AUTOMATIONS_RETRY: "automations.retry",
   /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
   INSTALLED_SKILLS_LIST: "installedSkills.list",
   /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
@@ -320,7 +341,18 @@ export const GATEWAY_METHOD = {
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /**
+   * Our own tools one agent is offered, held for a window from now until it
+   * is let go, asked of the service at once and again as a window comes
+   * forward, and a while after among the reads let go lately. What it holds
+   * is heard as `WORKSPACE_TOOLS_CHANGED` events, on the app state every
+   * window draws, never answered.
+   */
+  AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
+  /** One agent's own tools let go by the window that held them. */
+  AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
+  /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
+  AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
@@ -557,11 +589,13 @@ export const GATEWAY_EVENT = {
   TRANSCRIPT_CHANGED: "transcript.changed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
+  /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
+  PLAN_COMMENTS_CHANGED: "planComments.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
-  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
@@ -577,6 +611,10 @@ export const GATEWAY_EVENT = {
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
+  /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
+  /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

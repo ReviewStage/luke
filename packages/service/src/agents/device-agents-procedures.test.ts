@@ -310,13 +310,13 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
             request(owner, PATH.LINE_CLAIM, { body: { deviceId, id: randomUUID() } }),
           ),
         ];
-        const unknown = yield* statusOf(request("nobody", PATH.LINES, { deviceId }));
+        const unknown = yield* answerOf(request("nobody", PATH.LINES, { deviceId }));
 
         assert.deepEqual(answers, [upgrade, upgrade, upgrade, upgrade]);
-        assert.equal(
+        assert.deepEqual(
           unknown,
-          HOSTED_HTTP_STATUS.UNAUTHORIZED,
-          "a bearer naming no one is unauthenticated",
+          { status: HOSTED_HTTP_STATUS.UNAUTHORIZED, body: { error: "invalid-token" } },
+          "a bearer naming no one is unauthenticated, and says no host was removed",
         );
         assert.equal(yield* statusOf(macRegister(secret, deviceId)), HOSTED_HTTP_STATUS.OK);
 
@@ -470,12 +470,16 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       const removed = yield* statusOf(
         request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
       );
-      const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+      const beat = yield* answerOf(hostBeat(host.secret, host.deviceId));
       const listed = yield* answerOf(request(owner, PATH.HOSTS));
 
       assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
       assert.equal(removed, HOSTED_HTTP_STATUS.OK);
-      assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+      // Note that the 401 a released host reads as removed stands, marked so a host tells it from any other 401 on the service's origin.
+      assert.deepEqual(beat, {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: "invalid-token", hostRemoved: true },
+      });
       assert.deepEqual(listed.body.hosts, []);
       assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
         { action: SERVER_HOST_PAIRING_ACTION.APPROVE },

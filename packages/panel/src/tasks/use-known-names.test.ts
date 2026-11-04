@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -12,6 +14,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { MentionedAgents } from "./mentioned-place.js";
 import { useKnownNames, useWordTargets } from "./use-known-names.js";
 
 /**
@@ -20,7 +23,8 @@ import { useKnownNames, useWordTargets } from "./use-known-names.js";
  * the same names, a delivery that moves neither the tasks nor the Inbox
  * hands them those names again, and one that adds a task hands them new
  * names naming it; the tasks' keys, likewise, are handed again until a key
- * changes, whatever else about a task moves. Synthetic tasks.
+ * changes, whatever else about a task moves; and an untitled agent is named
+ * by the catalog around the reader. Synthetic tasks.
  */
 
 const AT = 1_792_000_000_000;
@@ -166,4 +170,45 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
 
   await deliver(listing([numbered(INVITES, 41), numbered(BILLING, 42)], 3));
   assert.deepEqual([...(seen.at(-1)?.keys() ?? [])], ["ACME-41", "ACME-42"]);
+});
+
+test("an untitled agent is named by the catalog around the reader, as its tab and its row in the @ list name it", async () => {
+  const agentId = "5b2e7c1d-3a4f-4e6b-8c9d-0a1b2c3d4e5f";
+  const model = "openai/gpt-6.1-sol";
+  const task: TaskSummary = {
+    ...INVITES,
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [{ id: agentId, title: null, model, effort: "high", status: AGENT_STATUS.RUNNING }],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(holding([task], 1)),
+  });
+  let seen: KnownNames | undefined;
+  function Reader(): null {
+    seen = useKnownNames();
+    return null;
+  }
+  const models = [
+    { id: model, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["high"] },
+  ];
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MentionedAgents, {
+          value: { models, me: undefined },
+          children: createElement(Reader),
+        }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(seen?.agents.get(agentId), "GPT-6.1 Sol");
 });

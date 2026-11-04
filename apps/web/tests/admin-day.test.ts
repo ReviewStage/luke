@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import "@repo/panel/testing/resize-observer";
-import type { AdminDayAccount, AdminDayDetail } from "@repo/features/admin-answer-wire";
+import type {
+  AdminDayAccount,
+  AdminDayActiveAccount,
+  AdminDayDetail,
+} from "@repo/features/admin-answer-wire";
 import { DayScreen } from "@repo/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,8 +13,9 @@ import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-day.test.ts -- one day's page names the day it covers and whether it
- * is still filling, states its totals and its accounts under their own
- * headings, busiest first with an admin marked in words, and moves the way a
+ * is still filling, states its live totals and active accounts first and the
+ * retired hosted tier's under it, each under its own heading, busiest first
+ * with an admin marked in words, and moves the way a
  * maintainer asks: a plain press on an account or on the way back moves in
  * place, and a modified one is left to the browser's own gesture. The
  * network, the HTTP boundary to the service, is a fake that answers the day's read.
@@ -38,12 +43,50 @@ const GRACE: AdminDayAccount = {
   calls: 37,
 };
 
-/** A synthetic past day, read two days after it closed, with two accounts of three listed. */
+const ADA_ACTIVE: AdminDayActiveAccount = {
+  id: "account-ada",
+  name: "Ada Lovelace",
+  email: "ada@example.test",
+  image: null,
+  admin: true,
+  counts: {
+    tasksCreated: 3,
+    planRevisions: 14,
+    agentsStarted: 9,
+    inboxAnswered: 2,
+    automationRuns: 1,
+  },
+};
+
+const LIN_ACTIVE: AdminDayActiveAccount = {
+  id: "account-lin",
+  name: "Lin",
+  email: "lin@example.test",
+  image: null,
+  admin: false,
+  counts: {
+    tasksCreated: 1,
+    planRevisions: 0,
+    agentsStarted: 2,
+    inboxAnswered: 0,
+    automationRuns: 0,
+  },
+};
+
+/**
+ * A synthetic past day, read two days after it closed, with two active
+ * accounts of four listed and two hosted-tier accounts of three.
+ */
 function detail(overrides: Partial<AdminDayDetail> = {}): AdminDayDetail {
   return {
     generatedAt: Date.UTC(2026, 9, 14, 12),
     day: DAY,
     limit: 2,
+    activity: {
+      features: { agentsStarted: 12, planRevisions: 15, inboxAnswered: 2, automationRuns: 1 },
+      activeDevelopers: 4,
+      accounts: [ADA_ACTIVE, LIN_ACTIVE],
+    },
     totals: { accounts: 3, calls: 1250 },
     accounts: [ADA, GRACE],
     ...overrides,
@@ -107,9 +150,11 @@ function headings(page: HTMLElement, level: string): string[] {
   return Array.from(page.querySelectorAll(level), (heading) => heading.textContent ?? "");
 }
 
-/** Each table row's cells, in the words they read. */
-function rows(page: HTMLElement): string[][] {
-  return Array.from(page.querySelectorAll("tr"), (row) =>
+/** Each row's cells of the table named `label`, in the words they read. */
+function rows(page: HTMLElement, label: string): string[][] {
+  const table = page.querySelector(`table[aria-label="${label}"]`);
+  if (table === null) throw new Error(`no table named ${label}`);
+  return Array.from(table.querySelectorAll("tr"), (row) =>
     Array.from(row.querySelectorAll("th, td"), (cell) => cell.textContent ?? ""),
   );
 }
@@ -149,9 +194,16 @@ test("a loaded day names itself and states its totals and accounts under their h
   expect(current(page)).toBe("October 12, 2026");
   expect(page.textContent).not.toContain("so far today");
   expect(headings(page, "h2")).toEqual([
+    "This day",
+    "Accounts active this day",
     "Hosted tier · this day · retired",
     "Hosted-tier accounts this day · retired",
   ]);
+  expect(page.textContent).toContain("Active developers4");
+  expect(page.textContent).toContain("Agents started12");
+  expect(page.textContent).toContain("Plan revisions15");
+  expect(page.textContent).toContain("Inbox items answered2");
+  expect(page.textContent).toContain("Automation runs1");
   expect(page.textContent).toContain("Active accounts3");
   expect(page.textContent).toContain("Hosted calls1,250");
 });
@@ -159,7 +211,15 @@ test("a loaded day names itself and states its totals and accounts under their h
 test("the accounts read busiest first, an admin marked in words and an email shown once", async () => {
   const { page } = await openDay(detail());
 
-  expect(rows(page)).toEqual([
+  expect(rows(page, "Accounts active this day")).toEqual([
+    ["Account", "Tasks", "Plan revisions", "Agents", "Inbox answered", "Automation runs"],
+    ["AAda LovelaceAdminada@example.test", "3", "14", "9", "2", "1"],
+    ["LLinlin@example.test", "1", "0", "2", "0", "0"],
+  ]);
+  expect(page.textContent).toContain(
+    "Only the 2 busiest accounts are listed. Active developers counts all 4.",
+  );
+  expect(rows(page, "Hosted-tier accounts this day")).toEqual([
     ["Account", "Calls"],
     ["AAda LovelaceAdminada@example.test", "1,204"],
     ["Ggrace@example.test", "37"],
@@ -172,15 +232,17 @@ test("the accounts read busiest first, an admin marked in words and an email sho
 test("today's page counts its totals so far", async () => {
   const { page } = await openDay(detail({ generatedAt: Date.UTC(2026, 9, 12, 15) }));
 
+  expect(page.textContent).toContain("Active developers4so far today");
   expect(page.textContent).toContain("Active accounts3so far today");
 });
 
-test("a day with no calls says so in place of the table, with no note under it", async () => {
+test("a day of agents and tasks with no calls lists its accounts and says the hosted tier is empty", async () => {
   const { page } = await openDay(
     detail({ totals: { accounts: 0, calls: 0 }, accounts: [], limit: 50 }),
   );
 
-  expect(page.querySelector("table")).toBeNull();
+  expect(rows(page, "Accounts active this day")).toHaveLength(3);
+  expect(page.querySelector('table[aria-label="Hosted-tier accounts this day"]')).toBeNull();
   expect(page.textContent).toContain("No hosted-tier calls recorded on this day.");
   expect(page.textContent).not.toContain("Calls count the hosted-tier calls");
 });
@@ -192,11 +254,11 @@ test("a plain press on an account or its row opens it; a modified press is the b
   expect(name.getAttribute("href")).toContain("account-ada");
   expect(press(name)).toBe(true);
   expect(press(name, { metaKey: true })).toBe(false);
-  const graceRow = page.querySelectorAll("tbody tr")[1];
-  if (graceRow === undefined) throw new Error("no second row");
-  press(graceRow.querySelector("td:last-child") ?? graceRow);
+  const linRow = page.querySelectorAll("tbody tr")[1];
+  if (linRow === undefined) throw new Error("no second row");
+  press(linRow.querySelector("td:last-child") ?? linRow);
 
-  expect(opened).toEqual(["account-ada", "account-grace"]);
+  expect(opened).toEqual(["account-ada", "account-lin"]);
 });
 
 test("the toolbar leads with the way back to the overview, which moves in place, loading or loaded", async () => {

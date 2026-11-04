@@ -63,6 +63,7 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,
+  type AgentReadCall,
   agentToolRejected,
   callerAgent,
   callerUserId,
@@ -562,7 +563,7 @@ const workspaceAutomation = (userId: string, workspaceId: string, id: string) =>
 
 /** One call of `list_automations`: the caller's workspace's automations its member may read, or one of them whole. */
 export function runListAutomations(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readListAsked(input);
@@ -666,6 +667,7 @@ export function runCreateAutomation(
       const written = yield* createAutomationAs(
         userId,
         {
+          id,
           workspaceId: workspace.value,
           repositories,
           name: made.name,
@@ -680,7 +682,6 @@ export function runCreateAutomation(
           ...(made.slackDelivery === undefined ? undefined : { slackDelivery: made.slackDelivery }),
         },
         SERVER_AUTOMATION_SOURCE.AGENT,
-        id,
       ).pipe(Effect.result);
       if (Result.isFailure(written)) {
         const refusal = written.failure;

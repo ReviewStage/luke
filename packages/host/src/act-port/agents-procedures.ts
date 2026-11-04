@@ -56,8 +56,6 @@ import {
   type AgentTranscriptOlderParams,
   type AgentTranscriptPage,
   type AgentWorkspaceListParams,
-  type AgentWorkspaceToolsAnswerView,
-  type DevicePresenceAnswerView,
   type HostDoneAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
@@ -81,7 +79,10 @@ export interface AgentProceduresDependencies {
     agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
     agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
     hostsList(): Effect.Effect<HostsAnswerView>;
-    hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
+    /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    hostsPresenceFollow(): Effect.Effect<void>;
+    hostsPresenceUnfollow(): Effect.Effect<void>;
+    hostsPresenceRefresh(): Effect.Effect<void>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
     hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
@@ -119,9 +120,11 @@ export interface AgentProceduresDependencies {
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
     agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
-    agentWorkspaceTools(
-      params: AgentPullRequestParams,
-    ): Effect.Effect<AgentWorkspaceToolsAnswerView>;
+    /** One agent's own tools held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
+    agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
+    /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
+    agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
     agentOverviewChecks(
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewChecksAnswerView>;
@@ -227,6 +230,10 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
   /** Every agent's origin a window holds a stream open of, so the host lets one go only with the last. */
   const openOrigins: OpenFollows<never> = MutableHashMap.empty();
+  /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
+  const openPresence: OpenFollows<never> = MutableHashMap.empty();
+  /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
+  const openTools: OpenFollows<never> = MutableHashMap.empty();
   const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
     noted(answer, (value) => {
       if ("agent" in value) notices.observeAgents([value.agent]);
@@ -258,13 +265,30 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsList();
     }),
-    [AGENT_ACT_KIND.HOSTS_PRESENCE]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE].effect(function* ({
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsPresence();
-    }),
+    [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that nothing is heard down the hold, since the held beats reach the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: () => "presence",
+            follow: () => host.hostsPresenceFollow(),
+            unfollow: () => host.hostsPresenceUnfollow(),
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openPresence,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH].effect(
+      function* ({ context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.hostsPresenceRefresh();
+      },
+    ),
     [AGENT_ACT_KIND.HOSTS_REMOVE]: actPort[AGENT_ACT_KIND.HOSTS_REMOVE].effect(function* ({
       input,
       context,
@@ -517,12 +541,30 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.agentReviewOptions(input);
       },
     ),
-    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS]: actPort[AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentWorkspaceTools(input);
-      },
-    ),
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actPort[
+      AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held tools reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (agent: AgentPullRequestParams) => agent.agentId,
+          follow: host.agentWorkspaceToolsFollow,
+          unfollow: host.agentWorkspaceToolsUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openTools,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY]: actPort[
+      AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.agentWorkspaceToolsRetry(input);
+    }),
     [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

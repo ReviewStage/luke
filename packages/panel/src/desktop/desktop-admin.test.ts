@@ -47,7 +47,6 @@ const ADA: AdminUserListRow = {
   activeDays: 12,
   lastActiveDay: "2026-10-12",
   lastSeenAt: Date.UTC(2026, 9, 12),
-  calls: 1204,
   favorite: false,
 };
 

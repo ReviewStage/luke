@@ -76,12 +76,36 @@ export function ActivityNote(): React.JSX.Element {
   );
 }
 
+/** How the agents-by-origin rows split the week's agents, and where pilots stand. */
+export function AgentOriginsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      Each agent started counts under one origin, the first that fits: an automation's run, then a
+      message to the Slack bot, then another agent's start_agent, then by hand, which is every agent
+      the others leave, so the rows sum to the week's agents started. A pilot's coders count under
+      Another agent; pilots counts the task pilots among the week's agents, whatever started them.
+    </SectionNote>
+  );
+}
+
 export function AccountActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
       {HOSTED_TIER_RETIRED} An active day is a UTC day this account made a hosted-tier call. Local
       use of the desktop app writes no row here. Launch activity is in product analytics, not this
       database.
+    </SectionNote>
+  );
+}
+
+/** What the account page's live activity counts: the Overview's and the roster's active day. */
+export function AccountActionsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      agent. Plan revisions count the account's own. The streak, Last active, and the calendar read
+      back a trailing year. A deleted task takes its agents and revisions with it, so past days can
+      empty.
     </SectionNote>
   );
 }
@@ -95,9 +119,9 @@ export function RosterNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      Active days, Last active, and Calls count the retired hosted tier's calls, and the roster is
-      ranked by them; only dictation still makes one. Last seen is the account's latest sign-in
-      session, which a sign-in moves without any hosted use.
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      agent. Last active is the latest such day in the past year, and the roster is ranked by it.
+      Last seen is the account's latest sign-in session.
       {truncatedTo !== undefined
         ? searched
           ? ` Only the ${formatCount(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
@@ -119,6 +143,30 @@ export function DayNote({
       Calls count the hosted-tier calls each account made on this UTC day. {HOSTED_TIER_RETIRED}
       {truncatedTo !== undefined
         ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. The totals count all ${formatCount(totalAccounts)}.`
+        : ""}
+    </SectionNote>
+  );
+}
+
+/**
+ * What the Day page's live figures count: one UTC day of the Overview's
+ * activity chart, and who was active in it.
+ */
+export function DayActivityNote({
+  truncatedTo,
+  activeDevelopers,
+}: {
+  truncatedTo?: number | undefined;
+  activeDevelopers: number;
+}): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active account created a task, wrote a plan revision, or started an agent on this UTC day.
+      The totals are this day's bar on the Overview's activity chart, so plan revisions count the
+      notes {PRODUCT_NAME}'s retired notetaker took too, and automation runs leave out the ones a
+      guard held back.
+      {truncatedTo !== undefined
+        ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. Active developers counts all ${formatCount(activeDevelopers)}.`
         : ""}
     </SectionNote>
   );

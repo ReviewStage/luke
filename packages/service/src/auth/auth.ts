@@ -1,3 +1,5 @@
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -16,6 +18,8 @@ import {
 import {
   ACCOUNT_TOKEN_STORAGE,
   AUTH_BASE_PATH,
+  AUTH_RATE_LIMIT,
+  CLIENT_ADDRESS_HEADERS,
   DESKTOP_SESSION,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
@@ -23,8 +27,10 @@ import {
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
   LOGIN_PAGE,
+  memberMcpClientDiscovery,
   OAUTH_PROVIDER_SCOPES,
   ORGANIZATION_OPTIONS,
+  oauthClientRegistration,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
   USER_FIELDS,
@@ -91,6 +97,8 @@ export const auth = betterAuth({
   account: ACCOUNT_TOKEN_STORAGE,
   user: USER_FIELDS,
   session: SESSION_COOKIE_CACHE,
+  rateLimit: AUTH_RATE_LIMIT,
+  advanced: { ipAddress: { ipAddressHeaders: [...CLIENT_ADDRESS_HEADERS] } },
   disabledPaths: [...DISABLED_AUTH_PATHS],
   socialProviders: socialProviders(secrets),
   plugins: [
@@ -103,7 +111,10 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: LOGIN_PAGE,
       consentPage: "/consent",
-      allowDynamicClientRegistration: false,
+      // An outside MCP client registers itself at `/oauth2/register`, or
+      // is discovered from its metadata document by the plugin below, under
+      // the member MCP server's scopes alone (`oauthClientRegistration`).
+      ...oauthClientRegistration(),
       clientPrivileges: denyOAuthClientPrivileges,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
@@ -113,11 +124,14 @@ export const auth = betterAuth({
       // build (`apps/web/server/seed-clients.ts`) rather than by the
       // plugin's own `resources`, whose seed runs a query as this module
       // loads, which every function bundle must do with nothing configured.
-      // A client reaches it only once linked to it
-      // (`enforcePerClientResources`, the plugin's default), which the
-      // sign-in of outside clients does.
+      // Any client may name it; its row allows only the scopes a client
+      // registered above holds, and the desktop's client holds none of them.
       resourcePrivileges: denyOAuthResourcePrivileges,
     }),
+    // A client named by the URL of its Client ID Metadata Document, as the
+    // MCP clients of 2026 name themselves: its document fetched through the
+    // package's own Node transport, with its host resolved once and pinned.
+    cimd(memberMcpClientDiscovery(fetchClientMetadataResource)),
     // A workspace is an organization: its members plan together.
     organization({ ...ORGANIZATION_OPTIONS, organizationHooks: authOrganizationHooks }),
     // The Mac's own session beside its OAuth token, so the organization

@@ -16,7 +16,9 @@ import {
   NO_AGENT_ORIGINS,
   NO_CHAPTERS,
   NO_HOLDER_INBOXES,
+  NO_KEYS_HELD,
   NO_PAGES,
+  NO_PLAN_COMMENTS,
   UNREAD,
 } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
@@ -235,6 +237,12 @@ export function initialAppState(
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
+    [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

@@ -1,7 +1,9 @@
 import type { AgentInboxScope } from "@repo/features/agent-view";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
+import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -27,8 +29,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, or a task's or an agent's pages, is held by the surface that
- * reads it: the host follows it while any surface holds it and a while
+ * own inbox, a task's or an agent's pages, a workspace's automations or
+ * runs, or an automation's runs, is held by the surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
  * one hook path reads, so a read added is an entry rather than a hook.
@@ -57,6 +59,14 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
 
 /** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
 export type InboxHolderKey = AgentInboxScope;
+
+/** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
+export type CommentSubject = TasksCommentsFollow;
+
+/** The comments a surface holds, as the act names them, with no page key where it reads the plan's. */
+function commentsFollowOf({ taskId, pageId }: CommentSubject): TasksCommentsFollow {
+  return pageId === undefined ? { taskId } : { taskId, pageId };
+}
 
 /** A read the host holds for the panel, by its name (`AppHostReads`). */
 type HostReadName = keyof AppHostReads;
@@ -150,18 +160,34 @@ function hostRead<
   };
 }
 
+/** The automations' hold on one list or history, a stream that carries nothing, and its Try again, by what it holds. */
+function automationsRead(kind: AutomationFollow["kind"]) {
+  return {
+    path: (id: string) => [id],
+    hold: (id: string) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id }),
+    retry: (id: string) => tellAct(ACT_KIND.AUTOMATIONS_RETRY, { kind, id }),
+  };
+}
+
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
- * inbox; one task's pages, or one agent's on no task, which the open
- * task's page, the panel beside an Inbox item, an agent's page, and a
- * page's card or frame each hold; one agent's pull request's chapters,
- * by the number its Pull request tab's own read of it found; and the run
- * that started one agent, which its page holds. Pages offer no Try again, because the
- * host reads pages that did not answer again on its own, and pages it was
- * refused, a plan's or an agent's the reader cannot reach, stand failed
- * until every surface lets them go and one holds them anew (`@repo/host`'s
- * `live-push.ts`).
+ * inbox; one task's pages, or one agent's on no task, which the open task's
+ * page, the panel beside an Inbox item, an agent's page, and a page's card
+ * or frame each hold; one agent's pull request's chapters, by the number its
+ * Pull request tab's own read of it found; the account's devices' beats, by
+ * the account, which every surface drawing a device's standing holds; one
+ * agent's own tools, which its servers popover holds; one workspace's
+ * automations, one workspace's runs, or one automation's runs, by its id;
+ * one plan's comments, or one page's, which the open task's plan and a
+ * page's tab each hold; and the run that started one agent, which its page
+ * holds. Pages offer no Try again, because the host reads
+ * pages that did not answer again on its own, and pages it was refused, a
+ * plan's or an agent's the reader cannot reach, stand failed until every
+ * surface lets them go and one holds them anew (`@repo/host`'s
+ * `live-push.ts`). The beats, which the host asks for again every
+ * `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer theirs
+ * to the window coming back online (`device-presence.ts`), never to a press.
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -198,6 +224,40 @@ const HOST_READS = {
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
     hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
     retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
+  }),
+  [LIVE_READ.DEVICE_PRESENCE]: hostRead(LIVE_READ.DEVICE_PRESENCE, {
+    slice: APP_SLICE.DEVICE_PRESENCE,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
+    hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
+    retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
+  }),
+  [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
+    slice: APP_SLICE.WORKSPACE_TOOLS,
+    path: (agentId: string) => [agentId],
+    hold: (agentId) => askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId }),
+    retry: (agentId) => tellAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId }),
+  }),
+  [LIVE_READ.AUTOMATIONS]: hostRead(LIVE_READ.AUTOMATIONS, {
+    slice: APP_SLICE.AUTOMATIONS,
+    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE),
+  }),
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: hostRead(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, {
+    slice: APP_SLICE.AUTOMATION_WORKSPACE_RUNS,
+    ...automationsRead(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
+  }),
+  [LIVE_READ.AUTOMATION_RUNS]: hostRead(LIVE_READ.AUTOMATION_RUNS, {
+    slice: APP_SLICE.AUTOMATION_RUNS,
+    ...automationsRead(AUTOMATION_FOLLOW.RUNS),
+  }),
+  [LIVE_READ.PLAN_COMMENTS]: hostRead(LIVE_READ.PLAN_COMMENTS, {
+    slice: APP_SLICE.PLAN_COMMENTS,
+    path: (subject: CommentSubject) =>
+      subject.pageId === undefined
+        ? [COMMENT_SUBJECT.PLAN, subject.taskId]
+        : [COMMENT_SUBJECT.PAGE, subject.pageId],
+    hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
+    retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 

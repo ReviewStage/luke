@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm/_relations";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -289,6 +290,19 @@ export const oauthClientResource = pgTable(
 export const oauthClientAssertion = pgTable("oauth_client_assertion", {
   id: text("id").primaryKey(),
   expiresAt: timestamptz("expires_at").notNull(),
+});
+
+/**
+ * Better Auth's rate limiter's counters, one row per address and path, as
+ * its database storage keeps them (`rateLimit.storage: "database"` in
+ * `auth.ts`): the count in the window that `lastRequest`, epoch millis,
+ * opened. The limiter prunes rows past its longest window as it writes.
+ */
+export const rateLimit = pgTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
 
 /**

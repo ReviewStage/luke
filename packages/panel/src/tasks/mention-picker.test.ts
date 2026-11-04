@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -13,7 +14,6 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { decodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
@@ -21,7 +21,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
+import { handHostReads, handState, holdAutomations } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
@@ -372,17 +372,14 @@ test("on a plan, the workspace's automations are found by their name, a pick wri
     lastRun: null,
     createdAt: 1,
   });
-  const asked: string[] = [];
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: ({ workspaceId }) => {
-      asked.push(workspaceId ?? "");
-      return Promise.resolve({
-        automations: [
-          automation("automation-notes", "Deploy notes"),
-          automation("automation-triage", "Triage Sentry"),
-        ],
-      });
-    },
+  fakeActPort({});
+  const { asked } = holdAutomations(handHostReads({}).deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: () => ({
+      rows: [
+        automation("automation-notes", "Deploy notes"),
+        automation("automation-triage", "Triage Sentry"),
+      ],
+    }),
   });
   const chosen: MentionNode[] = [];
   const { picker, page } = await mountedOnPlan(chosen);
@@ -391,7 +388,7 @@ test("on a plan, the workspace's automations are found by their name, a pick wri
     picker().onTrigger(word("automations:deploy"));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  assert.deepEqual(asked, ["workspace-stage"]);
+  assert.deepEqual(asked, [{ kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-stage" }]);
   assert.deepEqual(rows(page), ["Deploy notes"]);
 
   act(() => {

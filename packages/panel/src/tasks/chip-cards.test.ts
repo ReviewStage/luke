@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -45,7 +46,13 @@ import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdPages, stateWith } from "../testing/app-state.js";
+import {
+  type AutomationsHold,
+  handHostReads,
+  holdAutomations,
+  holdPages,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -290,8 +297,8 @@ const SWEPT: InboxItem = {
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
-/** Every workspace whose automations the act port was asked for, in order. */
-const automationReads: (string | undefined)[] = [];
+/** Every hold the window took on a workspace's automations, in order. */
+let automationHolds: readonly AutomationsHold[] = [];
 
 /** Every agent on no task whose pages the window held, in order. */
 const agentPageReads: string[] = [];
@@ -319,7 +326,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   told.length = 0;
-  automationReads.length = 0;
+  automationHolds = [];
   agentPageReads.length = 0;
   vi.useRealTimers();
 });
@@ -374,12 +381,13 @@ async function drawn(
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
-    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
-      automationReads.push(payload.workspaceId);
-      const beta = payload.workspaceId === BETA.id;
-      return Promise.resolve({ automations: beta ? [AUDIT] : [SWEEP] });
-    },
   });
+  // Note that a workspace's automations are laid on the document as a card holds them, as the host lays them.
+  automationHolds = holdAutomations(reads.deliverAutomations, {
+    [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => ({
+      rows: workspaceId === BETA.id ? [AUDIT] : [SWEEP],
+    }),
+  }).holds;
   // Note that a page's card holds its plan's or its agent's pages, which the host lays on the document.
   holdPages(reads.deliverPages, heldPagesOf);
   fakeAppPlatform({ pageFrameUrl });
@@ -705,7 +713,7 @@ test("a member's chip hangs their card", async () => {
 test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
-  const reads = () => automationReads.length;
+  const reads = () => automationHolds.length;
   const before = reads();
 
   const card = await cardOf(chipsOf(container)[0]);

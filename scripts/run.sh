@@ -205,9 +205,9 @@ elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then
     demo_credential_source=ANTHROPIC_API_KEY
 fi
 if [[ -n $demo_credential_source ]]; then
-    printf "demo: Dean's agents get the Claude credential in %s\n" "$demo_credential_source" >&2
+    printf "demo: agents get the Claude credential in %s\n" "$demo_credential_source" >&2
 else
-    printf 'demo: neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set, so Dean has no Claude credential and agents will not run; set one to run them\n' >&2
+    printf 'demo: neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set, so agents will not run; set one to run them\n' >&2
 fi
 demo_auth_secret=$(demo_random_key)
 demo_key_ring="1:$(demo_random_key)"
@@ -307,7 +307,7 @@ cp apps/host/dist/vespin-host.mjs packages/agent-runner/dist/agent-runner.mjs "$
 env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY APP_HOST_STATE_ROOT="$demo_profile" \
     node "$demo_folder/host/lib/vespin-host.mjs" run >"$demo_folder/host.log" 2>&1 &
 host_pid=$!
-printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/host.log" >&2
+printf "demo: running this Mac's host, its log at %s\n" "$demo_folder/host.log" >&2
 
 # Note that the app is handed acme's link, because a cleared profile opens
 # the member's own workspace, which the seed leaves empty; the app holds the

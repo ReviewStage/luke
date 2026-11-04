@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task whose plan's comments to act on, by the id list_tasks answered."
+    },
+    "thread": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The thread's id, as read_comments lists it."
+    },
+    "resolved": {
+      "type": "boolean",
+      "description": "true to resolve the thread once what it asked is settled; false to reopen a resolved one where it is unsettled again."
+    }
+  },
+  "required": [
+    "taskId",
+    "thread",
+    "resolved"
+  ],
+  "additionalProperties": false
+}

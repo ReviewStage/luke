@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  fakeCloudApi,
-  HTTP_STATUS,
-  type JsonValue,
-  recordedRoutes,
-  recordingHttpClient,
-} from "@repo/wire/testing";
-import { Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordedRoutes } from "@repo/wire/testing";
+import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS } from "./agent-wire.js";
@@ -201,41 +194,38 @@ it.effect(
 );
 
 it.effect(
-  "a task's comments are read past the cursor, a thread's write answers it as it stands or its refusal, and a task not the account's reads as not found",
+  "a thread's write answers it as it stands or its refusal, and a task not the account's answers as not found",
   () =>
     Effect.gen(function* () {
       const thread = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
       const api = fakeCloudApi({
-        [`GET /api/plans/${TASK_ID}/comments`]: {
-          answer: () => ({ threads: [], cursor: "c1" }),
-        },
         [`POST /api/plans/${TASK_ID}/comments/${thread}`]: {
           answer: () => ({ refused: "not-yours" }),
         },
-        [`GET /api/plans/${OTHER_TASK}/comments`]: {
+        [`POST /api/plans/${OTHER_TASK}/comments/${thread}`]: {
           status: 404,
           answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
         },
       });
       const action = { action: "edit", entry: thread, words: "Mine now" } as const;
 
-      const read = yield* Effect.provide(client().comments(TASK_ID, "0"), api.layer);
       const refused = yield* Effect.provide(
         client().actOnComment(TASK_ID, thread, action),
         api.layer,
       );
-      const elsewhere = yield* Effect.provide(client().comments(OTHER_TASK, "0"), api.layer);
+      const elsewhere = yield* Effect.provide(
+        client().actOnComment(OTHER_TASK, thread, action),
+        api.layer,
+      );
       const blank = yield* Effect.provide(
         client().actOnComment(TASK_ID, thread, { action: "reply", clientKey: "k", words: " " }),
         api.layer,
       );
 
-      assert.deepEqual(read, { threads: [], cursor: "c1" });
       assert.deepEqual(refused, { refused: "not-yours" });
       assert.deepEqual(elsewhere, { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(blank, { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED });
-      assert.equal(api.requests().length, 3);
-      assert.equal(api.requests()[0]?.searchParams.get("after"), "0");
+      assert.equal(api.requests().length, 2);
     }),
 );
 
@@ -409,30 +399,6 @@ it.effect(
       assert.deepEqual(
         api.requests().map((request) => request.body),
         [JSON.stringify({ picture })],
-      );
-    }),
-);
-
-it.effect(
-  "a comments read is asked under the held deadline: it outlasts the usual one and is unanswered past the hold",
-  () =>
-    Effect.gen(function* () {
-      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
-
-      const held = yield* Effect.forkChild(
-        Effect.provide(client().comments(TASK_ID, "0"), silent.layer),
-      );
-      while (silent.requests.length === 0) yield* Effect.yieldNow;
-      yield* TestClock.adjust("34 seconds");
-      assert.equal(held.pollUnsafe(), undefined, "still held past the usual deadline");
-      yield* TestClock.adjust("1 second");
-
-      assert.deepEqual(yield* Fiber.join(held), {
-        failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED,
-      });
-      assert.equal(
-        silent.requests[0]?.url,
-        `https://vespin.dev/api/plans/${TASK_ID}/comments?after=0`,
       );
     }),
 );

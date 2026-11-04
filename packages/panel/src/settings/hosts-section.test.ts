@@ -16,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -98,7 +99,6 @@ test("Add hosts shows the public install command, with no secret in it, waits fo
   ];
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
   });
   drawHosts();
   await settle();
@@ -135,8 +135,8 @@ it.effect("the dialog names a host that joins while it stands within seconds", (
     const hosts: Host[] = [];
     fakeActPort({
       [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-      [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: id, ageMs: 0 }] }),
     });
+    handBeats({ [id]: 0 });
     drawHosts(yield* onTestClock);
     yield* Effect.promise(settle);
     yield* Effect.promise(() => press("Add hosts"));
@@ -161,7 +161,6 @@ test("a code approved from its link in the same window lets Add hosts, open bene
   const hosts: Host[] = [];
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
     [ACT_KIND.HOSTS_PAIRING_READ]: () =>
       Promise.resolve({
         name: "hel-02",
@@ -207,8 +206,8 @@ it.effect(
       fakeActPort({
         [ACT_KIND.HOSTS_LIST]: () =>
           Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-        [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
       });
+      handBeats({});
       drawHosts(yield* onTestClock);
       yield* Effect.promise(settle);
       assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
@@ -256,9 +255,9 @@ async function machinesWithThisMac(
 ): Promise<void> {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
     [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac),
   });
+  handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
   drawHosts();
   await settle();
 }
@@ -290,16 +289,15 @@ test("This Mac stands first on the row of the machine it is, with no Remove", as
   assert.equal(document.querySelector('button[aria-label="This Mac actions"]'), null);
 });
 
-test("a host's row says Updating… in place of Online while its update runs", async () => {
+test("a host's row says Updating… while its update runs, though the restart has left its beat past fresh", async () => {
   const hosts: readonly Host[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "ord-01", update: HOST_UPDATE.UPDATING },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(
-    hosts,
-    {},
-    hosts.map((host) => ({ deviceId: host.id, ageMs: 0 })),
-  );
+  await machinesWithThisMac(hosts, {}, [
+    { deviceId: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", ageMs: 0 },
+    { deviceId: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", ageMs: 90_000 },
+  ]);
   const text = document.body.textContent ?? "";
 
   assert.ok(text.includes("ams-01Online · Linux server"), text);

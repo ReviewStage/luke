@@ -16,7 +16,14 @@ import type {
   AdminPullRequest,
   AdminWorkspaceKind,
 } from "./admin-account-wire.js";
-import type { ActivityFeature, FunnelStep, ReachFeature } from "./admin-overview-vocabulary.js";
+import type {
+  ActivityFeature,
+  AgentOrigin,
+  DayAccountCount,
+  FunnelStep,
+  MeaningfulAction,
+  ReachFeature,
+} from "./admin-overview-vocabulary.js";
 import type { ADMIN_ATTENTION_KIND, AdminWorkspacesKind } from "./admin-wire.js";
 import type { AgentFailure, AgentStatus, ContextWindow } from "./agent-wire.js";
 import type { AutomationRunReason } from "./automation-wire.js";
@@ -129,6 +136,13 @@ interface AdminReachRow {
   share: number | null;
 }
 
+/** One origin's agents among the week's agents started, and their share of them. */
+interface AdminAgentOriginRow {
+  origin: AgentOrigin;
+  agents: number;
+  share: number | null;
+}
+
 /**
  * One of the most active accounts over the window, ranked by the days it took
  * a meaningful action rather than by volume: who lives in the app daily, which a
@@ -160,8 +174,6 @@ export interface AdminOverview {
     activeDevelopers: AdminTrend;
     tasksCreated: AdminTrend;
     agentsStarted: AdminTrend;
-    /** Of the agents started in the recent run, how many an automation started. */
-    agentsFromAutomations: number;
     prsMerged: AdminTrend;
     /**
      * The pull requests of the agents started in the recent run, and how many
@@ -171,6 +183,15 @@ export interface AdminOverview {
      * an older agent opened this week is in neither figure.
      */
     prsOpened: { opened: number; merged: number };
+  };
+  /** The agents started in the headline's recent run, split by how each started. */
+  agentOrigins: {
+    /** The headline's `agentsStarted.recent`, the base of every share. */
+    agentsStarted: number;
+    /** Every origin, in the vocabulary's order, each agent under one; their agents sum to `agentsStarted`. */
+    origins: AdminAgentOriginRow[];
+    /** Of those agents, how many are task pilots, whatever started them. */
+    pilots: number;
   };
   activity: {
     /** The window's UTC days, oldest first, zero-filled. */
@@ -209,6 +230,41 @@ export interface AdminUserAccount {
   signInMethods: string[];
 }
 
+/** One UTC day of an account's meaningful actions: its key, and each kind's count that day. */
+export type AdminActionDay = { day: string } & Record<MeaningfulAction, number>;
+
+/** One UTC day's count of something, as a calendar draws it. */
+export interface AdminDailyCount {
+  day: string;
+  count: number;
+}
+
+/**
+ * The account's meaningful actions (`admin-activity-queries.ts`), read once
+ * over the calendar's trailing year and folded: every figure here comes from
+ * that one series, so a tile can never disagree with the bars or the grid.
+ */
+export interface AdminUserActions {
+  /** The window's UTC days, oldest first, zero-filled, each kind counted. */
+  daily: AdminActionDay[];
+  /** The calendar's zero-filled trailing year, `calendarDayKeys`'s span, each day's kinds summed. */
+  calendarDaily: AdminDailyCount[];
+  /** Every kind summed, over the trend's two runs. */
+  actionsTrend: AdminTrend;
+  activeDaysWindow: number;
+  /** Active days in the trailing run beside the run before it. */
+  activeDaysTrend: AdminTrend;
+  /**
+   * Consecutive active days ending today or yesterday, read off the trailing
+   * year, so a run is capped where it reaches the year's first day and the
+   * page words it as "or longer".
+   */
+  currentStreakDays: number;
+  /** The earliest and the latest active day inside the trailing year; null where it holds none. */
+  firstActiveDay: string | null;
+  lastActiveDay: string | null;
+}
+
 /** The account's whole hosted-tier history, folded to counts and two dates. */
 export interface AdminUserAllTime {
   activeDays: number;
@@ -221,6 +277,9 @@ export interface AdminUserDetail {
   generatedAt: number;
   windowDays: number;
   account: AdminUserAccount;
+  /** What the account did, by its meaningful actions: the page's live activity. */
+  actions: AdminUserActions;
+  /** The retired hosted tier's figures, which only dictation still writes. */
   activity: {
     daily: AdminDailyUsage[];
     /**
@@ -257,17 +316,12 @@ export interface AdminUserListRow {
   admin: boolean;
   /** When the account was created, in epoch milliseconds. */
   createdAt: number;
-  /** Window days with a hosted-usage row; zero for an account never active. */
+  /** Window days with at least one meaningful action; zero for an account never active. */
   activeDays: number;
-  /** The account's most recent active day inside the window, if any. */
+  /** The UTC day of the account's latest meaningful action in the trailing year, if any. */
   lastActiveDay: string | null;
-  /**
-   * When the account last touched the service at all, in epoch milliseconds,
-   * as `lastSeenInstant` folds it. Null for an account whose sessions have
-   * all been pruned and which never touched the hosted tier.
-   */
+  /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
   lastSeenAt: number | null;
-  calls: number;
   /** Whether the viewing admin starred this account, theirs alone to see. */
   favorite: boolean;
 }
@@ -311,14 +365,40 @@ export interface AdminDayTotals {
   calls: number;
 }
 
+/**
+ * One account active on the day, by a meaningful action, with what it did:
+ * each count the rows of the Overview's daily counts it is attributed to.
+ */
+export interface AdminDayActiveAccount {
+  id: string;
+  name: string;
+  email: string;
+  /** The avatar URL the sign-in provider gave the account, when it gave one. */
+  image: string | null;
+  admin: boolean;
+  counts: Record<DayAccountCount, number>;
+}
+
+/** The day's live activity, read from the same rows as the Overview's activity chart. */
+export interface AdminDayActivity {
+  /** Each feature's count that day, equal to its segment of the chart's bar. */
+  features: Record<ActivityFeature, number>;
+  /** Distinct accounts with a meaningful action that day, counted past the row bound. */
+  activeDevelopers: number;
+  /** Those accounts, busiest first, cut at the detail's stated bound. */
+  accounts: AdminDayActiveAccount[];
+}
+
 export interface AdminDayDetail {
   generatedAt: number;
   /** The UTC day the counts cover, as YYYY-MM-DD. */
   day: string;
-  /** The bound `accounts` was read under, so the page can word a truncation. */
+  /** The bound `accounts` and `activity.accounts` were each read under, so the page can word a truncation. */
   limit: number;
+  activity: AdminDayActivity;
+  /** The retired hosted tier's counts for the day. */
   totals: AdminDayTotals;
-  /** The day's active accounts, busiest first, cut at the stated bound. */
+  /** The day's hosted-tier accounts, busiest first, cut at the stated bound. */
   accounts: AdminDayAccount[];
 }
 
@@ -567,7 +647,7 @@ export type AdminAccountFailure =
   | { kind: typeof ADMIN_FAILURE_KIND.AUTOMATION; at: number; reason: AutomationRunReason | null };
 
 export interface AdminAccountSupport {
-  /** When the account last touched the service, as the roster's `lastSeenInstant` folds it; null where nothing says. */
+  /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
   lastSeenAt: number | null;
   totals: {
     tasksCreated: number;
