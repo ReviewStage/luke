@@ -130,7 +130,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       };
       return Promise.resolve(done(held));
     case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
-      // Ending a sign-in answers it as cancelled, as the host does.
+      // Ending a sign-in answers it as canceled, as the host does.
       signInOpen?.resolve(done({ cancelled: true }));
       signInOpen = undefined;
       return Promise.resolve(done(undefined));
