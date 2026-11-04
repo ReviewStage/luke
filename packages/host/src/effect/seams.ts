@@ -189,9 +189,8 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
  * (`compose-local-agents.ts`): how every runner is started (`launch`),
  * straight on the box as a host's are, on what (`tools`), the runner's
  * bundle, and what the start adds to its environment; the name, platform,
- * and architecture the device is offered under at Start; and the scripts that make an
- * agent's worktree and check it for unsaved work
- * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
+ * and architecture the device is offered under at Start; and the script that makes an
+ * agent's worktree (`node/open-on-mac.ts`'s `agentWorktreeScript`).
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
  * built them could not load in a browser. Only the follower asks for it, as
@@ -223,14 +222,6 @@ export interface LocalAgentPlatformSeam {
     readonly worktree: string;
     readonly branch: string | null;
   }) => string;
-  /**
-   * The script that says what a discard would lose from the agent's worktree
-   * (`node/open-on-mac.ts`'s `agentUnsavedWorkScript`): it prints a line naming
-   * the work at risk, nothing where there is none, and exits non-zero where it
-   * could not tell, which keeps the folder. A discard on a device that names
-   * none removes the folder unconditionally.
-   */
-  readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
 }

@@ -1,5 +1,5 @@
 /**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session, each reporting the steps it passes, fetching only where it makes its repository.
+ * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk whatever it holds, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session, each reporting the steps it passes, fetching only where it makes its repository.
  *
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
@@ -34,7 +34,7 @@ import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
 import { fakeClis } from "./testing/fake-clis.js";
-import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
+import { type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://app.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
@@ -57,8 +57,6 @@ const NEWER_KIND: DeviceAgentLine = {
   payload: {},
 };
 
-/** The platform's check of the worktree, named so the scripted spawner answers it. */
-const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
 /** The platform's script that makes the agent's repository, named so the scripted spawner answers it. */
 const WORKTREE_SCRIPT = "make-the-agents-repository";
 /** The runner's own start on the box, as the platform launches it. */
@@ -73,8 +71,8 @@ const json = (body: unknown) =>
 /** A fetch that never answers, as a held read the service holds past the test. */
 const held = () => new Promise<Response>(() => {});
 
-/** The platform the follower runs on: This Mac, whose agents run straight on it, checking a folder with the script given before a discard where one is. */
-const directMac = (unsavedWork: Script | undefined) => ({
+/** The platform the follower runs on: This Mac, whose agents run straight on it. */
+const directMac = () => ({
   launch: ({
     node,
     env,
@@ -100,7 +98,6 @@ const directMac = (unsavedWork: Script | undefined) => ({
   deviceArch: DEVICE_ARCH.ARM64,
   deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
   worktreeScript: () => WORKTREE_SCRIPT,
-  unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
 });
 
 /**
@@ -110,7 +107,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
  * the folder, the record's file for the agent, the line ids it settled, and
  * what waits for the service to take the discard's settle.
  */
-const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
+const following = (lines: readonly DeviceAgentLine[]) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("agent-lines-");
     const home = path.join(root, "home");
@@ -145,12 +142,11 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
           return held();
       }
     };
-    const spawner = scriptedSpawner((program, args) => {
-      if (program === "/bin/bash" && args[0] === "-l") {
-        return { stdout: "/usr/bin:/bin", exitCode: 0 };
-      }
-      return program === "/bin/bash" && args[1] === UNSAVED_WORK_SCRIPT ? unsavedWork : undefined;
-    });
+    const spawner = scriptedSpawner((program, args) =>
+      program === "/bin/bash" && args[0] === "-l"
+        ? { stdout: "/usr/bin:/bin", exitCode: 0 }
+        : undefined,
+    );
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
@@ -158,7 +154,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       fakeHttpClientLayer(fetchLike),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: () => {} }),
-      Layer.succeed(LocalAgentPlatform, directMac(unsavedWork)),
+      Layer.succeed(LocalAgentPlatform, directMac()),
     );
     const composer = yield* composeLocalAgents({
       kernel: { stateRoot: path.join(root, "state"), createId: () => DEVICE_ID },
@@ -173,17 +169,20 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
     return { folder, owned, settled, discardSettled: Deferred.await(discardSettled) };
   });
 
-it.effect("a discard line removes the agent's folder from the device and is settled", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { folder, settled, discardSettled } = yield* following([DISCARD]);
-      yield* discardSettled;
+it.effect(
+  "a discard line removes the agent's folder from the device whatever it holds, and the device's record of it, and is settled",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { folder, owned, settled, discardSettled } = yield* following([DISCARD]);
+        yield* discardSettled;
 
-      const fileSystem = yield* FileSystem.FileSystem;
-      assert.equal(yield* fileSystem.exists(folder), false, "the agent's folder is still there");
-      assert.deepEqual(settled, [DISCARD.id]);
-    }),
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(folder), false, "the agent's folder is still there");
+        assert.equal(yield* fileSystem.exists(owned), false);
+        assert.deepEqual(settled, [DISCARD.id]);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
 it.effect(
@@ -200,28 +199,6 @@ it.effect(
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
-
-for (const [name, check, kept] of [
-  ["says it holds work", { stdout: "it has changes not committed\n", exitCode: 0 }, true],
-  ["cannot say", { exitCode: 1 }, true],
-  ["finds nothing", { exitCode: 0 }, false],
-] as const) {
-  it.effect(
-    `a discard where the platform's check ${name} ${kept ? "keeps" : "removes"} the folder, and the device's record of it, and is settled`,
-    () =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { folder, owned, settled, discardSettled } = yield* following([DISCARD], check);
-          yield* discardSettled;
-
-          const fileSystem = yield* FileSystem.FileSystem;
-          assert.equal(yield* fileSystem.exists(folder), kept);
-          assert.equal(yield* fileSystem.exists(owned), kept);
-          assert.deepEqual(settled, [DISCARD.id]);
-        }),
-      ).pipe(Effect.provide(NodeFileSystem.layer)),
-  );
-}
 
 const LAUNCH: DeviceAgentLine = {
   id: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
@@ -327,7 +304,7 @@ const launching = (workStands: boolean, repositoryHangs = false) =>
       if (program === "/bin/bash") return { exitCode: 0 };
       return program === RUNNER ? { exitCode: 0 } : undefined;
     });
-    const platform = directMac(undefined);
+    const platform = directMac();
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
