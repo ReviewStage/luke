@@ -333,10 +333,20 @@ const agentMessageAnswerViewSchema = EffectSchema.Union([agentMessageAnswerSchem
 
 export type AgentMessageAnswerView = typeof agentMessageAnswerViewSchema.Type;
 
-/** One change of an agent's queue, as the window asks it: the agent and the change. */
+/**
+ * One change of an agent's queue, as the window asks it: the agent, the
+ * change, and for a message queued or edited with files, the ids the window
+ * keeps each file's bytes under, in order, which the host draws the message's
+ * files by until the service's queue names its own.
+ */
 export const agentQueueParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   change: agentQueueChangeSchema,
+  pictures: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String).check(
+      EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS),
+    ),
+  ),
 });
 
 export type AgentQueueParams = typeof agentQueueParamsSchema.Type;

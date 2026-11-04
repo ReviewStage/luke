@@ -26,7 +26,6 @@ import {
   type AgentPartView,
   type AgentPinParams,
   type AgentPullRequestWriteAnswerView,
-  type AgentQueueAnswerView,
   type AgentRenameParams,
   type AgentServersParams,
   type AgentTranscriptOlderAnswer,
@@ -152,6 +151,7 @@ import {
   chaptersModelWritten,
   heldAccountPreferences,
 } from "./account-preferences-follow.js";
+import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
   type AppAgentOrigins,
@@ -229,6 +229,7 @@ import {
   HELD_BYTES,
   HELD_BYTES_EACH,
   HELD_TRANSCRIPTS,
+  heldTranscript,
   type TranscriptFollows,
   TranscriptKey,
   transcriptFollows,
@@ -466,21 +467,30 @@ export function composeAgents(
       accountId: dependencies.accountId,
     });
     const gate = gateOf(dependencies);
+    const queues = yield* agentQueues(dependencies.pool);
     // Note that a transcript no window holds stops following, its messages standing for a window that steps back to it, since a working agent nobody looks at would otherwise stream its journal on.
     const transcriptSlice = yield* heldSlice<typeof LIVE_READ.TRANSCRIPT, TranscriptKey>({
       empty: NO_TRANSCRIPTS,
       path: (key) => [key.agentId, key.callId ?? OWN_TRANSCRIPT],
       gate,
-      // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
+      // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens; an agent's own carries its queue, which stands in the pool.
       follow: (key, answers) =>
-        followTranscript(
-          transcripts,
-          key,
-          {
-            newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
-            after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
-          },
-          answers,
+        Effect.scoped(
+          Effect.flatMap(
+            key.callId === undefined
+              ? queues.held(key.agentId, answers)
+              : Effect.succeed(heldTranscript(answers)),
+            (held) =>
+              followTranscript(
+                transcripts,
+                key,
+                {
+                  newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
+                  after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+                },
+                held,
+              ),
+          ),
         ),
       tell: (held: AppTranscripts) =>
         dependencies.kernel.emit(GATEWAY_EVENT.TRANSCRIPTS_CHANGED, carried(held)),
@@ -594,7 +604,7 @@ export function composeAgents(
     return composed(
       dependencies,
       http,
-      { transcripts, slice: transcriptSlice, holds: transcriptHolds },
+      { transcripts, slice: transcriptSlice, holds: transcriptHolds, queues },
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
@@ -613,6 +623,8 @@ interface Transcripts {
   readonly transcripts: TranscriptFollows;
   readonly slice: HeldSlice<TranscriptKey> & HeldRows<TranscriptKey, AppTranscript>;
   readonly holds: FiberMap.FiberMap<TranscriptKey>;
+  /** Each agent's queue in the pool, fed from its own transcript, and the change of one. */
+  readonly queues: AgentQueues;
 }
 
 /** The scopes' subscriptions the windows share, the held lifetime over them, and the windows' holds, one fiber per scope held. */
@@ -823,7 +835,7 @@ function fetchedReads(
 function composed(
   dependencies: AgentsDependencies,
   http: HttpClient.HttpClient,
-  { transcripts, slice: transcriptSlice, holds: transcriptHolds }: Transcripts,
+  { transcripts, slice: transcriptSlice, holds: transcriptHolds, queues }: Transcripts,
   { inboxes, holders, holds: inboxHolds, accountWide }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
@@ -949,6 +961,8 @@ function composed(
           : Effect.void,
       ),
   );
+  /** A change of an agent's queue, drawn over its own transcript's queue at once and standing until a page carries it. */
+  const queued = queues.write((agentId, change) => asked(client.changeQueue(agentId, change)));
   /**
    * An agent deleted once its question was answered, drawn gone from the
    * list at once and kept once the list carries it; a refusal puts it back.
@@ -1424,16 +1438,16 @@ function composed(
           "switching an agent's MCP servers names the agent and the servers off",
         ),
     ),
-    [GATEWAY_METHOD.AGENTS_QUEUE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, change } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_QUEUE]: declaredMethod(dependencies.pool, queued, (params: WireRecord) =>
+      Effect.map(
+        readParams(
           agentQueueParamsSchema,
           params,
           "changing an agent's queue names the agent and the change",
-        );
-        const answer = yield* asked(client.changeQueue(agentId, change));
-        return carried<AgentQueueAnswerView>(answer);
-      }),
+        ),
+        (read): QueueWrite => ({ ...read, queuedBy: dependencies.accountId() ?? "" }),
+      ),
+    ),
     [GATEWAY_METHOD.AGENTS_ARCHIVE]: declaredMethod(
       dependencies.pool,
       archived,

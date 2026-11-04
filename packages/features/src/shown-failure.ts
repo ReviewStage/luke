@@ -62,6 +62,8 @@ export const FAILURE_SURFACE = {
   AGENT_KEY_REMOVE: "agent_key.remove",
   AGENT_KEY_SAVE: "agent_key.save",
   AGENT_PIN: "agent.pin",
+  /** A change of an agent's queue the host drew and took back: a message queued, edited, held, steered, put in order, or the pause dropped. */
+  AGENT_QUEUE_CHANGE: "agent_queue.change",
   AGENT_QUEUE_DELETE: "agent_queue.delete",
   AGENT_RENAME: "agent.rename",
   AGENT_REWIND: "agent.rewind",
