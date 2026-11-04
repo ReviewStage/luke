@@ -32,6 +32,7 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { deviceAgentLine } from "@repo/database/schemas/device-agent";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@repo/database/testing";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -62,7 +63,7 @@ import {
   cloneAgentRepository,
   deepenCheckoutWith,
 } from "../coder-host/checkout.js";
-import { ranDirectlyFolderOf } from "../coder-host/status.js";
+import { agentFailureOf, hostLostOf, ranDirectlyFolderOf } from "../coder-host/status.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentLinesFor,
@@ -560,6 +561,9 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             lapsedTurn?.failureDetail,
             "Studio went away during this turn. Send a message to carry on once it's back.",
           );
+          // Note that the agent reads as its host lost, naming it, rather than as the model's failure.
+          assert.equal(agentFailureOf(lapsedTurn), AGENT_FAILURE.OTHER);
+          assert.deepEqual(hostLostOf(lapsedTurn), { host: "Studio" });
           assert.equal(bearer?.hash, null, "nothing the lapsed runner posts reaches the agent");
           assert.deepEqual(
             Option.map(

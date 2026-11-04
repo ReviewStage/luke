@@ -1,4 +1,8 @@
-import { agentFailureWords, ranDirectlyWords } from "@repo/features/agent-failure-words";
+import {
+  agentFailureWords,
+  hostLostWords,
+  ranDirectlyWords,
+} from "@repo/features/agent-failure-words";
 import { recordedVideosOf } from "@repo/features/agent-pictures-model";
 import { harnessNameOf } from "@repo/features/agent-runtime-models";
 import {
@@ -399,7 +403,9 @@ export interface EndLineParts {
  * An agent whose tab offers Continue, or that another already continued
  * (`continuable`), is not told to start a new one. One that ran directly on
  * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
- * where its work still is, in place of its failure's words.
+ * where its work still is, in place of its failure's words, and one whose
+ * host stopped beating while its turn ran (`hostLost`) names the host and
+ * that a message carries it on once the host is back.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's last line says (`agentPayerLine`).
  */
@@ -409,6 +415,7 @@ export function endLineParts(
   starter?: string,
   continuable = false,
   ranDirectly?: { readonly folder: string },
+  hostLost?: { readonly host: string },
 ): EndLineParts | undefined {
   switch (status) {
     case AGENT_STATUS.CANCELED:
@@ -416,6 +423,8 @@ export function endLineParts(
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
         return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
+      if (hostLost !== undefined)
+        return { words: hostLostWords(hostLost.host), failed: true, failure };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return {
