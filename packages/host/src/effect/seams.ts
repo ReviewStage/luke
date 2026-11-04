@@ -191,8 +191,9 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
  * straight on the box as a host's are, on what (`tools`), the runner's
  * bundle, and what the start adds to its environment; the name, platform,
  * and architecture the device is offered under at Start; and the scripts that make an
- * agent's own repository and check it for unsaved work
- * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
+ * agent's own repository, check it for unsaved work, and save that work
+ * (`node/open-on-mac.ts`'s `agentWorktreeScript`, `agentUnsavedWorkScript`, and
+ * `agentSalvageScript`).
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
  * built them could not load in a browser. Only the follower asks for it, as
@@ -234,6 +235,20 @@ export interface LocalAgentPlatformSeam {
    * none removes the folder unconditionally.
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
+  /**
+   * The script that saves into `salvage` what the agent's worktree holds that
+   * is nowhere else, before a folder kept for it is removed whatever it holds
+   * (`node/open-on-mac.ts`'s `agentSalvageScript`): it prints what it wrote,
+   * one fact a line (`SALVAGE_FACT`), and exits non-zero where a step fails,
+   * which keeps the folder. A device that names none keeps such a folder.
+   */
+  readonly salvageScript?:
+    | ((input: {
+        readonly worktree: string;
+        readonly salvage: string;
+        readonly maxBytes: number;
+      }) => string)
+    | undefined;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
   /**

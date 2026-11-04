@@ -4,7 +4,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
-import { agentUnsavedWorkScript, agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
+import {
+  agentSalvageScript,
+  agentUnsavedWorkScript,
+  agentWorktreeScript,
+  cloneFolder,
+} from "./open-on-mac.js";
 
 /**
  * A local agent's scripts over real Git and bash, an origin on disk standing
@@ -13,8 +18,10 @@ import { agentUnsavedWorkScript, agentWorktreeScript, cloneFolder } from "./open
  * over SSH; two launches at once before the clone is made each bring in their
  * own branch, none taking the lock from one that took it after the holder it
  * read let go; one waits on a clone another holds while it lives, and takes
- * the lock over once it is gone; and a discard finds work in an agent's
- * repository only where something of it is nowhere else.
+ * the lock over once it is gone; a discard finds work in an agent's
+ * repository only where something of it is nowhere else; and a salvage keeps
+ * an agent's changes as a diff that applies, and past its bound keeps its
+ * commits and changes but not its untracked files, saying so.
  */
 
 const GIT_ENVIRONMENT = {
@@ -412,6 +419,48 @@ test(
       { printed: "", code: 0 },
       "an agent that never had a worktree holds nothing",
     );
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a salvage keeps an agent's changes as a diff that applies, and past its bound keeps its commits and changes but not its untracked files, saying so",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = path.join(scratch, "agents", "one", "repository");
+    run(
+      scratch,
+      shell,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "agent/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+    writeFileSync(path.join(worktree, "fix.md"), "unpushed\n");
+    git(worktree, ["add", "fix.md"]);
+    git(worktree, ["commit", "--quiet", "-m", "fix"]);
+    writeFileSync(path.join(worktree, "README.md"), "changed\n");
+    writeFileSync(path.join(worktree, "big.bin"), "x".repeat(64 * 1024));
+    const salvage = path.join(state, "salvage", "one", "1");
+
+    const ran = runEnded(
+      scratch,
+      shell,
+      agentSalvageScript({ worktree, salvage, maxBytes: 32 * 1024 }),
+    );
+
+    assert.equal(ran.code, 0);
+    assert.match(ran.printed, /^commits commits\.bundle$/mu);
+    assert.match(ran.printed, /^changes changes\.diff$/mu);
+    assert.match(ran.printed, /^skipped the untracked files/mu);
+    assert.equal(existsSync(path.join(salvage, "untracked.tar")), false);
+    git(worktree, ["checkout", "--quiet", "--", "README.md"]);
+    git(worktree, ["apply", path.join(salvage, "changes.diff")]);
+    assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "changed\n");
   },
   GIT_DEADLINE,
 );

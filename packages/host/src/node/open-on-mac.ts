@@ -1,4 +1,5 @@
 import path from "node:path";
+import { SALVAGE_FACT } from "../local-agent-salvage.js";
 
 /**
  * open-on-mac.ts -- the scripts a local agent's repository is made and read with on this Mac, from the app's own clone of the repository.
@@ -233,6 +234,110 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     "if git rev-parse --verify --quiet refs/stash >/dev/null; then",
     '  echo "it has changes stashed"',
     "fi",
+    "exit 0",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Git run in the agent's repository with nothing of the developer's or the
+ * agent's that could run code: a clean environment, no system or global
+ * config, no prompt, no fetch of a promisor's missing objects, no fsmonitor
+ * and no hooks, so the repository's own config starts nothing.
+ */
+const SALVAGE_GIT = [
+  "g() {",
+  '  env -i PATH="$PATH" LANG=C GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 GIT_PAGER=cat \\',
+  '    git -c core.fsmonitor= -c core.hooksPath=/dev/null "$@"',
+  "}",
+];
+
+/**
+ * The script, its values quoted, that saves into `salvage` what a local
+ * agent's worktree holds that is nowhere else (`@repo/host`'s
+ * `compose-local-agents.ts`), before its folder is removed whatever it holds:
+ * a bundle of its commits on no remote branch (`SALVAGE_FACT.COMMITS`), a
+ * binary diff of its changes to tracked files (`CHANGES`), and a tar of its
+ * untracked files (`UNTRACKED`), or of the whole folder where it has no
+ * repository (`FILES`). The bundle and the diff are always kept; a tar that
+ * would take the salvage past `maxBytes` is not written, and it says so
+ * (`SKIPPED`). It prints each fact as a line and exits 0 once all is
+ * written, and exits 1 where a step fails, which keeps the folder.
+ */
+export function agentSalvageScript(input: {
+  readonly worktree: string;
+  readonly salvage: string;
+  readonly maxBytes: number;
+}): string {
+  return [
+    // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git lives on.
+    'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
+    "export PATH",
+    `worktree=${shellQuoted(input.worktree)}`,
+    `salvage=${shellQuoted(input.salvage)}`,
+    `cap=${Math.floor(input.maxBytes)}`,
+    ...SALVAGE_GIT,
+    // Note that the tar is cut one byte past the room left, so a tar too big is known by its size and never fills the disk.
+    "tarred() {",
+    '  room="$1"; shift',
+    '  if [ "$room" -le 0 ]; then return 2; fi',
+    '  tar -c -f - "$@" | head -c "$((room + 1))" > "$salvage/$name"',
+    '  made="${PIPESTATUS[0]}"',
+    '  if [ "$(wc -c < "$salvage/$name")" -gt "$room" ]; then rm -f "$salvage/$name"; return 2; fi',
+    '  [ "$made" -eq 0 ] || return 1',
+    "}",
+    "umask 077",
+    'mkdir -p "$salvage" || exit 1',
+    '[ -d "$worktree" ] || exit 0',
+    'cd "$worktree" || exit 1',
+    "if [ ! -e .git ]; then",
+    '  [ -n "$(ls -A)" ] || exit 0',
+    "  name=files.tar",
+    `  tarred "$cap" . && { echo "${SALVAGE_FACT.FILES} $name"; exit 0; }`,
+    '  [ "$?" -eq 2 ] || exit 1',
+    `  echo "${SALVAGE_FACT.SKIPPED} the folder's files, past $cap bytes"`,
+    "  exit 0",
+    "fi",
+    'head="$(g rev-parse --verify --quiet HEAD)" || head=""',
+    `[ -z "$head" ] || echo "${SALVAGE_FACT.HEAD} $head"`,
+    'origin="$(g config --get remote.origin.url)" || origin=""',
+    `[ -z "$origin" ] || echo "${SALVAGE_FACT.ORIGIN} $origin"`,
+    // Note that the head, every local branch and the stash are bundled, so a commit the agent left on any of them comes back.
+    "set -- --branches",
+    '[ -z "$head" ] || set -- HEAD "$@"',
+    'if g rev-parse --verify --quiet refs/stash >/dev/null; then set -- "$@" refs/stash; fi',
+    `ahead="$(g rev-list --max-count=1 "$@" --not --remotes --glob='refs/agent/*')" || exit 1`,
+    'if [ -n "$ahead" ]; then',
+    `  g bundle create "$salvage/commits.bundle" "$@" --not --remotes --glob='refs/agent/*' 2>/dev/null || exit 1`,
+    `  echo "${SALVAGE_FACT.COMMITS} commits.bundle"`,
+    "fi",
+    'if [ -n "$head" ]; then',
+    '  g diff --binary --no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/ HEAD > "$salvage/changes.diff" || exit 1',
+    '  if [ -s "$salvage/changes.diff" ]; then',
+    `    echo "${SALVAGE_FACT.CHANGES} changes.diff"`,
+    "  else",
+    '    rm -f "$salvage/changes.diff"',
+    "  fi",
+    "fi",
+    // Note that untracked files are asked for by name, since the developer's own `status.showUntrackedFiles` would hide them.
+    'listed="$salvage/.untracked"',
+    'g ls-files -z --others --exclude-standard > "$listed" || exit 1',
+    'if [ -s "$listed" ]; then',
+    "  used=0",
+    '  for kept in "$salvage/commits.bundle" "$salvage/changes.diff"; do',
+    '    [ -f "$kept" ] && used=$((used + $(wc -c < "$kept")))',
+    "  done",
+    "  name=untracked.tar",
+    '  if tarred "$((cap - used))" --null -T "$listed"; then',
+    `    echo "${SALVAGE_FACT.UNTRACKED} $name"`,
+    '  elif [ "$?" -eq 2 ]; then',
+    `    echo "${SALVAGE_FACT.SKIPPED} the untracked files, past $cap bytes with the commits and changes"`,
+    "  else",
+    '    rm -f "$listed"',
+    "    exit 1",
+    "  fi",
+    "fi",
+    'rm -f "$listed"',
     "exit 0",
     "",
   ].join("\n");
