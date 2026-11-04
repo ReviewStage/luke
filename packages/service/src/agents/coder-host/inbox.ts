@@ -76,7 +76,7 @@ import {
  * on the thread, since replying never answers: a member's message on the
  * thread reaches the agent as one of the developer's messages, and so does
  * an answer it waits on. No call holds the turn, since a coder session
- * takes no input mid-turn (`eve-host/eve-sessions.ts`'s `requestInput`).
+ * takes no input mid-turn.
  * Every call answers with the agent's whole inbox as it stands, each
  * thread's messages in order with their asks and answers, so the model
  * holds its threads whatever its context has lost to compaction. A worker
@@ -90,7 +90,6 @@ const MAX_PICTURE_MB = (INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1);
 /** The inbox's video bound in megabytes, as the words the model reads say it. */
 const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
 
-/** What `post_thread`'s words say. */
 const POST_THREAD_WORDS =
   "Post a message on a thread in the inbox, apart from your transcript. " +
   "Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
@@ -407,7 +406,6 @@ export function inboxRejected(reason: string): InboxToolResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** Whether every label stands once. */
 function distinct(labels: readonly string[]): boolean {
   return new Set(labels).size === labels.length;
 }
@@ -597,7 +595,6 @@ export function withdrawAsk(
   );
 }
 
-/** Runs one read: the agent's inbox as it stands. */
 export function readOwnInbox(
   agent: InboxAgent,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {

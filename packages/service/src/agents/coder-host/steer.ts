@@ -67,7 +67,7 @@ import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
 /**
- * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from the app's voice.
+ * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or any other sender.
  *
  * The words are handed to the session the agent runs in, where they steer
  * the turn under way or open one, and written as a line awaiting its turn
@@ -104,10 +104,8 @@ import { agentStatusOf } from "./status.js";
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
  * column, so the model never reads a teammate's words as the developer's.
- * Who reaches the agent is the caller's: the route holds the
- * developer's own bearer, and the voice brain's tool acts as the
- * deployment for the account; the agent's harness answers the message
- * either way (`runtime-sessions.ts`). An archived agent takes
+ * Who reaches the agent is the caller's; the agent's harness answers the
+ * message (`runtime-sessions.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
@@ -300,7 +298,7 @@ export interface SteerWritten {
   readonly sent?: { readonly runtime: ConversationRuntime; readonly turnRunning: boolean };
 }
 
-/** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
+/** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is. */
 export const steerAgent = (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
@@ -384,7 +382,6 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   // GitHub is asked beside the mentions' read, each judged in turn as above.
   const reached = yield* Effect.all(
     {
-      // An agent with no repository has none for GitHub to reach.
       repository: Effect.result(
         agent.repository === null
           ? Effect.void

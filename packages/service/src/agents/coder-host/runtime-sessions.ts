@@ -174,7 +174,6 @@ function routed<Turn extends EveHostTurn>(
   store: Context.Context<DatabaseServices>,
   native: Option.Option<NativeAgentSessionsService>,
 ): AgentSessions<Turn> {
-  /** The route of the conversation's calls, read now. */
   const routeOf = (conversationId: string) =>
     Effect.gen(function* () {
       const agent = yield* readAgentHeaderOfConversation(account, conversationId);

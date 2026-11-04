@@ -216,11 +216,7 @@ export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]]
   [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL]],
 ];
 
-/**
- * What the turn of an agent its Mac refused to start records, the agent
- * having run directly on that Mac, which now runs every agent in a VM,
- * followed by the folder of its checkout there, which still holds its work.
- */
+/** What a failed turn's detail opens with when its Mac refused an agent that ran directly on it; the folder of its checkout follows. */
 export const RAN_DIRECTLY_DETAIL =
   "the agent ran directly on its Mac, which now runs every agent in a VM; its work is still in ";
 
@@ -421,11 +417,8 @@ function summaryFields(
 
 /**
  * One agent as the tabs draw it, on a task or with none, read whole or as a
- * list's line, its status read at `now`, the member who started it named by
- * `names`, the accounts' names by id, where theirs stands, the agents
- * started from it, none where the read names none, and the Mac a local
- * agent runs on, where `macs` holds it. Its owner is read from `owners`,
- * which `agentOwnerFactsOf` answers for the agents of the read.
+ * list's line. Its owner is read from `owners`, which `agentOwnerFactsOf`
+ * answers for the agents of the read.
  */
 export function agentSummary(
   agent: Agent | AgentLine,

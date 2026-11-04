@@ -15,8 +15,7 @@
  * `native_session`, which the events route records from what the runner
  * reports, and a relaunch resumes.
  *
- * `open` reads the harness's credential and answers, as eve's open answers
- * once eve took the message; past the answer (`after-response.ts`) it opens
+ * `open` reads the harness's credential and answers; past the answer (`after-response.ts`) it opens
  * the agent's place with its repository checked out, waiting while the
  * machine's image is prepared, writes the skills its member installed into
  * the app beside it (`native-skills.ts`), and launches the runner. A launch that
@@ -53,7 +52,7 @@
  *
  * At a launch's end (`runnerEnded`, which the events route calls on the
  * runner's END event) the place is stopped unless a developer's Terminal
- * holds it, as eve's is at a turn's end; a runner waiting on a background
+ * holds it; a runner waiting on a background
  * task or a wakeup has posted no END, so its place stays up. An END from a
  * launch a newer one replaced, told by its event number, stops nothing.
  *
@@ -196,11 +195,11 @@ export type RunnerServices =
 export interface RunnerSessionsOptions {
   /** The account the sessions act for: the agent's starter, whose conversation and key they read. */
   readonly userId: string;
-  /** Where the runner posts its events: the events route (P09), which the composing edge names. */
+  /** Where the runner posts its events: the events route, which the composing edge names. */
   readonly eventsUrl: string;
   /** Where a runner on a machine that has it read its lines reads them (`RUNNER_LINES`), which the composing edge names. */
   readonly linesUrl: string;
-  /** Our MCP server's endpoint (P06), which the composing edge names. */
+  /** Our MCP server's endpoint, which the composing edge names. */
   readonly mcpUrl: string;
   /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside ours. */
   readonly integrations: (agent: Agent) => Effect.Effect<readonly IntegrationServer[]>;
@@ -822,8 +821,7 @@ export const runnerSessions = <
         // A released wait's wakeups go once the CLI has started again and taken its first
         // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy the service
         // still held would fire twice, or after the agent canceled it. A launch that failed
-        // before this leaves them for the sweep to deliver, and a delete that failed is logged,
-        // never failing the launch that already runs.
+        // before this leaves them for the sweep to deliver.
         yield* replaceAgentWakeups(agent.id, []).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(
@@ -862,8 +860,7 @@ export const runnerSessions = <
      * The message line with the turn's own words ahead of the developer's
      * (`turn-message.ts`), composed on what the harness's session has handed
      * (`native_handed`): nothing yet for a fresh session, whose history
-     * holds none of it, and what the row keeps otherwise. The flush line is
-     * eve's alone, whose compaction the row's steps are measured against.
+     * holds none of it, and what the row keeps otherwise.
      */
     const openedLine = (
       agent: Agent,
@@ -1208,8 +1205,7 @@ export const runnerSessions = <
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
           // the session goes on in a fresh one, a clean checkout of the repository under the
-          // session's tag, as eve's agents do (eve opens a new sandbox where its snapshot is
-          // gone). The harness's own session files went with the old filesystem, so none is
+          // session's tag. The harness's own session files went with the old filesystem, so none is
           // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
@@ -1568,15 +1564,11 @@ export const runnerSessions = <
           return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
         }
         // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
-        // the message, and where a runner is recorded they go ahead of it for that runner's launch,
-        // so a change of model since it launched holds; a launch still opening its sandbox reads
-        // the agent's model as it starts, and is queued the message alone for whichever launch runs.
-        // Note that the runner's repository credential is not renewed for this message, as
-        // `sendHolding` renews it, because the lease is another call's; it lives an hour, and the
-        // next message renews it. The message is queued as the developer's words alone, since
-        // the turn's own words (`openedLine`) are marked handed only once a runner took them, and
-        // no runner may take this line: they go ahead of the next message handed over instead.
-        // Its hand-on waits as long as a lease can stand, so it outlasts the launch it is behind.
+        // the message, and go ahead of it for a recorded runner's launch; with none recorded, the
+        // message alone is queued for whichever launch runs. Note that the credential is not renewed
+        // here, because the lease is another call's; it lives an hour, and the next message renews it.
+        // The turn's own words (`openedLine`) go ahead of the next message instead, since they are
+        // marked handed only once a runner took them. Its hand-on waits as long as a lease can stand, so it outlasts the launch it is behind.
         const ahead = yield* harness.ahead(agent);
         const recorded = Option.isSome(found) ? found.value.runner : undefined;
         yield* recorded === undefined
@@ -1599,14 +1591,11 @@ export const runnerSessions = <
 
     const sessions: NativeSessions<Turn> = {
       // An open answers once the plan's credential is read, so a plan refused or at its limit is
-      // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
-      // the request that asked (`after-response.ts`), under the runner lease, as eve's open hands its
-      // message over and returns. The caller's after-response door is kept beside the sessions' own
-      // services for that. On a machine whose runner reads its lines, the first message is queued
-      // before the answer, so no message sent after it can be read ahead of it; the launch's own
-      // queue of it finds it queued under its id, and a message sent meanwhile is queued behind it.
-      // Every line it says, past the answer included, names the agent; one that fails before the agent
-      // is read names its conversation.
+      // refused at once; the sandbox, the checkout, and the launch run past the answer of the
+      // request that asked (`after-response.ts`), under the runner lease. On a machine whose runner
+      // reads its lines, the first message is queued before the answer, so no message sent after it
+      // can be read ahead of it; the launch's own queue of it finds it queued under its id, and a
+      // message sent meanwhile is queued behind it.
       open: (message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1665,13 +1654,11 @@ export const runnerSessions = <
       // its own deadline; the lease is taken once the build ended and the message sent afresh, so
       // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
       // let go again for another wait where the relaunch finds the image's snapshot gone. A
-      // caller with no after-response door is answered that the image is being prepared, as before.
+      // caller with no after-response door is answered that the image is being prepared.
       // A message to a runner that reads its lines never waits behind another call's lease, as a
       // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
       // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).
-      // Note that one naming files waits as before, since they are written into a running place.
-      // Every line it says, past the answer included, names the agent where it was read, and its
-      // conversation and session where it was not.
+      // Note that one naming files still waits on the lease, since they are written into a running place.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1694,8 +1681,7 @@ export const runnerSessions = <
       // conversation's turn under way, to the command of the launch running it, and naming that
       // launch, so a Stop delayed past its turn never interrupts the next launch's. A Stop taken
       // is forced past the answer (`forcedStop`), its wait run there rather than holding the
-      // request; a caller with no after-response door leaves an unconfirmed Stop to the sweep, as
-      // before.
+      // request; a caller with no after-response door leaves an unconfirmed Stop to the sweep.
       cancel: (sessionId, turnId) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
