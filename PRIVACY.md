@@ -625,10 +625,12 @@ conversation's record.
 
 On either, the firewall is what keeps the token or key from the commands the
 agent runs: neither Claude Code nor Codex runs a sandbox of its own around
-them, so a command can read the stand-ins its agent's launch was handed,
-Codex's too, and the one its runner reaches our service with, each good for
-nothing but requests from that sandbox, but never the real values, which are
-never in the sandbox. What keeps even a stand-in from anyone with a Terminal
+them. A command Claude Code runs inherits its stand-in; one Codex runs
+inherits neither Codex's stand-in nor the one the agent's runner reaches our
+service with, but, running as the same user, any command can read each of
+them from the environment of the process that holds it. Each is good for
+nothing but requests from that sandbox, and the real values are never in the
+sandbox at all. What keeps even a stand-in from anyone with a Terminal
 in that sandbox is not a missing `sudo`: Claude Code or Codex runs as a user
 of its own, whose home no other user reads, and every Terminal shell, every
 command the agent runs, and Claude Code or Codex itself start with every

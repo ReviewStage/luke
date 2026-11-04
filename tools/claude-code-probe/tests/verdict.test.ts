@@ -199,7 +199,7 @@ describe("verdict", () => {
 
     expect(failing(conditions)).toEqual([
       "a Terminal's shell, capabilities dropped, has no sudo and no capabilities",
-      "a Terminal's shell, capabilities dropped, cannot read the token, its placeholder, the session, or /etc/shadow",
+      "a Terminal's shell, capabilities dropped, cannot read the token, the CLI's environment, the session, or /etc/shadow",
     ]);
     expect(passed(conditions)).toBe(false);
   });
@@ -217,7 +217,7 @@ describe("verdict", () => {
     );
 
     expect(failing(conditions)).toEqual([
-      "a Terminal's shell as it is today, capabilities kept, cannot read the token or its placeholder",
+      "a Terminal's shell as it is today, capabilities kept, cannot read the token or the CLI's environment",
     ]);
     expect(passed(conditions)).toBe(true);
   });

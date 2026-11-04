@@ -100,7 +100,7 @@ function finding(check: Check, name: string, pass: boolean, detail: string): Con
   return { check, name, pass, detail, gating: false };
 }
 
-/** Whether a shell's report shows it can reach neither the token, its placeholder, the session, nor root's secrets. */
+/** Whether a shell's report shows it can reach neither the token, the CLI's environment and the placeholder in it, the session, nor root's secrets. */
 function shellIsPrivate(report: LeakReport | undefined): boolean {
   return (
     report !== undefined &&
@@ -234,7 +234,7 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     condition(
       CHECK.TOKEN,
-      "a Terminal's shell, capabilities dropped, cannot read the token, its placeholder, the session, or /etc/shadow",
+      "a Terminal's shell, capabilities dropped, cannot read the token, the CLI's environment, the session, or /etc/shadow",
       shellIsPrivate(terminal),
       describe(terminal),
     ),
@@ -280,7 +280,7 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     finding(
       CHECK.TOKEN,
-      "a Terminal's shell as it is today, capabilities kept, cannot read the token or its placeholder",
+      "a Terminal's shell as it is today, capabilities kept, cannot read the token or the CLI's environment",
       shellIsPrivate(seen.terminalAsToday),
       describe(seen.terminalAsToday),
     ),

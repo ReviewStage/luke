@@ -514,6 +514,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
       ...markers,
       ciSeconds: options.ciSeconds,
       tokenSha256: credentials.map((one) => sha256Hex(one.tokens.accessToken)),
+      placeholderSha256: sha256Hex(placeholder),
       messages: recorded,
       steerTurnId,
       probeFile,

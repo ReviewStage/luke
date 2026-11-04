@@ -835,7 +835,7 @@ it.effect(
 );
 
 it.effect(
-  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, and never asks the service",
+  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, never asks the service, and no event carries the placeholder",
   () =>
     Effect.gen(function* () {
       const placeholder = "plan-placeholder-for-tests";
@@ -845,8 +845,14 @@ it.effect(
         url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
       const sentToOpenAi: string[] = [];
+      // A command reads app-server's environment, which no sandbox of Codex's keeps from it, and the agent says what it found.
+      const printed = {
+        method: "item/agentMessage/delta",
+        params: { threadId: THREAD, turnId: "turn", itemId: "item", delta: `found ${placeholder}` },
+      };
       const turn: Exchange = {
         ...RESUMED_TURN,
+        reply: [printed, ...RESUMED_TURN.reply],
         beforeReply: (process) =>
           Effect.gen(function* () {
             sentToOpenAi.push(yield* runTokenCommand(process, http));

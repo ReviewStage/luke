@@ -80,6 +80,8 @@ export interface ScanReport {
   readonly environsReadable: number;
   readonly environsDenied: number;
   readonly processesWithAccessToken: readonly string[];
+  /** The SHA-256 of each `processesWithAccessToken` entry's value, in its order; empty where the scanner named none. */
+  readonly accessTokenSha256: readonly string[];
   readonly jwtSha256: readonly { readonly sha256: string; readonly where: string }[];
 }
 
@@ -92,6 +94,8 @@ export interface Observations {
   readonly ciSeconds: number;
   /** SHA-256 of every access token the run used, the first and the refreshed. */
   readonly tokenSha256: readonly string[];
+  /** SHA-256 of the placeholder app-server was handed in the token's place. */
+  readonly placeholderSha256: string;
   readonly messages: readonly RecordedMessage[];
   readonly steerTurnId: string | undefined;
   readonly probeFile: string | undefined;
@@ -137,6 +141,7 @@ export function readScan(output: string): ScanReport | undefined {
       (one) =>
         `${isWireNumber(one.pid) ? one.pid : "?"}:${isWireString(one.comm) ? one.comm : "?"}`,
     ),
+    accessTokenSha256: processes.map((one) => (isWireString(one.sha256) ? one.sha256 : "")),
     jwtSha256: hashes.flatMap((one) =>
       isWireString(one.sha256) && isWireString(one.where)
         ? [{ sha256: one.sha256, where: one.where }]
@@ -215,37 +220,42 @@ function skipped(id: CheckId, detail: string): CheckResult {
 }
 
 /**
- * Whether a scan saw the token: its own environment, a hash of it, or, where
- * the seat may not read the placeholder, a process holding `ACCESS_TOKEN`.
+ * Whether a scan saw the token: its own environment, a hash of it, or a
+ * process holding `ACCESS_TOKEN` at anything but the placeholder the seat
+ * may read (`readablePlaceholder`, its SHA-256); none for a seat that may
+ * read no value at all.
  */
 function scanSawToken(
   scan: ScanReport,
   tokenSha256: readonly string[],
-  placeholderReadable: boolean,
+  readablePlaceholder: string | undefined,
 ): string | undefined {
   if (scan.ownEnvHasAccessToken) return "ACCESS_TOKEN is in its own environment";
-  if (!placeholderReadable && scan.processesWithAccessToken.length > 0) {
-    return `read ACCESS_TOKEN from ${scan.processesWithAccessToken.join(", ")}`;
-  }
+  const held = scan.processesWithAccessToken.filter(
+    (_, index) =>
+      readablePlaceholder === undefined || scan.accessTokenSha256[index] !== readablePlaceholder,
+  );
+  if (held.length > 0) return `read ACCESS_TOKEN from ${held.join(", ")}`;
   const hit = scan.jwtSha256.find((one) => tokenSha256.includes(one.sha256));
   return hit === undefined ? undefined : `found the token at ${hit.where}`;
 }
 
 /**
  * A scan judged: passes where the seat could not see the token. Note that a
- * command Codex runs may read the placeholder (`placeholderReadable`),
- * because Codex runs no sandbox of its own, so app-server's environment is
- * open to its commands, which the design accepts: the placeholder is good
- * only through the sandbox's firewall. Every other seat may read neither.
+ * command Codex runs may read the placeholder (`readablePlaceholder`, its
+ * SHA-256), because Codex runs no sandbox of its own, so app-server's
+ * environment is open to its commands, which the design accepts: the
+ * placeholder is good only through the sandbox's firewall. Any other value
+ * there fails it, and every other seat may read none.
  */
 function scanCheck(
   id: CheckId,
   scan: ScanReport | undefined,
   tokenSha256: readonly string[],
-  placeholderReadable = false,
+  readablePlaceholder?: string,
 ): CheckResult {
   if (scan === undefined) return skipped(id, "no scan report from this seat");
-  const saw = scanSawToken(scan, tokenSha256, placeholderReadable);
+  const saw = scanSawToken(scan, tokenSha256, readablePlaceholder);
   const read =
     scan.processesWithAccessToken.length === 0
       ? ""
@@ -363,7 +373,7 @@ function tokenChecks(seen: Observations): readonly CheckResult[] {
     .filter((text) => text.includes("access_token_in_env="));
   const writable = seen.writablePaths;
   return [
-    scanCheck(CHECK.CODEX_COMMAND, commandScans[0], seen.tokenSha256, true),
+    scanCheck(CHECK.CODEX_COMMAND, commandScans[0], seen.tokenSha256, seen.placeholderSha256),
     mcpAnswers.length === 0
       ? skipped(CHECK.MCP_SERVER, "the MCP server never answered")
       : check(

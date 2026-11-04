@@ -176,7 +176,7 @@ const MIN_LOGIN_CHARS = 5;
 /** Where a command runs that names no directory of its own. */
 const DEFAULT_DIRECTORY = "/tmp";
 
-/** Every value of the run's that no output may carry. */
+/** The secret values the run holds, which no output may carry. */
 function secretsOf(settings: Settings): readonly string[] {
   return [settings.claudeToken, settings.placeholder, settings.githubToken].map(Redacted.value);
 }
@@ -593,7 +593,12 @@ const probe = Effect.fn("probe/probe")(function* (
   }
   yield* say("· the placeholder from outside the sandbox");
   const outside = yield* Effect.exit(placeholderOutside(scrub, settings));
-  recording.placeholderOutside = Exit.isSuccess(outside) ? outside.value : undefined;
+  if (Exit.isSuccess(outside)) recording.placeholderOutside = outside.value;
+  else
+    recording.findings.push({
+      step: "the placeholder from outside the sandbox",
+      output: scrubText(scrub, Cause.pretty(outside.cause)),
+    });
   const tokenFiles = yield* run(scrub, recording, sandbox, "token-shaped files, as root", {
     script: ROOT_TOKEN_SCAN,
     as: RUN_AS.ROOT,
