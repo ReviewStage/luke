@@ -181,11 +181,9 @@ import {
   type IntegrationConnectView,
   type IntegrationProviderParams,
   type IntegrationRenameParams,
-  type IntegrationStatusesView,
   type IntegrationStatusView,
   integrationAccountViewSchema,
   integrationConnectViewSchema,
-  integrationStatusesViewSchema,
   integrationStatusViewSchema,
 } from "@repo/features/integration-view";
 import {
@@ -378,6 +376,7 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppIntegrations,
   AppIntegrationTools,
   AppMcpClients,
   AppPages,
@@ -547,8 +546,14 @@ export interface HostOperator {
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
   tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
-  /** Where every one of the account's integrations stands; or why there is no answer. */
-  integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
+  /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
+  integrationsFollow(): Effect.Effect<void>;
+  /** The account's integrations let go by the windows. */
+  integrationsUnfollow(): Effect.Effect<void>;
+  /** The account's held integrations read again at once, as Try again asks. */
+  integrationsRetry(): Effect.Effect<void>;
+  /** The account's integrations the host holds for the windows, whole, each time they move. */
+  onIntegrationsChanged(listener: (held: AppIntegrations) => void): () => void;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
   /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
@@ -1127,10 +1132,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   });
 
   return {
-    integrationsStatus: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
-        answerOf(integrationStatusesViewSchema, INTEGRATION_UNANSWERED),
+    integrationsFollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW, {})),
+    integrationsUnfollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW, {})),
+    integrationsRetry: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_RETRY, {})),
+    onIntegrationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INTEGRATIONS_CHANGED,
+        // Note that the held integrations are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppIntegrations>(payload) : undefined),
+        listener,
       ),
     integrationsConnect: (params) =>
       Effect.map(

@@ -13,6 +13,7 @@ import type {
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
@@ -415,6 +416,13 @@ export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRea
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
+/**
+ * Where every one of the account's integrations stands, by the account, as
+ * the host's read of them stands (`compose-integrations.ts`): its rows as
+ * the service last answered them, with GitHub's standing beside them.
+ */
+export type AppIntegrations = Readonly<Record<string, AppHostRead<IntegrationStatusesAnswer>>>;
+
 /** The outside MCP clients the account allowed, by the account, as the host's read of them stands. */
 export type AppMcpClients = Readonly<Record<string, AppHostRead<McpClientsAnswer>>>;
 /** Each integration server's tools the windows hold, by the server's name, as the host's read of them stands: its tools, or why it listed none. */
@@ -477,6 +485,7 @@ export interface AppHostReads {
   [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.INTEGRATIONS]: IntegrationStatusesAnswer;
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
@@ -582,6 +591,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** Where every one of the account's integrations stands, held while a window draws one and a while after: what Settings › Integrations, onboarding's tools step, the composer's servers, and every server's card read. */
+  [LIVE_READ.INTEGRATIONS]: AppIntegrations;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
   [LIVE_READ.INTEGRATION_TOOLS]: AppIntegrationTools;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
@@ -726,6 +737,7 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof InboxItem,
   },
+  [LIVE_READ.INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },

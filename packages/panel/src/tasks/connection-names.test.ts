@@ -9,11 +9,13 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppBridge } from "../testing/app-bridge.js";
+import { holdIntegrations } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { toolCallView } from "./tool-call-model.js";
 
@@ -53,17 +55,16 @@ async function serverSaid(
   accounts: readonly { connection: string; label?: string }[],
   provider: IntegrationProvider = NOTION,
 ): Promise<string | undefined> {
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
-      Promise.resolve({
-        integrations: statuses(),
-        accounts: accounts.map((account) => ({
-          provider,
-          status: INTEGRATION_STATUS.CONNECTED,
-          ...account,
-        })),
-      }),
-  });
+  holdIntegrations(() => ({
+    rows: {
+      integrations: statuses(),
+      accounts: accounts.map((account) => ({
+        provider,
+        status: INTEGRATION_STATUS.CONNECTED,
+        ...account,
+      })),
+    },
+  }));
   const view = toolCallView({
     tool: INTEGRATION_REMOTE_TOOL[provider],
     input: { remoteTool: "fetch", parentCallId: "wrapper", input: {}, connection },
@@ -77,7 +78,12 @@ async function serverSaid(
     return createElement("span", null, useServerName(view));
   }
   await act(async () => {
-    root.render(createElement(ConnectionNames, { needed: true, children: createElement(Row) }));
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ConnectionNames, { needed: true, children: createElement(Row) }),
+      ),
+    );
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   return container.textContent ?? undefined;
