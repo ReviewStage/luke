@@ -68,12 +68,12 @@ export interface IntegrationsAppSeams {
   resolveUserId: UserIdResolver;
   readConnections: (userId: string) => IntegrationStoreEffect<readonly IntegrationConnectionRow[]>;
   readSignIn: (state: string) => IntegrationStoreEffect<IntegrationConnectionRow | undefined>;
-  /** Records a sign-in under way; answers whether it took, which it does not where another sign-in minted the same name meanwhile. */
+  /** Records a sign-in under way; answers the transaction it took in, or nothing where another sign-in minted the same name meanwhile. */
   beginSignIn: (
     userId: string,
     account: IntegrationAccountKey,
     state: string,
-  ) => IntegrationStoreEffect<boolean>;
+  ) => IntegrationStoreEffect<string | undefined>;
   /** Sets one account connected, taking its name at the provider as its label where it carries none. */
   completeSignIn: (
     userId: string,
@@ -81,23 +81,24 @@ export interface IntegrationsAppSeams {
     state: string,
     accountName?: string,
   ) => IntegrationStoreEffect<boolean>;
-  /** Ends the sign-in begun under `state` without a grant: the browser came back without one. */
+  /** Ends the sign-in begun under `state` without a grant: the browser came back without one; answers the transaction that ended it, or nothing where nothing did. */
   endSignIn: (
     userId: string,
     connectionName: string,
     state: string,
-  ) => IntegrationStoreEffect<void>;
+  ) => IntegrationStoreEffect<string | undefined>;
+  /** Deletes the one account read; answers the transaction it was deleted in, or nothing where it was no longer there. */
   deleteAccount: (
     account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
-  ) => IntegrationStoreEffect<boolean>;
+  ) => IntegrationStoreEffect<string | undefined>;
   /** Labels an account that carries no label yet, or an empty one, with what its grant or its provider named or an empty label for nothing; only the account under that grant's subject. */
   fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
-  /** Names one account; answers whether the account held it. */
+  /** Names one account; answers the transaction it was named in, or nothing where the account held no such row. */
   renameConnection: (
     userId: string,
     connectionName: string,
     label: string,
-  ) => IntegrationStoreEffect<boolean>;
+  ) => IntegrationStoreEffect<string | undefined>;
   /** A fresh subject for another account's grant at Connect; random in production, fixed in a test. */
   mintSubject: () => string;
   /** A fresh sign-in state; random in production, fixed in a test. */

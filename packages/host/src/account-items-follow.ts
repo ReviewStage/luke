@@ -18,6 +18,7 @@ import {
   followTakingRows,
   restarting,
   type SyncStanding,
+  syncIdOf,
   type TxWait,
 } from "./live-follow.js";
 
@@ -83,11 +84,6 @@ function holderOf(stamp: InboxItemStamp): Pick<HeldItem, "kind" | "holder"> {
   return stamp.planId === null
     ? { kind: INBOX_SCOPE_KIND.AGENT, holder: stamp.agentId }
     : { kind: INBOX_SCOPE_KIND.PLAN, holder: stamp.planId };
-}
-
-/** A sync id as the host compares it, from the decimal an answer spells; none where it spells none. */
-function syncIdOf(standing: SyncStanding | undefined): bigint | undefined {
-  return standing !== undefined && /^\d+$/.test(standing.next) ? BigInt(standing.next) : undefined;
 }
 
 /**

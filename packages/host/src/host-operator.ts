@@ -107,7 +107,7 @@ import {
   hostDoneAnswerViewSchema,
   hostsAnswerViewSchema,
   type MemoriesAnswerView,
-  type MemoriesReadParams,
+  type MemoriesFollowParams,
   type MemoryForgetParams,
   memoriesAnswerViewSchema,
   type ProviderKeyForAgentsParams,
@@ -380,6 +380,7 @@ import type {
   AppIntegrations,
   AppIntegrationTools,
   AppMcpClients,
+  AppMemories,
   AppPages,
   AppPlanComments,
   AppPlanDocuments,
@@ -879,9 +880,15 @@ export interface HostOperator {
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
   githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
-  /** The memories our agents kept in a workspace; or why there are none. */
-  memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
-  /** One memory forgotten for good; the workspace's memories as they then stand, or why they are unchanged. */
+  /** The memories our agents kept in a workspace, held for the windows from now until let go and followed live; what they hold is heard through `onMemoriesChanged`. */
+  memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** A workspace's memories let go by the windows. */
+  memoriesUnfollow(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** A workspace's held memories asked again at once, as Try again asks; done once the ask has landed. */
+  memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** Every workspace's memories the host holds for the windows, whole, each time any of them moves. */
+  onMemoriesChanged(listener: (held: AppMemories) => void): () => void;
+  /** One memory forgotten for good, drawn gone at once over the held memories; the workspace's memories as they then stand, or why they are unchanged. */
   memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
@@ -2246,10 +2253,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
         answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    memoriesRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
-        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
+    memoriesFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: params.workspaceId })),
+    memoriesUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_UNFOLLOW, { workspaceId: params.workspaceId })),
+    memoriesRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_RETRY, { workspaceId: params.workspaceId })),
+    onMemoriesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MEMORIES_CHANGED,
+        // Note that the held memories are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppMemories>(payload) : undefined),
+        listener,
       ),
     memoryForget: (params) =>
       Effect.map(

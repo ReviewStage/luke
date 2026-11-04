@@ -1,3 +1,4 @@
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -56,15 +57,16 @@ import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
 import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
@@ -72,7 +74,9 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * A coding agent keeps a memory as it works without asking, and corrects one
  * in place when its developer says otherwise. They are the workspace's: every
  * member's agents in it recall them, and nothing crosses into another
- * workspace.
+ * workspace. The page draws them as the host holds them, followed live on
+ * the service (`LIVE_READ.MEMORIES`), so one an agent keeps, or another
+ * member forgets, draws while the page is open.
  *
  * At the top, a search over the words and their keeper's name
  * (`searchTokens`), lit where it landed, and the Tasks page's Filter, its
@@ -95,10 +99,11 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * bar floating at the page's foot then forgets or copies them all, and a
  * chosen row's ⋯ and right-click offer the bar's acts under how many it acts
  * on. Forget, of one or of several, asks once first, in red, as the Inbox's
- * Resolve does, since no memory comes back once forgotten; several are
- * forgotten one after another, since every answer is the workspace's
- * memories whole and two in flight could land out of order, and the memories
- * the reader may not forget are left chosen and said so. The whole page is
+ * Resolve does, since no memory comes back once forgotten. Each is gone from
+ * the list the moment it is sent, and back only where the service refused
+ * it; several are forgotten one after another, the first refusal stopping
+ * the rest, and the memories the reader may not forget are left chosen and
+ * said so. The whole page is
  * kept out of the screen recording, since a memory is members' own words
  * about their work.
  */
@@ -635,68 +640,15 @@ export function MemorySection({
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [memories, setMemories] = useState<readonly MemorySummary[] | undefined>(undefined);
-  /** What the last read failed with, its answer or its error, which its failure is reported as; absent while none failed. */
-  const [readFailure, setReadFailure] = useState<{ readonly cause: unknown } | undefined>(
-    undefined,
-  );
-  const [attempt, setAttempt] = useState(0);
-  const [forgetting, setForgetting] = useState<string | undefined>(undefined);
-  // Note that every change of workspace or reader starts a new scope, because a forget still out
-  // from the one before answers that scope's list, which must never be drawn under this one.
-  const scope = useRef(0);
-  /** The workspace the page shows now, which a forget answered after the page moved on checks against. */
-  const shown = useRef<string | undefined>(undefined);
-  // Note that every read and forget is numbered as it is sent, and a list is drawn only when it
-  // answers a later request than the list drawn last, so an older answer arriving late never
-  // puts back a memory a newer one already forgot.
-  const sent = useRef(0);
-  const drawn = useRef(0);
-  // Note that a read out while a forget landed may have read the list before that forget's delete,
-  // so its answer is not drawn; the page reads again instead.
-  const forgotten = useRef(0);
-
-  /** Draws the list one request answered, unless a later request's list is drawn already; answers whether it drew. */
-  const draw = useCallback((request: number, list: readonly MemorySummary[]): boolean => {
-    if (request < drawn.current) return false;
-    drawn.current = request;
-    setMemories(list);
-    return true;
-  }, []);
-
   const workspaceId = workspace?.id;
-  useEffect(() => {
-    scope.current += 1;
-    shown.current = workspaceId;
-    setForgetting(undefined);
-  }, [signedIn, workspaceId, readerId]);
+  // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
+  const memories = useHostRead(LIVE_READ.MEMORIES, signedIn ? workspaceId : undefined);
+  /** The forget out now, by the workspace it was asked in, which locks every Forget there until it answers. */
+  const [forgetting, setForgetting] = useState<
+    { readonly workspaceId: string; readonly id: string } | undefined
+  >(undefined);
 
-  // The page opening reads the memories as the service holds them now, which a call may just have added to.
-  useEffect(() => {
-    if (!signedIn || workspaceId === undefined) return;
-    let live = true;
-    sent.current += 1;
-    const request = sent.current;
-    const forgottenBefore = forgotten.current;
-    // Nothing of an earlier read, an earlier account, or another workspace stands while this one is out.
-    setMemories(undefined);
-    setReadFailure(undefined);
-    act(ACT_KIND.MEMORIES_READ, { workspaceId }).then(
-      (answer) => {
-        if (!live) return;
-        if ("failure" in answer) setReadFailure({ cause: answer });
-        else if (forgotten.current !== forgottenBefore) setAttempt((count) => count + 1);
-        else draw(request, answer.memories);
-      },
-      (error: unknown) => {
-        if (live) setReadFailure({ cause: error });
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, draw, signedIn, workspaceId, readerId, attempt]);
-
+  // Note that the host draws a forget gone the moment it is asked and keeps it gone until the read carries it, so the answer only says whether it was taken.
   const forget = useCallback(
     (id: string): Promise<ActionResult> => {
       if (workspaceId === undefined) {
@@ -705,28 +657,18 @@ export function MemorySection({
           reason: PAGE_LINE.FORGET_FAILED,
         });
       }
-      const asked = scope.current;
-      sent.current += 1;
-      const request = sent.current;
-      setForgetting(id);
+      const out = { workspaceId, id };
+      setForgetting(out);
       return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
-          if (asked === scope.current) setForgetting(undefined);
-          if (answer === undefined || "failure" in answer) {
-            return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED };
-          }
-          forgotten.current += 1;
-          // A forget answered while the page shows another workspace draws nothing there.
-          if (shown.current !== workspaceId) return { status: ACTION_RESULT_STATUS.ACCEPTED };
-          // Its own scope's list, unless a later one is drawn; otherwise a read again, since the list
-          // on the page may predate the forget, and the newest read's answer is the one that stands.
-          const drew = asked === scope.current && draw(request, answer.memories);
-          if (!drew) setAttempt((count) => count + 1);
-          return { status: ACTION_RESULT_STATUS.ACCEPTED };
+          setForgetting((current) => (current === out ? undefined : current));
+          return answer === undefined || "failure" in answer
+            ? { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED }
+            : { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
-    [act, draw, workspaceId],
+    [act, workspaceId],
   );
 
   // Note that several are forgotten one after another, each sent once the one before answered, and the first refusal stops the rest.
@@ -760,25 +702,21 @@ export function MemorySection({
   }
   return (
     <div className={NO_CAPTURE}>
-      {memories !== undefined ? (
+      {memories.rows !== undefined ? (
         // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
           <MemoryList
             readerId={readerId}
-            memories={memories}
-            forgetting={forgetting !== undefined}
+            memories={memories.rows}
+            forgetting={forgetting?.workspaceId === workspace.id}
             onForget={forgetAll}
           />
         </MemberDirectory>
-      ) : readFailure !== undefined ? (
+      ) : memories.status === HOST_READ_STATUS.FAILED ? (
         <SettingsLine>
           <ErrorState
-            failure={failureShown({
-              surface: FAILURE_SURFACE.MEMORIES_READ,
-              cause: readFailure.cause,
-              about: { workspaceId: workspace.id },
-            })}
-            onRetry={() => setAttempt((count) => count + 1)}
+            failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ, { workspaceId: workspace.id })}
+            onRetry={memories.retry}
           >
             {PAGE_LINE.FAILED}
           </ErrorState>

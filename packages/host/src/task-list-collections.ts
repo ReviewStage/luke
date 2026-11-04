@@ -40,7 +40,7 @@ import type {
 import { type Confirmation, type EntityPool, fieldKind, type HeldRows } from "@repo/sync";
 import { Effect, type Scope } from "effect";
 import { drawnAtEdges } from "./live-collection.js";
-import { confirmWrite, type TxWait } from "./live-follow.js";
+import { confirmWrite, type SyncStanding, syncIdOf, type TxWait } from "./live-follow.js";
 
 /** A plan's row as the list's statement answers it. */
 export type PlanRow = TaskListLiveRows["plans"][number];
@@ -75,8 +75,23 @@ export interface TaskListDependencies {
 
 /** The account's task list standing in the pool, for as long as its scope stands. */
 export interface TaskListCollections {
-  /** Takes one answer of the list's follow, both its parts, and draws it. */
-  readonly answer: (rows: TaskListLiveRows) => Effect.Effect<void>;
+  /** Takes one answer of the list's follow, both its parts, whole or past a sync id, and draws it. */
+  readonly answer: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<void>;
+}
+
+/**
+ * The ids a part holds after an answer: a whole one's rows alone, and one
+ * past a sync id joined onto those held, less those it names gone.
+ */
+function joined(
+  held: readonly string[],
+  rows: readonly { readonly id: string }[],
+  standing: SyncStanding | undefined,
+): readonly string[] {
+  const answered = rows.map((row) => row.id);
+  if (standing?.past === undefined) return answered;
+  const gone = new Set(standing.gone);
+  return [...new Set([...held, ...answered])].filter((id) => !gone.has(id));
 }
 
 /** The account's task list, empty until its follow first answers. */
@@ -85,6 +100,9 @@ export function taskListCollections(
 ): Effect.Effect<TaskListCollections, never, Scope.Scope> {
   return Effect.gen(function* () {
     const { pool } = dependencies;
+    /** The plans and the agents the list holds, by id, as its answers joined them. */
+    let planKeys: readonly string[] = [];
+    let agentKeys: readonly string[] = [];
     // Note that a write still standing once the scope closed draws nothing, since a sign-out closed it and its rows were the account's that left.
     let open = true;
     yield* Effect.addFinalizer(() =>
@@ -121,8 +139,23 @@ export function taskListCollections(
     });
 
     return {
-      answer: (rows) =>
-        Effect.andThen(Effect.andThen(plans.answer(rows.plans), agents.answer(rows.agents)), drawn),
+      answer: (rows, standing) =>
+        Effect.suspend(() => {
+          planKeys = joined(planKeys, rows.plans, standing);
+          agentKeys = joined(agentKeys, rows.agents, standing);
+          const at = syncIdOf(standing);
+          const answered = (held: readonly string[]) => ({
+            held,
+            ...(at === undefined ? undefined : { at }),
+          });
+          return Effect.andThen(
+            Effect.andThen(
+              plans.answer(rows.plans, answered(planKeys)),
+              agents.answer(rows.agents, answered(agentKeys)),
+            ),
+            drawn,
+          );
+        }),
     };
   });
 }

@@ -24,7 +24,9 @@ import {
  * not found, exactly as a workspace that names nothing, and a forget the
  * member may not make, not permitted. A forget answers the memories as they
  * then stand, whether or not the id named one, so a forget retried after it
- * landed answers the same.
+ * landed answers the same; one that deleted the memory answers the
+ * transaction it was deleted in beside them, which a desktop holding the
+ * workspace's memories live waits for (`workspaceMemoriesLive`).
  */
 
 /** What the memories' procedures reach beyond the store: who the bearer is. */
@@ -40,7 +42,10 @@ function memoriesAnswer(answer: WorkspaceMemoryAnswer) {
     case WORKSPACE_MEMORY.NOT_PERMITTED:
       return Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
     case WORKSPACE_MEMORY.READ:
-      return Effect.succeed({ memories: answer.memories });
+      return Effect.succeed({
+        memories: answer.memories,
+        ...(answer.txid === undefined ? undefined : { txid: answer.txid }),
+      });
   }
 }
 

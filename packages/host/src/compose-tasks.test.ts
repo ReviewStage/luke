@@ -15,13 +15,14 @@ import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
-import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
 import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
@@ -64,6 +65,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCallFailure,
+  type TasksCommentAnswer,
   type TasksView,
   tasksViewSchema,
 } from "@repo/features/tasks-view";
@@ -131,6 +133,9 @@ interface FakeService extends TasksClient {
   /** Each task's comment threads, by task id, and every comment write asked, in order. */
   threads: Record<string, PlanCommentThread[]>;
   commentCalls: string[];
+  /** What a write to a thread answers, once `commentGate` opens where one stands; a deletion where none is named. */
+  commentAnswer: TasksCommentAnswer | undefined;
+  commentGate: Deferred.Deferred<void> | undefined;
   /** Each plan's comments' live read by its task's id, and each page's by the page's; none answers unanswered. */
   commentLives: Record<string, PolledLive<CommentPart, typeof NOT_FOUND_LIVE>>;
   /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
@@ -383,8 +388,62 @@ const NOT_PERMITTED_WORKSPACE = {
 /** The instant the fake service stamps every edit's save with. */
 const EDITED_AT = 7_000;
 
+/** The task list's read as the service answers it, before it is read by sync id. */
+type ListAnswer = Exclude<
+  ReturnType<PolledLive<"plans" | "agents" | "issues">["first"]>,
+  { readonly failure: string }
+>;
+
+/** Each part of the task list's rows by id as they stood at each sync id answered, so a read past one is answered what moved since. */
+type ListAt = Map<string, ReadonlyMap<"plans" | "agents", ReadonlyMap<string, string>>>;
+
+/** A part's rows by id, each as JSON, to tell which moved. */
+function rowsById(rows: readonly unknown[] | undefined): ReadonlyMap<string, string> {
+  return new Map(
+    (rows ?? []).flatMap((row) => {
+      const id = typeof row === "object" && row !== null ? Reflect.get(row, "id") : undefined;
+      return typeof id === "string" ? [[id, JSON.stringify(row)] as const] : [];
+    }),
+  );
+}
+
+/**
+ * The task list's read as the service answers it by sync id, each version
+ * of the rows its id: past none, every row whole with the id to read past
+ * next; past an id, each part only the rows that moved since, with the ids
+ * of its own rows that stand no longer.
+ */
+function listBySyncId(answer: ListAnswer, past: string | undefined, listAt: ListAt): ListAnswer {
+  const next = answer.queries.plans.digest ?? "0";
+  const before = past === undefined ? undefined : listAt.get(past);
+  const now = new Map([
+    ["plans", rowsById(answer.queries.plans.rows)],
+    ["agents", rowsById(answer.queries.agents.rows)],
+  ] as const);
+  listAt.set(next, now);
+  const part = (name: "plans" | "agents"): SealedLiveQueryWire => {
+    const query = answer.queries[name];
+    const sync = past === undefined ? { next } : { past, next };
+    const was = before?.get(name);
+    const ids = now.get(name) ?? new Map<string, string>();
+    if (was === undefined || query.rows === undefined) return { ...query, sync };
+    const rows = query.rows.filter((row) => {
+      const id = typeof row === "object" && row !== null ? Reflect.get(row, "id") : undefined;
+      return typeof id === "string" && was.get(id) !== ids.get(id);
+    });
+    const gone = [...was.keys()].filter((id) => !ids.has(id));
+    return { ...query, rows, sync, gone };
+  };
+  return {
+    ...answer,
+    queries: { ...answer.queries, plans: part("plans"), agents: part("agents") },
+  };
+}
+
 function fakeService(tasks: Task[]): FakeService {
   let memberships: Workspace[] = [PERSONAL];
+  /** What the task list's read keeps to answer by sync id. */
+  const listAt: ListAt = new Map();
   let followMisses = false;
   const live: FakeService["live"] = {
     workspaces: polledLive<"workspaces" | "installations">(["workspaces", "installations"], () =>
@@ -423,6 +482,8 @@ function fakeService(tasks: Task[]): FakeService {
     tasks,
     threads: {},
     commentCalls: [],
+    commentAnswer: undefined,
+    commentGate: undefined,
     commentLives: {},
     commentsLive: (subject, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["commentsLive"]> => {
@@ -437,7 +498,7 @@ function fakeService(tasks: Task[]): FakeService {
         if ("page" in start) throw new Error("the fake holds no page's threads");
         service.commentCalls.push(`start:${planId}:${start.quote}`);
         const thread: PlanCommentThread = {
-          id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
+          id: start.id ?? "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
           scope: start.scope,
           quote: start.quote,
           anchor: start.anchor,
@@ -460,10 +521,15 @@ function fakeService(tasks: Task[]): FakeService {
         return { thread };
       }),
     actOnComment: (planId, threadId, action) =>
-      Effect.sync(() => {
-        service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
-        return { deleted: threadId };
-      }),
+      Effect.andThen(
+        Effect.suspend(() =>
+          service.commentGate === undefined ? Effect.void : Deferred.await(service.commentGate),
+        ),
+        Effect.sync(() => {
+          service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
+          return service.commentAnswer ?? { deleted: threadId };
+        }),
+      ),
     agents: {},
     tasklessAgents: [],
     liveListReads: 0,
@@ -926,11 +992,22 @@ function fakeService(tasks: Task[]): FakeService {
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
           : called(asked(read, poll, after));
       }),
-    // Note that a poll is not counted among the list's reads, as each is held until its rows move.
-    listLive: (_userId, poll, after) =>
+    // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
+    listLive: (_userId, sync) =>
       Effect.suspend(() => {
-        if (poll !== true) service.liveListReads += 1;
-        return called(asked(live.list, poll, after));
+        if (sync === undefined) return called(Effect.succeed(live.list.first()));
+        if (sync === "") {
+          service.liveListReads += 1;
+          const whole = live.list.first();
+          return called(
+            Effect.succeed("failure" in whole ? whole : listBySyncId(whole, undefined, listAt)),
+          );
+        }
+        return called(
+          Effect.map(live.list.poll(sync), (answer) =>
+            "failure" in answer ? answer : listBySyncId(answer, sync, listAt),
+          ),
+        );
       }),
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
@@ -1146,6 +1223,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       accountId: options.accountId ?? (() => "user-dana"),
+      member: () => ({ userId: options.accountId?.() ?? "user-dana", name: "Dana" }),
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       focus: yield* windowFocus,
       pool: yield* entityPool(),
@@ -4093,57 +4171,52 @@ it.effect(
 );
 
 it.effect(
-  "a thread answered stands until the read holds its revision; a deleted one stays hidden until the read drops it",
+  "a resolve draws over its thread at once, stands through a read from before it until the read carries it, and a refused one is taken back",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const plan = polledLive<CommentPart, typeof NOT_FOUND_LIVE>(["threads", "entries", "files"]);
       service.commentLives[INVITES] = plan;
       const { call, pushed } = yield* subject(service);
-      const drawn = () => {
-        const [, held] = pushed.at(-1) ?? [];
-        return (held as AppPlanComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]?.rows;
+      const status = () => {
+        const [, held] =
+          pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PLAN_COMMENTS_CHANGED) ?? [];
+        const rows = (held as AppPlanComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]?.rows;
+        return rows?.map((thread) => thread.status);
       };
-
-      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
-      yield* followSettled;
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS])));
-      const started = yield* call(GATEWAY_METHOD.TASKS_COMMENT_START, {
-        planId: INVITES,
-        start: {
-          clientKey: "key-1",
-          scope: PLAN_COMMENT_SCOPE.WORDS,
-          quote: "Invites",
-          anchor: { from: 2, to: 9 },
-          text: "# Invites",
-          words: "Why invites?",
-        },
-      });
-      const written = service.threads[INVITES]?.[0];
-      assert.ok(written !== undefined);
-      assert.deepEqual(started, { thread: written });
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-
-      // A read from before the write lands, and the thread the write answered still stands.
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, { ...written, revision: 0 }])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, written])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
-
-      yield* call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
+      const resolve = call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
         planId: INVITES,
         threadId: SEVEN_DAYS.id,
-        action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD },
+        action: { action: PLAN_COMMENT_ACTION.RESOLVE },
       });
-      assert.deepEqual(drawn(), [written]);
-      yield* answered(() =>
-        plan.set(commentRows([{ ...SEVEN_DAYS, updatedAt: 1, revision: 2 }, written])),
+      const resolved = { ...SEVEN_DAYS, status: PLAN_COMMENT_STATUS.RESOLVED, revision: 2 };
+      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      // An answer Sync woke hands the follow its wait for a write's transaction.
+      yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-earlier"]));
+
+      service.commentGate = Deferred.makeUnsafe<void>();
+      service.commentAnswer = { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS };
+      const refused = yield* Effect.forkChild(resolve);
+      yield* followSettled;
+      assert.deepEqual(
+        status(),
+        [PLAN_COMMENT_STATUS.RESOLVED],
+        "drawn before the service answers",
       );
-      assert.deepEqual(drawn(), [written], "a read still holding the deleted thread hides it");
-      yield* answered(() => plan.set(commentRows([written])));
-      // Note that the thread is a teammate's again once the read dropped it, so a read that brings it back draws it.
-      yield* answered(() => plan.set(commentRows([SEVEN_DAYS, written])));
-      assert.deepEqual(drawn(), [SEVEN_DAYS, written]);
+      Deferred.doneUnsafe(service.commentGate, Effect.void);
+      assert.deepEqual(yield* Fiber.join(refused), { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS });
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.OPEN], "taken back once refused");
+
+      service.commentGate = undefined;
+      service.commentAnswer = { thread: resolved, txid: "tx-resolve" };
+      const kept = yield* Effect.forkChild(resolve);
+      yield* followSettled;
+      yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-other"]));
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED], "a read from before it");
+      yield* answered(() => plan.set(commentRows([resolved]), ["tx-resolve"]));
+      assert.deepEqual(yield* Fiber.join(kept), { thread: resolved, txid: "tx-resolve" });
+      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED]);
     }),
 );
 
@@ -4389,6 +4462,35 @@ it.effect(
         "a follow refused as signed out asks no more",
       );
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+    }),
+);
+
+it.effect(
+  "a task the service no longer lists leaves the list as an answer past its sync id names it gone, and the rest stand",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations"), taskRow(BILLING, "Billing export")],
+        agents: [],
+        issues: [],
+      });
+      assert.deepEqual(
+        last()
+          ?.tasks.map((row) => row.id)
+          .toSorted(),
+        [BILLING, INVITES].toSorted(),
+      );
+
+      // Another member deleted the billing task, and nothing else moved.
+      yield* listAnswers(service, { plans: [taskRow(INVITES, "Teammate invitations")] });
+
+      assert.deepEqual(
+        last()?.tasks.map((row) => row.id),
+        [INVITES],
+      );
     }),
 );
 

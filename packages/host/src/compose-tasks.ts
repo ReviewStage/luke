@@ -211,6 +211,7 @@ import {
   commentSubjectOf,
   planCommentReads,
 } from "./plan-comment-reads.js";
+import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections } from "./sidebar-collections.js";
@@ -322,6 +323,9 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 
 /** A Browser tab opened behind a closed gate, or on a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** What a write to a task's comments answers behind a closed gate: unanswered, which takes back what it drew. */
+const COMMENT_UNANSWERED: TasksCommentAnswer = { failure: TASK_CALL_FAILURE.UNANSWERED };
 
 /** A plan's skills, by its id and the workspace and repository the list names it in, so a plan moved to another of either is another key, its workspace's installed skills among what is read. */
 class PlanSkillsKey extends Data.Class<{
@@ -496,9 +500,11 @@ export interface TasksDependencies {
   kept: KeptContent;
   /** The windows coming forward, raised here as the panel's focus reaches the host and heard by every read asked again on it. */
   focus: WindowFocus;
-  /** The sync engine's pool, which the task list's plans and agents stand in. */
+  /** The sync engine's pool, which the task list's plans and agents, and the comments' threads, stand in. */
   pool: EntityPool;
-  /** GitHub's standing as an integration asked again, as a GitHub connect or disconnect that answered asks (`compose-integrations.ts`). */
+  /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
+  member: () => { readonly userId: string; readonly name: string } | undefined;
+  /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
 }
 
@@ -753,9 +759,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
-        kernel.emit(
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
+        Effect.sync(() =>
+          kernel.emit(
+            GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
+            carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
+          ),
         ),
       onTxWait: (wait) => {
         if (wait === undefined) historyTxWaits.delete(taskId);
@@ -821,10 +829,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
           // Note that a read that stops answering keeps its rows, and their lapses, until the next delivery.
-          publish: (rows) => {
-            if (rows === undefined) answers.unanswered();
-            else Queue.offerUnsafe(delivered, rows);
-          },
+          publish: (rows) =>
+            Effect.sync(() => {
+              if (rows === undefined) answers.unanswered();
+              else Queue.offerUnsafe(delivered, rows);
+            }),
         });
       }),
     );
@@ -852,7 +861,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
-      publish: (pages) => (pages === undefined ? answers.unanswered() : answers.answered(pages)),
+      publish: (pages) =>
+        Effect.sync(() => (pages === undefined ? answers.unanswered() : answers.answered(pages))),
     });
   }
 
@@ -896,11 +906,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Each plan's or page's comments the windows show, and the few let go
-   * latest, each as its read stands with the windows' writes laid over it,
-   * told whole on the app state every window draws
+   * latest, each thread a row of the pool with every write standing drawn
+   * over it, told whole on the app state every window draws
    * (`LIVE_READ.PLAN_COMMENTS`), on the terms the pages are held.
    */
   const comments = yield* planCommentReads({
+    pool: dependencies.pool,
     seal: (subject, userId, poll, after) =>
       Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
         sealed.ok
@@ -918,6 +929,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each subject's comments, one fiber standing until let go. */
   const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
+  /** The windows' writes to a task's comments, each drawn over its thread at once; behind a closed gate each answers unanswered, taken back as it is drawn. */
+  const commentWrites = planCommentWrites({
+    start: (planId, start) =>
+      gate() ? served(client.startComment(planId, start)) : Effect.succeed(COMMENT_UNANSWERED),
+    act: (planId, threadId, action) =>
+      gate()
+        ? served(client.actOnComment(planId, threadId, action))
+        : Effect.succeed(COMMENT_UNANSWERED),
+    member: dependencies.member,
+    now: kernel.now,
+  });
 
   /**
    * The plan of each task a window opened, and of the few opened latest,
@@ -1005,19 +1027,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
     return followTaskList({
-      live: (poll, after) =>
+      live: (sync) =>
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
-          : Effect.map(served(client.listLive(userId, poll, after)), (sealed) =>
+          : Effect.map(served(client.listLive(userId, sync)), (sealed) =>
               sealed.ok
                 ? sealed.answer
                 : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
             ),
       // Note that an answer's read standing rides the list it draws, so a window is told both at once.
-      take: (rows) =>
+      take: (rows, standing) =>
         Effect.suspend(() => {
           view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
-          return taskList.collections.answer(rows);
+          return taskList.collections.answer(rows, standing);
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
@@ -2437,30 +2459,30 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* comments.retry(commentSubjectOf(read));
         return {};
       }),
-    [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // A write to a task's comments is drawn over its thread at once, a
+    // thread started drawn under the id its window minted, standing until
+    // the subject's read carries it, or taken back where the service
+    // refused it (`plan-comment-writes.ts`).
+    [GATEWAY_METHOD.TASKS_COMMENT_START]: declaredMethod(
+      dependencies.pool,
+      commentWrites.started,
+      (params: WireRecord) =>
+        readParams(
           tasksCommentStartParamsSchema,
           params,
           "starting a comment names a plan and the thread",
-        );
-        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.startComment(read.planId, read.start));
-        comments.answered(read.planId, answer);
-        return carried<TasksCommentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: declaredMethod(
+      dependencies.pool,
+      commentWrites.acted,
+      (params: WireRecord) =>
+        readParams(
           tasksCommentActParamsSchema,
           params,
           "changing a comment names a plan, a thread, and what to do",
-        );
-        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.actOnComment(read.planId, read.threadId, read.action));
-        comments.answered(read.planId, answer);
-        return carried<TasksCommentAnswer>(answer);
-      }),
+        ),
+    ),
     // The picture is kept and its id answered to the editor that took it;
     // the plan's text names it once the editor lays its address in.
     [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: (params) =>
@@ -2718,14 +2740,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return edited.answer;
       }),
     // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection whatever the bound says, and GitHub's
-    // standing as an integration is asked again once either answers.
+    // forward again reads the connection whatever the bound says.
     [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        yield* dependencies.githubMoved;
         return carried<TasksGitHubPageAnswer>(
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
         );
@@ -2737,6 +2757,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
         const disconnected = yield* served(client.github.disconnect());
         githubAskedAt = undefined;
+        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
         if (!disconnected.ok) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
