@@ -1265,7 +1265,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           const moved = yield* collections.answer(rows, standing);
           // Note that an answer the list did not draw tells its standing here, as after a poll that failed, and one it drew told it already.
           publish();
-          // Note that only an answer read at a sync id is kept, since the follow reads past it at the next launch, and one that moved no row is written only beside the next that did.
+          // Note that only an answer read at a sync id is kept, since the follow reads past it at the next launch, and one that moved no row is written only beside the next that did, or as the store closes.
           if (entities !== undefined && standing !== undefined) {
             const kept = { rows: collections.synced(), at: standing.next };
             yield* moved
