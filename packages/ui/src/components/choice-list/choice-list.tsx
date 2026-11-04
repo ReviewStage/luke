@@ -7,7 +7,6 @@ import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
 import { ignoredByReplay } from "../../session-replay-marks.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
-import { Badge } from "../badge/badge.js";
 import {
   ROVING_ORIENTATION,
   ROVING_STOP,
@@ -54,16 +53,15 @@ import {
  * reader cannot press, the picked ones in the checked look with a check and
  * the caller's words for whose pick it was, and the rest stepped back to an
  * outline. A badge (the agent's "Recommended") stands at the row's top
- * right however the label wraps, in the attention tone while the choice
- * waits on the reader and the neutral one once settled, when it is history
- * rather than a call to act.
+ * right however the label wraps, as plain words in the caption's type and
+ * the muted ink rather than a chip, open or settled alike, so it never
+ * reads as the pick.
  *
  * A read-only list is the record of a choice made in the look it was made
  * in: the open list's own rows, marks, pills, and flow, the picked ones
  * checked and the rest not, at full strength rather than faded as an
  * unavailable list is, so it reads as an answer given and not one waiting.
- * No press, key, or Tab reaches its rows, and its badges stand in the
- * neutral tone, as a settled list's do.
+ * No press, key, or Tab reaches its rows.
  *
  * The list owns its rows' spacing, type, and states. The caller holds the
  * value and answers every change with the values it asks for.
@@ -199,14 +197,8 @@ export interface ChoiceOption<Value extends string> {
   label: string;
   /** A line under the label: what the option means, or why it is unavailable. */
   detail?: string | undefined;
-  /** A short word at the row's top right, the agent's "Recommended". */
+  /** A short word at the row's top right, in the muted ink: the agent's "Recommended". */
   badge?: string | undefined;
-  /**
-   * The badge's tone while the list is open: the attention tone of a call to
-   * act where none is given, or the neutral one for a word that only says
-   * what the option is, as a voice's "Feminine" does.
-   */
-  badgeTone?: StatusTone | undefined;
   /** A picture before the words, a workspace's tile. */
   mark?: ReactNode;
   /** What hangs after the label on its line, a connected credential's check. */
@@ -319,13 +311,11 @@ function labelFlex(option: ChoiceOption<string>, look: ChoiceLook | undefined): 
  */
 function ChoiceWords({
   option,
-  tone,
   look,
   after,
   number,
 }: {
   option: ChoiceOption<string>;
-  tone: StatusTone;
   look?: ChoiceLook | undefined;
   after?: ReactNode;
   number?: number | undefined;
@@ -345,7 +335,11 @@ function ChoiceWords({
         </span>
         {option.badge === undefined && number === undefined ? null : (
           <span className="ui-choice-end inline-flex flex-none items-center gap-2">
-            {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
+            {option.badge === undefined ? null : (
+              <span className="ui-choice-badge text-muted-foreground text-caption leading-body whitespace-nowrap">
+                {option.badge}
+              </span>
+            )}
             {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
               <span
@@ -407,14 +401,12 @@ function RowInside({
   checked,
   look,
   number,
-  badgeTone,
 }: {
   radio: boolean;
   option: ChoiceOption<string>;
   checked: boolean;
   look: ChoiceLook;
   number: number | undefined;
-  badgeTone: StatusTone;
 }): React.JSX.Element {
   return (
     <>
@@ -432,12 +424,7 @@ function RowInside({
       {option.mark === undefined ? null : (
         <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
       )}
-      <ChoiceWords
-        option={option}
-        tone={option.badgeTone ?? badgeTone}
-        look={look}
-        number={number}
-      />
+      <ChoiceWords option={option} look={look} number={number} />
     </>
   );
 }
@@ -455,7 +442,6 @@ function ChoiceRow({
   across,
   number,
   focusRef,
-  badgeTone,
   onPress,
 }: {
   radio: boolean;
@@ -476,8 +462,6 @@ function ChoiceRow({
   dims: boolean;
   look: ChoiceLook;
   across: boolean;
-  /** The badge's tone where the option names none. */
-  badgeTone: StatusTone;
   /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
   number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
@@ -527,14 +511,7 @@ function ChoiceRow({
     },
   } as const;
   const inside = (
-    <RowInside
-      radio={radio}
-      option={option}
-      checked={checked}
-      look={look}
-      number={number}
-      badgeTone={badgeTone}
-    />
+    <RowInside radio={radio} option={option} checked={checked} look={look} number={number} />
   );
   const row = radio ? (
     <Radio.Root {...attributes}>{inside}</Radio.Root>
@@ -634,7 +611,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       across={flow === CHOICE_FLOW.ACROSS}
       number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
-      badgeTone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}
       onPress={() => press(option.value)}
     />
   ));
@@ -698,7 +674,6 @@ function SettledChoices<Value extends string>({
             )}
             <ChoiceWords
               option={option}
-              tone={STATUS_TONE.NEUTRAL}
               after={
                 picked ? (
                   // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's center.

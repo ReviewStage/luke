@@ -17,7 +17,6 @@ import {
 } from "@repo/features/admin-wire";
 import {
   codeLinesSchema,
-  type TasksRevisionsAnswer,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
   taskHistoryFollowSchema,
@@ -259,11 +258,17 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(EffectSchema.Void),
+  // Note that the hold's stream carries nothing: the held history reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
     "Could not follow that plan's history on this system.",
   )
     .input(exactInput(taskHistoryFollowSchema))
-    .output(eventIterator(type<TasksRevisionsAnswer>())),
+    .output(eventIterator(type<never>())),
+  [TASKS_ACT_KIND.TASKS_HISTORY_RETRY]: actProcedure(
+    "Could not read that plan's history again on this system.",
+  )
+    .input(exactInput(taskHistoryFollowSchema))
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
     .input(exactInput(tasksPictureParamsSchema))
     .output(EffectSchema.flip(tasksPictureAnswerSchema)),
