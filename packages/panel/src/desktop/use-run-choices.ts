@@ -3,28 +3,21 @@ import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { useWorkspaceAgents, type WorkspaceAgents } from "../tasks/use-workspace-agents.js";
 
 /**
  * use-run-choices.ts -- what an automation's "Runs land in" row chooses from: the models a new agent may run on, the account's default it runs on until one is chosen, and the workspace's agents on the repository a run may go to.
  *
  * The models and the default are read once as the row first stands, and
  * the models again as the chip's menu opens, so it shows the catalog as it
- * stands. The agents are read only while runs land in the same agent, and
- * again whenever the workspace or the repository changes, so the picker
- * offers the agents of the repository the automation works in; once a word
- * is searched, the service finds the agents on that repository holding it,
- * so one past the newest can be chosen. A read that
- * did not answer leaves what it would have drawn unread, which the row says
- * plainly rather than offering a list that is not one.
+ * stands. The agents are the newest the task list carries of the
+ * repository the automation works in (`useWorkspaceAgents`), drawn only
+ * while runs land in the same agent; once a word is searched, the service
+ * finds the agents on that repository holding it, so one past the newest
+ * can be chosen. A read that did not answer leaves what it would have drawn
+ * unread, which the row says plainly rather than offering a list that is
+ * not one.
  */
-
-/** The workspace's agents as the picker draws them: read, failed, or not yet read. */
-type AgentsRead =
-  | { readonly agents: readonly AgentSummary[] }
-  | { readonly failed: true }
-  | undefined;
-
-const AGENTS_FAILED = { failed: true } as const;
 
 export interface RunChoices {
   /** The catalog as last read; nothing before the first read lands. */
@@ -38,12 +31,12 @@ export interface RunChoices {
   /** Whether the read of the default did not answer, so it is not known. */
   readonly defaultFailed: boolean;
   /** The workspace's agents on the repository, newest first, where the picker asks for them. */
-  readonly agents: AgentsRead;
+  readonly agents: WorkspaceAgents;
   /** The agents on the repository the last search found, standing until the next answers; nothing while no word is searched, or where it failed. */
   readonly found: readonly AgentSummary[] | undefined;
   /** Whether the search for the words typed did not answer, which is not the same as finding no agent. */
   readonly searchFailed: boolean;
-  /** Reads the repository's agents again, and the search for the words typed with them, after either failed. */
+  /** Reads the task list again where it failed, and the search for the words typed, after either failed. */
   readonly retryAgents: () => void;
   /** The words the agents are being searched for, trimmed; empty while none is typed. */
   readonly searched: string;
@@ -57,18 +50,18 @@ export function useRunChoices(input: {
   readonly repository: string | null;
   readonly wantsAgents: boolean;
 }): RunChoices {
-  const { act } = useAct();
+  const { act, press } = useAct();
   const { workspaceId, repository, wantsAgents } = input;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [modelsFailed, setModelsFailed] = useState(false);
   const [defaultChoice, setDefaultChoice] = useState<ModelChoice | undefined>(undefined);
   const [defaultFailed, setDefaultFailed] = useState(false);
-  const [agents, setAgents] = useState<AgentsRead>(undefined);
+  const agents = useWorkspaceAgents(wantsAgents ? workspaceId : undefined, repository);
   const [found, setFound] = useState<readonly AgentSummary[] | undefined>(undefined);
   const [searchFailed, setSearchFailed] = useState(false);
   const [words, setWords] = useState("");
-  // Each press of Retry reads the agents again, and the search with them.
-  const [agentReads, setAgentReads] = useState(0);
+  // Each press of Retry searches again.
+  const [searches, setSearches] = useState(0);
   const readModels = useCallback(() => {
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsFailed(false);
@@ -93,32 +86,13 @@ export function useRunChoices(input: {
       () => setDefaultFailed(true),
     );
   }, [act, readModels]);
-  useEffect(() => {
-    if (!wantsAgents || workspaceId === undefined) return;
-    let live = true;
-    // Nothing of another repository's list stands while this one's is out.
-    setAgents(undefined);
-    setFound(undefined);
-    act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
-      workspaceId,
-      ...(repository === null ? undefined : { repository }),
-    }).then(
-      (answer) => {
-        if (live) setAgents("failure" in answer ? AGENTS_FAILED : { agents: answer.agents });
-      },
-      () => {
-        if (live) setAgents(AGENTS_FAILED);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId, repository, wantsAgents, agentReads]);
   // Once a word is typed the service finds the agents it names, however many the repository holds.
   const asked = words.trim();
   useEffect(() => {
     if (!wantsAgents || workspaceId === undefined || asked === "") return;
     let live = true;
+    // Nothing another repository's search found stands while this one's is out.
+    setFound(undefined);
     setSearchFailed(false);
     act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
       workspaceId,
@@ -139,8 +113,13 @@ export function useRunChoices(input: {
     return () => {
       live = false;
     };
-  }, [act, workspaceId, repository, wantsAgents, asked, agentReads]);
-  const retryAgents = useCallback(() => setAgentReads((count) => count + 1), []);
+  }, [act, workspaceId, repository, wantsAgents, asked, searches]);
+  const listFailed = agents !== undefined && "failed" in agents;
+  const retryAgents = useCallback(() => {
+    // Note that the newest are the task list's, so where it failed the list's own Try again reads it.
+    if (listFailed) press(ACT_KIND.TASKS_REFRESH);
+    setSearches((count) => count + 1);
+  }, [press, listFailed]);
   return {
     models,
     modelsFailed,

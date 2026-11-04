@@ -150,9 +150,6 @@ export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   summaryModel?: SummaryModelOf;
 }
 
-/** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
-const WORKSPACE_AGENTS_LIMIT = 50;
-
 /**
  * How long a developer's resume holds the sandbox it wakes: the Terminal
  * relay's idle bound (`terminal/relay.ts`'s `TERMINAL_RELAY_BOUNDS.IDLE`),
@@ -407,7 +404,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
-          limit: WORKSPACE_AGENTS_LIMIT,
+          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS,
         }),
       );
       return yield* listedSummaries(context.userId, agents);
