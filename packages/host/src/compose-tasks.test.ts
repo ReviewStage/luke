@@ -4875,6 +4875,50 @@ it.effect(
     }),
 );
 
+/** Every telling of the token repositories the host holds for the windows, whole, in order. */
+function heldTokenRepositories(
+  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED ? [payload] : [],
+  );
+}
+
+it.effect(
+  "a workspace's token repositories asked before an addition land behind the addition's answer, never over it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const listed = (fullName: string) => ({
+        fullName,
+        addedBy: "Ada",
+        addedAt: 1,
+        removable: true,
+      });
+      const before = [listed("acme/relay")];
+      const after = [listed("acme/side"), ...before];
+      const answering = yield* Deferred.make<void>();
+      Object.assign(service.workspaces, {
+        tokenRepositories: () =>
+          Effect.as(Deferred.await(answering), { ok: true as const, answer: before }),
+        setTokenRepository: () => Effect.succeed({ ok: true as const, answer: after }),
+      });
+      const { call, pushed, settled } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+        workspaceId: ACME.id,
+        repository: "acme/side",
+        added: true,
+      });
+      yield* Deferred.succeed(answering, undefined);
+      yield* settled;
+
+      assert.deepEqual(heldTokenRepositories(pushed).at(-1), { [ACME.id]: { rows: after } });
+    }),
+);
+
 it.effect("two holds and a remount read one workspace's people once", () =>
   Effect.gen(function* () {
     const service = fakeService([]);

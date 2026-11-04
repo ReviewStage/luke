@@ -186,6 +186,7 @@ import {
   type AppLinkStanding,
   type AppLinkStandings,
   type AppRepositoryLists,
+  type AppTokenRepositories,
   EVERY_WORKSPACE,
   NO_BROWSER_TABS,
   NO_KEYS_HELD,
@@ -1356,6 +1357,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each workspace's people, one fiber standing until let go. */
   const memberHolds = yield* FiberMap.make<string>();
+
+  /**
+   * Each workspace's token repositories the windows draw, told on the app
+   * state every window draws (`LIVE_READ.TOKEN_REPOSITORIES`): asked of the
+   * service as a window first holds them, again as a window comes forward
+   * and on Try again, and laid from each addition's or removal's own
+   * answer, since nothing wakes them as a live read is woken.
+   */
+  const tokenRepositories = yield* heldFetch<typeof LIVE_READ.TOKEN_REPOSITORIES, string>({
+    empty: NO_KEYS_HELD,
+    path: (workspaceId) => [workspaceId],
+    gate,
+    focus: dependencies.focus,
+    fetch: (workspaceId) =>
+      Effect.map(served(client.workspaces.tokenRepositories(workspaceId)), (listed) =>
+        listed.ok ? Option.some(listed.answer) : Option.none(),
+      ),
+    tell: (held: AppTokenRepositories) =>
+      kernel.emit(GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's token repositories, one fiber standing until let go. */
+  const tokenRepositoryHolds = yield* FiberMap.make<string>();
 
   /** What a member write's answer says of each of `userIds`: the role it answers them with, or gone where it names them no more. */
   function membersMoved(
@@ -3362,21 +3385,45 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           photo.ok ? photo.answer : { failure: photo.failure },
         );
       }),
-    // A workspace's token repositories, and each change of them, are
-    // answered to the page that asked and held nowhere, as a photo is: they
-    // move no task and no workspace the view holds.
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES]: (params) =>
+    // A workspace's token repositories are held for a window while it
+    // draws them, and told only on the app state (`TOKEN_REPOSITORIES_CHANGED`);
+    // each change's own answer is laid there too. Note that the windows'
+    // hold is one fiber standing until let go, so a window holding it again
+    // holds nothing anew.
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
+        const { workspaceId } = yield* readParams(
           tasksWorkspaceTokenRepositoriesParamsSchema,
           params,
-          "reading a workspace's token repositories names the workspace",
+          "holding a workspace's token repositories names the workspace",
         );
-        if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.tokenRepositories(read.workspaceId));
-        return carried<TasksWorkspaceTokenRepositoriesAnswer>(
-          listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
+        yield* FiberMap.run(
+          tokenRepositoryHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(tokenRepositories.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
         );
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceTokenRepositoriesParamsSchema,
+          params,
+          "letting a workspace's token repositories go names the workspace",
+        );
+        yield* FiberMap.remove(tokenRepositoryHolds, workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          tasksWorkspaceTokenRepositoriesParamsSchema,
+          params,
+          "reading a workspace's token repositories again names the workspace",
+        );
+        yield* tokenRepositories.retry(workspaceId);
+        return {};
       }),
     [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: (params) =>
       Effect.gen(function* () {
@@ -3390,7 +3437,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const changed = yield* served(
           client.workspaces.setTokenRepository(workspaceId, repository, added),
         );
-        if (changed.ok) yield* repositoriesMovedIn(new Set([workspaceId]));
+        if (changed.ok) {
+          yield* tokenRepositories.answered(workspaceId, changed.answer);
+          yield* repositoriesMovedIn(new Set([workspaceId]));
+        }
         return carried<TasksWorkspaceTokenRepositoriesAnswer>(
           changed.ok ? { repositories: changed.answer } : { failure: changed.failure },
         );
@@ -3547,6 +3597,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* linkStandings.open;
       yield* repositoryLists.open;
       yield* membersReads.held.open;
+      yield* tokenRepositories.open;
       yield* documents.open;
       if (!gate()) return;
       yield* drawnFromDisk;
@@ -3561,7 +3612,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, histories, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* heldHistories.end;
@@ -3569,6 +3620,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* linkStandings.end;
       yield* repositoryLists.end;
       yield* membersReads.held.end;
+      yield* tokenRepositories.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
       yield* FiberHandle.clear(listFollow);

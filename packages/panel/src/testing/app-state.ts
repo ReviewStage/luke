@@ -27,6 +27,7 @@ import {
   type AppBrowserTabs,
   type AppChapters,
   type AppDevicePresence,
+  type AppGitHubToken,
   type AppHolderInboxes,
   type AppHolderPages,
   type AppHostRead,
@@ -40,6 +41,7 @@ import {
   type AppRepositoryLists,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppTokenRepositories,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
   EVERY_WORKSPACE,
@@ -55,6 +57,7 @@ import {
   UNREAD,
 } from "@repo/host/app-state";
 import {
+  ACCOUNT_ASK_ACT_KIND,
   AGENT_ACT_KIND,
   AUTOMATION_ACT_KIND,
   INTEGRATION_ACT_KIND,
@@ -126,6 +129,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST]: NO_KEYS_HELD,
     [LIVE_READ.REPOSITORY_LISTS]: NO_KEYS_HELD,
+    [LIVE_READ.GITHUB_TOKEN]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.PULL_REQUEST_CHECKS]: NO_KEYS_HELD,
@@ -134,6 +138,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.THIS_MAC_HOST]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
+    [LIVE_READ.TOKEN_REPOSITORIES]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.MCP_CLIENTS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
@@ -245,6 +250,7 @@ export interface HostReadsHanded {
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  readonly deliverTokenRepositories: (next: AppTokenRepositories) => void;
   /** The account's task list, as the host lays it whole. */
   readonly deliverTasks: (next: TasksView) => void;
 }
@@ -262,12 +268,12 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 /**
  * Lays the host's reads as given, the account's feed of every item, the
  * holders' own inboxes, the pull requests' chapters, the servers' tools, the
- * signed-in account's keys, and the workspaces' people, over whatever
- * document the window was handed, its experiments and the reads handed
- * before among it, and answers with how each is delivered again as it
- * moves, as the host tells it; what the bridge delivered before still
- * reaches the window. The account is given an id where the document names
- * none, since the host holds its keys by it.
+ * signed-in account's keys, and the workspaces' people and token
+ * repositories, over whatever document the window was handed, its
+ * experiments and the reads handed before among it, and answers with how
+ * each is delivered again as it moves, as the host tells it; what the bridge
+ * delivered before still reaches the window. The account is given an id
+ * where the document names none, since the host holds its keys by it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
@@ -276,6 +282,7 @@ export function handHostReads(first: {
   readonly tools?: AppIntegrationTools;
   readonly keys?: AppHostRead<AppProviderKeyList>;
   readonly members?: AppWorkspaceMembers;
+  readonly tokenRepositories?: AppTokenRepositories;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const earlier = fakeAppBridgeCalls().onAppState;
@@ -308,6 +315,9 @@ export function handHostReads(first: {
         ...(first.members === undefined
           ? undefined
           : { [LIVE_READ.WORKSPACE_MEMBERS]: first.members }),
+        ...(first.tokenRepositories === undefined
+          ? undefined
+          : { [LIVE_READ.TOKEN_REPOSITORIES]: first.tokenRepositories }),
       };
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
@@ -341,6 +351,7 @@ export function handHostReads(first: {
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverRepositoryLists: (next) => deliver({ [LIVE_READ.REPOSITORY_LISTS]: next }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverTokenRepositories: (next) => deliver({ [LIVE_READ.TOKEN_REPOSITORIES]: next }),
     deliverTasks: (next) => deliver({ tasks: next }),
   };
 }
@@ -779,10 +790,10 @@ export function handBeats(
   });
 }
 
-/** The id the account a test's integrations are held for goes by, where the document handed names none. */
-const INTEGRATIONS_ACCOUNT_ID = "user-integrations";
+/** The id the account a test's own reads are held for goes by, where the document handed names none. */
+const HELD_FOR_ACCOUNT_ID = "user-integrations";
 
-/** The window's hold on the account's integrations as a test's host answers it. */
+/** The window's hold on a read keyed by the account signed in, as a test's host answers it. */
 export interface IntegrationsHeld {
   /** Lays the read as the test's host reads it now, as the host lays a read that moved. */
   readonly lay: () => void;
@@ -792,35 +803,30 @@ export interface IntegrationsHeld {
   readonly retries: () => number;
 }
 
+/** A read keyed by the account signed in, as a test's host holds it. */
+export type AccountReadHeld = IntegrationsHeld;
+
 /**
- * Answers the window's hold on the account's integrations as the host does,
- * beside whatever acts the test answers by now: the read `readOf` answers
- * laid on the document under the account signed in, given an id where the
- * document names none, as the window first asks for the document, again as
- * Try again asks, and again as `lay` asks, as the host lays a read that
- * moved; none is laid while it answers none. Note that each read is laid
- * under the newest version the window was handed, by the document or a
- * delivery of the helpers beneath this one, which a delivery repeating it
+ * Lays the read `readOf` answers on the document under the account signed
+ * in, given an id where the document names none, as the window first asks
+ * for the document, and again as the answered `lay` asks, as the host lays
+ * a read that moved; none is laid while it answers none. Note that each read
+ * is laid under the newest version the window was handed, by the document or
+ * a delivery of the helpers beneath this one, which a delivery repeating it
  * is adopted at, so it never puts another helper's later delivery behind it.
  */
-export function holdIntegrations(
-  readOf: () => AppHostRead<IntegrationStatusesAnswer> | undefined,
-): IntegrationsHeld {
+function heldForAccount<Rows>(
+  sliceOf: (held: Readonly<Record<string, AppHostRead<Rows>>>) => Partial<AppStateSnapshot>,
+  readOf: () => AppHostRead<Rows> | undefined,
+): () => void {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listening = fakeAppBridgeCalls().onAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  let accountId = INTEGRATIONS_ACCOUNT_ID;
+  let accountId = HELD_FOR_ACCOUNT_ID;
   let version = 0;
-  let holds = 0;
-  let retries = 0;
   const laid = () => {
     const read = readOf();
-    return read === undefined ? NO_KEYS_HELD : { [accountId]: read };
-  };
-  const lay = () => {
-    for (const listener of [...listeners]) {
-      listener({ version, entries: { [LIVE_READ.INTEGRATIONS]: laid() } });
-    }
+    return sliceOf(read === undefined ? NO_KEYS_HELD : { [accountId]: read });
   };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -829,12 +835,8 @@ export function holdIntegrations(
       version = Math.max(version, snapshot.version);
       const { account } = snapshot;
       if (account.status !== ACCOUNT_STATUS.SIGNED_IN) return snapshot;
-      accountId = account.id ?? INTEGRATIONS_ACCOUNT_ID;
-      return {
-        ...snapshot,
-        account: { ...account, id: accountId },
-        [LIVE_READ.INTEGRATIONS]: laid(),
-      };
+      accountId = account.id ?? HELD_FOR_ACCOUNT_ID;
+      return { ...snapshot, account: { ...account, id: accountId }, ...laid() };
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
@@ -848,6 +850,24 @@ export function holdIntegrations(
       };
     },
   });
+  return () => {
+    for (const listener of [...listeners]) listener({ version, entries: laid() });
+  };
+}
+
+/**
+ * Answers the window's hold on the account's integrations as the host does,
+ * beside whatever acts the test answers by now: the read `readOf` answers
+ * laid on the document under the account signed in (`heldForAccount`), as
+ * the window first asks for the document, again as Try again asks, and
+ * again as `lay` asks.
+ */
+export function holdIntegrations(
+  readOf: () => AppHostRead<IntegrationStatusesAnswer> | undefined,
+): IntegrationsHeld {
+  let holds = 0;
+  let retries = 0;
+  const lay = heldForAccount((held) => ({ [LIVE_READ.INTEGRATIONS]: held }), readOf);
   fakeActPort({
     ...fakeActPortCalls(),
     [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: () => {
@@ -855,6 +875,34 @@ export function holdIntegrations(
       return quietHold();
     },
     [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: () => {
+      retries += 1;
+      lay();
+      return Promise.resolve();
+    },
+  });
+  return { lay, holds: () => holds, retries: () => retries };
+}
+
+/**
+ * Answers the window's hold on the account's GitHub token as the host does,
+ * beside whatever acts the test answers by now: the read `readOf` answers
+ * laid on the document under the account signed in (`heldForAccount`), as
+ * the window first asks for the document, again as Try again asks, and
+ * again as `lay` asks, as the host lays a save's or a removal's answer.
+ */
+export function holdGitHubToken(
+  readOf: () => AppHostRead<AppGitHubToken> | undefined,
+): AccountReadHeld {
+  let holds = 0;
+  let retries = 0;
+  const lay = heldForAccount((held) => ({ [LIVE_READ.GITHUB_TOKEN]: held }), readOf);
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: () => {
+      holds += 1;
+      return quietHold();
+    },
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_RETRY]: () => {
       retries += 1;
       lay();
       return Promise.resolve();

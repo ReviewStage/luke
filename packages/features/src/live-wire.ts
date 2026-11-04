@@ -865,6 +865,8 @@ export const LIVE_READ = {
   PROVIDER_KEYS: "providerKeys",
   /** One agent's pull request as its Pull request tab draws it, by the agent and then the pull request's number, or the agent's own: fetched by the host while a window holds it. */
   PULL_REQUEST: "pullRequest",
+  /** The account's own GitHub token as its login, hint, and status, never the token, by the account: fetched by the host while a window holds it, and laid from each save's and removal's own answer. */
+  GITHUB_TOKEN: "githubToken",
   /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
   /** The checks on one agent's pull request's head, keyed and fetched as `PULL_REQUEST`. */
@@ -887,6 +889,8 @@ export const LIVE_READ = {
   THIS_MAC_HOST: "thisMacHost",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
+  /** The repositories members added to one workspace on their own GitHub tokens, those its App reaches left out, by the workspace: fetched by the host while a window holds it, and laid from each addition's and removal's own answer. */
+  TOKEN_REPOSITORIES: "tokenRepositories",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
   /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */

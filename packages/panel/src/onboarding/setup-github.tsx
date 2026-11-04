@@ -1,7 +1,7 @@
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import {
   GITHUB_TOKEN_CREATE_URL,
   type GitHubTokenRejection,
-  type GitHubTokenSummary,
 } from "@repo/features/github-token-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -33,7 +33,8 @@ import {
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { useHostRead } from "../use-host-read.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * setup-github.tsx -- setup's GitHub step: the App installed on the workspace's repositories, or the member's own token, chosen as two cards.
@@ -103,18 +104,15 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   const { act } = useAct();
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
-  const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
+  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const held = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
+  // Note that a token read that failed is taken for none, so the card offers a paste rather than waiting.
+  const token = held.status === HOST_READ_STATUS.FAILED ? null : held.rows?.token;
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<GitHubTokenRejection | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    act(ACT_KIND.GITHUB_TOKEN_READ).then(
-      (answer) => setToken("failure" in answer ? null : answer.token),
-      () => setToken(null),
-    );
-  }, [act]);
   const save = () => {
     const typed = pasted.trim();
     if (typed === "" || saving) return;
@@ -125,7 +123,6 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
       .then(
         (answer) => {
           if ("failure" in answer) return setFailed(true);
-          setToken(answer.token);
           setRejection(answer.rejected);
           if (answer.rejected === undefined) setPasted("");
         },

@@ -238,11 +238,13 @@ function TokenForm({
   );
 }
 
-/** The dialog the Profile row's Add or Manage opens, over the token as the row last read it. */
+/**
+ * The dialog the Profile row's Add or Manage opens, over the token as the
+ * host holds it, where a save's and a removal's own answer lands.
+ */
 export function GitHubTokenDialog({
   open,
   token,
-  onToken,
   onClose,
   onExited,
 }: {
@@ -250,8 +252,6 @@ export function GitHubTokenDialog({
   open: boolean;
   /** The saved token, or null where none is. */
   token: GitHubTokenSummary | null;
-  /** The token as the service answered a save or a removal. */
-  onToken: (token: GitHubTokenSummary | null) => void;
   onClose: () => void;
   onExited: () => void;
 }): React.JSX.Element {
@@ -264,7 +264,6 @@ export function GitHubTokenDialog({
       .catch(() => undefined)
       .then((answer) => {
         if (answer === undefined || "failure" in answer) return LINE.SAVE_FAILED;
-        onToken(answer.token);
         return answer.rejected === undefined ? undefined : rejectionLabel(answer.rejected);
       });
 
@@ -275,7 +274,6 @@ export function GitHubTokenDialog({
         if (answer === undefined || "failure" in answer) {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: LINE.REMOVE_FAILED };
         }
-        onToken(answer.token);
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
 

@@ -117,6 +117,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onRepositoryListsChanged((held) => {
         state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
       }),
+      gateway.host.onGitHubTokenChanged((held) => {
+        state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
+      }),
       gateway.host.onChaptersChanged((held) => {
         state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });
       }),
@@ -134,6 +137,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onWorkspaceMembersChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
+      }),
+      gateway.host.onTokenRepositoriesChanged((held) => {
+        state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
       }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
