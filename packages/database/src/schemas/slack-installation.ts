@@ -1,4 +1,5 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { SLACK_THREAD_ORIGIN, type SlackThreadOrigin } from "../storage-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
@@ -19,11 +20,13 @@ import { organization, user } from "./auth.js";
  * on every message. Each row leaves with its installation, so a Disconnect
  * forgets every member, and with its account.
  *
- * A Slack thread a member started an agent from, by mentioning the bot in a
- * channel or writing to it directly, is kept against that agent, so a later
- * mention in the thread is sent to the agent rather than starting another,
- * and each of the agent's settled turns is posted back in the thread once.
- * Each row leaves with its installation, its agent, and its member.
+ * A Slack thread that speaks for an agent is kept against it, with its
+ * origin: either a thread where a member started the agent, by mentioning
+ * the bot in a channel or writing to it directly, or the DM where the bot
+ * sent an automation run's result. A later message in the thread is sent to
+ * the agent rather than starting another, and each of the agent's settled
+ * turns is posted once, in its current thread, the one kept or written in
+ * latest. Each row leaves with its installation, its agent, and its member.
  *
  * An owner or admin may name a default repository for the workspace's Slack
  * starts, and one for each channel the bot is in; a channel's leaves with
@@ -64,7 +67,7 @@ export const slackMember = pgTable(
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
 );
 
-/** A Slack thread an agent was started from, which its later mentions are sent to and its final messages are posted in. */
+/** A Slack thread that speaks for an agent, one it was started from or its automation run's result was sent in, which its later messages are sent to and its settled turns posted in. */
 export const slackAgentThread = pgTable(
   "slack_agent_thread",
   {
@@ -78,13 +81,17 @@ export const slackAgentThread = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentTable.id, { onDelete: "cascade" }),
-    /** The member who started the agent from the thread. */
+    /** The member the thread was kept for: who started the agent from it, or the automation owner its run's result was sent to. */
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     /** The agent's latest turn whose outcome was posted in the thread; null before the first. */
     postedTurnId: text("posted_turn_id"),
     createdAt: timestamptz("created_at").notNull(),
+    /** Where the thread came from: a member's message that started the agent, or its run's result DM. */
+    origin: text("origin").$type<SlackThreadOrigin>().notNull().default(SLACK_THREAD_ORIGIN.START),
+    /** When the thread last became its agent's current one, kept for it or written in by a member; a settled turn is posted in the agent's latest. */
+    activeAt: timestamptz("active_at").notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.organizationId, t.channelId, t.threadTs] }),

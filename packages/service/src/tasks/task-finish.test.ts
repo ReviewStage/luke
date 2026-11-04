@@ -11,7 +11,7 @@ import { readTask, updateTask } from "@repo/database/models/task-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { messages, turns } from "@repo/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, SLACK_THREAD_ORIGIN } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_ARCHIVER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
@@ -219,12 +219,14 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
   );
 
   it.effect(
-    "a task a Slack message made is done once its agent's turn settles well, with no pull request merged",
+    "a task a Slack message made is done once its agent's turn settles well, with no pull request merged; one whose agent an automation's result DM speaks for waits on its merge",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
         const task = yield* startTask(userId, { name: "Find the flakiest test and fix it" });
         const agent = yield* openAgent(userId, task.id);
+        const other = yield* startTask(userId, { name: "Teammate invitations" });
+        const reported = yield* openAgent(userId, other.id);
         yield* linkSlackInstallation({
           organizationId: task.workspaceId,
           teamId: `T-${randomUUID()}`,
@@ -237,13 +239,27 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           threadTs: "1700000002.000300",
           agentId: agent.id,
           userId,
+          origin: SLACK_THREAD_ORIGIN.START,
+        });
+        // A same-agent automation's result DM, kept for an agent no run started.
+        yield* recordSlackAgentThread({
+          organizationId: other.workspaceId,
+          channelId: "D0001",
+          threadTs: "1700000002.000400",
+          agentId: reported.id,
+          userId,
+          origin: SLACK_THREAD_ORIGIN.RUN_RESULT,
         });
         yield* reopenTaskForWork(userId, task.id);
+        yield* reopenTaskForWork(userId, other.id);
         yield* turnOf(agent, TURN_STATUS.SETTLED);
+        yield* turnOf(reported, TURN_STATUS.SETTLED);
 
         yield* settleTaskAfterTurn(userId, task.id, agent.id);
+        yield* settleTaskAfterTurn(userId, other.id, reported.id);
 
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        assert.equal(yield* statusOf(userId, other.id), TASK_STATUS.IN_PROGRESS);
         assert.deepEqual(
           countedFor(userId).map((event) => event.properties),
           [{ status: TASK_STATUS.DONE, by: "slack" }],
