@@ -149,23 +149,21 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
             },
           ],
         );
-        assert.deepEqual(blocksOf(posted[0]), [
-          { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
-          {
-            type: "markdown",
-            text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
-          },
-          {
-            type: "actions",
-            elements: [
-              {
-                type: "button",
-                text: { type: "plain_text", text: "Open in Vespin" },
-                url: link,
-              },
-            ],
-          },
-        ]);
+        const [header, words, actions] = blocksOf(posted[0]);
+        assert.deepEqual(header, {
+          type: "header",
+          text: { type: "plain_text", text: "Require a review on main" },
+        });
+        assert.deepEqual(words, {
+          type: "markdown",
+          text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
+        });
+        // The to-do's own buttons, answered by our Slack route, then the open button.
+        assert.deepEqual(
+          actions.elements.map((element: { text: { text: string } }) => element.text.text),
+          ["Mark done", "Couldn't do it", "Open in Vespin"],
+        );
+        assert.equal(actions.elements.at(-1).url, link);
 
         const askId =
           item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
