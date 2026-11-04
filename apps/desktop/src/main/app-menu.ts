@@ -322,7 +322,7 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
 /**
  * View's Developer submenu: the window chosen over's own tools, toggled by
  * the system's role, docked as Chrome docks them; and, where `buildLabel` is
- * given, Show Build Label, which hides the build's sidebar chip and Dock band
+ * given, Show Build Label, which hides the build's sidebar row and Dock band
  * for a demo and brings them back, ticked while they are drawn.
  */
 function developerItem(buildLabel: BuildLabelMenu | undefined): MenuItemConstructorOptions {

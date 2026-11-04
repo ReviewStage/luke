@@ -95,8 +95,8 @@ export interface WindowService extends DesktopService {
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
   /**
-   * Draws or hides a development build's label, the sidebar's chip and the
-   * Dock tile's band, as the menu bar's Show Build Label does; answers false
+   * Draws or hides a development build's label, the sidebar's branch row and
+   * the Dock tile's band, as the menu bar's Show Build Label does; answers false
    * in a build that draws none, or before the start has drawn the Dock tile.
    */
   showBuildLabel: (shown: boolean) => boolean;
@@ -294,8 +294,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         badge,
         config.report,
       );
-      // Developer's Show Build Label, and the chip's own Hide, hide the band
-      // and the sidebar's chip together, and the menu brings both back, so a
+      // Developer's Show Build Label, and the sidebar row's own Hide and Show
+      // branch, hide the band and the row together and bring both back, so a
       // demo shows no branch.
       const buildLabelMenu = (shown: boolean): BuildLabelMenu => ({
         shown,

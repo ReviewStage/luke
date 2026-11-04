@@ -635,8 +635,8 @@ export const WINDOW_SURFACE_ACT_KIND = {
   WINDOW_UNSAVED_WORK: "window.unsavedWork",
   /**
    * A development build's label, the branch it was cut from, drawn or hidden
-   * for a demo: the sidebar's chip in every window and the Dock tile's band,
-   * as View > Developer > Show Build Label turns them.
+   * for a demo: the sidebar's branch row in every window and the Dock tile's
+   * band, as View > Developer > Show Build Label turns them.
    */
   WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
   FEEDBACK_SEND: "feedback.send",
