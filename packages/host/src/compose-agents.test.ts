@@ -1943,13 +1943,14 @@ it.effect(
       yield* nextPoll;
       assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
 
+      // A page carrying a later change of the queue is drawn as it says.
       script({
         ...pageNow("1:0", { holds: false }),
-        queue: queueOf("Run the tests and fix them", 2),
+        queue: queueOf("Run the tests, then open the pull request", 3),
       });
-      live.transcript.set({ queueRevision: [{ revision: 2 }] });
+      live.transcript.set({ queueRevision: [{ revision: 3 }] });
       yield* nextPoll;
-      assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
+      assert.deepEqual(queuedTexts(held), ["Run the tests, then open the pull request"]);
     }),
 );
 

@@ -217,7 +217,7 @@ test("an edit takes the message's files into the box, read as its row draws them
   });
 });
 
-test("a message queued with an image names the id its bytes stand under for the host to draw it by, and once the queue names the service's id, the bytes the box held stand under that too, never read back", async () => {
+test("a message queued with an image names the id its bytes stand under for the host to draw it by, and once the service answers it under an id of its own, the bytes the box held stand under that too, never read back", async () => {
   act(() => now().page({ messages: [], revision: 1 }));
   act(() => now().composer.setAttachments(() => [SHOT]));
   act(() => now().editing.queue());
@@ -230,16 +230,19 @@ test("a message queued with an image names the id its bytes stand under for the 
   const url = `data:${SHOT.mediaType};base64,${SHOT.data}`;
   const queued = sent.at(-1);
   assert.ok(queued?.change === QUEUE_CHANGE.ADD);
-  const drawnAs = pictures.at(-1)?.[0];
-  assert.equal(ready(drawnAs), url);
-  const shot = (id: string | undefined) => ({
-    ...message(queued.id, ""),
-    files: [{ name: SHOT.name, mediaType: SHOT.mediaType, ...(id === undefined ? {} : { id }) }],
-  });
-  // The host draws the message under the id the tab named, then the service's queue names its own.
-  act(() => now().page({ messages: [shot(drawnAs)], revision: 1 }));
+  assert.equal(ready(pictures.at(-1)?.[0]), url);
   const landed = "5d6e7f80-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
-  act(() => now().page({ messages: [shot(landed)], revision: 2 }));
+  await answer({
+    queue: {
+      messages: [
+        {
+          ...message(queued.id, ""),
+          files: [{ name: SHOT.name, mediaType: SHOT.mediaType, id: landed }],
+        },
+      ],
+      revision: 2,
+    },
+  });
 
   assert.equal(ready(landed), url);
 });

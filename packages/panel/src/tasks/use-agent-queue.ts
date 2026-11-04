@@ -13,7 +13,7 @@ import { STATUS_TONE } from "@repo/ui";
 import { keepPictureRead, PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Option, Schema } from "effect";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
@@ -31,9 +31,9 @@ import type { HeldComposer } from "./use-agent-composer.js";
  * tab mints (`crypto.randomUUID`), so it is drawn at the queue's end as it
  * goes, under the id it keeps, and takes presses at once. The files of a
  * message queued or edited here are kept in the window's pictures under
- * ids of the tab's own, which the host draws them by, and, before the row
- * naming them by the service's ids is painted, under those, so its
- * thumbnails never give way to a read of what the window already holds.
+ * ids of the tab's own, which the host draws them by, and, as the service
+ * answers, under the ids it names them by, so its thumbnails never give way
+ * to a read of what the window already holds.
  */
 
 /** What a change answered where the act itself failed. */
@@ -55,13 +55,6 @@ const LEFT_WORDS = "It already left the queue.";
 /** The messages of a queue its page carries none of, as an agent's page before its first change. */
 const NO_MESSAGES: readonly QueuedMessage[] = [];
 
-/** The files of a message queued or edited from this tab: the box's bytes, the ids it drew them under, and whether a row has named those yet. */
-interface KeptFiles {
-  readonly attachments: readonly AgentAttachment[];
-  readonly drawnAs: readonly string[];
-  drawn: boolean;
-}
-
 /** A file the box held, as the window draws it from its own bytes. */
 function fileUrl(file: AgentAttachment): string {
   return `data:${file.mediaType};base64,${file.data}`;
@@ -80,30 +73,24 @@ function messageOf(change: AgentQueueChange): string | undefined {
 }
 
 /**
- * The files of each message queued or edited from this tab, kept in the
- * agent's pictures under the ids the service's queue names them by, once a
- * row named them by the tab's own and then by the service's, so the landed
- * row draws the bytes the box held rather than reading them back.
+ * The files a message was queued or edited with from this tab, kept in the
+ * agent's pictures under the ids the service's answer names them by, before
+ * any page naming them by those is drawn, so the landed row draws the bytes
+ * the box held rather than reading them back.
  */
 function keepLandedFiles(
   owner: string,
-  messages: readonly QueuedMessage[],
-  kept: Map<string, KeptFiles>,
+  queue: AgentQueue,
+  messageId: string,
+  attachments: readonly AgentAttachment[],
 ): void {
-  for (const [id, files] of kept) {
-    const listed = messages.find((message) => message.id === id)?.files ?? [];
-    const drawn = listed.some((file) => file.id !== undefined && files.drawnAs.includes(file.id));
-    if (drawn) files.drawn = true;
-    // Note that a row still naming the files it was edited from, before the host drew the edit, is not yet the service's.
-    if (drawn || !files.drawn || listed.length === 0) continue;
-    for (const [index, file] of listed.entries()) {
-      const held = files.attachments[index];
-      if (file.id === undefined || held === undefined) continue;
-      if (pictureNow(owner, file.id).kind !== PICTURE_STATE.READY) {
-        keepPictureRead(owner, file.id, fileUrl(held));
-      }
+  const landed = queue.messages.find((message) => message.id === messageId);
+  for (const [index, file] of (landed?.files ?? []).entries()) {
+    const held = attachments[index];
+    if (file.id === undefined || held === undefined) continue;
+    if (pictureNow(owner, file.id).kind !== PICTURE_STATE.READY) {
+      keepPictureRead(owner, file.id, fileUrl(held));
     }
-    kept.delete(id);
   }
 }
 
@@ -129,9 +116,6 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
   const { act } = useAct();
   const toast = useToast();
   const messages = queue?.messages ?? NO_MESSAGES;
-  const kept = useRef(new Map<string, KeptFiles>());
-  // The files of a message queued or edited here are kept under the service's ids before the row naming them is painted.
-  useLayoutEffect(() => keepLandedFiles(agentId, messages, kept.current), [agentId, messages]);
   const listed = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const change = (next: AgentQueueChange, after?: Promise<unknown>) => {
     const files = filesOf(next);
@@ -141,9 +125,6 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
       keepPictureRead(agentId, id, fileUrl(file));
       return id;
     });
-    if (messageId !== undefined && drawnAs.length > 0) {
-      kept.current.set(messageId, { attachments: files, drawnAs, drawn: false });
-    }
     const params = {
       agentId,
       change: next,
@@ -157,9 +138,12 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
     return asked
       .catch(() => UNANSWERED)
       .then((answer) => {
+        // Note that the files are kept under the service's ids as it answers, ahead of the page that carries its queue.
+        if ("queue" in answer && messageId !== undefined && files.length > 0) {
+          keepLandedFiles(agentId, answer.queue, messageId, files);
+        }
         const words = REFUSED_WORDS[next.change];
         if (!("failure" in answer) || words === undefined) return answer;
-        if (messageId !== undefined) kept.current.delete(messageId);
         toast({
           words,
           ...(answer.failure === AGENT_CALL_FAILURE.NOT_FOUND && messageId !== undefined

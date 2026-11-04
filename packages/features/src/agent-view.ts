@@ -69,7 +69,7 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { countedNumber } from "./service-wire.js";
+import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
@@ -343,7 +343,7 @@ export const agentQueueParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   change: agentQueueChangeSchema,
   pictures: EffectSchema.optionalKey(
-    EffectSchema.Array(EffectSchema.String).check(
+    EffectSchema.Array(wireUuidSchema).check(
       EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS),
     ),
   ),
