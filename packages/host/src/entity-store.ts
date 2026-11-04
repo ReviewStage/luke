@@ -310,6 +310,11 @@ export function openEntityStore(
         rows: KeptRows[Read][string],
       ) =>
         Effect.sync(() => {
+          // Note that a late answer for a workspace the kept list no longer names is not kept, so a workspace left never comes back with it.
+          const listed = reads[KEPT_READ.WORKSPACES];
+          if (listed !== undefined && !listed.some((workspace) => workspace.id === workspaceId)) {
+            return;
+          }
           const byWorkspace = { ...byWorkspaceOf<Read>(reads, kept), [workspaceId]: rows };
           // SAFETY: the read `kept` names is set to a record of its own rows, each workspace's `KeptRows[Read][string]`.
           reads = { ...reads, [kept]: byWorkspace } as Partial<KeptRows>;
