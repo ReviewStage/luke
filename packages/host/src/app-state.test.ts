@@ -4,6 +4,8 @@ import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { Task, TaskSummary } from "@repo/features/task-wire";
+import { TASKS_READ } from "@repo/features/tasks-view";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { WireValue } from "@repo/wire";
@@ -152,6 +154,31 @@ describe("a delivery that crosses the wire", () => {
     ...document,
     [LIVE_READ.PAGES]: { [PAGE_OWNER.TASK]: tasks, [PAGE_OWNER.AGENT]: {} },
   });
+  /** One task as the list names it, its name the words it is told apart by. */
+  const summary = (id: string, name: string): TaskSummary => ({
+    id,
+    workspaceId: "workspace-personal",
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: null,
+  });
+  const [invites, billing] = [
+    {
+      ...summary("invites", "Teammate invitations"),
+      agents: { total: 0, working: 0, agents: [], pullRequestTotal: 0, pullRequests: [] },
+    },
+    summary("billing", "Billing usage alerts"),
+  ];
+  const openPlan: Task = {
+    ...invites,
+    document: { body: "# Billing alerts fire at ninety percent", assumptions: [] },
+  };
+  const planRead = { status: TASKS_READ.READY, task: openPlan };
+  const taskList = (tasks: readonly TaskSummary[]): AppStateSnapshot => ({
+    ...document,
+    tasks: { ...document.tasks, tasks, activeTaskId: openPlan.id, document: planRead },
+  });
   const quietList = [quietItem];
   const quietInbox = { rows: quietList };
   const quietPages = { rows: [quietPage] };
@@ -161,16 +188,19 @@ describe("a delivery that crosses the wire", () => {
       name: "the account's feed, a holder moved, one gone, and one kept",
       sent: feed({ quiet: quietList, moved: [item("moved", "Ship?")], gone: [alpha] }),
       next: feed({ quiet: quietList, moved: [item("moved", "Ship tonight?")] }),
-      kept: (state: AppStateSnapshot) =>
+      kept: (state: AppStateSnapshot) => [
         state[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN].quiet,
-      quiet: quietItem.title,
+      ],
+      quiet: [quietItem.title],
     },
     {
       name: "the held inboxes, a holder moved, one let go, and one kept",
       sent: held({ quiet: quietInbox, moved: { rows: [alpha] }, gone: { failed: true } }),
       next: held({ quiet: quietInbox, moved: { rows: [] } }),
-      kept: (state: AppStateSnapshot) => state[LIVE_READ.HOLDER_INBOX][INBOX_SCOPE_KIND.PLAN].quiet,
-      quiet: quietItem.title,
+      kept: (state: AppStateSnapshot) => [
+        state[LIVE_READ.HOLDER_INBOX][INBOX_SCOPE_KIND.PLAN].quiet,
+      ],
+      quiet: [quietItem.title],
     },
     {
       name: "the held pages, an owner's moved, one let go, and one kept",
@@ -183,8 +213,8 @@ describe("a delivery that crosses the wire", () => {
         quiet: quietPages,
         moved: { rows: [page("9d3f7a2c-1b4e-4f6a-8c2d-5e7b9a1c3d4f", "Final")] },
       }),
-      kept: (state: AppStateSnapshot) => state[LIVE_READ.PAGES][PAGE_OWNER.TASK].quiet,
-      quiet: quietPage.title,
+      kept: (state: AppStateSnapshot) => [state[LIVE_READ.PAGES][PAGE_OWNER.TASK].quiet],
+      quiet: [quietPage.title],
     },
     {
       name: "a held inbox's rows, one retitled, one gone, one come at the head, and one kept",
@@ -192,11 +222,27 @@ describe("a delivery that crosses the wire", () => {
       next: held({
         moved: { rows: [item("delta", "Delta?"), alpha, item("bravo", "Bravo now?")] },
       }),
-      kept: (state: AppStateSnapshot) =>
+      kept: (state: AppStateSnapshot) => [
         state[LIVE_READ.HOLDER_INBOX][INBOX_SCOPE_KIND.PLAN].moved?.rows?.find(
           (row) => row.id === alpha.id,
         ),
-      quiet: alpha.title,
+      ],
+      quiet: [alpha.title],
+    },
+    {
+      name: "the task list, one task renamed and one come at the head, the rest and the open plan's document kept",
+      sent: taskList([invites, billing]),
+      next: taskList([
+        summary("delta", "Quarterly review"),
+        { ...invites, name: "Invites now" },
+        billing,
+      ]),
+      kept: (state: AppStateSnapshot) => [
+        state.tasks.tasks.find((row) => row.id === billing.id),
+        state.tasks.tasks.find((row) => row.id === invites.id)?.agents,
+        state.tasks.document,
+      ],
+      quiet: [billing.name, openPlan.document.body],
     },
   ])(
     "crosses a change to $name as what moved alone, what it kept the very one the window held",
@@ -209,9 +255,10 @@ describe("a delivery that crosses the wire", () => {
       const adopted = withAppStateDelivery(window, delivered);
 
       assert.deepEqual(adopted, { ...next, version: 2 });
-      assert.notEqual(kept(window), undefined);
-      assert.equal(kept(adopted), kept(window));
-      assert.equal(JSON.stringify(delivered).includes(quiet), false);
+      const held = kept(window);
+      assert.equal(held.includes(undefined), false);
+      for (const [at, part] of kept(adopted).entries()) assert.equal(part, held[at]);
+      for (const words of quiet) assert.equal(JSON.stringify(delivered).includes(words), false);
     },
   );
 });

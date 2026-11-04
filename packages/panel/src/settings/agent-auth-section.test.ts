@@ -26,15 +26,14 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { restOn } from "../testing/hint-rest.js";
 import { AgentsPage } from "./agents-page.js";
 
 /**
  * Settings › Agents' harnesses over a bridge answering as the service would:
  * each row's button says how its harness is connected, or Connect, or that
- * its plan needs a hand; its dialog's radio cards save and remove each
- * credential, and the checked radio is the plan's default for agents, sent
- * as the plan's `forAgents`. Nothing pasted stands on the page once kept or
+ * its plan needs a hand; its dialog's rows save and remove each credential,
+ * and while both are saved its default control picks the one new agents
+ * use, sent as the plan's `forAgents`. Nothing pasted stands on the page once kept or
  * reaches a log. Synthetic credentials throughout.
  */
 
@@ -219,14 +218,23 @@ async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
   );
 }
 
-const radio = (dialog: Element, label: string) =>
-  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((each) =>
-    each.textContent?.startsWith(label),
-  ) ?? assert.fail(`no ${label} radio`);
+/** The dialog's row a label names. */
+const row = (dialog: Element, label: string) =>
+  [...dialog.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
+    (each) => each.querySelector(".ui-settings-row-label")?.textContent === label,
+  ) ?? assert.fail(`no ${label} row`);
 
-/** The card a radio heads. */
-const card = (dialog: Element, label: string) =>
-  radio(dialog, label).closest<HTMLElement>(".ui-choice-card") ?? assert.fail(`no ${label} card`);
+/** What a dialog's row says of its credential under its name, and in which tint. */
+const lineOf = (within: Element) => {
+  const line = within.querySelector<HTMLElement>(".ui-settings-row-state");
+  return line === null ? undefined : { words: line.textContent, state: line.dataset.state };
+};
+
+/** An option of the default's control, by its words. */
+const choice = (dialog: Element, label: string) =>
+  [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === label,
+  ) ?? assert.fail(`no ${label} choice`);
 
 /** The field a visible label names, as a reader finds it. */
 function labeled(within: Element, words: string): HTMLInputElement {
@@ -351,19 +359,25 @@ test("each harness's row stands where a link to its section lands", async () => 
   assert.ok(landed(SETTINGS_SECTION.CODEX).contains(rowButton(page, "Codex")));
 });
 
-test("the dialog's radios pick the plan or the key as the default, sent as the plan's forAgents, and only a saved credential's radio is pressable", async () => {
+test("while both credentials are saved, the dialog's own default control picks the plan or the key, sent as the plan's forAgents; with one saved, none stands", async () => {
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude");
-  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "true");
-  assert.equal(radio(dialog, "API key").disabled, true, "no key saved, nothing to pick");
+  assert.equal(dialog.querySelector('[role="radio"]'), null, "one credential is the one used");
   await press(dialog, "Done");
 
   held = { keys: [ANTHROPIC_KEY], subscriptions: [CLAUDE_PLAN] };
   for (const root of roots.splice(0)) act(() => root.unmount());
   const both = await mount();
   dialog = await open(both, "Claude");
-  act(() => radio(dialog, "API key").click());
+  assert.equal(
+    row(dialog, "New Claude agents use")
+      .querySelector('[role="radiogroup"]')
+      ?.getAttribute("aria-label"),
+    "New Claude agents use",
+  );
+  assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "true");
+  act(() => choice(dialog, "API key").click());
   await settle();
   assert.deepEqual(forAgentsSent(), [
     {
@@ -372,23 +386,24 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
       forAgents: false,
     },
   ]);
-  assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
-  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "false");
+  assert.equal(choice(dialog, "API key").getAttribute("aria-checked"), "true");
+  assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "false");
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
 
-  act(() => radio(dialog, "Claude plan").click());
+  act(() => choice(dialog, "Claude plan").click());
   await settle();
   assert.equal(forAgentsSent().at(-1)?.forAgents, true);
-  assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "true");
+  assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "true");
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Claude plan"));
 });
 
-test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed with its Remove key button after asking", async () => {
+test("an API key is pasted into a masked field with an eye under its row, sent once, said as Saved with its hint, and removed with its row's Remove after asking", async () => {
   const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const keyCard = card(dialog, "API key");
-  const field = labeled(keyCard, "Anthropic API key");
+  const keyCard = row(dialog, "Anthropic API key");
+  assert.match(keyCard.textContent ?? "", /Billed by Anthropic per token\./u);
+  const field = labeled(keyCard, "API key");
   assert.equal(field.type, "password");
   assert.equal(field.autocomplete, "off");
   assert.ok(
@@ -407,14 +422,8 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_SAVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key: KEY }],
   );
-  const saved =
-    card(dialog, "API key").querySelector<HTMLInputElement>(
-      'input[aria-label="Anthropic API key"]',
-    ) ?? assert.fail("no hint");
-  assert.equal(saved.value, "sk-ant-…wxyz");
-  assert.equal(saved.readOnly, true);
-  assert.ok(radio(dialog, "API key").querySelector(".ui-settings-saved-mark"));
-  assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
+  assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz"));
+  assert.equal(row(dialog, "Anthropic API key").querySelector("input"), null, "the field closes");
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
@@ -422,7 +431,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   }
   assert.ok(dialog.querySelector(".ph-no-capture input"), "the dialog's fields are not recorded");
 
-  await press(card(dialog, "API key"), "Remove key");
+  await press(row(dialog, "Anthropic API key"), "Remove Anthropic API key");
   await settle();
   assert.equal(
     sent.some((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE),
@@ -436,41 +445,31 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
 });
 
-test("resting on Edit key says its name in the window's pill", async () => {
+test("replacing a saved API key opens a New key field showing Saved where the key would be, offers no Show until one is typed, and turns the row's end into Cancel", async () => {
   held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
   const page = await mount();
   const dialog = await open(page, "Claude");
-
-  restOn(button(card(dialog, "API key"), "Edit key"));
-
-  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Edit key");
-});
-
-test("editing a saved API key shows Saved where the key would be, never the key, and offers no Show until one is typed", async () => {
-  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
-  const page = await mount();
-  const dialog = await open(page, "Claude");
-  const keyCard = card(dialog, "API key");
-  await press(keyCard, "Edit key");
-  const field = labeled(keyCard, "Anthropic API key");
+  const keyCard = row(dialog, "Anthropic API key");
+  await press(keyCard, "Replace Anthropic API key");
+  const field = labeled(keyCard, "New key");
+  assert.ok(document.activeElement === field, "Replace puts the focus in the field");
   assert.equal(field.placeholder, "Saved");
   assert.match(keyCard.textContent ?? "", /Saving replaces the key Vespin holds\./u);
   assert.equal(field.value, "");
   assert.equal(field.type, "password");
   assert.equal(button(keyCard, "Show").disabled, true, "there is nothing in the window to show");
-  assert.ok(
-    !keyCard.innerHTML.includes(ANTHROPIC_KEY.hint),
-    "not even the hint stands over the field",
-  );
   paste(field, KEY);
   assert.equal(button(keyCard, "Show").disabled, false);
+  await press(keyCard, "Cancel");
+  assert.equal(keyCard.querySelector("input"), null, "Cancel closes the field");
+  assert.ok(!document.body.innerHTML.includes(KEY), "and drops what was pasted");
 });
 
 test("a Claude setup-token is saved by its kind, refused with why, and disconnected after asking", async () => {
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const field = labeled(card(dialog, "Claude plan"), "Claude setup-token");
+  const field = labeled(row(dialog, "Claude plan"), "Claude setup-token");
   assert.equal(field.type, "password");
   assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   assert.ok(
@@ -492,15 +491,8 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
       key: TOKEN,
     },
   );
-  const plan = card(dialog, "Claude plan");
-  assert.match(plan.textContent ?? "", /Connected/u);
-  assert.doesNotMatch(
-    dialog.textContent ?? "",
-    /checked/iu,
-    "an unchecked plan reads as a connected one",
-  );
-  assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
-  assert.ok(radio(dialog, "Claude plan").querySelector(".ui-settings-saved-mark"));
+  const plan = row(dialog, "Claude plan");
+  assert.deepEqual(lineOf(plan), connectedWith("Connected"));
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Claude plan"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
@@ -523,7 +515,7 @@ test("a harness's dialog opens on the first field it draws, the setup-token's, e
   await settle();
 
   const codex = await open(page, "Codex");
-  assert.ok(document.activeElement === labeled(codex, "OpenAI API key"), "the API key");
+  assert.ok(document.activeElement === labeled(codex, "API key"), "the API key");
 });
 
 test("with both credentials kept, Disconnect's question giving way to the setup-token form leaves focus on its field", async () => {
@@ -532,8 +524,8 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   const dialog = await open(page, "Claude");
 
   act(() => {
-    button(card(dialog, "Claude plan"), "Disconnect").focus();
-    button(card(dialog, "Claude plan"), "Disconnect").click();
+    button(row(dialog, "Claude plan"), "Disconnect").focus();
+    button(row(dialog, "Claude plan"), "Disconnect").click();
   });
   await settle();
   await press(question(), "Disconnect");
@@ -543,13 +535,13 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   );
 });
 
-test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
+test("a Claude token Anthropic rejected says so in its row and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
   assert.deepEqual(rowState(page, "Claude"), needsHand("Claude plan · Needs attention"));
   const dialog = await open(page, "Claude");
-  const plan = card(dialog, "Claude plan");
-  assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
+  const plan = row(dialog, "Claude plan");
+  assert.deepEqual(lineOf(plan), needsHand("Anthropic rejected this token. Paste a new one."));
   await press(plan, "Replace token");
   const field = labeled(plan, "Claude setup-token");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
@@ -562,12 +554,9 @@ test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, a
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("ChatGPT plan · Signed out"));
   const dialog = await open(page, "Codex");
-  assert.match(
-    card(dialog, "ChatGPT plan").textContent ?? "",
-    /Signed out of ChatGPT\.(?! Continue)/u,
-  );
+  assert.deepEqual(lineOf(row(dialog, "ChatGPT plan")), needsHand("Signed out of ChatGPT."));
   assert.ok(
-    document.activeElement === button(card(dialog, "ChatGPT plan"), "Continue with ChatGPT"),
+    document.activeElement === button(row(dialog, "ChatGPT plan"), "Continue with ChatGPT"),
     "Continue with ChatGPT has focus",
   );
 });
@@ -576,20 +565,20 @@ test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the firs
   const page = await mount();
   const dialog = await open(page, "Codex");
   assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
-  await press(card(dialog, "ChatGPT plan"), "Continue with ChatGPT");
+  await press(row(dialog, "ChatGPT plan"), "Continue with ChatGPT");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
   assert.equal(
     document.querySelectorAll('[role="dialog"]').length,
     1,
     "OpenAI's notice opens no card over the dialog",
   );
-  assert.match(card(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
-  await press(card(dialog, "ChatGPT plan"), "Got it");
+  assert.match(row(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
+  await press(row(dialog, "ChatGPT plan"), "Got it");
   assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
   assert.deepEqual(rowState(page, "Codex"), connectedWith("ChatGPT plan"));
-  assert.equal(radio(dialog, "ChatGPT plan").getAttribute("aria-checked"), "true");
+  assert.deepEqual(lineOf(row(dialog, "ChatGPT plan")), connectedWith("Connected"));
 
-  await press(card(dialog, "ChatGPT plan"), "Disconnect");
+  await press(row(dialog, "ChatGPT plan"), "Disconnect");
   assert.equal(actLook("Disconnect"), "danger", "an ended sign-in is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(
@@ -603,24 +592,28 @@ test("a ChatGPT sign-in waiting on the browser says so without trailing dots, be
   signInOpen = Promise.withResolvers();
   const page = await mount();
   const dialog = await open(page, "Codex");
-  await press(card(dialog, "ChatGPT plan"), "Continue with ChatGPT");
-  const waiting = button(card(dialog, "ChatGPT plan"), "Waiting for ChatGPT");
+  await press(row(dialog, "ChatGPT plan"), "Continue with ChatGPT");
+  const waiting = button(row(dialog, "ChatGPT plan"), "Waiting for ChatGPT");
+  assert.match(
+    row(dialog, "ChatGPT plan").textContent ?? "",
+    /Finish signing in in your browser\./u,
+  );
   assert.equal(waiting.getAttribute("aria-busy"), "true");
-  const cancel = button(card(dialog, "ChatGPT plan"), "Cancel");
+  const cancel = button(row(dialog, "ChatGPT plan"), "Cancel");
   assert.equal(cancel.getAttribute("data-variant"), BUTTON_VARIANT.QUIET);
-  await press(card(dialog, "ChatGPT plan"), "Cancel");
+  await press(row(dialog, "ChatGPT plan"), "Cancel");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN_CANCEL).length, 1);
 });
 
-test("without the sign-in's loopback, Codex's ChatGPT plan card stands disabled and says why, while its API key card works", async () => {
+test("without the sign-in's loopback, Codex's ChatGPT plan row offers nothing and says why, while its API key row works", async () => {
   const page = await mount(
     DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CHATGPT_SIGN_IN),
   );
   const dialog = await open(page, "Codex");
-  const plan = card(dialog, "ChatGPT plan");
+  const plan = row(dialog, "ChatGPT plan");
   assert.equal(plan.textContent, "ChatGPT planDesktop app only");
-  assert.equal(radio(dialog, "ChatGPT plan").disabled, true);
-  const field = labeled(card(dialog, "API key"), "OpenAI API key");
+  assert.equal(plan.querySelector("button"), null);
+  const field = labeled(row(dialog, "OpenAI API key"), "API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
   assert.deepEqual(rowState(page, "Codex"), connectedWith("OpenAI API key sk-ant-…wxyz"));
 });

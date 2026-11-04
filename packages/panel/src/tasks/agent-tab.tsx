@@ -320,8 +320,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
  * drawn and goes nowhere. No line here names a price: a price in the
- * window is the whole run's, said only at the model menu's foot
- * (`agentUsageLine`). Every word here is the agent's or the plan's, so the
+ * window is the whole run's, said only on the model menu's last line
+ * (`agentPayerLine`). Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where

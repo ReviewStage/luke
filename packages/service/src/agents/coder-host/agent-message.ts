@@ -175,7 +175,7 @@ export const MESSAGE_AGENT_TOOL = {
 } as const;
 
 /** A steer's refusal in the model's words, with when a plan's reached limit resets where the provider said. */
-function refusalWords(refusal: HostedRefusal): string {
+export function messageRefusalWords(refusal: HostedRefusal): string {
   const words = REFUSAL_WORDS.get(refusal.error) ?? MESSAGE_AGENT_REFUSAL.UNAVAILABLE;
   return refusal.resetsAt === undefined
     ? words
@@ -249,7 +249,7 @@ export function runMessageAgent(
         sender: agentLineSender(sender),
         metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
       }).pipe(Effect.result);
-      if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
+      if (Result.isFailure(sent)) return agentToolRejected(messageRefusalWords(sent.failure));
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         delivery: sent.success,

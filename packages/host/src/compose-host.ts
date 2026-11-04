@@ -58,6 +58,7 @@ import {
   isPlatformConcern,
   unavailableConcern,
 } from "./host-concerns.js";
+import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
@@ -139,10 +140,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       const signedIn = account.session.snapshot();
       return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
     };
+    /** Content read under a key it never changes under, kept in this process for the account signed in until the agents' reset lets it go at a sign-out. */
+    const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
     const tasks = yield* composeTasks({
       kernel,
       account,
       accountId,
+      kept,
       client: Object.assign(
         new HostedTaskClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -166,6 +170,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       kernel,
       account,
       accountId,
+      kept,
       reader: () => {
         const signedIn = account.session.snapshot();
         return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined

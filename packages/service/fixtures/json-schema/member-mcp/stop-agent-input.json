@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The agent's id, as list_agents answered it."
+    }
+  },
+  "required": [
+    "agentId"
+  ],
+  "additionalProperties": false
+}
