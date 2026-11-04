@@ -15,7 +15,10 @@
  * slot composes, in the slots' declared order, so a write never drops what
  * another part of the session still needs; with nothing standing, the
  * policy is the open internet. An entry withdrawn leaves the row at once,
- * and the row goes with its last entry.
+ * and the row goes with its last entry. A renewal (`renew`, the sweep's for
+ * a ChatGPT plan's token) changes a slot only where it still stands, so it
+ * never sets back an entry a withdraw or a clear took off, and writes
+ * nothing where it finds nothing new.
  *
  * Two writes at once from two functions (a message's renewal, a Terminal's,
  * a runner's end) may land at Vercel in either order, and whichever lands
@@ -81,12 +84,21 @@ export const FIREWALL_SLOT = {
   CLAUDE: "claude",
   /** The runner's bearer, swapped in on our deployment's host for the placeholder its launch holds (`./coder-host/runner-sessions.ts`). */
   RUNNER: "runner",
+  /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API, for that launch alone. */
+  OPENAI_KEY: "openai-key",
+  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on OpenAI's API and renewed by the sweep while it stands. */
+  OPENAI_PLAN: "openai-plan",
 } as const;
 
 export type FirewallSlot = (typeof FIREWALL_SLOT)[keyof typeof FIREWALL_SLOT];
 
 /** The slots a runner's launch sets and its end takes off a place left up: each a credential its runner alone sends. */
-export const RUNNER_SLOTS: readonly FirewallSlot[] = [FIREWALL_SLOT.CLAUDE, FIREWALL_SLOT.RUNNER];
+export const RUNNER_SLOTS: readonly FirewallSlot[] = [
+  FIREWALL_SLOT.CLAUDE,
+  FIREWALL_SLOT.RUNNER,
+  FIREWALL_SLOT.OPENAI_KEY,
+  FIREWALL_SLOT.OPENAI_PLAN,
+];
 
 const SLOT_ORDER: readonly FirewallSlot[] = Object.values(FIREWALL_SLOT);
 
@@ -142,6 +154,9 @@ export interface PlaceholderSwap {
 /** The entries standing at a session's firewall, by slot. */
 type Standing = ReadonlyMap<FirewallSlot, FirewallEntry>;
 
+/** What a write leaves in its slot: an entry, or none to take it off; nothing at all to leave the slot, and the record, as they stand. */
+type SlotChange = Option.Option<FirewallEntry | undefined>;
+
 /** The record as a writer read it: the version it stood at, none where no row stood, and its entries. */
 interface ReadRecord {
   readonly version: string | undefined;
@@ -164,6 +179,21 @@ export interface SandboxFirewall {
   readonly clear: (
     sandboxSessionId: string,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  /** The slots standing at the session's firewall, as its record holds them; none where no record stands. */
+  readonly standing: (
+    session: FirewallSession,
+  ) => Effect.Effect<ReadonlySet<FirewallSlot>, SandboxUnavailable, DatabaseServices>;
+  /**
+   * The slot's entry renewed where it still stands: `renewal` is handed what
+   * stands and answers what stands in its place, or none to leave it; a slot
+   * that stands no longer is left alone, so a renewal never sets back what a
+   * withdraw or a clear took off. Answers whether it wrote.
+   */
+  readonly renew: <R>(
+    session: FirewallSession,
+    slot: FirewallSlot,
+    renewal: (standing: FirewallEntry) => Effect.Effect<FirewallEntry | undefined, never, R>,
+  ) => Effect.Effect<boolean, SandboxUnavailable, DatabaseServices | R>;
 }
 
 const PathMatchSchema = Schema.Union([
@@ -303,6 +333,41 @@ export function placeholderSwap(swap: PlaceholderSwap): FirewallEntry {
   ]);
 }
 
+/**
+ * The swap `placeholderSwap` made, renewed to set `value` in place of the
+ * one it sets, its domain, header, and placeholder kept; none where it sets
+ * `value` already, so a renewal that finds nothing new writes nothing.
+ */
+export function renewedSwap(
+  entry: FirewallEntry,
+  value: Redacted.Redacted,
+): FirewallEntry | undefined {
+  const next = Redacted.value(value);
+  const standing = Redacted.value(entry.rules);
+  const sets = (headers: Readonly<Record<string, string>>) =>
+    Object.values(headers).every((held) => held === next);
+  if (
+    standing.every(([, rules]) =>
+      rules.every((rule) => rule.transform.every((each) => sets(each.headers))),
+    )
+  ) {
+    return undefined;
+  }
+  return entryOf(
+    standing.map(
+      ([host, rules]): HostRules => [
+        host,
+        rules.map((rule) => ({
+          ...rule,
+          transform: rule.transform.map((each) => ({
+            headers: Object.fromEntries(Object.keys(each.headers).map((name) => [name, next])),
+          })),
+        })),
+      ],
+    ),
+  );
+}
+
 /** A placeholder minted for one launch: random, and named nowhere but where its process reads it. */
 export function newPlaceholder(): Redacted.Redacted {
   return Redacted.make(randomBytes(FIREWALL_BOUNDS.PLACEHOLDER_BYTES).toString("base64url"));
@@ -384,24 +449,31 @@ const readRecord = (ring: KeyRing, session: FirewallSession) =>
 
 /** The firewall over the API given: every write through the session's record, and its policy composed whole. */
 export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
-  /** The slot changed in the session's record, read again for as long as another writer moves it first: what stands after, at the version this write minted. */
-  const written = (
+  /**
+   * The slot changed in the session's record as `next` decides on what
+   * stands there, read again for as long as another writer moves it first:
+   * what stands after, at the version this write minted; none where `next`
+   * leaves the slot as it stands, which writes and sends nothing.
+   */
+  const written = <R>(
     ring: KeyRing,
     session: FirewallSession,
     slot: FirewallSlot,
-    entry: FirewallEntry | undefined,
+    next: (standing: FirewallEntry | undefined) => Effect.Effect<SlotChange, never, R>,
   ) =>
     Effect.gen(function* () {
       for (let attempt = 0; attempt < FIREWALL_BOUNDS.WRITE_ATTEMPTS; attempt += 1) {
         const standing = yield* readRecord(ring, session);
-        const entries = withSlot(standing.entries, slot, entry);
-        const next =
+        const decided = yield* next(standing.entries.get(slot));
+        if (Option.isNone(decided)) return undefined;
+        const entries = withSlot(standing.entries, slot, decided.value);
+        const row =
           entries.size === 0
             ? undefined
             : { version: randomUUID(), sealedEntries: sealed(ring, session, entries) };
         const now = yield* DateTime.nowAsDate;
-        if (yield* replaceStandingFirewall(session, standing.version, next, now)) {
-          return { version: next?.version, entries } satisfies ReadRecord;
+        if (yield* replaceStandingFirewall(session, standing.version, row, now)) {
+          return { version: row?.version, entries } satisfies ReadRecord;
         }
       }
       return yield* unkept("the firewall's record kept moving under this write");
@@ -423,11 +495,22 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
       );
     });
 
-  /** The slot set or taken off, and the whole policy sent; a record the store could not keep is the write unavailable. */
-  const change = (session: FirewallSession, slot: FirewallSlot, entry: FirewallEntry | undefined) =>
+  /**
+   * The slot changed as `next` decides, and the whole policy sent; nothing
+   * written or sent where it left the slot as it stands. Answers whether it
+   * wrote; a record the store could not keep is the write unavailable.
+   */
+  const change = <R>(
+    session: FirewallSession,
+    slot: FirewallSlot,
+    next: (standing: FirewallEntry | undefined) => Effect.Effect<SlotChange, never, R>,
+  ) =>
     Effect.gen(function* () {
       const ring = yield* keyRing;
-      yield* settled(ring, session, yield* written(ring, session, slot, entry));
+      const wrote = yield* written(ring, session, slot, next);
+      if (wrote === undefined) return false;
+      yield* settled(ring, session, wrote);
+      return true;
     }).pipe(
       Effect.mapError((failure) =>
         failure instanceof SandboxUnavailable
@@ -437,8 +520,29 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
     );
 
   return {
-    set: (session, slot, entry) => change(session, slot, entry),
-    withdraw: (session, slot) => change(session, slot, undefined),
+    set: (session, slot, entry) =>
+      Effect.asVoid(change(session, slot, () => Effect.succeed(Option.some(entry)))),
+    // Note that a withdraw writes and sends even where its slot stands no longer, so one made again after a send
+    // that failed sends what stands.
+    withdraw: (session, slot) =>
+      Effect.asVoid(change(session, slot, () => Effect.succeed(Option.some(undefined)))),
+    standing: (session) =>
+      Effect.gen(function* () {
+        const record = yield* readRecord(yield* keyRing, session);
+        return new Set(record.entries.keys());
+      }).pipe(
+        Effect.mapError((failure) =>
+          failure instanceof SandboxUnavailable
+            ? failure
+            : unkept("the firewall's record could not be read"),
+        ),
+      ),
+    renew: (session, slot, renewal) =>
+      change(session, slot, (standing) =>
+        standing === undefined
+          ? Effect.succeed(Option.none())
+          : Effect.map(renewal(standing), Option.fromUndefinedOr),
+      ),
     // Note that a record that would not go is logged and the open internet sent anyway, because the
     // stop it goes ahead of must not wait on the store, and the sweep drops the row once its session is gone.
     clear: (sandboxSessionId) =>

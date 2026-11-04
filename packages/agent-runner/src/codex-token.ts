@@ -1,13 +1,18 @@
 /**
- * codex-token.ts -- the runner as Codex's token command: the service asked for the plan's access token under the runner's bearer, and the token answered for app-server alone.
+ * codex-token.ts -- the runner as Codex's token command: in the cloud's sandbox the launch's placeholder, and on a host the plan's access token asked of the service under the runner's bearer, answered for app-server alone.
  *
  * App-server runs `node <bundle> codex-token <tokenUrl>` (its provider's
  * `auth` command, `codex.ts`) for the bearer it sends OpenAI: as it first
  * needs one, again once its cached one is older than the refresh interval,
  * and again after a 401, mid-turn included. The command inherits
- * app-server's environment, the runner's bearer in it (which our MCP
- * server's header already reads from there), and prints the token on stdout,
- * which app-server reads and nothing else does. A refusal or failure says
+ * app-server's environment and prints what it answers on stdout, which
+ * app-server reads and nothing else does. In the cloud's sandbox that
+ * environment holds the placeholder the service minted for the launch
+ * (`RUNNER_ENV.CODEX_TOKEN`), which the sandbox's firewall swaps for the
+ * plan's token on OpenAI's API, so the command asks nothing and no token
+ * enters the sandbox. On a host it holds the runner's bearer (which our MCP
+ * server's header already reads from there), and the command asks the
+ * service for the token under it. A refusal or failure says
  * only its status on stderr, which app-server may quote in a turn's error,
  * so no secret is ever written there.
  */
@@ -29,11 +34,17 @@ class CodexTokenFailed extends Data.TaggedError("CodexTokenFailed")<{
   readonly detail: string;
 }> {}
 
-/** The plan's access token, asked of the service at `url` under the bearer in `env`. */
-export const askCodexToken = Effect.fn("agent-runner/askCodexToken")(function* (
+/**
+ * The bearer app-server sends OpenAI: the launch's placeholder where `env`
+ * holds one, and otherwise the plan's access token, asked of the service at
+ * `url` under the bearer in `env`.
+ */
+export const codexToken = Effect.fn("agent-runner/codexToken")(function* (
   url: string,
   env: Readonly<Record<string, string | undefined>>,
 ) {
+  const placeholder = env[RUNNER_ENV.CODEX_TOKEN];
+  if (placeholder !== undefined && placeholder !== "") return placeholder;
   const bearer = env[RUNNER_ENV.BEARER];
   if (bearer === undefined || bearer === "") {
     return yield* new CodexTokenFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });

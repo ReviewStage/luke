@@ -6,6 +6,7 @@ import {
   AGENT_AUTHOR,
   AGENT_BRIEF,
   AGENT_KIND,
+  AGENT_MACHINE,
   AGENT_PAYER,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
@@ -2343,6 +2344,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
           repository: "acme/api",
           title: "Flaky tests",
           archivedAt: null,
+          machine: AGENT_MACHINE.VERCEL,
         };
 
         assert.deepEqual(

@@ -12,11 +12,13 @@
  * row is the account's own, keyed by the account whose agent the session
  * is and the session, so a read and a write reach that account's row
  * alone; a clear, made by the service ahead of a stop, and the sweep's drop
- * read nothing and are the deployment's. The row holds the entries only as the
+ * read nothing and are the deployment's, as are the sweep's count and list
+ * of the sessions whose row stands, which name each row's account and
+ * session and nothing it holds. The row holds the entries only as the
  * service sealed them (`provider-key-seal.ts`'s `sealFirewallEntries`).
  */
 
-import { and, eq, lt } from "drizzle-orm";
+import { and, count, eq, lt } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -110,6 +112,29 @@ const deleteSession = SqlSchema.void({
     ),
 });
 
+const countSessions = SqlSchema.findAll({
+  Request: Schema.Struct({}),
+  Result: Schema.Struct({ count: Schema.Number }),
+  execute: () => Database.use((db) => db.select({ count: count() }).from(sandboxFirewall)),
+});
+
+const listSessions = SqlSchema.findAll({
+  Request: Schema.Struct({ offset: Schema.Number, limit: Schema.Number }),
+  Result: Schema.Struct(OwnerFields),
+  execute: ({ offset, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: sandboxFirewall.userId,
+          sandboxSessionId: sandboxFirewall.sandboxSessionId,
+        })
+        .from(sandboxFirewall)
+        .orderBy(sandboxFirewall.sandboxSessionId, sandboxFirewall.userId)
+        .offset(offset)
+        .limit(limit),
+    ),
+});
+
 const deleteStale = SqlSchema.findAll({
   Request: Schema.Struct({ updatedBefore: Schema.Date }),
   Result: Schema.Struct({ sandboxSessionId: Schema.String }),
@@ -160,6 +185,23 @@ export function replaceStandingFirewall(
 /** The session's rows deleted, whoever's they are, as the session's firewall is cleared ahead of a stop. */
 export function clearStandingFirewall(sandboxSessionId: string): FirewallEffect<void> {
   return deleteSession({ sandboxSessionId });
+}
+
+/** How many sessions' rows stand, whoever's they are: the sweep's to size its window by. */
+export function countStandingFirewalls(): FirewallEffect<number> {
+  return Effect.map(countSessions({}), ([row]) => row?.count ?? 0);
+}
+
+/**
+ * The sessions whose row stands, whoever's they are, in the order of their
+ * ids, from `offset` on and at most `limit` of them, each by its account and
+ * session alone: the sweep's to renew what lapses in them.
+ */
+export function listStandingFirewalls(
+  offset: number,
+  limit: number,
+): FirewallEffect<readonly FirewallOwner[]> {
+  return listSessions({ offset, limit });
 }
 
 /** Every row last written before the instant given deleted, answering how many went: sessions that ended long since. */

@@ -7,7 +7,9 @@ import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   clearStandingFirewall,
+  countStandingFirewalls,
   dropStaleFirewalls,
+  listStandingFirewalls,
   readStandingFirewall,
   replaceStandingFirewall,
 } from "../sandbox-firewall-store.js";
@@ -90,7 +92,7 @@ it.layer(getTestDB())("a sandbox session's firewall record", (it) => {
   );
 
   it.effect(
-    "a clear deletes the session's row, and the sweep drops only the rows last written before its bound",
+    "a clear deletes the session's row, the sweep drops only the rows last written before its bound, and the sweep's list names the sessions whose row stands",
     () =>
       Effect.gen(function* () {
         const cleared = yield* openOwner;
@@ -108,6 +110,13 @@ it.layer(getTestDB())("a sandbox session's firewall record", (it) => {
         assert.equal(yield* readStandingFirewall(stale), undefined);
         assert.ok(dropped >= 1);
         assert.deepEqual(yield* readStandingFirewall(fresh), kept);
+        const standing = yield* countStandingFirewalls();
+        const listed = (yield* listStandingFirewalls(0, standing)).map(
+          (each) => each.sandboxSessionId,
+        );
+        assert.equal(listed.length, standing);
+        assert.ok(listed.includes(fresh.sandboxSessionId));
+        assert.ok(!listed.includes(cleared.sandboxSessionId));
       }),
   );
 });

@@ -1,5 +1,5 @@
 /**
- * runner-token-app.ts -- where a Codex runner on its starter's ChatGPT plan asks for the plan's access token, mid-turn included.
+ * runner-token-app.ts -- where a local Codex runner on its starter's ChatGPT plan asks for the plan's access token, mid-turn included.
  *
  * App-server runs the runner's token command (`@repo/agent-runner`'s
  * `codex-token.ts`) as it needs a bearer for OpenAI: as a turn's requests go
@@ -13,10 +13,13 @@
  * a bearer no standing coding agent's conversation holds, a retired one's
  * among them, is refused. So is one whose agent does not run on Codex on its
  * starter's ChatGPT plan, and one past the brake, which is kept per agent. A
- * local agent's runner asks here from its Mac as a sandbox's does, so no
- * token travels through the Mac's queue.
+ * local agent's runner asks here from its Mac or its host, so no token
+ * travels through the box's queue. One in the cloud's sandbox is refused: its
+ * token command answers a placeholder, and the token stands at the sandbox's
+ * firewall in its place (`../coder-host/codex-sessions.ts`), so no token
+ * ever enters the sandbox, and a bearer read there asks for none here.
  * What this answers is the token the runner's launch was already handed as
- * the plan's payer, to the same sandbox the same bearer already reaches
+ * the plan's payer, to the same box the same bearer already reaches
  * our MCP server from. The token is never logged, and travels in the
  * answer's body alone, which no cache keeps.
  *
@@ -189,7 +192,7 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   return yield* repositoryTokenFor(userId, agent.value, brake);
 });
 
-/** POST: the plan's access token, for the Codex agent on the plan the bearer stands for; or, on a host's device secret, its agent's GitHub token. */
+/** POST: the plan's access token, for the local Codex agent on the plan the bearer stands for; or, on a host's device secret, its agent's GitHub token. */
 const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")(function* (
   brake: RateBrake,
 ): Effect.fn.Return<
@@ -218,6 +221,10 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
     readAgentHeaderOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  // Note that a runner in the cloud's sandbox is handed no token at all, since its token stands at the sandbox's firewall.
+  if (agent.value.machine !== AGENT_MACHINE.DEVICE) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
   const routing = yield* hostedStoreOrUnavailable(readAgentRouting(target.userId, agent.value.id));
   // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
   // started on the plan, or one recorded with an older payer whose launch turns to the plan

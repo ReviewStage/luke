@@ -603,11 +603,19 @@ disk holds the agent's checkout and Codex's own thread files (under its
 `CODEX_HOME`): its record of the thread, which it resumes from there when the
 agent is next messaged. Both stay on that disk between turns and in the
 snapshot Vercel keeps when the sandbox stops, and are deleted with the
-sandbox when the task is deleted, as above. Only the plan's short-lived
-access token, never your sign-in's refresh token, is handed to Codex, in its
-process's environment and on its input, or, for an agent your API key pays
-for, that key, in its process's environment alone: neither is ever written to
-that disk, a command Codex runs, or the conversation's record.
+sandbox when the task is deleted, as above. Neither the plan's short-lived
+access token nor, for an agent your API key pays for, that key ever enters the
+sandbox: our service sets it at the sandbox's network firewall, which adds it
+to the agent's requests to OpenAI's API on their way out, and hands Codex in
+its place only a random stand-in made for that launch, which is good for
+nothing but those requests from that sandbox. While the agent runs, our
+service renews the plan's access token there before it expires, checking
+each running agent's within a quarter of an hour, and the token or the key
+comes off the firewall as the agent's run ends. The firewall's copy is kept in our database as the
+sandbox's other firewall entries are (see "How agents read your
+repository"), and your sign-in's refresh token never leaves our service.
+Neither is ever written to that disk, a command Codex runs, or the
+conversation's record.
 
 On either, what keeps the token from anyone with a Terminal in that sandbox
 is not a missing `sudo`: Claude Code or Codex runs as a user of its own,

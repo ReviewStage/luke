@@ -37,15 +37,20 @@
  * refusing the events, ends it as `failed`.
  *
  * Tokens. App-server takes its token from a command, Codex's provider
- * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`), which
- * asks the service at the config's `tokenUrl` under the runner's bearer. Codex keeps
+ * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`). In
+ * the cloud's sandbox it answers the placeholder the service minted for the
+ * launch (`RUNNER_ENV.CODEX_TOKEN`), and the sandbox's firewall sets the
+ * plan's token in its place on OpenAI's API, renewed by the service, so no
+ * token enters the sandbox; on a host it asks the service at the config's
+ * `tokenUrl` under the runner's bearer. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
  * alone. A launch whose environment holds `OPENAI_API_KEY` (one the
  * account's OpenAI API key pays for) asks no token: app-server reads the key
  * from there, the provider's documented `env_key`, and no command it runs
- * inherits it.
+ * inherits it; in the cloud's sandbox it is a placeholder there too, the key
+ * set in its place at the firewall.
  *
  * Speed. Each turn names its service tier: `fast` for a fast version,
  * which Codex sends as the API's `priority`, on the plan and an API key
@@ -476,7 +481,7 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPol
     });
   const excluded = [
     RUNNER_ENV.BEARER,
-    ...(auth.kind === CODEX_AUTH.API_KEY ? [RUNNER_ENV.OPENAI_API_KEY] : []),
+    auth.kind === CODEX_AUTH.API_KEY ? RUNNER_ENV.OPENAI_API_KEY : RUNNER_ENV.CODEX_TOKEN,
   ];
   const overrides: (readonly [string, string])[] = [
     ...providerOverrides(auth),

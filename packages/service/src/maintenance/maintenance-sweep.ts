@@ -13,6 +13,7 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
+import type { CodexPlanSweepOutcome } from "./codex-plan-sweep.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
@@ -42,8 +43,10 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * for what their agents are told of, and the native agents' image template
  * is moved on and the templates of older images deleted, the hosts' pairings
  * whose code lapsed are deleted with the address each kept, the sync log's
- * rows older than its keep are pruned, and the firewall records of sandbox
- * sessions that ended long since are dropped. Each is bounded on its own, and the
+ * rows older than its keep are pruned, the firewall records of sandbox
+ * sessions that ended long since are dropped, and the ChatGPT plan token a
+ * Codex agent's sandbox carries at its firewall is renewed before it lapses.
+ * Each is bounded on its own, and the
  * sweep runs them in turn, each kept from the others, so one that fails is
  * logged and the rest still run.
  */
@@ -51,7 +54,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The twenty sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The twenty-one sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -93,10 +96,12 @@ interface MaintenanceSweeps {
   pruneSyncLog: (now: number) => SweepRead<number>;
   /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
   purgeStaleFirewalls: (now: number) => SweepRead<number>;
+  /** Renews the ChatGPT plan token behind the Codex agents' standing swaps at their sandboxes' firewalls, a window's worth. */
+  renewCodexPlanSwaps: (now: number) => SweepRead<CodexPlanSweepOutcome>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the twenty sweeps once
+ * How a run is told to the sweep's cron monitor: around the twenty-one sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -153,6 +158,8 @@ interface MaintenanceSweepAnswer {
   syncLog: Swept<number>;
   /** Firewall records of sandbox sessions long ended, dropped. */
   staleFirewalls: Swept<number>;
+  /** What the renewal of the Codex agents' plan tokens at their firewalls did. */
+  codexPlanSwaps: Swept<CodexPlanSweepOutcome>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -181,7 +188,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The twenty sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The twenty-one sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -216,6 +223,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
     staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
+    codexPlanSwaps: yield* isolated("renewCodexPlanSwaps", sweeps.renewCodexPlanSwaps(now)),
   };
 });
 

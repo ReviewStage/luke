@@ -2125,6 +2125,7 @@ const AGENT_HEADER_COLUMNS = {
   repository: agentTable.repository,
   title: agentTable.title,
   archivedAt: agentTable.archivedAt,
+  machine: agentTable.machine,
 } as const;
 
 const AgentHeaderRowSchema = Schema.Struct({
@@ -2135,6 +2136,7 @@ const AgentHeaderRowSchema = Schema.Struct({
   repository: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  machine: Schema.Literals(Object.values(AGENT_MACHINE)),
 });
 
 const findAgentHeaderOfConversation = SqlSchema.findOneOption({
@@ -3557,12 +3559,12 @@ export function readAgentOfConversation(
 export type AgentHeader = Pick<
   Agent,
   "id" | "userId" | "organizationId" | "taskId" | "repository" | "title" | "archivedAt"
->;
+> & { readonly machine: AgentMachineKind };
 
 /**
  * The header of the agent whose conversation this is, for a caller that needs
- * no more of it than who it is, its workspace, task, repository, title, and archive;
- * nothing where `readAgentOfConversation` answers nothing.
+ * no more of it than who it is, its workspace, task, repository, title,
+ * archive, and machine; nothing where `readAgentOfConversation` answers nothing.
  */
 export function readAgentHeaderOfConversation(
   userId: string,
