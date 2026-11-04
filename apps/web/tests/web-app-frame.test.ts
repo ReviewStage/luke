@@ -81,10 +81,7 @@ test("the shell's frame stands while the session is read, and the signed-in pane
       "the session read has gone out",
     ),
   );
-  assert.ok(
-    root.querySelector(".boot-frame .desktop-shell .desktop-main") !== null,
-    "the frame stands",
-  );
+  assert.ok(root.querySelector(".boot-frame .ui-product-mark") !== null, "the frame stands");
   assert.doesNotMatch(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
 
   session.resolve();
