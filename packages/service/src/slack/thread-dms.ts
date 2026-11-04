@@ -68,8 +68,8 @@ import { slackClipped, slackMarkdownBlock } from "./slack-markdown.js";
 /** Slack's own limits a DM's parts are clipped to: a header's text, a button's, and a checkbox's. */
 const SLACK_TEXT_BOUND = { HEADER: 150, BUTTON: 75, OPTION: 75 } as const;
 
-/** What a ticked checkbox says beside its label where the agent recommends it. */
-const RECOMMENDED_NOTE = "Recommended";
+/** What a checkbox says after its label, in parentheses, where the agent recommends it. */
+const RECOMMENDED_NOTE = " (Recommended)";
 
 /** The words on the button that answers an ask taking several options with the ones ticked. */
 const SUBMIT_LABEL = "Submit";
@@ -167,7 +167,7 @@ function postedMessage(item: InboxItem, asked: boolean): InboxMessage | undefine
  * one, the recommended ones primary, each under an action id of its own,
  * which the route answers the ask under, so a press Slack sends again is the
  * same answer; where it takes several, a checkbox per option, the
- * recommended ones saying so, and a Submit button under an action id of its
+ * recommended ones saying so in parentheses after the label, and a Submit button under an action id of its
  * own on the same terms. None for any other ask.
  */
 function askControls(itemId: string, message: InboxMessage): AskControls {
@@ -196,13 +196,12 @@ function askControls(itemId: string, message: InboxMessage): AskControls {
     }));
     return { blocks: [], buttons };
   }
-  const options = ask.options.map(({ label }, index) => ({
-    text: { type: "plain_text", text: slackClipped(label, SLACK_TEXT_BOUND.OPTION) },
-    value: String(index),
-    ...(recommended.has(label)
-      ? { description: { type: "plain_text", text: RECOMMENDED_NOTE } }
-      : undefined),
-  }));
+  // Note that a recommended label is clipped short of its note, so the note always shows.
+  const options = ask.options.map(({ label }, index) => {
+    const note = recommended.has(label) ? RECOMMENDED_NOTE : "";
+    const text = `${slackClipped(label, SLACK_TEXT_BOUND.OPTION - note.length)}${note}`;
+    return { text: { type: "plain_text", text }, value: String(index) };
+  });
   return {
     blocks: [
       {
