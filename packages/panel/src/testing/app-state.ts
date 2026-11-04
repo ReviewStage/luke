@@ -7,6 +7,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
+  type AppChapters,
   type AppHolderInboxes,
   type AppHolderPages,
   type AppHostRead,
@@ -14,6 +15,7 @@ import {
   type AppPages,
   type AppStateDelivery,
   type AppStateSnapshot,
+  NO_CHAPTERS,
   NO_HOLDER_INBOXES,
   NO_PAGES,
   UNREAD,
@@ -72,6 +74,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.PAGES]: NO_PAGES,
+    [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -162,11 +165,12 @@ export interface HostReadsHanded {
   readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
+  readonly deliverChapters: (next: AppChapters) => void;
 }
 
 /**
  * Lays the host's reads as given, the account's feed of every item, the
- * and the holders' own inboxes, over whatever
+ * holders' own inboxes, and the pull requests' chapters, over whatever
  * document the window was handed, its experiments and the reads handed
  * before among it, and answers with how each is delivered again as it
  * moves, as the host tells it.
@@ -174,6 +178,7 @@ export interface HostReadsHanded {
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
+  readonly chapters?: AppChapters;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
@@ -185,6 +190,9 @@ export function handHostReads(first: {
       version,
       ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
       ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
+      ...(first.chapters === undefined
+        ? undefined
+        : { [LIVE_READ.PULL_REQUEST_CHAPTERS]: first.chapters }),
     }),
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
@@ -199,6 +207,7 @@ export function handHostReads(first: {
     deliverItems: (next) => deliver({ [LIVE_READ.INBOX_ITEMS]: next }),
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
+    deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
   };
 }
 

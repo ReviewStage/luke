@@ -2124,7 +2124,7 @@ function chaptersTabCount(
   const files = changes.pullRequest ?? undefined;
   // Note that once the files are read their own head is the one the view judges by, even where they name none.
   const filesHead = files === undefined ? chapters.head : files.headSha;
-  const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, {
+  const state = chaptersShown(chapters.answer, chapters.generating, {
     pullRequest: chapters.head,
     files: filesHead,
   });
@@ -3046,12 +3046,11 @@ function PullRequestTabBody({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads, the checks among them, and the chapters once their read was asked,
-  // and what the agent published, which names this tab and its pin by the pull request's title.
+  // Refresh reads again the header's reads, the checks among them, and what the agent published, which names this
+  // tab and its pin by the pull request's title; the chapters are held live, so Refresh does not read them.
   // It settles once the header's reads land, which a change waits on before its press lets go.
   const refresh = () => {
     const header = Promise.all([ask.pullRequest(), ask.conversation(), ask.checks()]);
-    if (askedYet(chapters)) chapters.ask();
     void source.readPublished().catch(() => undefined);
     return header;
   };
@@ -3126,7 +3125,7 @@ function PullRequestTabBody({
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   const overview = landed(parts.pullRequest);
-  // The chapters, read as the tab is shown once the pull request's own read has answered, naming the number it found, so their tab says where they stand before their view is opened.
+  // The chapters, held while the tab is shown once the pull request's own read has answered, naming the number it found, so their tab says where they stand before their view is opened.
   const chapters = useChaptersRead(
     agentId,
     source,

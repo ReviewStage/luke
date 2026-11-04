@@ -117,11 +117,13 @@ import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
 import {
+  type AppChapters,
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
   UNREAD,
 } from "./app-state.js";
+import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -184,7 +186,7 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 /** The service's side of the agents, as this concern asks it. */
 export type AgentClient = Pick<
   HostedAgentClient,
-  | "chapters"
+  | "pullRequestChaptersLive"
   | "generateChapters"
   | "readChaptersModel"
   | "writeChaptersModel"
@@ -367,6 +369,14 @@ export function composeAgents(
       tell: (held: AppHolderInboxes) =>
         dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
     });
+    const chapters = yield* heldChapters({
+      seal: (key, poll, userId, after) =>
+        asked(client.pullRequestChaptersLive(key.agentId, key.number, userId, poll, after)),
+      accountId: dependencies.accountId,
+      gate,
+      tell: (held: AppChapters) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
+    });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
       () => (gate() ? dependencies.accountId() : undefined),
@@ -383,6 +393,7 @@ export function composeAgents(
         tellItems,
       );
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
+    const chapterHolds = yield* FiberMap.make<ChaptersKey>();
     const accountFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
@@ -391,6 +402,7 @@ export function composeAgents(
       { inboxes, holders, holds: inboxHolds, reads },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
+      { chapters, holds: chapterHolds },
     );
   });
 }
@@ -423,6 +435,12 @@ interface SessionReads {
   readonly followItems: (userId: string) => Effect.Effect<void>;
 }
 
+/** The held lifetime over every agent's pull request's chapters the windows hold, and the windows' holds, one fiber per pull request held. */
+interface ChapterFollows {
+  readonly chapters: HeldSlice<ChaptersKey>;
+  readonly holds: FiberMap.FiberMap<ChaptersKey>;
+}
+
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: AgentsDependencies,
@@ -433,6 +451,8 @@ function composed(
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches among them. */
   { reads: sessionReads, followItems }: SessionReads,
+  /** The pull requests' chapters the windows hold. */
+  { chapters, holds: chapterHolds }: ChapterFollows,
 ): AgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
@@ -900,15 +920,47 @@ function composed(
         const answer = yield* asked(client.changes(agentId, number));
         return carried<AgentChangesAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS]: (params) =>
+    // A pull request's chapters are held for a window while its Pull request tab reads them, and told only on the app state (`CHAPTERS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          pullRequestChaptersReadParamsSchema,
-          params,
-          "reading a pull request's chapters names one agent and its pull request's number",
+        const key = new ChaptersKey(
+          yield* readParams(
+            pullRequestChaptersReadParamsSchema,
+            params,
+            "following a pull request's chapters names one agent and its pull request's number",
+          ),
         );
-        const answer = yield* asked(client.chapters(agentId, number));
-        return carried<PullRequestChaptersAnswerView>(answer);
+        yield* FiberMap.run(
+          chapterHolds,
+          key,
+          Effect.scoped(Effect.andThen(chapters.hold(key), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const key = new ChaptersKey(
+          yield* readParams(
+            pullRequestChaptersReadParamsSchema,
+            params,
+            "letting a pull request's chapters go names one agent and its pull request's number",
+          ),
+        );
+        yield* FiberMap.remove(chapterHolds, key);
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const key = new ChaptersKey(
+          yield* readParams(
+            pullRequestChaptersReadParamsSchema,
+            params,
+            "reading a pull request's chapters again names one agent and its pull request's number",
+          ),
+        );
+        yield* chapters.retry(key);
+        return {};
       }),
     [GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE]: (params) =>
       Effect.gen(function* () {
@@ -1207,6 +1259,7 @@ function composed(
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* holders.end;
+    yield* chapters.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
@@ -1218,7 +1271,10 @@ function composed(
   return {
     methods,
     lifetime: Effect.void,
-    open: Effect.andThen(sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems), holders.open),
+    open: Effect.andThen(
+      sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems),
+      Effect.andThen(holders.open, chapters.open),
+    ),
     reset,
   };
 }

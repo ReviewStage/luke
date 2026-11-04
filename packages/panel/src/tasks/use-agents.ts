@@ -382,17 +382,11 @@ export interface AgentsControl {
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
-   * One read of a pull request's chapters, as its Chapters tab asks it, by
-   * the number its own read of the pull request found. Answers whether
-   * chapters can be generated, and the workspace's newest chapters, whatever
-   * head they were made for; or why there are none, a port that refused
-   * included.
-   */
-  readChapters: (agentId: string, number: number) => Promise<PullRequestChaptersAnswerView>;
-  /**
-   * The same pull request's chapters generated for its head now, or the
+   * One pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
-   * may take minutes, as `readChapters` answers.
+   * may take minutes, with whether chapters can be generated and the
+   * workspace's newest chapters, whatever head they were made for; or why
+   * there are none, a port that refused included.
    */
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
@@ -1505,14 +1499,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const readChapters = useCallback<AgentsControl["readChapters"]>(
-    (agentId, number) =>
-      act(ACT_KIND.CHAPTERS_READ, { agentId, number }).catch(
-        (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
-      ),
-    [act],
-  );
-
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
       act(ACT_KIND.CHAPTERS_GENERATE, pullRequestAsked(agentId, number)).catch(
@@ -1665,7 +1651,6 @@ export function useAgents(input: {
     readNumberedPullRequest,
     readChanges,
     changesPeople,
-    readChapters,
     generateChapters,
     readOverviewPullRequest,
     readReviewOptions,

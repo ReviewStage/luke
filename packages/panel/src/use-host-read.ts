@@ -1,6 +1,7 @@
 import type { AgentInboxScope } from "@repo/features/agent-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
+import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -152,9 +153,10 @@ function hostRead<
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
- * inbox; and one task's pages, or one agent's on no task, which the open
+ * inbox; one task's pages, or one agent's on no task, which the open
  * task's page, the panel beside an Inbox item, an agent's page, and a
- * page's card or frame each hold. Pages offer no Try again, because the
+ * page's card or frame each hold; and one agent's pull request's chapters,
+ * by the number its Pull request tab's own read of it found. Pages offer no Try again, because the
  * host reads pages that did not answer again on its own, and pages it was
  * refused, a plan's or an agent's the reader cannot reach, stand failed
  * until every surface lets them go and one holds them anew (`@repo/host`'s
@@ -183,6 +185,12 @@ const HOST_READS = {
         "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
       ),
     retry: undefined,
+  }),
+  [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
+    slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
+    path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
+    hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
+    retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
   }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 

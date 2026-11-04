@@ -434,11 +434,7 @@ function fakeService() {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
-    chapters: (agentId, number) =>
-      Effect.sync(() => {
-        asked.push(`chapters:${agentId}#${number}`);
-        return CHAPTERS;
-      }),
+    pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -992,10 +988,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID, number: 11 }),
-      CHAPTERS,
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
         agentId: AGENT_ID,
         number: 11,
@@ -1177,7 +1169,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
-      `chapters:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
       "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
