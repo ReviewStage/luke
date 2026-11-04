@@ -725,6 +725,50 @@ export function listJournals(
   );
 }
 
+const findNewestJournalOf = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: SelectedMessageRowSchema,
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([messages.conversationId], MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            inArray(messages.conversationId, [...conversationIds]),
+            eq(messages.role, MESSAGE_ROLE.ASSISTANT),
+          ),
+        )
+        .orderBy(messages.conversationId, desc(messages.seq)),
+    ),
+});
+
+/**
+ * The newest turn journal of each conversation named, whoever owns it, keyed
+ * by conversation: `listJournals`' newest for many at once. A conversation
+ * with none, or whose journal does not read, is absent. Only for ids a gate
+ * already read, as `latestTurnsOfReached`.
+ */
+export function newestJournalsOfReached(
+  conversationIds: readonly string[],
+  tools: ToolSet,
+): Effect.Effect<ReadonlyMap<string, StoredMessageRecord>, StoreFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.flatMap(findNewestJournalOf({ conversationIds }), (selected) =>
+    // Note that each row is read on its own, so one unreadable journal leaves out its conversation alone.
+    Effect.map(
+      Effect.forEach(selected, (row) => readSelected([row], tools)),
+      (reads) =>
+        new Map(
+          reads
+            .flatMap((read) => (read.ok ? read.value : []))
+            .map((record) => [record.conversationId, record]),
+        ),
+    ),
+  );
+}
+
 const findMessageByClientIdRow = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
