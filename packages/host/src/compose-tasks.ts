@@ -2421,14 +2421,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               Effect.gen(function* () {
                 const created = yield* served(client.create(start.request));
                 if (!created.ok) {
-                  const { failure, localAgentRefusal } = created;
+                  const { failure, localAgentRefusal, cause } = created;
                   if (opened !== undefined) yield* startedBack(opened, start.request.id);
                   return {
-                    refused: carried<TasksStartAnswer>(
-                      localAgentRefusal === undefined
-                        ? { failure }
-                        : { failure, localAgentRefusal },
-                    ),
+                    refused: carried<TasksStartAnswer>({
+                      failure,
+                      ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
+                      ...(cause === undefined ? undefined : { cause }),
+                    }),
                   };
                 }
                 const { task, agent, txid } = created.answer;

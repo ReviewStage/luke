@@ -1466,14 +1466,16 @@ Fixture and evidence runs send nothing to Sentry.
 **Errors Vespin shows you.** Each time the Mac app or Vespin in a browser shows
 you an error, such as a notice that something you asked for could not be
 done, it also sends Sentry a log line saying so; where the error is not one
-our service or the app named, as a limit you reached is, it sends an error
-report besides. Each carries where in Vespin the error was shown, its code, the
-name, code, HTTP status, and message of the error behind it, with every run
+our service or the app named, as a limit you reached is, nor one shown while
+our service was not answering, it sends an error report besides. Each
+carries where in Vespin the error was shown, its code, the name, code, HTTP
+status, and message of the error behind it, with every run
 shaped like a credential replaced and the message cut short, the ids of what
 it was about (such as the workspace, task, agent, conversation, inbox item,
 automation, or pull request number), whether your Mac or browser was
-online, whether you were signed in, and, while you were, your Vespin
-account's id, as every report described above does. It never carries what
+online and whether our service was answering it, whether you were signed
+in, and, while you were, your Vespin account's id, as every report
+described above does. It never carries what
 you typed, a
 transcript, a plan, or a file's contents. The message is the error's own, or
 our service's sentence for a refusal, so it can name what that error named,

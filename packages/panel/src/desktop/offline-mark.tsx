@@ -13,9 +13,10 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
  * its read could not be done; the pill says once why, where the window keeps
  * its own state, beside a release on its way in (`sidebar-foot.tsx`). It
  * reads the document's `network` slice, which main keeps from the
- * platform's answer, and the host's live state beside the task list
- * (`HOST_LIVE`), which its follow keeps, and draws nothing while both are
- * well, once the pill has faded out. It is a status rather than a press, so
+ * platform's answer and from whether the service answered its last call,
+ * and the host's live state beside the task list (`HOST_LIVE`), which its
+ * follow keeps, and draws nothing while both are well, once the pill has
+ * faded out. It is a status rather than a press, so
  * it is announced as one, and a sidebar too narrow for its word draws its
  * glyph alone and still names it.
  */
@@ -46,9 +47,10 @@ const LIVE_MARK_LOOK = {
 
 /** What the pill stands for now, or none, which redraws its readers only as it turns. */
 const liveMarkAtom: Atom.Atom<LiveMark | undefined> = Atom.make((get) => {
-  if (get(APP_SLICE.NETWORK)?.online === false) return LIVE_MARK.MAC_OFFLINE;
+  const network = get(APP_SLICE.NETWORK);
+  if (network?.online === false) return LIVE_MARK.MAC_OFFLINE;
   const live = get(APP_SLICE.TASKS)?.live;
-  if (live === HOST_LIVE.OFFLINE) return LIVE_MARK.SERVICE_OFFLINE;
+  if (network?.reachable === false || live === HOST_LIVE.OFFLINE) return LIVE_MARK.SERVICE_OFFLINE;
   if (live === HOST_LIVE.CATCHING_UP) return LIVE_MARK.CATCHING_UP;
   return undefined;
 });
