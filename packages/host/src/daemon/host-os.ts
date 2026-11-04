@@ -15,19 +15,16 @@ import {
   type DeviceMachine,
   type DevicePlatform,
 } from "@repo/features/device-agent-wire";
-import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import type { AgentCliPins } from "../local-agent-setup.js";
 import { macDeviceName } from "../node/mac-device-name.js";
 import { linuxMachine, macMachine } from "../node/machine-identity.js";
-import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
  * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, how it reads which machine it is, and which builds of the agent CLIs it keeps.
  *
  * Everything else, the connect, the follower, and each agent run straight
  * on the box, is the same program on every OS (`hostPlatform`,
- * `hostDaemon`), the check of an agent's folder for unsaved work before a
- * discard among it. A description
+ * `hostDaemon`). A description
  * reads the machine only when its daemon asks it to, as it starts. Which one
  * a daemon runs on, and where its state lives there, is `hostRuntime`'s.
  */
@@ -44,8 +41,6 @@ export interface HostOs {
   readonly machine: () => DeviceMachine;
   /** The builds of the agent CLIs it fetches and keeps, for the architecture it runs on (`LocalAgentPlatformSeam.clis`). */
   readonly agentClis: (arch: DeviceArch) => AgentCliPins;
-  /** What says a discard would lose work from an agent's worktree (`LocalAgentPlatformSeam.unsavedWorkScript`), run on the box. */
-  readonly unsavedWorkScript: NonNullable<LocalAgentPlatformSeam["unsavedWorkScript"]>;
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
   readonly stateRoot: (home: string) => string;
 }
@@ -62,7 +57,6 @@ export const LINUX_HOST: HostOs = {
     codex: CODEX_LINUX_PINS[arch],
     gh: GH_LINUX_PINS[arch],
   }),
-  unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home) => path.join(home, "state"),
 };
 
@@ -82,7 +76,6 @@ export const DARWIN_HOST: HostOs = {
   machine: macMachine,
   // Note that the arch is not read, since a Mac host is built for Apple silicon alone (`arches`).
   agentClis: () => ({ claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN, gh: GH_MAC_PIN }),
-  unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home) => path.join(home, ".local", "state", "vespin-host"),
 };
 

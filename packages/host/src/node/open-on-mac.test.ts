@@ -5,15 +5,10 @@ import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
-import {
-  agentUnsavedWorkScript,
-  agentWorktreeScript,
-  cloneFolder,
-  WORKTREE_LOCK_BUSY,
-} from "./open-on-mac.js";
+import { agentWorktreeScript, cloneFolder, WORKTREE_LOCK_BUSY } from "./open-on-mac.js";
 
 /**
- * A local agent's scripts over real Git and bash, an origin on disk standing
+ * A local agent's worktree script over real Git and bash, an origin on disk standing
  * in for GitHub: an agent gets a worktree of the box's shared clone,
  * detached at its branch's head, which the clone lists; a first clone cut
  * off midway leaves nothing at the clone's place; two launches at once
@@ -22,9 +17,8 @@ import {
  * after the holder it read let go; one waits on a clone another holds while
  * it lives, takes the lock over once it is gone, and gives up, leaving a live
  * holder's lock, once it has waited its bound; a transfer from a remote that
- * never answers fails rather than hangs; a make that fails or was cut off
- * leaves nothing that blocks the next; and a removal finds work in an agent's
- * folder only where it has changes not committed or commits on no branch.
+ * never answers fails rather than hangs; and a make that fails or was cut
+ * off leaves nothing that blocks the next.
  */
 
 const GIT_ENVIRONMENT = {
@@ -551,84 +545,6 @@ test(
     assert.equal(existsSync(`${agent("agent")}.making`), false);
     assert.deepEqual(worktreesListed(clone), realPaths([clone, agent("other"), agent("agent")]));
     assert.doesNotMatch(git(clone, ["worktree", "list", "--porcelain"]), /^locked/mu);
-  },
-  GIT_DEADLINE,
-);
-
-test(
-  "a removal finds work in an agent's worktree only where it has changes not committed, tracked or untracked, or commits on its head alone, and never in a branch, a stash, an ignored file, a head fetched from GitHub, or another agent's worktree; and in a folder with no repository only where it has files",
-  async (t) => {
-    const { scratch, origin, push, shell, state } = await fixture(t);
-    push("first\n");
-    const clone = cloneFolder(state, "acme/app");
-    const agent = (name: string) => path.join(scratch, "agents", name, "repository");
-    const launched = (name: string, branch: string | null) =>
-      run(
-        scratch,
-        shell,
-        agentWorktreeScript({
-          repository: "acme/app",
-          clone,
-          worktree: agent(name),
-          branch,
-          remote: origin,
-        }),
-      );
-    launched("one", "agent/fix-relay");
-    // Note that the other starts from GitHub's default branch, moved since, which only the head fetched into refs/agent holds.
-    push("second\n");
-    launched("other", null);
-    const worktree = agent("one");
-    const found = (folder: string) =>
-      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: folder })).printed.trim();
-    const committed = (name: string, text: string) => {
-      writeFileSync(path.join(worktree, name), text);
-      git(worktree, ["add", "--all"]);
-      git(worktree, ["commit", "--quiet", "-m", name]);
-    };
-
-    assert.equal(found(worktree), "", "a clean worktree holds nothing");
-    assert.equal(
-      found(agent("other")),
-      "",
-      "a head fetched from GitHub's default branch holds nothing",
-    );
-
-    // Note that the developer's own Git setting that hides untracked files must not hide them here.
-    git(worktree, ["config", "status.showUntrackedFiles", "no"]);
-    writeFileSync(path.join(worktree, "notes.md"), "unsaved\n");
-    assert.match(found(worktree), /changes not committed/u, "an untracked file");
-    rmSync(path.join(worktree, "notes.md"));
-    writeFileSync(path.join(worktree, "README.md"), "edited\n");
-    assert.match(found(worktree), /changes not committed/u, "a tracked edit");
-    assert.equal(found(agent("other")), "", "another agent's changes keep no folder but theirs");
-
-    git(worktree, ["stash", "--quiet"]);
-    committed(".gitignore", "build/\n");
-    assert.match(found(worktree), /commits on no branch/u, "a commit on the detached head alone");
-
-    // Note that branches and stashes stand in the shared clone, which outlives the folder.
-    git(worktree, ["switch", "--quiet", "-c", "unpushed"]);
-    mkdirSync(path.join(worktree, "build"));
-    writeFileSync(path.join(worktree, "build", "out.js"), "built\n");
-    assert.equal(
-      found(worktree),
-      "",
-      "an unpushed branch, a stash, and an ignored file keep nothing",
-    );
-
-    const plain = path.join(scratch, "agents", "plain", "repository");
-    mkdirSync(plain, { recursive: true });
-    assert.equal(found(plain), "", "an empty folder holds nothing");
-    writeFileSync(path.join(plain, "report.md"), "written by an agent with no repository\n");
-    assert.match(found(plain), /no repository/u);
-
-    const missing = path.join(scratch, "agents", "none", "repository");
-    assert.deepEqual(
-      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: missing })),
-      { printed: "", code: 0 },
-      "an agent that never had a worktree holds nothing",
-    );
   },
   GIT_DEADLINE,
 );

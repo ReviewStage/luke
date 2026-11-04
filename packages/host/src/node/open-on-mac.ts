@@ -1,7 +1,7 @@
 import path from "node:path";
 
 /**
- * open-on-mac.ts -- the scripts a local agent's worktree is made and read with on its box, from the box's own clone of the repository.
+ * open-on-mac.ts -- the script a local agent's worktree is made with on its box, from the box's own clone of the repository.
  *
  * The box keeps one clone of each repository under `~/.vespin`, made the
  * first time an agent of it starts, under a lock, and every agent of it
@@ -215,42 +215,6 @@ export function agentWorktreeScript(input: {
     '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',
     '  exit "$status"',
     "fi",
-    "",
-  ].join("\n");
-}
-
-/**
- * The script, its path quoted, that says what removing a local agent's
- * folder would lose (`@repo/host`'s `compose-local-agents.ts`): it prints
- * one line, and exits 0, where its worktree has changes not committed,
- * tracked or untracked but never ignored, commits on its head that no
- * branch, remote branch, or head we fetched holds, or the folder has files
- * and no repository. Commits on a branch need no check, since the branches
- * are the shared clone's, which outlives the folder. It prints nothing and
- * exits 0 where there is nothing to lose, or no folder at all, and exits 1
- * where Git could not say, which the caller takes as work to keep.
- */
-export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
-  return [
-    // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git lives on.
-    'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
-    "export PATH",
-    `worktree=${shellQuoted(input.worktree)}`,
-    '[ -d "$worktree" ] || exit 0',
-    'cd "$worktree" || exit 1',
-    // Note that a folder with no repository, as an agent with none gets, holds what the agent wrote and nothing else has a copy.
-    "if [ ! -e .git ]; then",
-    '  files="$(ls -A)" || exit 1',
-    '  [ -z "$files" ] || echo "it has files and no repository"',
-    "  exit 0",
-    "fi",
-    // Note that untracked files are asked for by name, since the developer's own `status.showUntrackedFiles` would hide them.
-    'changes="$(git status --porcelain --untracked-files=all)" || exit 1',
-    '[ -z "$changes" ] || echo "it has changes not committed"',
-    // Note that a commit made on a detached head stands on no branch, so the folder's removal would lose it; another agent's branch only ever counts it saved, and the heads we fetched into refs/agent are GitHub's.
-    `ahead="$(git rev-list --max-count=1 HEAD --not --branches --remotes --glob='refs/agent/*')" || exit 1`,
-    '[ -z "$ahead" ] || echo "it has commits on no branch"',
-    "exit 0",
     "",
   ].join("\n");
 }

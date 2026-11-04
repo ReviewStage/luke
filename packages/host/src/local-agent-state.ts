@@ -2,7 +2,7 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the launches no exit has settled yet, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written by the follower (`compose-local-agents.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the launches no exit has settled yet; read and written by the follower (`compose-local-agents.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
  *
  * The follower holds the state while it follows and writes it whole. A file that
  * cannot be read or decoded reads as nothing kept, and a key it does not
@@ -20,21 +20,14 @@ const STATE_FILE = "local-agents.json";
  * launch or files, until a discard removes its folder. The folder stands in
  * the user's own `~/.vespin/agents`, so `vespin-host uninstall` reads this to
  * remove its own and no other's (`apps/host/scripts/vespin-host.sh`), and the
- * follower to pass over its own alone (`ownedAgents`).
+ * follower to let go of its own turns alone as the gate opens (`ownedAgents`).
  */
 const OWNED_FOLDER = "owned-agents";
 
 /**
  * The state: the launches whose runners this device started and the
  * service has not yet taken a settle of, each with the agent it ran for,
- * absent from a launch kept before it, the agents the service no longer
- * lists whose folders a discard kept for work in them, each with when it
- * was first kept (epoch milliseconds), which the follower never checks
- * again while they stand and lets go of whole a week after, and when each
- * agent whose folder stands was last used here (epoch milliseconds): its
- * last launch, turn's end, or files written, which a pass reads to clear
- * the folders of agents long unused; each of the last two absent from a
- * state file from before it.
+ * absent from a launch kept before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   launches: Schema.Array(
@@ -43,8 +36,6 @@ const LocalAgentStateSchema = Schema.Struct({
       agentId: Schema.optionalKey(Schema.String),
     }),
   ),
-  kept: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
-  lastUsed: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
 });
 
 export type LocalAgentState = typeof LocalAgentStateSchema.Type;

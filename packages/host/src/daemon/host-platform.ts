@@ -89,6 +89,5 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         worktree,
         branch,
       }),
-    unsavedWorkScript: options.os.unsavedWorkScript,
   };
 }
