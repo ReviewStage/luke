@@ -1243,7 +1243,7 @@ function ManagedGitHub({
 }: {
   workspace: Workspace;
   connections: readonly ShownConnection[];
-  /** Add repository, which stands before the row's own press. */
+  /** Add repository, which stands before the row's own press and draws nothing without the reader's token. */
   add: React.ReactNode;
   /** What the last add was refused with, said under the row. */
   addRefusal: string | undefined;
@@ -1309,8 +1309,8 @@ function ManagedGitHub({
  * The workspace's GitHub: an owner's or an admin's to connect, and for a
  * member, read only, or the ask to have it; then every account connected,
  * the same for both, and every repository a member added on their own
- * token (`workspace-token-repositories.tsx`), which any member adds from
- * GitHub's row.
+ * token (`workspace-token-repositories.tsx`), which a member whose own
+ * token is saved adds from GitHub's row, and none else is offered it.
  */
 function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const connections = connectionsOf(workspace);

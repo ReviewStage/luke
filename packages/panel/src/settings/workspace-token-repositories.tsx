@@ -8,8 +8,6 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppGitHubToken } from "@repo/host/app-state";
-import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
   AVATAR_SIZE,
@@ -32,7 +30,6 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
-import { SettingsPageLink } from "../open-settings.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -53,8 +50,9 @@ import { AddMenuButton } from "./add-menu-button.js";
  * as the menu opens from the addable the repository picker's listing
  * answers beside its own, each drawn as the repository chip's menu draws one
  * (`repositoryMenuRow`); a pick adds it, and the list the service then
- * answers lands where the host holds it. With no token of the reader's
- * saved, as the host holds it, the menu says to add one. The list is the
+ * answers lands where the host holds it. Add repository is drawn only while
+ * a token of the reader's is saved, as the host holds it: not while that is
+ * still being read, nor once its read failed, nor with none saved. The list is the
  * host's (`LIVE_READ.TOKEN_REPOSITORIES`), read, still being read, or
  * refused: while it is read the rows say Reading, and refused they say so
  * with Retry, neither drawn as a workspace with none.
@@ -69,8 +67,6 @@ const WORDS = {
   SEARCH: "Search repositories",
   NO_MATCH: noMatchWords(TERM.REPOSITORY),
   NONE: "No repositories",
-  NO_TOKEN_BEFORE: "Add a GitHub token in",
-  NO_TOKEN_AFTER: "settings to add repositories.",
   READING: readingWords(TERM.REPOSITORY.many),
   NOT_READ: readFailedWords("the repositories"),
   ROWS_READING: readingWords("token repositories"),
@@ -149,23 +145,14 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
 type Candidates =
   | { readonly kind: "reading" }
   | { readonly kind: "failed" }
-  | { readonly kind: "no-token" }
   | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
 
-/**
- * What the picker offers, from the reader's token and the workspace's
- * repositories as the host holds them, less those already listed. Note that
- * a token read that fails is taken for no word on the token, because the
- * list alone says what the token may reach.
- */
+/** What the picker offers, from the workspace's repositories as the host holds them, less those already listed. */
 function candidatesOf(
-  token: { readonly rows: AppGitHubToken | undefined; readonly status: HostReadStatus },
   list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
   listed: readonly { readonly fullName: string }[],
   pictures: boolean,
 ): Candidates {
-  if (token.rows?.token === null) return { kind: "no-token" };
-  if (token.status === HOST_READ_STATUS.LOADING) return { kind: "reading" };
   if (list.rows === undefined) {
     return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
   }
@@ -181,9 +168,22 @@ function candidatesOf(
 
 /**
  * Add repository and its menu: the outline `Button`, and under it the
- * app's searched menu hung from it at a Settings picker's width.
+ * app's searched menu hung from it at a Settings picker's width. Drawn only
+ * while the reader's own GitHub token is saved (`LIVE_READ.GITHUB_TOKEN`),
+ * so a reader with none, or whose token is unread, is offered no press.
  */
-export function AddTokenRepository({
+export function AddTokenRepository(props: {
+  workspaceId: string;
+  repositories: TokenRepositories;
+  onRefused: (refusal: string | undefined) => void;
+}): React.JSX.Element | null {
+  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
+  return token.rows?.token ? <AddRepositoryMenu {...props} /> : null;
+}
+
+/** The menu itself, mounted only once a token is saved, so the workspace's repositories are read for no one else. */
+function AddRepositoryMenu({
   workspaceId,
   repositories,
   onRefused,
@@ -192,29 +192,22 @@ export function AddTokenRepository({
   repositories: TokenRepositories;
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  // Note that the workspace's repositories and the reader's token are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`, `LIVE_READ.GITHUB_TOKEN`).
+  // Note that the workspace's repositories are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`).
   const pictures = useRepositoryPictures();
   const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
-  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
   const read = () => {
     if (list.status === HOST_READ_STATUS.FAILED) list.retry();
   };
-  const candidates = candidatesOf(token, list, repositories.listed, pictures);
+  const candidates = candidatesOf(list, repositories.listed, pictures);
   const rows = candidates.kind === "read" ? candidates.rows : [];
-  const note = (close: () => void) =>
-    candidates.kind === "reading" ? (
-      WORDS.READING
-    ) : candidates.kind === "failed" ? (
-      WORDS.NOT_READ
-    ) : candidates.kind === "no-token" ? (
-      <>
-        {WORDS.NO_TOKEN_BEFORE} <SettingsPageLink page={SETTINGS_VIEW.ACCOUNT} onLeave={close} />{" "}
-        {WORDS.NO_TOKEN_AFTER}
-      </>
-    ) : rows.length === 0 ? (
-      WORDS.NONE
-    ) : undefined;
+  const note =
+    candidates.kind === "reading"
+      ? WORDS.READING
+      : candidates.kind === "failed"
+        ? WORDS.NOT_READ
+        : rows.length === 0
+          ? WORDS.NONE
+          : undefined;
   return (
     <AddMenuButton
       label={WORDS.ADD}

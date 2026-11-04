@@ -6,7 +6,6 @@ import {
 } from "@repo/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
@@ -43,9 +42,6 @@ const NO_CAPTURE = "ph-no-capture";
 /** The row's name. */
 const TOKEN_LABEL = "GitHub personal access token";
 
-/** What the row says while no token is saved, so what the token is for is told before it is asked for. */
-const TOKEN_PURPOSE = `Lets agents work in repositories ${PRODUCT_NAME}'s GitHub App does not reach, and open pull requests as you.`;
-
 /** What the row says where the token could not be read, so what stands is unknown. */
 const TOKEN_READ_FAILED = "The token could not be read.";
 
@@ -73,7 +69,7 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
 
 /**
  * The member's own GitHub personal access token: its hint, login, and
- * expiry once one is saved, what it is for while none is, and Manage or Add, which
+ * expiry once one is saved, and Manage or Add, which
  * opens the token's dialog (`github-dialog.tsx`). The token is the one the
  * host holds for the account the row is drawn for (`LIVE_READ.GITHUB_TOKEN`),
  * where a save's and a removal's own answer lands too; a read that fails
@@ -98,9 +94,7 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
         label={<OneLine hint={wholeWordsHint(TOKEN_LABEL)}>{TOKEN_LABEL}</OneLine>}
-        description={
-          token ? <TokenFacts token={token} /> : token === null ? TOKEN_PURPOSE : undefined
-        }
+        description={token ? <TokenFacts token={token} /> : undefined}
         // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
         below={
           status === HOST_READ_STATUS.FAILED
