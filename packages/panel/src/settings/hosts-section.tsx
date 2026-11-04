@@ -19,6 +19,7 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
+  type DialogConfirm,
   ErrorState,
   GAP,
   PlusIcon,
@@ -203,61 +204,79 @@ function HostRow({
   label,
   book,
   onRemove,
+  locked,
   kept,
 }: {
   host: HostLine;
   /** What the list calls the machine (`machineName`). */
   label: string;
   book: PresenceBook;
-  onRemove: (id: string) => Promise<ActionResult>;
+  /** Asks the section's Remove question of this machine. */
+  onRemove: () => void;
+  /** Whether a removal is out, which every Remove waits out. */
+  locked: boolean;
   /** Whether the machine is This Mac as the app keeps its host. */
   kept: boolean;
 }): React.JSX.Element {
-  const removing = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
-    () => onRemove(host.id),
-    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
-  );
   return (
-    <>
-      <MenuRow
-        thing={label}
-        actions={
-          kept
-            ? []
-            : [
-                {
-                  label: "Remove",
-                  icon: <TrashIcon />,
-                  danger: true,
-                  disabled: removing.busy,
-                  onSelect: removing.ask,
-                },
-              ]
+    <MenuRow
+      thing={label}
+      actions={
+        kept
+          ? []
+          : [
+              {
+                label: "Remove",
+                icon: <TrashIcon />,
+                danger: true,
+                disabled: locked,
+                onSelect: onRemove,
+              },
+            ]
+      }
+      row={{ label, description: <StandingLine host={host} book={book} /> }}
+    />
+  );
+}
+
+/** The machine Remove was asked of, by the account it was asked under, and what the list called it then. */
+interface RemoveAsked {
+  readonly accountId: string | undefined;
+  readonly host: HostLine;
+  readonly label: string;
+}
+
+/** Remove's question over the machine it was asked of, with the command that takes the host off the machine itself. */
+function RemoveHostDialog({
+  asked,
+  confirm,
+}: {
+  asked: RemoveAsked | undefined;
+  confirm: DialogConfirm;
+}): React.JSX.Element {
+  return (
+    <ConfirmDialog
+      open
+      confirm={confirm}
+      question={{
+        title: `Remove ${asked?.label ?? ""}?`,
+        body: REMOVED,
+        verb: "Remove",
+        running: "Removing",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
+      }}
+    >
+      <CodeCard
+        title={
+          asked?.host.platform === DEVICE_PLATFORM.DARWIN
+            ? UNINSTALL_TITLE.MAC
+            : UNINSTALL_TITLE.SERVER
         }
-        row={{ label, description: <StandingLine host={host} book={book} /> }}
+        titleIs={CODE_CARD_TITLE.WORDS}
+        code={HOST_UNINSTALL_COMMAND}
+        copy={copyThroughShell}
       />
-      <ConfirmDialog
-        open
-        confirm={removing}
-        question={{
-          title: `Remove ${label}?`,
-          body: REMOVED,
-          verb: "Remove",
-          running: "Removing",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
-      >
-        <CodeCard
-          title={
-            host.platform === DEVICE_PLATFORM.DARWIN ? UNINSTALL_TITLE.MAC : UNINSTALL_TITLE.SERVER
-          }
-          titleIs={CODE_CARD_TITLE.WORDS}
-          code={HOST_UNINSTALL_COMMAND}
-          copy={copyThroughShell}
-        />
-      </ConfirmDialog>
-    </>
+    </ConfirmDialog>
   );
 }
 
@@ -339,8 +358,12 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const installScriptUrl = read.rows?.installScriptUrl;
   // Note that each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
   const book = useDevicePresence(signedIn);
-  // The ids of the account's hosts as Add hosts opened, while its dialog stands.
-  const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
+  // The ids of the account's hosts as Add hosts opened, by the account it opened for, while its dialog stands.
+  const [adding, setAdding] = useState<
+    { readonly accountId: string | undefined; readonly known: ReadonlySet<string> } | undefined
+  >(undefined);
+  // Note that Add hosts does not outlive the account it opened for, since every host of the next would read as joined.
+  if (adding !== undefined && adding.accountId !== accountId) setAdding(undefined);
   const thisMac = useThisMac();
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
@@ -348,18 +371,26 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
 
   // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
   const add = useCallback(() => {
-    if (hosts !== undefined) setAdding(new Set(hosts.map((host) => host.id)));
-  }, [hosts]);
+    if (hosts !== undefined) setAdding({ accountId, known: new Set(hosts.map((host) => host.id)) });
+  }, [hosts, accountId]);
   const closeAdd = useCallback(() => setAdding(undefined), []);
 
-  // Note that the host draws a removal gone on the list the moment it is asked, so a refusal is all that is said here.
-  const remove = useCallback(
-    (id: string): Promise<ActionResult> =>
-      act(ACT_KIND.HOSTS_REMOVE, { id })
-        .catch(() => undefined)
-        .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
-    [act],
+  // Note that Remove asks over the section rather than its row, because the host draws a removal gone on the list the moment it is asked, so the row is gone before a refusal comes back to be said.
+  const [asked, setAsked] = useState<RemoveAsked | undefined>(undefined);
+  const removing = useConfirmDialog(
+    { subject: asked !== undefined && asked.accountId === accountId, surfaceOpen: true },
+    () =>
+      asked === undefined
+        ? Promise.resolve(REFUSED)
+        : act(ACT_KIND.HOSTS_REMOVE, { id: asked.host.id })
+            .catch(() => undefined)
+            .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
+    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
   );
+  const askRemove = (host: HostLine, label: string) => {
+    setAsked({ accountId, host, label });
+    removing.ask();
+  };
 
   const listed = hosts?.map(machineOf) ?? [];
   // Note that This Mac stands first, with no Remove, only where the app keeps its host.
@@ -392,16 +423,20 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
                 }
               />
             ) : null}
-            {ordered.map((host) => (
-              <HostRow
-                key={host.id}
-                host={host}
-                label={machineName(machineOf(host), listed, thisMac)}
-                book={book}
-                onRemove={remove}
-                kept={host === listedMac}
-              />
-            ))}
+            {ordered.map((host) => {
+              const label = machineName(machineOf(host), listed, thisMac);
+              return (
+                <HostRow
+                  key={host.id}
+                  host={host}
+                  label={label}
+                  book={book}
+                  onRemove={() => askRemove(host, label)}
+                  locked={removing.busy}
+                  kept={host === listedMac}
+                />
+              );
+            })}
           </>
         ) : read.status === HOST_READ_STATUS.FAILED ? (
           <SettingsLine>
@@ -425,9 +460,10 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           </Button>
         </div>
       ) : null}
+      <RemoveHostDialog asked={asked} confirm={removing} />
       {adding === undefined || !loaded ? null : (
         <AddHostsDialog
-          known={adding}
+          known={adding.known}
           hosts={hosts}
           thisMac={thisMac}
           installScriptUrl={installScriptUrl}

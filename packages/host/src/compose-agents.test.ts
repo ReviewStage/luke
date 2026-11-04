@@ -293,8 +293,10 @@ function fakeService() {
   let forgetAnswer: MemoriesAnswerView = { memories: [] };
   /** What a forget waits on before the service answers it; nothing from the start. */
   let forgetGate: Effect.Effect<void> = Effect.void;
-  /** What a host's removal answers; unanswered from the start. */
+  /** What a host's removal answers, once its gate lets it; unanswered from the start. */
   let removeAnswer: HostDoneAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+  /** What a host's removal waits on before the service answers it; nothing from the start. */
+  let removeGate: Effect.Effect<void> = Effect.void;
   /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
   let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
     failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -333,10 +335,15 @@ function fakeService() {
         return presence;
       }),
     removeHost: (id) =>
-      Effect.sync(() => {
-        asked.push(`remove-host:${id}`);
-        return removeAnswer;
-      }),
+      Effect.andThen(
+        Effect.sync(() => {
+          asked.push(`remove-host:${id}`);
+        }),
+        Effect.andThen(
+          Effect.suspend(() => removeGate),
+          Effect.sync(() => removeAnswer),
+        ),
+      ),
     readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),
@@ -782,9 +789,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
-    /** What each host's removal answers from now on. */
-    answerRemoves: (answer: HostDoneAnswerView) => {
+    /** What each host's removal answers from now on, and what it waits on before it does. */
+    answerRemoves: (answer: HostDoneAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       removeAnswer = answer;
+      removeGate = gate;
     },
     /** What each forget answers from now on, and what it waits on before it does. */
     answerForgets: (answer: MemoriesAnswerView, gate: Effect.Effect<void> = Effect.void) => {
@@ -3354,7 +3362,7 @@ function hostIdsOf(told: WireValue | undefined): readonly string[] | undefined {
 }
 
 it.effect(
-  "a removed host is drawn gone at once and stays gone through an answer from before its removal until the read carries its transaction",
+  "a removal draws its host gone before the service answers and keeps it gone through an answer from before it until the read carries its transaction, and a refused removal puts back the host it drew gone",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
@@ -3368,10 +3376,17 @@ it.effect(
       yield* nextPoll;
       assert.deepEqual(shown(), [KEPT_HOST, GONE_HOST]);
 
-      answerRemoves({ done: true, txid: "9400" });
-      const removed = yield* call(GATEWAY_METHOD.HOSTS_REMOVE, { id: GONE_HOST });
-      assert.deepEqual(removed, { done: true, txid: "9400" });
-      assert.deepEqual(shown(), [KEPT_HOST]);
+      const answering = yield* Deferred.make<void>();
+      answerRemoves({ done: true, txid: "9400" }, Deferred.await(answering));
+      const removing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.HOSTS_REMOVE, { id: GONE_HOST }),
+      );
+      yield* settled;
+      assert.equal(removing.pollUnsafe(), undefined, "no answer while the service is asked");
+      assert.deepEqual(shown(), [KEPT_HOST], "gone before the service answers");
+
+      yield* Deferred.succeed(answering, undefined);
+      assert.deepEqual(yield* Fiber.join(removing), { done: true, txid: "9400" });
       // The read answers once more from before the removal, which still stands over it.
       live.hosts.set(both);
       yield* nextPoll;
@@ -3379,6 +3394,16 @@ it.effect(
       live.hosts.set({ hosts: [hostRow(KEPT_HOST, "ams-01")] }, ["9400"]);
       yield* nextPoll;
       assert.deepEqual(shown(), [KEPT_HOST]);
+
+      const refusing = yield* Deferred.make<void>();
+      answerRemoves({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
+      const refused = yield* Effect.forkChild(call(GATEWAY_METHOD.HOSTS_REMOVE, { id: KEPT_HOST }));
+      yield* settled;
+      assert.deepEqual(shown(), []);
+      yield* Deferred.succeed(refusing, undefined);
+      assert.deepEqual(yield* Fiber.join(refused), { failure: AGENT_CALL_FAILURE.NOT_PERMITTED });
+      yield* settled;
+      assert.deepEqual(shown(), [KEPT_HOST], "put back once the service refused it");
     }),
 );
 

@@ -1354,7 +1354,7 @@ it.layer(getTestDB())("the account's hosts' live read", (it) => {
         });
 
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.match(answer.installScriptUrl, /^https?:\/\/[^/]+\//u);
+        assert.equal(answer.installScriptUrl, "https://app.test/install.sh");
         assert.deepEqual(
           hostsOfLiveRows(hosts).map((host) => [host.name, host.platform]),
           [["fra-03", DEVICE_PLATFORM.LINUX]],

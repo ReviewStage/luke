@@ -2,15 +2,22 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import type { HostLine } from "@repo/features/host-live";
 import { LIVE_READ } from "@repo/features/live-wire";
-import type { AppStateDelivery, AppThisMacHost } from "@repo/host/app-state";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery, AppStateSnapshot, AppThisMacHost } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type FakeActPort,
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -57,9 +64,12 @@ async function settle(): Promise<void> {
 /**
  * Hosts drawn signed in, on a registry of the test's own, so the window's
  * shared presence is read afresh rather than standing as an earlier test
- * left it.
+ * left it, the host answering the window's acts as `procedures` say and
+ * holding its holds quietly, as it does while their reads are laid.
  */
-function drawHosts(registry: AtomRegistry.AtomRegistry = AtomRegistry.make()): void {
+function drawHosts(procedures: Partial<FakeActPort> = {}): void {
+  fakeActPort(procedures);
+  const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
@@ -72,12 +82,14 @@ function drawHosts(registry: AtomRegistry.AtomRegistry = AtomRegistry.make()): v
  * Lays the account's hosts as `hostsOf` names them, as the host holds them,
  * under the account the window's document names, over whatever the window
  * was handed; answers with how they are laid anew as they move, as the host
+ * lays them, under another account where one is named, as a sign-in to it
  * lays them.
  */
-function holdHosts(hostsOf: () => readonly HostLine[]): () => void {
+function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) => void {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listening = fakeAppBridgeCalls().onAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let account: AppStateSnapshot["account"] | undefined;
   let accountId: string | undefined;
   let version = 0;
   const laid = () =>
@@ -93,7 +105,7 @@ function holdHosts(hostsOf: () => readonly HostLine[]): () => void {
     requestAppState: async () => {
       const snapshot = await (handed ?? assert.fail("a document is handed"))();
       version = Math.max(version, snapshot.version);
-      const { account } = snapshot;
+      account = snapshot.account;
       if (account.status === ACCOUNT_STATUS.SIGNED_IN) accountId = account.id;
       return { ...snapshot, ...laid() };
     },
@@ -109,9 +121,14 @@ function holdHosts(hostsOf: () => readonly HostLine[]): () => void {
       };
     },
   });
-  return () => {
+  return (signedInAs) => {
     version += 1;
-    for (const listener of [...listeners]) listener({ version, entries: laid() });
+    if (signedInAs !== undefined) {
+      account = { ...(account ?? assert.fail("a document is handed")), id: signedInAs };
+      accountId = signedInAs;
+    }
+    const entries = signedInAs === undefined ? laid() : { ...laid(), account };
+    for (const listener of [...listeners]) listener({ version, entries });
   };
 }
 
@@ -151,6 +168,20 @@ test("the dialog names a host that joins while it stands, as the host lays it", 
 
   assert.ok(approved.includes("hel-02"), approved);
   assert.ok(!approved.includes("Waiting for approval"));
+});
+
+test("Add hosts does not outlive the account it opened for", async () => {
+  handBeats({});
+  const lay = holdHosts(() => [{ id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" }]);
+  drawHosts();
+  await settle();
+  await press("Add hosts");
+  assert.ok(dialogText().includes("Waiting for approval"));
+
+  act(() => lay("user-elsewhere"));
+  await settle();
+
+  assert.equal(dialogText(), "", "the next account's hosts are not named as joined");
 });
 
 /** The button whose words are these, pressed. */
@@ -244,6 +275,36 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
 
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(asked.includes("Remove sfo-02?"), asked);
+});
+
+test("a refused Remove is said in the dialog that asked it, though the list drew its host gone while it was asked", async () => {
+  const kept: HostLine = { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" };
+  const removed: HostLine = { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" };
+  let hosts: readonly HostLine[] = [kept, removed];
+  handBeats({});
+  const lay = holdHosts(() => hosts);
+  drawHosts({
+    // The host draws the removal gone at once, and puts the host back once the service refuses it.
+    [ACT_KIND.HOSTS_REMOVE]: async () => {
+      hosts = [kept];
+      lay();
+      await new Promise((done) => setTimeout(done, 0));
+      hosts = [kept, removed];
+      lay();
+      return { failure: AGENT_CALL_FAILURE.NOT_PERMITTED };
+    },
+  });
+  await settle();
+  const more =
+    document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
+    assert.fail("sfo-02's ⋯ is drawn");
+  act(() => more.click());
+  chooseMenuItem("Remove");
+
+  await press("Remove");
+
+  const said = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(said.includes("Could not reach the service. Try again."), said);
 });
 
 test("a Mac whose host the service does not list yet keeps a This Mac row that reads offline, with nothing to press", async () => {
