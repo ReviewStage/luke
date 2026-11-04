@@ -73,8 +73,8 @@ and the address their accept links are built on; and its automations as
 their list shows them, each with its name, trigger, the prompt it hands its
 agent, and its latest run, never a webhook's body or secret. The members,
 invitations, and automations it keeps for a workspace are deleted once you
-leave that workspace, and its tasks and agents with the next list our
-service sends. Beside these it
+leave that workspace. Its tasks and agents remain until our service sends
+the next task list. Beside these it
 keeps the changes you made while our service could
 not be reached (a task's name, standing, or pin, a pinned repository, a
 section, or an agent's name or pin), each with a random key it is sent
