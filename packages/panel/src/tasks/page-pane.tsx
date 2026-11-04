@@ -70,7 +70,7 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { usePageTheme } from "./page-theme.js";
+import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   ownWordsIn,
   PAGE_COMMENT_WORDS,
@@ -432,7 +432,7 @@ function PageFrame({
   const [framedSrc, setFramedSrc] = useState<string>();
   const found = useFrameFind(frame);
   useFrameLinks(frame);
-  usePageTheme(frame);
+  usePageTheme(frame, PAGE_ROOM.OWN);
   useFrameFocus(frame);
   const loaded = framedSrc === src;
   return (

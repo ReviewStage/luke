@@ -11,15 +11,29 @@ import { Schema } from "effect";
 import { type RefObject, useEffect } from "react";
 
 /**
- * page-theme.ts -- the window's theme handed to a page it frames: answered when the page asks, and sent again each time the window's appearance flips.
+ * page-theme.ts -- the window's theme handed to a page it frames, with the room kept around it where it stands: answered when the page asks, and sent again each time the window's appearance flips.
  *
- * A page wears the theme as `--vespin-*` variables (`@repo/features/page-theme`),
+ * A page wears the theme as `--app-*` variables (`@repo/features/page-theme`),
  * each the value of one of the window's own roles as its root holds it now,
  * and the scheme the window is drawn in. A role the desktop writes as
  * `light-dark()` is handed as written, so the page reads it in the scheme it
  * is handed beside it. The ask is heard from the frame drawn alone, and the
  * answer goes to that frame alone.
+ *
+ * A page is told to keep no side room of its own, since in words it stands
+ * at the words' edges. In a room of its own, its tab in the side panel, the
+ * window keeps that room for it instead: the inset the window's own pages
+ * keep, and their narrow inset in a frame under 480px, so a page reads in
+ * its tab, wide or on a phone, as the window's pages do.
  */
+
+/** Where a page is drawn: in the words that tell of it, or in a room of its own, its tab. */
+export const PAGE_ROOM = {
+  WORDS: "words",
+  OWN: "own",
+} as const;
+
+export type PageRoom = (typeof PAGE_ROOM)[keyof typeof PAGE_ROOM];
 
 /** Each variable a page reads, by the window's role it carries. */
 const ROLE_OF: Readonly<Record<PageThemeVariable, string>> = {
@@ -45,12 +59,25 @@ const ROLE_OF: Readonly<Record<PageThemeVariable, string>> = {
   [PAGE_THEME_VARIABLE.TEXT_SIZE]: "--ui-type-body-size",
   [PAGE_THEME_VARIABLE.TEXT_LEADING]: "--ui-type-body-leading",
   [PAGE_THEME_VARIABLE.RADIUS]: "--ui-card-radius",
+  [PAGE_THEME_VARIABLE.READING_WIDTH]: "--ui-page-measure",
 };
 
 const isAsk = Schema.is(pageThemeAskSchema);
 
-/** The theme as the window's root draws it now. */
-function themeNow(): PageTheme {
+/** The room kept around a page drawn in `room`, wide and narrow, as the window's root draws it now. */
+function insetIn(
+  room: PageRoom,
+  drawn: CSSStyleDeclaration,
+): Pick<PageTheme, "inset" | "narrowInset"> {
+  if (room === PAGE_ROOM.WORDS) return { inset: "", narrowInset: "" };
+  return {
+    inset: drawn.getPropertyValue("--ui-page-inset").trim(),
+    narrowInset: drawn.getPropertyValue("--ui-page-inset-narrow").trim(),
+  };
+}
+
+/** The theme as the window's root draws it now, for a page drawn in `room`. */
+function themeNow(room: PageRoom): PageTheme {
   const drawn = getComputedStyle(document.documentElement);
   const variables = Object.fromEntries(
     Object.entries(ROLE_OF).map(([variable, role]) => [
@@ -58,13 +85,18 @@ function themeNow(): PageTheme {
       drawn.getPropertyValue(role).trim(),
     ]),
   ) as Record<PageThemeVariable, string>;
-  return { scheme: drawnDark() ? PAGE_THEME_SCHEME.DARK : PAGE_THEME_SCHEME.LIGHT, variables };
+  return {
+    scheme: drawnDark() ? PAGE_THEME_SCHEME.DARK : PAGE_THEME_SCHEME.LIGHT,
+    variables,
+    ...insetIn(room, drawn),
+  };
 }
 
-/** Hands the page in `frame` the window's theme when it asks, and again each time the window's appearance flips. */
-export function usePageTheme(frame: RefObject<HTMLIFrameElement | null>): void {
+/** Hands the page in `frame`, drawn in `room`, the window's theme when it asks, and again each time the window's appearance flips. */
+export function usePageTheme(frame: RefObject<HTMLIFrameElement | null>, room: PageRoom): void {
   useEffect(() => {
-    const send = () => frame.current?.contentWindow?.postMessage(pageThemeMessage(themeNow()), "*");
+    const send = () =>
+      frame.current?.contentWindow?.postMessage(pageThemeMessage(themeNow(room)), "*");
     const hear = (event: MessageEvent) => {
       const framed = frame.current?.contentWindow;
       if (framed === null || framed === undefined || event.source !== framed) return;
@@ -76,5 +108,5 @@ export function usePageTheme(frame: RefObject<HTMLIFrameElement | null>): void {
       window.removeEventListener("message", hear);
       stop();
     };
-  }, [frame]);
+  }, [frame, room]);
 }
