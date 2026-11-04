@@ -2984,10 +2984,25 @@ export function useTasksTab(input: {
    */
   const openOnTask = (planId: string, place: AgentPlace) => {
     // Note that an archived agent's tab is never drawn, so a place in its transcript opens on its own page.
-    if (archivedAgent(place.agentId) && TRANSCRIPT_PLACES.has(place.kind)) {
+    if (!TRANSCRIPT_PLACES.has(place.kind) || agents.agentIds?.includes(place.agentId) === true) {
+      showOnTask(planId, place);
+    } else if (archivedAgent(place.agentId)) {
       openOnAgentPage(place);
-      return;
+    } else if (liveAgents !== undefined) {
+      showOnTask(planId, place);
+    } else {
+      // Before the list followed live lands, an agent of another task may yet be archived, so it is read first.
+      const mine = navigations.current;
+      readAgentById(act, place.agentId).then((agent) => {
+        if (navigations.current !== mine) return;
+        if (agent?.archivedAt === undefined) showOnTask(planId, place);
+        else openOnAgentPage(place);
+      });
     }
+  };
+
+  // An agent's place on its task, its tab among the column's, read as standing.
+  const showOnTask = (planId: string, place: AgentPlace) => {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
         showColumnTab(planId, { agent: place.agentId });
@@ -3091,7 +3106,7 @@ export function useTasksTab(input: {
         else if (agent.planId === null) openOnAgentPage(place);
         else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
           openOnAgentPage(place);
-        else openOnTask(agent.planId, place);
+        else showOnTask(agent.planId, place);
       });
     }
   };
@@ -3630,9 +3645,7 @@ export function useTasksTab(input: {
       select(taskId);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
-      archivedAgent(agentId)
-        ? standInFor({ kind: STAND_IN.AGENT, agentId })
-        : showColumnTab(taskId, { agent: agentId }),
+      openOnTask(taskId, { kind: LINK_PLACE.AGENT, planId: taskId, agentId }),
     ),
     onShowColumnTab: guard(showColumnTab),
     onShowPanelTab: guard(showPanelTab),
