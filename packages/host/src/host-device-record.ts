@@ -15,8 +15,10 @@ import * as FileSystem from "effect/FileSystem";
  * Once the service refuses that secret, the machine was removed, and the daemon
  * marks the record refused rather than deleting it, so nothing that reads
  * it, the daemon at its next start or the app, takes the machine as never
- * enrolled and enrolls it again unasked. The record is never logged, and no
- * answer or report names the secret.
+ * enrolled and enrolls it again unasked. A refused record whose secret the
+ * service takes again, as a database restored to before it lost the box,
+ * is marked accepted, and the machine follows its agents again. The record
+ * is never logged, and no answer or report names the secret.
  */
 
 /** The record's file, in the daemon's state. */
@@ -30,7 +32,7 @@ const HostDeviceSchema = Schema.Struct({
     ),
   ),
   serviceOrigin: Schema.String,
-  /** Present once the service refused the secret: the machine was removed, and comes back only by joining again. */
+  /** Present once the service refused the secret: the machine was removed, and comes back by joining again, or by the service taking the secret again. */
   refused: Schema.optionalKey(Schema.Literal(true)),
 });
 
@@ -73,4 +75,15 @@ export const markHostDeviceRefused = Effect.fnUntraced(function* (
   const kept = yield* readHostDevice(stateRoot);
   if (Option.isNone(kept) || kept.value.deviceSecret !== deviceSecret) return;
   yield* writeHostDevice(stateRoot, { ...kept.value, refused: true });
+});
+
+/** The record's refusal taken back, where it still holds the secret given: the service took that secret again. */
+export const markHostDeviceAccepted = Effect.fnUntraced(function* (
+  stateRoot: string,
+  deviceSecret: string,
+) {
+  const kept = yield* readHostDevice(stateRoot);
+  if (Option.isNone(kept) || kept.value.deviceSecret !== deviceSecret) return;
+  const { refused: _refused, ...accepted } = kept.value;
+  yield* writeHostDevice(stateRoot, accepted);
 });
