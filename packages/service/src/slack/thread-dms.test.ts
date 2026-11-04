@@ -142,9 +142,9 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         assert.deepEqual(more, []);
         assert.equal(title?.args.channel, `U-${email}`);
         assert.equal(title?.args.thread_ts, undefined);
-        assert.equal(title?.args.text, "Require a review on main");
+        assert.equal(title?.args.text, "📥 Require a review on main");
         assert.deepEqual(blocksOf(title), [
-          { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+          { type: "header", text: { type: "plain_text", text: "📥 Require a review on main" } },
         ]);
         assert.equal(reply?.args.channel, "D0001");
         assert.equal(reply?.args.thread_ts, "1700000000.000101");
@@ -265,7 +265,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
       const [updated] = calls.filter((call) => call.method === "chat.update");
       assert.equal(updated?.args.ts, "1700000000.000050");
       assert.deepEqual(blocksOf(updated).slice(0, 2), [
-        { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+        { type: "header", text: { type: "plain_text", text: "📥 Require a review on main" } },
         { type: "markdown", text: "Turn it on." },
       ]);
     }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles([]))));
