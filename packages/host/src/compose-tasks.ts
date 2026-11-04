@@ -187,6 +187,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -506,6 +507,8 @@ export interface TasksDependencies {
   focus: WindowFocus;
   /** The sync engine's pool, which the task list's plans and agents, and the comments' threads, stand in. */
   pool: EntityPool;
+  /** The signed-in account's lists kept on disk, which the gate opening draws before the service answers and each answer keeps; none where nothing keeps them. */
+  entities: () => EntityStore | undefined;
   /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
   member: () => { readonly userId: string; readonly name: string } | undefined;
   /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
@@ -1083,10 +1086,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let taskList = yield* openTaskList;
   yield* Effect.addFinalizer(() => Scope.close(taskList.scope, Exit.void));
 
+  /** The sync id the list drawn from disk was kept at, which the next follow reads past once; none once it has. */
+  let listKeptAt: string | undefined;
+
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
+    const from = listKeptAt;
+    listKeptAt = undefined;
     return followTaskList({
+      ...(from === undefined ? undefined : { from }),
       live: (sync) =>
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
@@ -1099,7 +1108,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       take: (rows, standing) =>
         Effect.suspend(() => {
           view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
-          return taskList.collections.answer(rows, standing);
+          const entities = dependencies.entities();
+          const { collections } = taskList;
+          // Note that only an answer read at a sync id is kept, since the follow reads past it at the next launch.
+          const kept =
+            entities === undefined || standing === undefined
+              ? Effect.void
+              : Effect.suspend(() =>
+                  entities.keep(KEPT_READ.TASK_LIST, {
+                    rows: collections.synced(),
+                    at: standing.next,
+                  }),
+                );
+          return Effect.andThen(collections.answer(rows, standing), kept);
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
@@ -1156,6 +1177,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             workspaceMoves.set(each.id, (workspaceMoves.get(each.id) ?? 0) + 1);
           }
           write({ workspaces, workspacesStatus: TASKS_READ.READY });
+          yield* dependencies.entities()?.keep(KEPT_READ.WORKSPACES, workspaces) ?? Effect.void;
         }),
       ).pipe(
         Effect.as(false),
@@ -1356,6 +1378,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   let sidebar = yield* openSidebar;
   yield* Effect.addFinalizer(() => Scope.close(sidebar.scope, Exit.void));
+  /** Whether the sidebar's follow has answered since its collections opened, after which nothing kept on disk is drawn over it. */
+  let sidebarAnswered = false;
   /**
    * The sidebar's writes, each service call under the serial lock and the
    * transaction waited for outside it, so no task open, save, or read waits
@@ -1397,7 +1421,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           },
         },
         sealed,
-        (rows) => sidebar.collections.answer(rows),
+        (rows) =>
+          Effect.andThen(
+            sidebar.collections.answer(rows),
+            Effect.suspend(() => {
+              sidebarAnswered = true;
+              return dependencies.entities()?.keep(KEPT_READ.SIDEBAR, rows) ?? Effect.void;
+            }),
+          ),
       ).pipe(Effect.ignore);
       return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
     });
@@ -1409,6 +1440,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.ignore,
     );
     yield* FiberHandle.run(sidebarFollow, followed, { onlyIfMissing: true });
+  });
+
+  /**
+   * The account's lists as the entity store kept them, drawn as the service
+   * last answered them before any follow does, each only where nothing has
+   * answered it since: the task list, which its next follow reads past the
+   * sync id it was kept at, the sidebar, and the workspaces.
+   */
+  const drawnFromDisk = Effect.gen(function* () {
+    const entities = dependencies.entities();
+    if (entities === undefined) return;
+    const list = entities.stored(KEPT_READ.TASK_LIST);
+    if (list !== undefined && view.listStatus !== TASKS_READ.READY) {
+      listKeptAt = list.at;
+      view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.CATCHING_UP };
+      yield* taskList.collections.answer(list.rows, { past: undefined, next: list.at, gone: [] });
+    }
+    const sidebarRows = entities.stored(KEPT_READ.SIDEBAR);
+    if (sidebarRows !== undefined && !sidebarAnswered) {
+      yield* sidebar.collections.answer(sidebarRows);
+    }
+    const workspaces = entities.stored(KEPT_READ.WORKSPACES);
+    if (workspaces !== undefined && view.workspacesStatus !== TASKS_READ.READY) {
+      write({ workspaces, workspacesStatus: TASKS_READ.READY });
+    }
   });
 
   /**
@@ -3365,6 +3421,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* membersReads.held.open;
       yield* documents.open;
       if (!gate()) return;
+      yield* drawnFromDisk;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
     }),
@@ -3391,6 +3448,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberMap.clear(invitationFollows);
       yield* Scope.close(sidebar.scope, Exit.void);
       sidebar = yield* openSidebar;
+      sidebarAnswered = false;
+      listKeptAt = undefined;
       yield* serial(
         Effect.sync(() => {
           githubAskedAt = undefined;

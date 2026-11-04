@@ -9,7 +9,9 @@ import { GATEWAY_ERROR, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { noNetwork } from "@repo/wire/testing";
-import { ConfigProvider, Effect, Layer, Result } from "effect";
+import { ConfigProvider, Effect, Layer, Path, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { AccountSourceHost } from "./account-source.js";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
 import { hostKernelLayer } from "./effect/kernel.js";
@@ -26,6 +28,7 @@ import {
   TerminalSocket,
   ThisMacHost,
 } from "./effect/seams.js";
+import { ENTITY_STORE_FILE_NAME } from "./entity-store.js";
 import {
   ALL_CLIENT_CAPABILITIES,
   ALL_HOST_PLATFORM_CONCERNS,
@@ -213,5 +216,43 @@ describe("the host's account source", () => {
 
       assert.deepEqual(answered, { ok: true, result: { account } });
     }).pipe(Effect.provide(NodeFileSystem.layer)),
+  );
+});
+
+describe("the account's lists kept on disk", () => {
+  it.effect("are deleted as the account gate closes at a sign-out", () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("host-entities-");
+      const fileSystem = yield* FileSystem.FileSystem;
+      const file = (yield* Path.Path).join(stateRoot, ENTITY_STORE_FILE_NAME);
+      yield* fileSystem.writeFileString(file, "sealed lists");
+      const account = {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        email: "dev@example.com",
+        provider: ACCOUNT_PROVIDER.GITHUB,
+      } as const;
+      let gate: AccountSourceHost | undefined;
+      const host = hostStandingLayer.pipe(
+        Layer.provideMerge(hostAssemblyLayer([])),
+        Layer.provide(
+          Layer.merge(
+            machineOver(stateRoot),
+            fixedAccountSource({
+              account,
+              opened: (opened) => {
+                gate = opened;
+              },
+            }),
+          ),
+        ),
+      );
+
+      yield* Effect.provide(
+        Effect.suspend(() => gate?.stopCapabilities ?? Effect.die("the source was never opened")),
+        host,
+      );
+
+      assert.equal(yield* fileSystem.exists(file), false);
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
   );
 });
