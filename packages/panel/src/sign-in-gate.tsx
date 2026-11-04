@@ -1,7 +1,8 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS, type SignInFailure } from "@repo/features/words";
 import {
   ANNOUNCE,
   AuthPage,
@@ -15,6 +16,16 @@ import {
 } from "@repo/ui";
 import { failureShown } from "./failure-report.js";
 import { useAnnounceShown } from "./use-announce-shown.js";
+
+/**
+ * Each sign-in failure as the answer its report carries, whose key is the
+ * report's code, so a failed sign-in says why in Sentry. Note that each is one
+ * object for good, because a report is matched by its cause's identity and a
+ * new object on every draw would report the same failure again.
+ */
+const SIGN_IN_FAILURE_ANSWERS = Object.fromEntries(
+  Object.values(SIGN_IN_FAILURE).map((failure) => [failure, { failure }]),
+) as Record<SignInFailure, { readonly failure: SignInFailure }>;
 
 /** What the gate says while it waits on the browser. */
 const FINISH_IN_BROWSER = "Finish in your browser.";
@@ -47,7 +58,7 @@ export function SignInGate({
   /** Whose sign-in the gate is waiting on; absent while none was begun here. */
   waiting?: AccountProvider;
   /** Why the last attempt ended without landing, from the flow's owner. */
-  failure?: string;
+  failure?: SignInFailure;
   /** The provider this Mac last signed in with; absent while none is kept. */
   lastUsed?: AccountProvider;
   /** The link that opens the Mac app instead, which a shell that is not the Mac app offers; absent in the Mac app. */
@@ -68,10 +79,10 @@ export function SignInGate({
         failure === undefined
           ? undefined
           : {
-              words: failure,
+              words: SIGN_IN_FAILURE_WORDS[failure],
               failure: failureShown({
                 surface: FAILURE_SURFACE.ACCOUNT_SIGN_IN,
-                cause: FAILURE_CONDITION.REFUSED,
+                cause: SIGN_IN_FAILURE_ANSWERS[failure],
                 refused: true,
               }),
             }
