@@ -141,7 +141,7 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_INSTALLED_SKILLS: "/api/live/installed-skills",
   /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */
   LIVE_INTEGRATION_STATUSES: "/api/live/integration-statuses",
-  /** The account's preferences row, its default agent and Slack notifications as stored, sealed for following over Neon Realtime (GET), or its row inline where polled, none for an account that stored nothing. `account-preferences-live.ts` declares the answer. */
+  /** The account's preferences row, its default agent and Slack notifications as stored, with a `chaptersModel` of null that a 0.26.0 desktop still decodes, sealed for following over Neon Realtime (GET), or its row inline where polled, none for an account that stored nothing. `account-preferences-live.ts` declares the answer. */
   LIVE_ACCOUNT_PREFERENCES: "/api/live/account-preferences",
   /**
    * A workspace's agents, on a task or with none, newest started first and

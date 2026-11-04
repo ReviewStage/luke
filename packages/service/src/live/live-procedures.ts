@@ -138,8 +138,9 @@
  *
  * `GET /api/live/account-preferences` answers the account's preferences row
  * as one statement, its default agent and Slack notifications as stored,
- * none for an account that stored nothing, woken by a write to any of them
- * or to another column a view reads
+ * with a `chaptersModel` of null that a 0.26.0 desktop still decodes, none
+ * for an account that stored nothing, woken by a write to any of them or to
+ * another column a view reads
  * (`accountPreferencesLive`), so a default chosen on another device reaches
  * an open window within one coalesce window.
  */
