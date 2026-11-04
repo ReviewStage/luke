@@ -10,7 +10,6 @@ import type {
   TaskStanding,
 } from "@repo/features/task-wire";
 import { readingWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   EmptyState,
@@ -30,7 +29,7 @@ import {
   useMinute,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { openThread, PlanCommentsProvider, usePlanComments } from "@repo/ui/plan-comments";
+import { openThread, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
@@ -42,7 +41,6 @@ import {
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -76,6 +74,7 @@ import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
+import { usePlanComments } from "../tasks/use-plan-comments.js";
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
@@ -406,7 +405,6 @@ function PlanDocument({
   const phone = room === SHELL_ROOM.NARROW;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
-  const { act } = useAct();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The task's agents' cloud browser tabs, which a phone's Show browser goes back to, read only on a phone.
   const agentBrowsers = useCloudBrowserTabs(
@@ -421,14 +419,14 @@ function PlanDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are read while the task is shown, for its plan's margin, its Comments tab, and its summary.
-  const comments = usePlanComments({
-    planId: inboxTaskId,
-    shown: tasks.shown,
-    readComments: (params) => act(ACT_KIND.TASKS_COMMENTS, params),
-    startComment: (params) => act(ACT_KIND.TASKS_COMMENT_START, params),
-    actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
-  });
+  // The task's comments are held from its open while it is shown, for its plan's margin, its Comments tab, and its summary, so its first ready frame marks them.
+  const commentsTaskId = tasks.shown ? tasks.activeTaskId : undefined;
+  const comments = usePlanComments(
+    useMemo(
+      () => (commentsTaskId === undefined ? undefined : { taskId: commentsTaskId }),
+      [commentsTaskId],
+    ),
+  );
   const openComments = comments?.threads.filter(openThread).length;
   // A link to a comment thread is taken once the task's comments are read:
   // a resolved one opens the Comments tab, where it is listed, and the ask

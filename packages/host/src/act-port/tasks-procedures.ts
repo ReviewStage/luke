@@ -35,8 +35,7 @@ import {
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
-  type TasksCommentsAnswer,
-  type TasksCommentsParams,
+  type TasksCommentsFollow,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -139,7 +138,11 @@ export interface TasksProceduresDependencies {
     onTaskHistoryChanged(listener: (followed: TaskHistoryFollowed) => void): () => void;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-    tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+    /** A plan's or page's comments held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+    tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+    /** A held plan's or page's comments read again at once, as Try again asks. */
+    tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
     tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
     tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   };
@@ -180,12 +183,20 @@ function adminPage(serviceBaseUrl: string): string | undefined {
   return isWebAddress(page) && isServicePage(page, serviceBaseUrl) ? page : undefined;
 }
 
+/** Which comments a stream holds open: a plan's, or one page's, each named so two holds of one compare equal. */
+interface CommentsHeld {
+  readonly taskId: string;
+  readonly pageId: string | undefined;
+}
+
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id. */
   const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
+  /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
+  const openComments: OpenFollows<never, CommentsHeld> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
   const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
   return {
@@ -583,14 +594,33 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksPictureKeep(input);
       },
     ),
-    [TASKS_ACT_KIND.TASKS_COMMENTS]: actPort[TASKS_ACT_KIND.TASKS_COMMENTS].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksComments(input);
-    }),
+    [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that nothing is heard down the hold, since the held comments reach the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: (scope: TasksCommentsFollow): CommentsHeld => ({
+              taskId: scope.taskId,
+              pageId: scope.pageId,
+            }),
+            follow: host.tasksCommentsFollow,
+            unfollow: host.tasksCommentsUnfollow,
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openComments,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_COMMENTS_RETRY]: actPort[TASKS_ACT_KIND.TASKS_COMMENTS_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.tasksCommentsRetry(input);
+      },
+    ),
     // A refused comment is the thread's to say, with its retry, so it is answered rather than refused.
     [TASKS_ACT_KIND.TASKS_COMMENT_START]: actPort[TASKS_ACT_KIND.TASKS_COMMENT_START].effect(
       function* ({ input, context, errors }) {

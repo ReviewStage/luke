@@ -12,6 +12,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { ORPCError } from "@orpc/client";
 import {
   ADMIN_QUERY,
   ADMIN_READ,
@@ -41,7 +42,6 @@ import {
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@repo/features/tasks-view";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { vi } from "vitest";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
@@ -106,7 +106,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: "Could not read that page's source on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: "Could not read that picture on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: "Could not keep that picture on this system.",
-  [TASKS_ACT_KIND.TASKS_COMMENTS]: "Could not read the task's comments on this system.",
+  [TASKS_ACT_KIND.TASKS_COMMENTS_RETRY]: "Could not read the task's comments again on this system.",
   [TASKS_ACT_KIND.TASKS_COMMENT_START]: "Could not comment on the task on this system.",
   [TASKS_ACT_KIND.TASKS_COMMENT_ACT]: "Could not change the task's comment on this system.",
 } as const;
@@ -242,7 +242,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
     kind: TASKS_ACT_KIND.TASKS_PICTURE_KEEP,
     payload: { ...PLAN, picture: "data:image/png;base64,iVBORw0KGgo=" },
   },
-  { kind: TASKS_ACT_KIND.TASKS_COMMENTS, payload: { ...PLAN, after: "0" } },
+  { kind: TASKS_ACT_KIND.TASKS_COMMENTS_RETRY, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_COMMENT_START, payload: COMMENT_START },
   { kind: TASKS_ACT_KIND.TASKS_COMMENT_ACT, payload: COMMENT_ACT },
 ];
@@ -416,8 +416,9 @@ function windowPort(
       ask(`revision:${params.seq}`, () => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const),
     tasksRestore: (params) => ask(`restore:${params.seq}`, () => true),
     tasksPictureKeep: (params) => ask(`keep:${params.planId}`, () => ({ id: PICTURE_ID })),
-    tasksComments: (params) =>
-      ask(`comments:${params.planId}:${params.after}`, () => ({ threads: [], cursor: "c1" })),
+    tasksCommentsFollow: (scope) => ask(`comments-follow:${scope.taskId}`, () => undefined),
+    tasksCommentsUnfollow: (scope) => ask(`comments-unfollow:${scope.taskId}`, () => undefined),
+    tasksCommentsRetry: (scope) => ask(`comments-retry:${scope.taskId}`, () => undefined),
     tasksCommentStart: (params) =>
       ask(`comment:${params.planId}`, () => ({ refused: PLAN_COMMENT_REFUSAL.TOO_MANY })),
     tasksCommentAct: (params) =>
@@ -876,16 +877,16 @@ it("a plan's picture is read through the host from a panel, its absence answered
   ]);
 });
 
-it("a plan's comments are read and acted on through the host from a panel", async () => {
+it("a plan's comments are read again and acted on through the host from a panel", async () => {
   const { client, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENTS, { ...PLAN, after: "0" }), {
-    answer: { threads: [], cursor: "c1" },
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENTS_RETRY, TASK), {
+    answer: undefined,
   });
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENT_ACT, COMMENT_ACT), {
     answer: { deleted: THREAD_ID },
   });
-  assert.deepEqual(asked, ["comments:plan-1:0", `act:${THREAD_ID}:resolve`]);
+  assert.deepEqual(asked, [`comments-retry:${TASK_ID}`, `act:${THREAD_ID}:resolve`]);
 });
 
 it("a pull request is answered to a panel as the host read it, or as none, and a service that did not answer is refused in its kind's own words", async () => {

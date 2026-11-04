@@ -9,8 +9,9 @@ import type {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
-import type { TasksView } from "@repo/features/tasks-view";
+import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
@@ -379,6 +380,29 @@ export type AppAutomationReads = Pick<
   | typeof LIVE_READ.AUTOMATION_RUNS
 >;
 
+/** What a task's comment threads stand on: its plan, or one of its pages. */
+type CommentSubjectKind = (typeof COMMENT_SUBJECT)[keyof typeof COMMENT_SUBJECT];
+
+/** One subject's comment threads, as the host's read of them stands: every thread, the oldest started first, resolved ones among them, once it answered, with the windows' writes laid over them until the read holds them. */
+type AppSubjectComments = AppHostRead<readonly PlanCommentThread[]>;
+
+/**
+ * Each task's comments the host holds for the windows
+ * (`plan-comment-reads.ts`): a plan's own threads by its task's id, and a
+ * page's by the page's id, never its version, those a window chose and the
+ * few let go lately, each as its own read stands. One absent is held by
+ * nobody.
+ */
+export type AppPlanComments = {
+  readonly [Kind in CommentSubjectKind]: Readonly<Record<string, AppSubjectComments>>;
+};
+
+/** No comments held, as the host stands before any window shows a plan or a page and after the session ends. */
+export const NO_PLAN_COMMENTS: AppPlanComments = {
+  [COMMENT_SUBJECT.PLAN]: {},
+  [COMMENT_SUBJECT.PAGE]: {},
+};
+
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
@@ -390,6 +414,7 @@ export interface AppHostReads {
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
+  [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
 }
 
 /**
@@ -494,6 +519,8 @@ export interface AppState {
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: AppHeldById<readonly AutomationWorkspaceRun[]>;
   /** Each automation's runs the windows chose, by the automation, newest fired first, held as the automations are: what its editor and an agent its run started read. */
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
+  /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
+  [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -607,6 +634,11 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PLAN_COMMENTS]: {
+    keys: READ_KEYS.TWO,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof PlanCommentThread,
+  },
   tasks: {
     keys: READ_KEYS.PARTS,
     on: KEYS_ON.SLICE,
