@@ -2139,8 +2139,9 @@ const finishTask = SqlSchema.findOneOption({
  * notices open until a member opens them (`inbox-settle.ts`). It archives
  * no agent, then or as a turn ends, since someone may be talking to one:
  * only a member's or an agent's move to Done does (`updateTaskCommitted`).
- * A task an automation's run made for itself asks no merged pull request,
- * `mergeRequired` false, since its run may publish nothing, and its caller's
+ * A task an automation's run or a Slack message made for itself asks no
+ * merged pull request, `mergeRequired` false, since its agent may publish
+ * nothing, and its caller's
  * guard holds its agents to having finished well instead.
  */
 export function finishTaskWork<R = never>(

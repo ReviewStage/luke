@@ -17,8 +17,7 @@
  * draw nothing takes the frame down and says so with Reload in its place, so
  * it is never left looking as though the panel were still coming, nor
  * blank. The panel stands in an error boundary that does the same for a
- * render that throws. What the next load's frame needs to know of this one
- * is kept as the panel draws (`first-frame-hint.tsx`).
+ * render that throws.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -39,7 +38,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { browserLinkPlatform } from "../link-platform";
 import { type BrowserHistory, browserHistory } from "./browser-history";
-import { FirstFrameHint } from "./first-frame-hint";
 import { withLoadLink } from "./load-link";
 import { browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
@@ -154,7 +152,6 @@ export async function mountWebApp(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <WebAppearance />
-        <FirstFrameHint />
         <App />
       </RegistryContext.Provider>
     </ErrorBoundary>,

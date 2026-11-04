@@ -1,11 +1,14 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
-import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import type { GitHubTokenSummary } from "@repo/features/github-token-wire";
+import {
+  ACCOUNT_PROVIDER,
+  type ACCOUNT_STATUS,
+  signedInAccountId,
+} from "@repo/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -25,12 +28,12 @@ import {
 } from "@repo/ui";
 import { accountActor } from "@repo/ui/actor-model";
 import type { ActionResult } from "@repo/wire";
-import { useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useBusyPress } from "./busy-press.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
@@ -71,37 +74,20 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
 /**
  * The member's own GitHub personal access token: its hint, login, and
  * expiry once one is saved, what it is for while none is, and Manage or Add, which
- * opens the token's dialog (`github-dialog.tsx`). The token is read as the
- * row is drawn, again for each account it is drawn for (the section keys it
- * by the account); a read that fails says so under the row in a
- * `FailureNote` whose Retry reads again, and draws neither Add nor Manage,
- * since what stands is unknown.
+ * opens the token's dialog (`github-dialog.tsx`). The token is the one the
+ * host holds for the account the row is drawn for (`LIVE_READ.GITHUB_TOKEN`),
+ * where a save's and a removal's own answer lands too; a read that fails
+ * says so under the row in a `FailureNote` whose Retry asks again, and draws
+ * neither Add nor Manage, since what stands is unknown.
  */
-function GitHubTokenRow(): React.JSX.Element {
-  const { act } = useAct();
-  const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
+function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React.JSX.Element {
+  const { rows, status, retry } = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
+  const token = rows?.token;
   const [managing, setManaging] = useState(false);
   // Note that the card is drawn for the token it opened over until its fade has run, so it does not change under its own exit.
   const { held: drawn, onExited } = useHeldThroughExit(
     managing && token !== undefined ? token : undefined,
   );
-  const [readFailed, setReadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    setReadFailed(false);
-    act(ACT_KIND.GITHUB_TOKEN_READ)
-      .catch(() => undefined)
-      .then((answer) => {
-        if (!live) return;
-        if (answer === undefined || "failure" in answer) setReadFailed(true);
-        else setToken(answer.token);
-      });
-    return () => {
-      live = false;
-    };
-  }, [act, attempt]);
 
   return (
     <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)} className={NO_CAPTURE}>
@@ -117,11 +103,11 @@ function GitHubTokenRow(): React.JSX.Element {
         }
         // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
         below={
-          token === undefined && readFailed
+          status === HOST_READ_STATUS.FAILED
             ? () => (
                 <FailureNote
                   failure={unreadShown(FAILURE_SURFACE.ACCOUNT_TOKEN_READ)}
-                  onRetry={() => setAttempt((n) => n + 1)}
+                  onRetry={retry}
                 >
                   {TOKEN_READ_FAILED}
                 </FailureNote>
@@ -141,7 +127,6 @@ function GitHubTokenRow(): React.JSX.Element {
         <GitHubTokenDialog
           open={managing && token !== undefined}
           token={drawn}
-          onToken={setToken}
           onClose={() => setManaging(false)}
           onExited={onExited}
         />
@@ -211,7 +196,7 @@ export function AccountSection({
           )}
         </SettingsRow>
       </div>
-      <GitHubTokenRow key={account.id} />
+      <GitHubTokenRow key={account.id} accountId={signedInAccountId(account)} />
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <SettingsRow label="Delete account">
           {() => (

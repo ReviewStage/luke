@@ -33,6 +33,7 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@repo/host/acts";
 import {
+  type AppTokenRepositories,
   type AppWorkspaceIntegrations,
   type AppWorkspaceMembers,
   NO_KEYS_HELD,
@@ -71,6 +72,7 @@ import {
   handCapabilities,
   handHostReads,
   holdAutomations,
+  holdGitHubToken,
   holdRepositoryLists,
   type RepositoriesRead,
 } from "../testing/app-state.js";
@@ -228,8 +230,11 @@ let tokenRepositories: WorkspaceTokenRepository[] = [];
 let tokenReadHeld: Promise<void> | undefined;
 /** Whether the token repositories' read is refused rather than answered. */
 let tokenReadFails = false;
-/** Whether the reader has a GitHub token saved, as the token's read answers it. */
+/** Whether the reader has a GitHub token saved, as the host holds it. */
 let tokenSaved = true;
+/** Each workspace's token repositories as the host holds them for the window. */
+let heldTokenRepositories: AppTokenRepositories = NO_KEYS_HELD;
+let deliverTokenRepositories: HostReadsHanded["deliverTokenRepositories"] = () => undefined;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -299,6 +304,15 @@ function layIntegrations(workspaceId: string): void {
       sentry === undefined ? { failed: true } : { rows: { sentry, slack: slackOf(slackBot) } },
   };
   deliverIntegrations(integrations);
+}
+
+/** Lays a workspace's token repositories on the window's document as the host holds them: as the service lists them, or failed where it refused them. */
+function layTokenRepositories(workspaceId: string, refused = tokenReadFails): void {
+  heldTokenRepositories = {
+    ...heldTokenRepositories,
+    [workspaceId]: refused ? { failed: true } : { rows: tokenRepositories },
+  };
+  deliverTokenRepositories(heldTokenRepositories);
 }
 
 /** The bridge, answering the section's acts the way the host would, a member write drawn on the document from its answer. */
@@ -434,27 +448,20 @@ function answer(request: Asked): Promise<Answered> {
       layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.GITHUB_TOKEN_READ:
-      return Promise.resolve(done({ token: tokenSaved ? SAVED_TOKEN : null }));
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ: {
-      const read = tokenRepositories;
-      const held = tokenReadHeld;
-      tokenReadHeld = undefined;
-      return (held ?? Promise.resolve()).then(
-        (): FakeActAnswer =>
-          tokenReadFails ? { status: FAKE_ANSWER.REFUSED, reason: "Could not read." } : done(read),
-      );
-    }
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY:
+      layTokenRepositories(request.payload.workspaceId);
+      return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET: {
-      const { repository, added } = request.payload;
+      const { workspaceId, repository, added } = request.payload;
       tokenRepositories = added
         ? [
             { fullName: repository, addedBy: READER_ID, addedAt: 2, removable: true },
             ...tokenRepositories,
           ]
         : tokenRepositories.filter((one) => one.fullName !== repository);
+      layTokenRepositories(workspaceId, false);
       return Promise.resolve(done(tokenRepositories));
     }
     default:
@@ -479,7 +486,6 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
     ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
-    ACT_KIND.GITHUB_TOKEN_READ,
   ];
   const procedures = kinds.map((kind) => [kind, onPort(kind)]);
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
@@ -552,6 +558,7 @@ beforeEach(() => {
   tokenReadHeld = undefined;
   tokenReadFails = false;
   tokenSaved = true;
+  heldTokenRepositories = NO_KEYS_HELD;
   opened = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
@@ -568,6 +575,14 @@ beforeEach(() => {
       void Promise.resolve().then(() => layIntegrations(input.workspaceId));
       return quietHold();
     },
+    // Note that the token repositories' read waits where the test holds it, as one still out on the wire.
+    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, payload: input });
+      const held = tokenReadHeld;
+      tokenReadHeld = undefined;
+      void (held ?? Promise.resolve()).then(() => layTokenRepositories(input.workspaceId));
+      return quietHold();
+    },
     [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
       sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
       const stream = pushableStream<TasksWorkspaceInvitationsAnswer>();
@@ -582,12 +597,14 @@ beforeEach(() => {
   const reads = handHostReads({});
   deliverPeople = reads.deliverMembers;
   deliverIntegrations = reads.deliverIntegrations;
+  deliverTokenRepositories = reads.deliverTokenRepositories;
   // Note that a workspace's automations are laid as the leave holds them, where the test names any.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
       automations === undefined ? undefined : { rows: automations.map(automationOf) },
   });
   holdRepositoryLists(reads.deliverRepositoryLists, listing);
+  holdGitHubToken(() => ({ rows: { token: tokenSaved ? SAVED_TOKEN : null } }));
 });
 
 afterEach(() => {
@@ -1038,7 +1055,7 @@ test("the chosen team workspace's members are listed with their email and role, 
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => request.kind),
-    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACT_KIND.WORKSPACE_MEMBERS_FOLLOW],
+    [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, ACT_KIND.WORKSPACE_MEMBERS_FOLLOW],
   );
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
@@ -1900,28 +1917,6 @@ test("the token repositories say Reading while they are read, and a refused read
   );
 });
 
-test("a token repositories read that lands after an add does not take back what the add answered", async () => {
-  tokenReach = ["octo-member/side"];
-  let release: () => void = () => undefined;
-  tokenReadHeld = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
-
-  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
-  await settle();
-  const side = document.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("no option");
-  act(() => side.click());
-  await settle();
-  release();
-  await settle();
-
-  assert.deepEqual(
-    integrationRows(page).map(([name]) => name),
-    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
-  );
-});
-
 test("the page has no workspace picker of its own, and shows another workspace, the account's role in it, and its own members once the sidebar lists it", async () => {
   const beta: Workspace = {
     ...ACME,
@@ -2080,7 +2075,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
       .filter(
         (request) =>
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_FOLLOW &&
-          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW &&
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),

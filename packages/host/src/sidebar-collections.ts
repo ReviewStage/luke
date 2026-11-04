@@ -22,6 +22,8 @@
  * of the rest before what it drew is taken back (`keep`).
  */
 
+import type { TaskCallResult } from "@repo/features";
+import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import type { SidebarRead, SidebarRows } from "@repo/features/sidebar-live";
 import type {
   AgentSectionEntry,
@@ -33,7 +35,13 @@ import type {
 } from "@repo/features/task-section-wire";
 import { applySectionWrite } from "@repo/features/task-section-writes";
 import type { RepositoryPin, RepositoryPinsWritten } from "@repo/features/task-wire";
-import type { TasksPinRepositoryParams, TasksWriteSectionParams } from "@repo/features/tasks-view";
+import {
+  type TasksPinRepositoryParams,
+  type TasksWriteSectionParams,
+  tasksPinRepositoryParamsSchema,
+  tasksWriteSectionParamsSchema,
+} from "@repo/features/tasks-view";
+import { GATEWAY_METHOD } from "@repo/gateway";
 import {
   type Confirmation,
   type EntityKind,
@@ -44,8 +52,9 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import { Effect, Equal, type Scope } from "effect";
+import { Effect, Equal, Schema, type Scope } from "effect";
 import { confirmWrite, type TxWait } from "./live-follow.js";
+import { callKey, untaken, type WriteAnswers } from "./queued-writes.js";
 
 /** The account's sections and the rows in them as the pool holds them: one row, under the account's own id. */
 export interface SectionsRow extends TaskSections {
@@ -224,16 +233,24 @@ export interface SidebarWriteDependencies {
   readonly pinRepository: (
     repository: string,
     pinned: boolean,
-  ) => Effect.Effect<RepositoryPinsWritten | undefined>;
+    key: string | undefined,
+  ) => Effect.Effect<TaskCallResult<RepositoryPinsWritten, WriteUntaken>>;
   readonly writeSection: (
     write: TaskSectionWrite,
-  ) => Effect.Effect<TaskSectionsWritten | undefined>;
+    key: string | undefined,
+  ) => Effect.Effect<TaskCallResult<TaskSectionsWritten, WriteUntaken>>;
   /** The account's sidebar standing now, which a sign-out replaces. */
   readonly collections: () => SidebarCollections;
 }
 
 /** A write refused, which takes back what it drew. */
 const REFUSED = { refused: { changed: false } } as const;
+
+/** What a sidebar write answers its caller where the service kept it, and where it refused it. */
+const ANSWERS: WriteAnswers<SidebarWritten> = {
+  kept: { changed: true },
+  refused: { changed: false },
+};
 
 /**
  * The sidebar's writes: a repository pinned or unpinned, drawn at once, a
@@ -254,10 +271,11 @@ export function sidebarWrites(dependencies: SidebarWriteDependencies): SidebarWr
       keys: ({ repository }) => [repository],
       change: ({ repository, pinned, at }) =>
         pinned ? { made: { repository, pinnedAt: at } } : () => ROW_GONE,
-      send: ({ repository, pinned }) =>
+      send: ({ repository, pinned }, { key }) =>
         gate()
-          ? Effect.map(dependencies.pinRepository(repository, pinned), (answered) => {
-              if (answered === undefined) return REFUSED;
+          ? Effect.map(dependencies.pinRepository(repository, pinned, key), (pinnedAs) => {
+              if (!pinnedAs.ok) return untaken(pinnedAs.failure, ANSWERS);
+              const answered = pinnedAs.answer;
               const kept = answered.pins.find((pin) => pin.repository === repository);
               return {
                 answer: { changed: true },
@@ -266,34 +284,54 @@ export function sidebarWrites(dependencies: SidebarWriteDependencies): SidebarWr
               };
             })
           : Effect.succeed(REFUSED),
+      queue: {
+        name: GATEWAY_METHOD.TASKS_PIN_REPOSITORY,
+        input: Schema.Struct({ ...tasksPinRepositoryParamsSchema.fields, at: Schema.Number }),
+        queued: () => ANSWERS.kept,
+      },
     },
     sectionsWritten: {
       kind: SECTIONS,
       keys: ({ ownerId }) => (ownerId === undefined ? [] : [ownerId]),
       change: ({ writes, at }) => sectionsAfter(writes, at),
-      send: ({ writes }) =>
+      send: ({ writes }, { key }) =>
         gate()
           ? Effect.gen(function* () {
               let kept: TaskSections | undefined;
               let txid: string | undefined;
               let refused = false;
-              for (const write of writes) {
-                const answered = yield* dependencies.writeSection(write);
-                if (answered === undefined) refused = true;
-                else {
-                  const { txid: committed, ...sections } = answered;
-                  kept = sections;
-                  txid = committed ?? txid;
+              for (const [call, write] of writes.entries()) {
+                const writtenAs = yield* dependencies.writeSection(write, callKey(key, call));
+                if (!writtenAs.ok) {
+                  // Note that a call unanswered stops the drag where it stands, so the calls after it are sent again with it, each under its own key.
+                  if (writtenAs.failure === WRITE_UNTAKEN.UNANSWERED) {
+                    return untaken(writtenAs.failure, ANSWERS);
+                  }
+                  if (writtenAs.failure === WRITE_UNTAKEN.REFUSED) refused = true;
+                  continue;
                 }
+                const { txid: committed, ...sections } = writtenAs.answer;
+                kept = sections;
+                txid = committed ?? txid;
               }
               const last = kept;
               if (!refused && last !== undefined) {
                 return { answer: { changed: true }, txid, taken: () => last };
               }
+              if (!refused) return { answer: { changed: true }, txid: undefined, settled: true };
               if (last !== undefined) yield* dependencies.collections().keep(txid, last);
               return REFUSED;
             })
           : Effect.succeed(REFUSED),
+      queue: {
+        name: GATEWAY_METHOD.TASKS_WRITE_SECTION,
+        input: Schema.Struct({
+          ...tasksWriteSectionParamsSchema.fields,
+          ownerId: Schema.UndefinedOr(Schema.String),
+          at: Schema.Number,
+        }),
+        queued: () => ANSWERS.kept,
+      },
     },
   };
 }

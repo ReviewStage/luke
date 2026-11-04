@@ -16,7 +16,9 @@ import {
   ProviderMark,
   STATUS_TONE,
   Stack,
+  StaticChip,
 } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -205,6 +207,22 @@ function Chips(): React.JSX.Element {
             <ProviderMark provider={MARK_PROVIDER.GITHUB} />
             <ChipName mono>agent/expire-invitations</ChipName>
           </Chip>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="chips-static" title="Static: a value fixed where it stands">
+        <Inline>
+          <StaticChip>
+            <GLYPH.CLOUD />
+            <ChipName>Cloud</ChipName>
+          </StaticChip>
+          <StaticChip tone={STATUS_TONE.ATTENTION}>
+            <GLYPH.DESKTOP />
+            <ChipName>Ada's MacBook Pro · Offline</ChipName>
+          </StaticChip>
+          <StaticChip iconOnly>
+            <GLYPH.CLOUD />
+            <ChipName>Cloud</ChipName>
+          </StaticChip>
         </Inline>
       </CatalogSection>
       <CatalogSection id="chips-link" title="A link, given an address">

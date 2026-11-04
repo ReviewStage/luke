@@ -63,6 +63,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
+  type AppGitHubTokens,
   type AppInstalledSkills,
   type AppIntegrations,
   type AppIntegrationTools,
@@ -72,6 +73,7 @@ import {
   type AppRepositoryLists,
   type AppSlackChannels,
   type AppStateSnapshot,
+  type AppTokenRepositories,
   type AppWorkspaceIntegrations,
   type AppWorkspaceMembers,
   EVERY_WORKSPACE,
@@ -607,16 +609,6 @@ type StagedAnswer<Kind extends PortActKind> = (
 
 /** Every read the staged pages ask, answered as the service would answer it for this account. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.GITHUB_TOKEN_READ]: () => ({
-    token: {
-      login: "ada",
-      hint: "…7f2c",
-      status: GITHUB_TOKEN_STATUS.VERIFIED,
-      statusAt: NOW - 2 * DAY,
-      addedAt: NOW - 30 * DAY,
-      expiresAt: NOW + 60 * DAY,
-    },
-  }),
   [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
   [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
@@ -708,17 +700,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
             role: WORKSPACE_ROLE.MEMBER,
             expiresAt: new Date(NOW + 5 * DAY).toISOString(),
             acceptUrl: "https://vespin.dev/invite/fixture",
-          },
-        ]
-      : [],
-  [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: ({ workspaceId }) =>
-    workspaceId === WORKSPACE.ACME
-      ? [
-          {
-            fullName: "theo/acme-scripts",
-            addedBy: "Theo Lindqvist",
-            addedAt: NOW - 6 * DAY,
-            removable: true,
           },
         ]
       : [],
@@ -835,6 +816,37 @@ const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
   ]),
 );
 
+/** The account's staged GitHub token, as the host holds it: a made-up hint, never a token. */
+const STAGED_GITHUB_TOKEN: AppGitHubTokens = {
+  [ACCOUNT_ID]: {
+    rows: {
+      token: {
+        login: "ada",
+        hint: "…7f2c",
+        status: GITHUB_TOKEN_STATUS.VERIFIED,
+        statusAt: NOW - 2 * DAY,
+        addedAt: NOW - 30 * DAY,
+        expiresAt: NOW + 60 * DAY,
+      },
+    },
+  },
+};
+
+/** Each staged workspace's token repositories, as the host holds them: one a teammate added to Acme, and none in the personal workspace. */
+const STAGED_TOKEN_REPOSITORIES: AppTokenRepositories = {
+  [WORKSPACE.ACME]: {
+    rows: [
+      {
+        fullName: "theo/acme-scripts",
+        addedBy: "Theo Lindqvist",
+        addedAt: NOW - 6 * DAY,
+        removable: true,
+      },
+    ],
+  },
+  [WORKSPACE.PERSONAL]: { rows: [] },
+};
+
 /** The staged workspace's memories, as the host holds them for Settings › Memory; one object across deliveries. */
 const STAGED_MEMORIES: AppMemories = { [WORKSPACE.ACME]: { rows: MEMORIES } };
 
@@ -913,9 +925,10 @@ const STAGED_INTEGRATIONS: AppIntegrations = {
  * Main's document as these profiles draw it: the fixture workspaces'
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
- * staged hosts beating, and its integrations, credentials, servers' tools,
- * the staged workspace's memories and skills, and the staged workspaces'
- * own integrations and Acme's Slack channels held. The members are held under
+ * staged hosts beating, and its integrations, credentials, GitHub token,
+ * servers' tools, the staged workspaces' token repositories, own
+ * integrations, and Acme's Slack channels, and the staged workspace's
+ * memories and skills held. The members are held under
  * every profile rather than only the signed-in ones, because ⌘K's People, a
  * task's assignee and creator faces, and the person page read them wherever
  * the window stands. Each slice laid over is one object across deliveries,
@@ -937,6 +950,8 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.WORKSPACE_INTEGRATIONS]: STAGED_WORKSPACE_INTEGRATIONS,
     [LIVE_READ.SLACK_CHANNELS]: STAGED_SLACK_CHANNELS,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
+    [LIVE_READ.GITHUB_TOKEN]: STAGED_GITHUB_TOKEN,
+    [LIVE_READ.TOKEN_REPOSITORIES]: STAGED_TOKEN_REPOSITORIES,
     [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,
     [LIVE_READ.REPOSITORY_LISTS]: STAGED_REPOSITORIES,
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),

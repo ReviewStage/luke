@@ -178,10 +178,12 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       return answer();
     });
   const host: WorkspaceProceduresDependencies["host"] = {
-    workspaceTokenRepositories: (params) =>
-      ask(`tokenRepositories:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { repositories: [] },
-      ),
+    workspaceTokenRepositoriesFollow: (params) =>
+      ask(`tokenRepositoriesFollow:${params.workspaceId}`, () => undefined),
+    workspaceTokenRepositoriesUnfollow: (params) =>
+      ask(`tokenRepositoriesUnfollow:${params.workspaceId}`, () => undefined),
+    workspaceTokenRepositoriesRetry: (params) =>
+      ask(`tokenRepositoriesRetry:${params.workspaceId}`, () => undefined),
     workspaceTokenRepositorySet: (params) =>
       ask(`tokenRepositorySet:${params.workspaceId}:${params.repository}:${params.added}`, () =>
         script.notPermitted ? refusal() : { repositories: [] },

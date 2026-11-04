@@ -21,12 +21,15 @@ import {
   ProgressCount,
   PULL_REQUEST_GLYPH,
   RELATED_TASK_CELLS,
+  SKELETON_SHAPE,
+  Skeleton,
   STATUS_TONE,
   TASK_ROW_CELL,
   TASK_ROW_EDGES,
   TaskPriorityMark,
   TaskRow,
   TaskRowDraft,
+  TaskRowSkeleton,
   TaskRows,
   TaskStatusMark,
   TEXT_TONE,
@@ -51,7 +54,8 @@ import { CatalogSection } from "../section";
  * ⇧-click, and a menu their ⋯, a right-click, and the menu key open; a
  * composer's dock of related tasks, bare of a box's gutter and a ⋯, its
  * rows' kinds leading and their × at their ends; and a quick add's draft
- * raised as a card over a row, its chips in their cells. Synthetic tasks.
+ * raised as a card over a row, its chips in their cells; and a list never
+ * chosen still being read, its rows' blocks in their cells. Synthetic tasks.
  */
 
 /** Does nothing: the catalog's menus act on nothing. */
@@ -338,6 +342,38 @@ function DraftOverRow(): React.JSX.Element {
   );
 }
 
+/** The cells a glance at a task draws, as Home's Recent does. */
+const GLANCE_CELLS = [
+  TASK_ROW_CELL.STATUS,
+  TASK_ROW_CELL.REPOSITORY,
+  TASK_ROW_CELL.AGENTS,
+  TASK_ROW_CELL.UPDATED,
+] as const;
+
+/** How wide each placeholder row's name stands. */
+const READING_NAMES = ["46%", "38%", "54%"] as const;
+
+/** A list never chosen still being read: each row's own cells holding blocks. */
+function ReadingRowsSkeleton(): React.JSX.Element {
+  return (
+    <TaskRows label="Recent" cells={GLANCE_CELLS} edges={TASK_ROW_EDGES.UNCHOSEN}>
+      {READING_NAMES.map((name) => (
+        <TaskRowSkeleton
+          key={name}
+          cells={GLANCE_CELLS}
+          name={name}
+          edges={TASK_ROW_EDGES.UNCHOSEN}
+          content={{
+            [TASK_ROW_CELL.STATUS]: <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="16px" />,
+            [TASK_ROW_CELL.REPOSITORY]: <Skeleton width="72px" />,
+            [TASK_ROW_CELL.UPDATED]: <Skeleton width="24px" />,
+          }}
+        />
+      ))}
+    </TaskRows>
+  );
+}
+
 function TaskRowsExample(): React.JSX.Element {
   return (
     <>
@@ -352,6 +388,9 @@ function TaskRowsExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="task-row-draft" title="A quick add's draft over a row">
         <DraftOverRow />
+      </CatalogSection>
+      <CatalogSection id="task-rows-reading" title="A list never chosen, still being read">
+        <ReadingRowsSkeleton />
       </CatalogSection>
     </>
   );

@@ -344,6 +344,7 @@ import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -358,6 +359,7 @@ import type {
   AppBrowserTabs,
   AppChapters,
   AppDevicePresences,
+  AppGitHubTokens,
   AppHistories,
   AppHolderInboxes,
   AppHostRead,
@@ -376,6 +378,7 @@ import type {
   AppRepositoryLists,
   AppSlackChannels,
   AppThisMacHosts,
+  AppTokenRepositories,
   AppWorkspaceIntegrations,
   AppWorkspaceMembers,
   AppWorkspaceTools,
@@ -452,6 +455,8 @@ export interface HostOperator {
   tasksRefresh(): Effect.Effect<void>;
   /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
+  /** A window said the changes made offline the service refused: the host clears their count for every window. */
+  tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
@@ -678,10 +683,20 @@ export interface HostOperator {
   ): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
-  /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
-  workspaceTokenRepositories(
+  /** The repositories members added to a workspace on their own GitHub tokens, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onTokenRepositoriesChanged`. */
+  workspaceTokenRepositoriesFollow(
     params: TasksWorkspaceTokenRepositoriesParams,
-  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+  ): Effect.Effect<void>;
+  /** One workspace's token repositories let go by the windows. */
+  workspaceTokenRepositoriesUnfollow(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<void>;
+  /** One workspace's held token repositories asked again at once, as Try again asks; done once the ask has landed. */
+  workspaceTokenRepositoriesRetry(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<void>;
+  /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
+  onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
   /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
   workspaceTokenRepositorySet(
     params: TasksWorkspaceTokenRepositorySetParams,
@@ -891,8 +906,14 @@ export interface HostOperator {
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   chatGptSignInCancel(): Effect.Effect<void>;
-  /** The member's own GitHub token as its login, hint, and status; or why there is none. */
-  githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
+  githubTokenFollow(): Effect.Effect<void>;
+  /** The member's GitHub token let go by the windows. */
+  githubTokenUnfollow(): Effect.Effect<void>;
+  /** The member's held GitHub token asked again at once, as Try again asks; done once the ask has landed. */
+  githubTokenRetry(): Effect.Effect<void>;
+  /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
+  onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
   /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
@@ -964,6 +985,8 @@ export interface HostOperator {
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
+  /** How many changes made offline the service refused as they were sent again, each time the count moves. */
+  onOfflineRefusedChanged(listener: (count: number) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -1326,6 +1349,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
+    tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
       Effect.map(
@@ -1783,12 +1807,30 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
         answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
       ),
-    workspaceTokenRepositories: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES, {
+    workspaceTokenRepositoriesFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, {
           workspaceId: params.workspaceId,
         }),
-        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceTokenRepositoriesUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceTokenRepositoriesRetry: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    onTokenRepositoriesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
+        // Note that the held repositories are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppTokenRepositories>(payload) : undefined),
+        listener,
       ),
     workspaceTokenRepositorySet: (params) =>
       Effect.map(
@@ -2331,10 +2373,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
-    githubTokenRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
+    githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
+    githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
+    githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
+    onGitHubTokenChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.GITHUB_TOKEN_CHANGED,
+        // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
+        (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
+        listener,
       ),
     githubTokenSave: (params) =>
       Effect.map(
@@ -2551,6 +2598,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                   : undefined),
               }
             : undefined,
+        listener,
+      ),
+    onOfflineRefusedChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.OFFLINE_REFUSED_CHANGED,
+        (payload) => (isRecord(payload) && isWireNumber(payload.count) ? payload.count : undefined),
         listener,
       ),
     onTasksChanged: (listener) =>

@@ -9,7 +9,6 @@ import {
   PAGE_FRAME,
   Skeleton,
   STATUS_TONE,
-  useMinute,
   useRovingKeys,
 } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
@@ -18,6 +17,7 @@ import { useRef } from "react";
 import { useInboxRowDrafts } from "../composer-drafts.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
+import { SetupSections } from "../onboarding/setup-sections.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
 import { type InboxListed, NEEDS_YOU, needsYou } from "../tasks/inbox-model.js";
@@ -27,10 +27,9 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { SetupSections } from "../onboarding/setup-sections.js";
 import { letGoOfFocus, useHomeNewTask, welcomed } from "./desktop-welcome.js";
-import { PersonSectionFrame, RowsSkeleton, SectionSkeleton } from "./person-frame.js";
-import { RecentRow } from "./recent-row.js";
+import { PersonSectionFrame, SectionSkeleton } from "./person-frame.js";
+import { RecentTasks, RecentTasksSkeleton } from "./recent-tasks.js";
 
 /**
  * desktop-home.tsx -- Home: the page the window rests on with no task open, opening on New task's composer under a greeting and saying what waits on the developer and the tasks worked on latest.
@@ -42,8 +41,8 @@ import { RecentRow } from "./recent-row.js";
  * ChatGPT's do; then Inbox, every open item of the listed workspace waiting
  * on the reader, as the Inbox's own row draws it, a press opening the Inbox
  * on it; then Recent, the listed workspace's tasks with the latest activity,
- * each a task's row as a person's page lists it (`recent-row.tsx`), a press
- * opening it. Its sections are a person's page's (`person-frame.tsx`),
+ * each the Tasks page's row as a person's page lists it (`recent-tasks.tsx`),
+ * a press opening it. Its sections are a person's page's (`person-frame.tsx`),
  * whose voice was Home's to begin with. Nothing waiting says so in the
  * Inbox's own words. An account with nothing yet is greeted as new, and
  * asked over the composer for what setup left undone (`setup-sections.tsx`).
@@ -175,7 +174,6 @@ function HomeRecent({
   room: ShellRoom;
   staged: boolean;
 }): React.JSX.Element | null {
-  const now = useMinute();
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
   const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
   const recent = recentTasks(tasks.listed.tasks, room);
@@ -193,18 +191,7 @@ function HomeRecent({
         </div>
       ) : null}
       {recent.length === 0 ? null : (
-        <List label={RECENT} joinsWalk>
-          {recent.map((task) => (
-            <RecentRow
-              key={task.id}
-              tasks={tasks}
-              task={task}
-              now={now}
-              unread={unread(task)}
-              onOpen={() => tasks.onSelect(task.id)}
-            />
-          ))}
-        </List>
+        <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
       )}
     </PersonSectionFrame>
   );
@@ -246,7 +233,7 @@ function HomeSectionsSkeleton(): React.JSX.Element {
       <SectionSkeleton>
         <InboxListSkeleton />
       </SectionSkeleton>
-      <RowsSkeleton label="Reading your tasks…" />
+      <RecentTasksSkeleton label="Reading your tasks…" />
     </>
   );
 }

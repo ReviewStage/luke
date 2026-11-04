@@ -42,7 +42,8 @@ import { workspaceReachableBy } from "./workspace-store.js";
  * in (`slackStartRepository`) unless the message names one. A thread an agent was
  * started from is kept against it (`slackAgentThread`), and moved to the
  * agent that continues it where that one ended (`moveSlackAgentThread`), and
- * each of the agent's settled turns is claimed there once (`claimSlackThreadTurn`).
+ * each of the agent's settled turns is claimed there once (`claimSlackThreadTurn`);
+ * the task such an agent stands on is the one its message made (`isSlackTask`).
  * An owner or admin names the repository Slack starts default to, for the
  * workspace and for each channel (`slackStartRepositories`); a channel's is
  * forgotten when the bot leaves it.
@@ -413,6 +414,20 @@ const claimThreadTurn = SqlSchema.findAll({
     ),
 });
 
+const findSlackMadeTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ agentId: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ agentId: slackAgentThread.agentId })
+        .from(slackAgentThread)
+        .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+        .where(eq(agentTable.taskId, taskId))
+        .limit(1),
+    ),
+});
+
 /** The workspace's default repository for Slack starts. */
 const findDefaultRepository = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -689,6 +704,16 @@ export function claimSlackThreadTurn(
   turnId: string,
 ): TaskStoreEffect<readonly (typeof SlackThreadSchema.Type)[]> {
   return claimThreadTurn({ agentId, turnId });
+}
+
+/**
+ * Whether the task is one a Slack message made for the agent it started,
+ * which is an agent a thread is kept for standing on it; a Slack start makes
+ * its agent's task, and its continue lands on that same task, so no other
+ * task holds a thread's agent.
+ */
+export function isSlackTask(taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(findSlackMadeTask({ taskId }), Option.isSome);
 }
 
 /** The workspace's default repository for Slack starts, and each channel's, as an owner or admin named them. */

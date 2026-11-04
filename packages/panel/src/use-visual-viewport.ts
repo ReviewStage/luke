@@ -30,21 +30,26 @@
  * stays the reference, as before.
  *
  * iOS Safari opens its keyboard over the page and pans the visual viewport
- * down to the focused field, so the whole page slides up, and a stage that
- * followed the pan slid back down after it; WebKit does not redraw the caret
- * through that move, so it stood a keyboard's height from the words. So at
- * the page's own scale the pan is undone (`scrollTo(0, 0)`): the stage stays
- * at the window's top, ends where the keyboard begins, and the caret of the
- * field focused is scrolled into view within its own column, as a native app
- * keeps it above the keyboard. Where an engine keeps its pan anyway, the
- * stage still follows it, as before. A pinch's pan is the developer's own and
- * is never undone, and a window that shrinks for the keyboard pans nothing.
- * The stage is let down again as the focus leaves the field, ahead of the
- * keyboard's slide away, which WebKit measures only once it has ended.
+ * down to the focused field, so the page slides up under the keyboard. The
+ * stage follows that pan rather than undoing it: it stands where the visible
+ * part begins and ends where the keyboard does, so it is always over what is
+ * seen and the composer at its foot always stands on the keyboard. Note that
+ * the pan is never scrolled back, because Safari pans again to keep the caret
+ * in view as words are typed, and so does the editor's own reveal of its
+ * caret, so a page that undid each pan fought both, the composer jumping
+ * under the fingers until the pans happened to agree.
+ *
+ * A stage that follows the pan takes back what the pan showed, though, so a
+ * field inside a scrolling column, the plan's or Home's, can be left with its
+ * caret below the column's new foot; as the keyboard rises, that column alone
+ * is scrolled to keep the caret in view. And the stage is let down again as
+ * the focus leaves the field, ahead of the keyboard's slide away, which
+ * WebKit measures only once it has ended.
  */
 
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { useLayoutEffect } from "react";
+import { scrollerOf } from "./scroll-within.js";
 
 /** How far down the layout viewport the visible part begins, as a phone pans it to a focused field. */
 const VIEWPORT_TOP = "--ui-viewport-top";
@@ -62,17 +67,6 @@ const CARET_MARGIN = 24;
 /** Whether the page is drawn at its own scale rather than pinch-zoomed. */
 function unzoomed(viewport: VisualViewport): boolean {
   return Math.abs(viewport.scale - 1) <= UNZOOMED_TOLERANCE;
-}
-
-/** The nearest box around `element` that scrolls its content up and down; none where nothing does. */
-function scrollerOf(element: Element): HTMLElement | undefined {
-  for (let at = element.parentElement; at !== null; at = at.parentElement) {
-    const { overflowY } = getComputedStyle(at);
-    if ((overflowY === "auto" || overflowY === "scroll") && at.scrollHeight > at.clientHeight) {
-      return at;
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -109,8 +103,8 @@ function typedField(target: EventTarget | null): target is HTMLElement {
 
 /**
  * The focused field's caret scrolled up into view within its own column,
- * above `bottom`, where the keyboard now covers it; nothing while no field
- * is focused.
+ * above `bottom`, where the keyboard now stands; nothing while no field is
+ * focused.
  */
 function caretAboveKeyboard(bottom: number): void {
   const field = document.activeElement;
@@ -133,30 +127,26 @@ export function useVisualViewport(): void {
     const viewport = window.visualViewport;
     if (viewport === null || viewport === undefined) return undefined;
     const root = document.documentElement.style;
-    /** Where the stage begins, as last measured at the page's own scale. */
+    /** Where the visible part begins, as last measured at the page's own scale. */
     let top = 0;
-    /** How much of the window the keyboard covered as last measured. */
+    /** How much of the window's height the keyboard took from the stage as last measured, whether below it or by a pan. */
     let covered = 0;
     /**
      * Whether the keyboard is going: the focus left every field it was up
-     * for, while the viewport still measures it. Note that the stage is let
-     * down at once, because WebKit measures the keyboard gone only once it
-     * has slid away (WebKit bug 265578, with Safari's address bar at the
-     * bottom), and the stage held short until then trailed it by its whole
-     * slide, the room it left standing empty.
+     * for, while the viewport still measures it. Note that the stage takes
+     * the whole window at once, because WebKit measures the keyboard gone
+     * only once it has slid away (WebKit bug 265578, with Safari's address
+     * bar at the bottom), and the stage held short until then trailed it by
+     * its whole slide, the room it left standing empty.
      */
     let going = false;
-    /** Where the stage ends in the window, as last measured: the keyboard's top while it is up. */
-    let foot = window.innerHeight;
     const write = () => {
       let layout: number;
       let bottom: number;
       if (unzoomed(viewport)) {
-        // The keyboard's pan undone, so the stage stays at the window's top.
-        if (viewport.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
-        // A viewport still panned (`offsetTop`) is seen, not covered: what
-        // stands above it is the top's, and only what stands below its foot
-        // is the keyboard's.
+        // A viewport panned down to the field (`offsetTop`) is seen, not
+        // covered: the stage begins there, and only what stands below its
+        // foot is the keyboard's.
         const seen = visibleViewport();
         top = seen.top;
         layout = window.innerHeight;
@@ -167,20 +157,20 @@ export function useVisualViewport(): void {
         bottom = Math.min(layout, top + Math.round(viewport.height * viewport.scale));
       }
       // The keyboard measured gone, or let go of ahead of it.
-      if (going && bottom >= layout) going = false;
-      if (going) bottom = layout;
-      const inset = Math.max(0, layout - bottom);
-      root.setProperty(VIEWPORT_TOP, `${top}px`);
-      root.setProperty(STAGE_HEIGHT, `${bottom - top}px`);
-      root.setProperty(KEYBOARD_INSET, `${inset}px`);
+      if (going && bottom - top >= layout) going = false;
+      const stageTop = going ? 0 : top;
+      const stageBottom = going ? layout : bottom;
+      const taken = layout - (stageBottom - stageTop);
+      root.setProperty(VIEWPORT_TOP, `${stageTop}px`);
+      root.setProperty(STAGE_HEIGHT, `${stageBottom - stageTop}px`);
+      root.setProperty(KEYBOARD_INSET, `${Math.max(0, layout - stageBottom)}px`);
       // A keyboard that rose, or grew, over the focused field keeps its caret in view.
-      if (inset > covered) caretAboveKeyboard(bottom);
-      foot = bottom;
-      covered = inset;
+      if (taken > covered) caretAboveKeyboard(stageBottom);
+      covered = taken;
     };
     // Focus leaving every typed field lets the keyboard go at once; a field taking it measures the keyboard again.
     const left = (event: FocusEvent) => {
-      if (covered === 0 || typedField(event.relatedTarget)) return;
+      if (covered <= 0 || typedField(event.relatedTarget)) return;
       going = true;
       write();
     };
@@ -188,8 +178,6 @@ export function useVisualViewport(): void {
       if (!typedField(event.target)) return;
       going = false;
       write();
-      // A field focused under a keyboard already up keeps its caret in view too, as the pan that would have shown it is undone.
-      if (covered > 0) caretAboveKeyboard(foot);
     };
     write();
     viewport.addEventListener("resize", write);

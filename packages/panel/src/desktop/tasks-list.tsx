@@ -32,8 +32,6 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
-  GLYPH_INK,
-  GlyphSlot,
   GROUP_HEAD,
   GROUP_ROWS,
   GROUP_SURFACE,
@@ -43,15 +41,12 @@ import {
   ListMotion,
   motionKey,
   motionRows,
-  OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
   reachedKey,
   SelectionBar,
   SelectionRegion,
   Stack,
-  TASK_AGENTS_MARK_SIZE,
-  TaskAgentsMark,
   TaskPriorityMark,
   type TaskRowCell,
   TaskRowDraft,
@@ -60,15 +55,14 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Time,
   taskRowColumns,
   useLeaving,
   useMinute,
   useRovingKeys,
 } from "@repo/ui";
 import { actorName, creatorActor } from "@repo/ui/actor-model";
-import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
-import { childTaskCounts, repositoryLabel, TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
+import { FolderXIcon, GLYPH, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
+import { childTaskCounts, repositoryLabel } from "@repo/ui/task-list-model";
 import {
   placeWrites,
   restoreWrites,
@@ -608,8 +602,7 @@ function listDrops(
 /**
  * One task's row on the page (`task-list-row.tsx`), and the cells only the
  * page draws, each in its own column where the view draws it: what waits on
- * the reader, its repository led by its owner's picture, its creator's face,
- * its maker named before it, its agents' work, and when it last moved. Note
+ * the reader, and its creator's face, its maker named before it. Note
  * that it is held while what it is handed stands (`memo`), each prop a plain
  * value or a steady door, so a change to one task draws its row alone, and
  * the minute moves only its time.
@@ -677,26 +670,6 @@ const TasksPageRow = memo(function TasksPageRow({
       onStanding={(standing) => onStanding(task, standing)}
       content={{
         [TASK_PROPERTY.WAITING]: <WaitingBadge count={waiting} />,
-        [TASK_PROPERTY.REPOSITORY]: (
-          <>
-            {task.repository === null ? (
-              <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-                <FolderXIcon />
-              </GlyphSlot>
-            ) : (
-              <RepositoryPicture
-                repository={task.repository}
-                pictures={tasks.pictures}
-                fallback={
-                  <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-                    <GLYPH.REPOSITORY />
-                  </GlyphSlot>
-                }
-              />
-            )}
-            <OneLine>{repositoryName}</OneLine>
-          </>
-        ),
         // Note that a task the app or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
         [TASK_PROPERTY.CREATOR]: (
           <>
@@ -713,10 +686,6 @@ const TasksPageRow = memo(function TasksPageRow({
             <CreatorFace task={task} onOpen={onOpen} />
           </>
         ),
-        [TASK_PROPERTY.AGENTS]: (
-          <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
-        ),
-        [TASK_PROPERTY.UPDATED]: <Time at={taskTime(task, TASK_ORDER.UPDATED)} hint={false} />,
       }}
     />
   );

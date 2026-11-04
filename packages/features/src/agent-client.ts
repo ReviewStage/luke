@@ -997,14 +997,15 @@ export class HostedAgentClient {
     return this.#change(agentId, admitted, CHOOSE_REFUSALS);
   }
 
-  /** Renames one agent, or clears its title with an empty one, answering it as it then stands; a title past the bound is refused here without traveling. */
+  /** Renames one agent, or clears its title with an empty one, under the idempotency key given where one is, answering it as it then stands; a title past the bound is refused here without traveling. */
   rename(
     agentId: string,
     request: AgentRenameRequest,
+    key?: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(agentRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#change(agentId, admitted, ROW_REFUSALS);
+    return this.#change(agentId, admitted, ROW_REFUSALS, key);
   }
 
   /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
@@ -1025,10 +1026,11 @@ export class HostedAgentClient {
     return this.#change(agentId, { archived: request.archived }, ARCHIVE_REFUSALS);
   }
 
-  /** Pins one agent for the account alone, or unpins it, answering it as it then stands. */
+  /** Pins one agent for the account alone, or unpins it, under the idempotency key given where one is, answering it as it then stands. */
   pin(
     agentId: string,
     request: AgentPinRequest,
+    key?: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return this.#change(
       agentId,
@@ -1036,17 +1038,24 @@ export class HostedAgentClient {
         ? { pinned: request.pinned }
         : { pinned: request.pinned, position: request.position },
       ROW_REFUSALS,
+      key,
     );
   }
 
-  /** One change of an agent, answering it as it then stands. */
+  /** One change of an agent, under the idempotency key given where one is, answering it as it then stands. */
   #change(
     agentId: string,
     body: AgentChangeRequest,
     named: NamedRefusals,
+    key?: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(
-      askHosted(this.#hosted.agents.change, { params: { id: agentId }, body }),
+      askHosted(
+        this.#hosted.agents.change,
+        { params: { id: agentId }, body },
+        HOSTED_DEADLINE.USUAL,
+        key,
+      ),
       named,
     );
   }
