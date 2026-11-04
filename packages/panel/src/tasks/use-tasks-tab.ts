@@ -2987,7 +2987,7 @@ export function useTasksTab(input: {
     if (!TRANSCRIPT_PLACES.has(place.kind) || agents.agentIds?.includes(place.agentId) === true) {
       showOnTask(planId, place);
     } else if (archivedAgent(place.agentId)) {
-      openOnAgentPage(place);
+      openArchived(place);
     } else if (liveAgents !== undefined) {
       showOnTask(planId, place);
     } else {
@@ -2996,9 +2996,15 @@ export function useTasksTab(input: {
       readAgentById(act, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         if (agent?.archivedAt === undefined) showOnTask(planId, place);
-        else openOnAgentPage(place);
+        else openArchived(place);
       });
     }
+  };
+
+  // An archived agent's transcript place on its own page, a side panel filling the window giving way, as a column tab shown has it give way.
+  const openArchived = (place: AgentPlace) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    openOnAgentPage(place);
   };
 
   // An agent's place on its task, its tab among the column's, read as standing.
@@ -3105,7 +3111,7 @@ export function useTasksTab(input: {
         if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
         else if (agent.planId === null) openOnAgentPage(place);
         else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
-          openOnAgentPage(place);
+          openArchived(place);
         else showOnTask(agent.planId, place);
       });
     }
