@@ -146,6 +146,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   AGENTS: "agents",
   HOSTS: "hosts",
   INTEGRATIONS: "integrations",
+  MCP: "mcp",
   SKILLS: "skills",
   API_KEYS: "api_keys",
   /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */

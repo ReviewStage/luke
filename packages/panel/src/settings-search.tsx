@@ -142,7 +142,7 @@ export function resultPageWord(page: SettingsView): string {
 const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Appearance, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
-const INTEGRATION_WORDS = "connect disconnect integration mcp";
+const INTEGRATION_WORDS = "connect disconnect integration";
 
 /** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
 const EXPERIMENT_WORDS = "experiment preview beta labs early try";
@@ -235,6 +235,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
+    // The MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MCP_CLIENTS,
+          label: "Agents with access",
+          page: SETTINGS_VIEW.MCP,
+          haystack: ["Agents with access", "mcp server clients oauth allowed revoke access"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MCP_CONNECT,
+          label: "Connect an agent",
+          page: SETTINGS_VIEW.MCP,
+          haystack: [
+            "Connect an agent",
+            "mcp server url address claude code codex chatgpt connector",
+          ],
+        }
+      : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,

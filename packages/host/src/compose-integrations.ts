@@ -77,7 +77,7 @@ import type { WindowFocus } from "./window-focus.js";
  * every ask answers unanswered.
  *
  * The outside MCP clients the account allowed are fetched the same way,
- * under the account signed in, while Settings › Integrations holds them,
+ * under the account signed in, while Settings › MCP holds them,
  * and told as `MCP_CLIENTS_CHANGED` events. A revoke that lands lays the
  * clients it answered as they then stand before it answers, so the
  * window's list already stands without the client; one that did not finish
@@ -315,7 +315,7 @@ function composed(
     });
 
   const methods: HostMethodTable = {
-    // The outside MCP clients are held for the windows while Settings › Integrations shows them, under the account signed in, and told only on the app state (`MCP_CLIENTS_CHANGED`); a revoke's own answer is laid there too.
+    // The outside MCP clients are held for the windows while Settings › MCP shows them, under the account signed in, and told only on the app state (`MCP_CLIENTS_CHANGED`); a revoke's own answer is laid there too.
     [GATEWAY_METHOD.MCP_CLIENTS_FOLLOW]: () => Effect.as(clients.hold.follow, {}),
     [GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW]: () => Effect.as(clients.hold.unfollow, {}),
     [GATEWAY_METHOD.MCP_CLIENTS_RETRY]: () =>

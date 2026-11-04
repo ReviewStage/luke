@@ -6,6 +6,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -33,7 +34,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
- * mcp-clients-section.tsx -- Settings › Integrations' outside MCP clients: the agents the account allowed in, each revoked from its row, and how to connect one.
+ * mcp-clients-section.tsx -- Settings › MCP's outside MCP clients: the agents the account allowed in, each revoked from its row, and how to connect one.
  *
  * An agent that signs a member in to the MCP server (Claude Code, Codex,
  * Claude.ai, ChatGPT) holds the member's Allow from the consent page until
@@ -48,9 +49,10 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * an agent half revoked could sign in again without being asked.
  *
  * Under them, Connect an agent gives the server's address with its Copy,
- * and how each agent this page knows adds it, as each agent's own docs say
- * it: Claude Code and Codex by a command, each with its Copy, and Claude.ai
- * and ChatGPT through their own settings.
+ * drawn under its row at full width as each command is, and how each agent
+ * this page knows adds it, as each agent's own docs say it: Claude Code and
+ * Codex by a command, each with its Copy, and Claude.ai and ChatGPT through
+ * their own settings.
  *
  * Each section is `@repo/ui`'s `SettingsSection` and each row its
  * `SettingsRow`, an address or a command its `CopyField`, and Revoke the
@@ -67,11 +69,11 @@ const SERVER_NAME = PRODUCT_NAME.toLowerCase();
 
 const PAGE_LINE = {
   READ_FAILED: "The agents with access could not be read.",
-  NONE: "No agent can use your account yet. Connect one below.",
+  NONE: "No agents yet.",
   UNNAMED: "Unnamed agent",
   SERVER: "Server URL",
-  SERVER_WORDS: `Add this URL to an agent that supports remote MCP servers. It asks you to allow it in ${PRODUCT_NAME}, then shows up above.`,
-  REVOKED: `Revoked. Access it already holds stops working within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
+  SERVER_WORDS: "Add this URL to any agent that supports remote MCP servers.",
+  REVOKED: `Revoked. Its access ends within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
 } as const;
 
 /** How one agent adds the server: the words a member follows, and the command where it takes one. */
@@ -101,7 +103,7 @@ const CONNECT_STEPS: readonly ConnectStep[] = [
   {
     name: "ChatGPT",
     words:
-      "In Plugins, choose + › Add custom MCP server, paste the server URL under Connection, then choose Create as a plugin. It asks you to sign in the first time it uses a tool.",
+      "In Plugins, choose + › Add custom MCP server, paste the server URL under Connection, then choose Create as a plugin.",
   },
 ];
 
@@ -110,8 +112,8 @@ const CLIENT_SKELETON_ROWS = 1;
 
 /**
  * The sections that stand while the agents are read: a row to each agent
- * likely, ending in its Revoke, and Connect an agent's rows as its steps
- * declare them, the address first with its field and Copy.
+ * likely, ending in its Revoke, and Connect an agent's rows, the address
+ * first and then each step its declaration lists, each field under its row.
  */
 const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
@@ -123,13 +125,10 @@ const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   },
   {
     headed: true,
-    rows: [
-      {
-        described: true,
-        controls: [SETTINGS_SKELETON_CONTROL.FIELD, SETTINGS_SKELETON_CONTROL.MORE],
-      },
-      ...CONNECT_STEPS.map(() => ({ described: true, controls: [] })),
-    ],
+    rows: Array.from({ length: 1 + CONNECT_STEPS.length }, () => ({
+      described: true,
+      controls: [],
+    })),
   },
 ];
 
@@ -249,17 +248,20 @@ function shownClients(
 /** Connect an agent: the server's address with its Copy, and how each agent adds it. */
 function ConnectSection({ serverUrl }: { serverUrl: string }): React.JSX.Element {
   return (
-    <SettingsSection title={SECTION_TITLE.CONNECT}>
-      <SettingsRow label={PAGE_LINE.SERVER} description={PAGE_LINE.SERVER_WORDS}>
-        {() => (
+    <SettingsSection title={SECTION_TITLE.CONNECT} anchor={SETTINGS_SEARCH_ROW.MCP_CONNECT}>
+      <SettingsRow
+        label={PAGE_LINE.SERVER}
+        description={PAGE_LINE.SERVER_WORDS}
+        below={() => (
           <CopyField
             label={PAGE_LINE.SERVER}
             value={serverUrl}
             what="URL"
             copy={copyThroughShell}
+            width={COPY_FIELD_WIDTH.FULL}
           />
         )}
-      </SettingsRow>
+      />
       {CONNECT_STEPS.map((step) => {
         const command = step.command?.(serverUrl);
         return (
@@ -295,7 +297,7 @@ export function McpClientsSections(): React.JSX.Element {
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
   if (rows === undefined) {
     return status === HOST_READ_STATUS.FAILED ? (
-      <SettingsSection title={SECTION_TITLE.CLIENTS}>
+      <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
         <SettingsLine>
           <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
             {PAGE_LINE.READ_FAILED}
@@ -312,7 +314,7 @@ export function McpClientsSections(): React.JSX.Element {
   const shown = shownClients(rows.clients, revoked);
   return (
     <>
-      <SettingsSection title={SECTION_TITLE.CLIENTS}>
+      <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
         {shown.length === 0 ? (
           <SettingsLine>{PAGE_LINE.NONE}</SettingsLine>
         ) : (

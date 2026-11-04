@@ -1716,7 +1716,7 @@ answers none and the route refuses the call.
 **Listing and revoking.** A client the member allowed is an `oauth_client`
 row (its name, redirects, and `client_discovery_id` for a document-named
 one, `user_id` empty for both), its grant the member's `oauth_consent` row
-and the `oauth_refresh_token` rows under it. Settings › Integrations lists
+and the `oauth_refresh_token` rows under it. Settings › MCP lists
 and revokes them through `src/member-mcp/clients-procedures.ts`, at
 `/api/account/mcp-clients`. The list reads the member's consents for every
 client but the desktop's through Drizzle on the account's bearer
