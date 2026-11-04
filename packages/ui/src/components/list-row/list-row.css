@@ -371,6 +371,21 @@
     opacity: 0.45;
   }
 
+  /* A latent row keeps its place unseen at rest, a way back to something
+     put away, and comes in while the row is hovered or holds the keyboard.
+     Note that it is faded by its opacity, never its visibility, so a reader
+     still reaches it, and a screen with no hover draws it at rest. */
+  @media (hover: hover) {
+    .ui-list-row[data-latent="true"] {
+      opacity: 0;
+      transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
+    }
+
+    .ui-list-row[data-latent="true"]:is(:hover, :has(:focus-visible)) {
+      opacity: 1;
+    }
+  }
+
   .ui-list-row-description,
   .ui-list-row-meta {
     color: var(--ui-color-text-muted);

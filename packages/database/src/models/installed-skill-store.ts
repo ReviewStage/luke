@@ -13,6 +13,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
 import { and, asc, eq, exists, or, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { installedSkill, installedSkillFile } from "../schemas/installed-skill.js";
@@ -37,7 +38,9 @@ import { roleAmong } from "./workspace-store.js";
  * transaction: the files are checked first, at least `SKILL.md` and within
  * `INSTALLED_SKILL_BOUNDS`, which a check on one row cannot hold, while the
  * name's rule and each file's own bound are the tables' checks. A name
- * already held in its scope is refused as `InstalledSkillNameTaken`.
+ * already held in its scope is refused as `InstalledSkillNameTaken`. Every
+ * write answers the transaction it committed in, which a reader holding the
+ * skills live (`installedSkillsLiveStatement`) waits for.
  */
 
 /** A skill's name already held in its scope: by the account's own personal skill, or by the workspace's. */
@@ -72,6 +75,15 @@ const InstalledSkillRowSchema = Schema.Struct({
 /** One installed skill as a list reads it, without its files. */
 export type InstalledSkill = typeof InstalledSkillRowSchema.Type;
 
+/** A skill as a write left it, beside the transaction it committed in. */
+const WrittenSkillRowSchema = Schema.Struct({
+  ...InstalledSkillRowSchema.fields,
+  txid: Schema.String,
+});
+
+/** One installed skill as a write left it, and the transaction it committed in, which a reader following the skills waits for. */
+export type WrittenSkill = typeof WrittenSkillRowSchema.Type;
+
 const INSTALLED_SKILL_COLUMNS = {
   id: installedSkill.id,
   ownerUserId: installedSkill.ownerUserId,
@@ -87,6 +99,16 @@ const INSTALLED_SKILL_COLUMNS = {
   createdAt: installedSkill.createdAt,
   updatedAt: installedSkill.updatedAt,
 };
+
+/**
+ * The id of the transaction a write committed in, read in its own
+ * `RETURNING`; within a store transaction's savepoint it is still the outer
+ * transaction's, which every write of an install shares.
+ */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+/** A skill's columns as a write returns them, its transaction beside them. */
+const WRITTEN_SKILL_COLUMNS = { ...INSTALLED_SKILL_COLUMNS, ...TXID };
 
 /** One file of an installed skill: its path from the skill's folder, its bytes, and their hex SHA-256. */
 interface InstalledSkillFile {
@@ -278,7 +300,7 @@ const insertSkill = SqlSchema.findAll({
     computedHash: Schema.String,
     now: Schema.Date,
   }),
-  Result: InstalledSkillRowSchema,
+  Result: WrittenSkillRowSchema,
   execute: ({ now, ...row }) =>
     Database.use((db) =>
       db
@@ -286,7 +308,7 @@ const insertSkill = SqlSchema.findAll({
         .values({ ...row, enabled: true, createdAt: now, updatedAt: now })
         // Note that the conflict is a name held in its scope, by either partial index.
         .onConflictDoNothing()
-        .returning(INSTALLED_SKILL_COLUMNS),
+        .returning(WRITTEN_SKILL_COLUMNS),
     ),
 });
 
@@ -385,14 +407,14 @@ const writeRevision = SqlSchema.findAll({
     computedHash: Schema.String,
     now: Schema.Date,
   }),
-  Result: InstalledSkillRowSchema,
+  Result: WrittenSkillRowSchema,
   execute: ({ userId, id, now, ...changes }) =>
     Database.use((db) =>
       db
         .update(installedSkill)
         .set({ ...changes, updatedAt: now })
         .where(allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE, id))
-        .returning(INSTALLED_SKILL_COLUMNS),
+        .returning(WRITTEN_SKILL_COLUMNS),
     ),
 });
 
@@ -403,26 +425,26 @@ const writeEnabled = SqlSchema.findAll({
     enabled: Schema.Boolean,
     now: Schema.Date,
   }),
-  Result: InstalledSkillRowSchema,
+  Result: WrittenSkillRowSchema,
   execute: ({ userId, id, enabled, now }) =>
     Database.use((db) =>
       db
         .update(installedSkill)
         .set({ enabled, updatedAt: now })
         .where(allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE, id))
-        .returning(INSTALLED_SKILL_COLUMNS),
+        .returning(WRITTEN_SKILL_COLUMNS),
     ),
 });
 
 const removeSkill = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ txid: Schema.String }),
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
         .delete(installedSkill)
         .where(allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE, id))
-        .returning({ id: installedSkill.id }),
+        .returning(TXID),
     ),
 });
 
@@ -463,7 +485,7 @@ const writeShare = SqlSchema.findAll({
     organizationId: Schema.String,
     now: Schema.Date,
   }),
-  Result: InstalledSkillRowSchema,
+  Result: WrittenSkillRowSchema,
   execute: ({ userId, id, organizationId, now }) =>
     Database.use((db) =>
       db
@@ -478,7 +500,7 @@ const writeShare = SqlSchema.findAll({
         .where(
           and(eq(installedSkill.id, id), ownPersonal(userId), memberOf(userId, organizationId)),
         )
-        .returning(INSTALLED_SKILL_COLUMNS),
+        .returning(WRITTEN_SKILL_COLUMNS),
     ),
 });
 
@@ -524,17 +546,17 @@ export function readInstalledSkill(
 }
 
 /**
- * Installs the skill with its files, enabled, in one transaction: nothing
- * where the account may not install in its scope (a workspace it is not a
- * current member of), `InstalledSkillNameTaken` where its scope holds the
- * name already, and `InstalledSkillFilesRefused` where its files break
- * the bounds.
+ * Installs the skill with its files, enabled, in one transaction, answering
+ * it with the transaction it committed in: nothing where the account may
+ * not install in its scope (a workspace it is not a current member of),
+ * `InstalledSkillNameTaken` where its scope holds the name already, and
+ * `InstalledSkillFilesRefused` where its files break the bounds.
  */
 export function installSkill(
   userId: string,
   made: NewInstalledSkill,
 ): Effect.Effect<
-  Option.Option<InstalledSkill>,
+  Option.Option<WrittenSkill>,
   TaskStoreFailure | InstalledSkillNameTaken | InstalledSkillFilesRefused,
   DatabaseServices
 > {
@@ -571,16 +593,19 @@ export function installSkill(
 
 /**
  * Replaces a skill's files and source, and what its `SKILL.md` says of it,
- * in one transaction, where the account may manage it; nothing for any
- * other id, and `InstalledSkillFilesRefused` where the files break the
- * bounds. Its name, scope, and toggle stand.
+ * in one transaction, where the account may manage it, answering it with
+ * the transaction it committed in; nothing for any other id, and
+ * `InstalledSkillFilesRefused` where the files break the bounds. Its name,
+ * scope, and toggle stand. Note that the skill's own row is written in the
+ * transaction its files are, so a reader that follows the row alone moves
+ * with every update.
  */
 export function updateInstalledSkill(
   userId: string,
   id: string,
   revision: InstalledSkillRevision,
 ): Effect.Effect<
-  Option.Option<InstalledSkill>,
+  Option.Option<WrittenSkill>,
   TaskStoreFailure | InstalledSkillFilesRefused,
   DatabaseServices
 > {
@@ -607,12 +632,12 @@ export function updateInstalledSkill(
   });
 }
 
-/** Turns a skill the account may manage on or off, answering it as it now stands; nothing for any other id. */
+/** Turns a skill the account may manage on or off, answering it as it now stands with the transaction it committed in; nothing for any other id. */
 export function setInstalledSkillEnabled(
   userId: string,
   id: string,
   enabled: boolean,
-): TaskStoreEffect<Option.Option<InstalledSkill>> {
+): TaskStoreEffect<Option.Option<WrittenSkill>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeEnabled({ userId, id, enabled, now }), (rows) =>
       Option.fromUndefinedOr(rows[0]),
@@ -620,15 +645,21 @@ export function setInstalledSkillEnabled(
   );
 }
 
-/** Removes a skill the account may manage, and its files; false for any other id. */
-export function removeInstalledSkill(userId: string, id: string): TaskStoreEffect<boolean> {
-  return Effect.map(removeSkill({ userId, id }), (rows) => rows.length > 0);
+/** Removes a skill the account may manage, and its files, answering the transaction it was removed in; nothing for any other id. */
+export function removeInstalledSkill(
+  userId: string,
+  id: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(removeSkill({ userId, id }), (rows) =>
+    Option.map(Option.fromUndefinedOr(rows[0]), (removed) => removed.txid),
+  );
 }
 
 /**
  * Moves the account's own personal skill into a workspace it is a current
- * member of, in one transaction: the skill becomes the workspace's, its
- * sharer kept as who installed it, its files, source, and toggle standing.
+ * member of, in one transaction, answering it with the transaction it
+ * committed in: the skill becomes the workspace's, its sharer kept as who
+ * installed it, its files, source, and toggle standing.
  * Nothing where the skill is none of the account's personal ones or the
  * account is no member there, and `InstalledSkillNameTaken` where the
  * workspace holds a skill of its name already. Note that two shares of one
@@ -640,7 +671,7 @@ export function shareInstalledSkill(
   id: string,
   organizationId: string,
 ): Effect.Effect<
-  Option.Option<InstalledSkill>,
+  Option.Option<WrittenSkill>,
   TaskStoreFailure | InstalledSkillNameTaken,
   DatabaseServices
 > {
@@ -670,4 +701,43 @@ export function sessionInstalledSkills(
   organizationId: string | null,
 ): TaskStoreEffect<readonly InstalledSkillWithFiles[]> {
   return Effect.map(findOfferedWithFiles({ userId, organizationId }), groupedFiles);
+}
+
+/**
+ * The skills the account sees in the workspace as its held read answers
+ * them: the rows `listInstalledSkills` reads, each with whether the account
+ * may manage it, by the store's own rule (`allowedTo`), and the workspace a
+ * workspace skill is, null for a personal one. Every column is under the key
+ * the wire reads it by (`@repo/features/installed-skill-live`), each instant
+ * as epoch milliseconds, and the order is the reader's to keep. None where a
+ * statement names a value Realtime cannot carry.
+ */
+export function installedSkillsLiveStatement(
+  userId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  // Note that a skill whose installer's account is gone compares as unknown, so it reads manageable only by those who manage the workspace.
+  const manageable = sql<boolean>`coalesce(${allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE)}, false)`;
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: installedSkill.id,
+            scope: installedSkill.scope,
+            name: installedSkill.name,
+            description: installedSkill.description,
+            userInvocable: installedSkill.userInvocable,
+            source: installedSkill.source,
+            enabled: installedSkill.enabled,
+            workspaceId: installedSkill.organizationId,
+            installedBy: installedSkill.installedByUserId,
+            manageable,
+          },
+          { createdAt: installedSkill.createdAt, updatedAt: installedSkill.updatedAt },
+        ),
+      )
+      .from(installedSkill)
+      .where(offeredIn(userId, organizationId)),
+  );
 }

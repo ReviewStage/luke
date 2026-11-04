@@ -95,6 +95,10 @@ const namesSeen = (userId: string, organizationId: string) =>
     rows.map((row) => `${row.scope}:${row.name}`),
   );
 
+/** Whether the account's removal of the skill removed it. */
+const removed = (userId: string, id: string) =>
+  Effect.map(removeInstalledSkill(userId, id), Option.isSome);
+
 const readable = (userId: string, id: string) =>
   Effect.map(readInstalledSkill(userId, id), Option.isSome);
 
@@ -146,11 +150,11 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         assert.deepEqual(yield* namesSeen(teammate, first), []);
         assert.equal(yield* readable(teammate, id), false);
         assert.deepEqual(yield* managedBy(teammate, id), { toggled: false, updated: false });
-        assert.equal(yield* removeInstalledSkill(teammate, id), false);
+        assert.equal(yield* removed(teammate, id), false);
         assert.equal(yield* readable(owner, id), true);
 
         assert.deepEqual(yield* managedBy(owner, id), { toggled: true, updated: true });
-        assert.equal(yield* removeInstalledSkill(owner, id), true);
+        assert.equal(yield* removed(owner, id), true);
         assert.equal(yield* readable(owner, id), false);
       }),
   );
@@ -188,7 +192,7 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         assert.equal(yield* readable(outsider, id), false);
 
         assert.deepEqual(yield* managedBy(teammate, id), { toggled: false, updated: false });
-        assert.equal(yield* removeInstalledSkill(teammate, id), false);
+        assert.equal(yield* removed(teammate, id), false);
         assert.deepEqual(yield* managedBy(outsider, id), { toggled: false, updated: false });
         assert.deepEqual(
           yield* managedBy(installer, byAdmin),
@@ -198,8 +202,8 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         assert.deepEqual(yield* managedBy(installer, id), { toggled: true, updated: true });
         assert.deepEqual(yield* managedBy(admin, id), { toggled: true, updated: true });
         assert.deepEqual(yield* managedBy(owner, byAdmin), { toggled: true, updated: true });
-        assert.equal(yield* removeInstalledSkill(owner, id), true);
-        assert.equal(yield* removeInstalledSkill(installer, byAdmin), false);
+        assert.equal(yield* removed(owner, id), true);
+        assert.equal(yield* removed(installer, byAdmin), false);
         assert.deepEqual(yield* namesSeen(teammate, workspace), ["workspace:sentry-triage"]);
       }),
   );
@@ -220,17 +224,13 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         yield* leaveWorkspace(workspace, installer);
         assert.equal(yield* readable(installer, id), false);
         assert.deepEqual(yield* managedBy(installer, id), { toggled: false, updated: false });
-        assert.equal(yield* removeInstalledSkill(installer, id), false);
+        assert.equal(yield* removed(installer, id), false);
         assert.deepEqual(yield* namesSeen(installer, workspace), []);
         assert.deepEqual(yield* sessionInstalledSkills(installer, workspace), []);
         assert.equal(yield* readable(owner, id), true, "the workspace keeps it");
 
         yield* joinWorkspace(workspace, installer, WORKSPACE_ROLE.MEMBER);
-        assert.equal(
-          yield* removeInstalledSkill(installer, id),
-          true,
-          "back as a member, theirs again",
-        );
+        assert.equal(yield* removed(installer, id), true, "back as a member, theirs again");
       }),
   );
 

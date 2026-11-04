@@ -151,6 +151,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       captureStill: (sender, rect) => windowStill(sender, rect),
       tellUnsavedWork: services.unsavedWork.tell,
+      showBuildLabel: windows.showBuildLabel,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -223,7 +224,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
         },
-        thisMacHost: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,

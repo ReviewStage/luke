@@ -3,24 +3,30 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
   hostedClient,
 } from "./hosted-link.js";
+import type { InstalledSkillsLiveAnswer } from "./installed-skill-live.js";
 import type {
   InstalledSkillContent,
   InstalledSkillFilesRefusal,
   InstalledSkillPreview,
-  InstalledSkillSummary,
   InstalledSkillUpdateCheck,
+  installedSkillAnswerSchema,
+  installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillPreviewFileRequestSchema,
+  installedSkillRemovedAnswerSchema,
+  installedSkillUpdatedAnswerSchema,
 } from "./installed-skill-route-wire.js";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillCallFailure,
 } from "./installed-skill-view.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
@@ -34,7 +40,9 @@ import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
  * with one: says why, and offers to try again. A skill refused is answered
  * with its name and why its files were refused where the service said.
  * A preview, an install, and an update read GitHub on the service before
- * they answer, so they wait as long as a Start does.
+ * they answer, so they wait as long as a Start does. Each write answers the
+ * service's answer whole, the transaction it committed in among it, which
+ * the host waits for on the skills it holds live (`installedSkillsLive`).
  */
 
 /** A call's answer, or why there is none: for a skill refused, which, and why its files were. */
@@ -61,6 +69,11 @@ export type InstalledSkillInstallParams = typeof installedSkillInstallRequestSch
 /** A previewed skill's `SKILL.md` asked for: the workspace, and the repository, commit, and folder the preview named. */
 export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileRequestSchema.Type;
 
+/** A live read the service did not answer, in the window's own words. */
+export interface InstalledSkillsLiveFailed {
+  readonly failure: InstalledSkillCallFailure;
+}
+
 /** The refusals an installed skills call names, by the service's own word for each. */
 const REFUSALS: ReadonlyMap<HostedApiError, InstalledSkillCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_FOUND, INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND],
@@ -76,6 +89,11 @@ const REFUSALS: ReadonlyMap<HostedApiError, InstalledSkillCallFailure> = new Map
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED],
 ]);
 
+/** The window's word for a refusal named here; unanswered for everything else. */
+function failureOf(failed: HostedFailure): InstalledSkillCallFailure | undefined {
+  return failed._tag === "HostedRefused" ? REFUSALS.get(failed.refusal) : undefined;
+}
+
 /** A procedure's answer picked, or the refusal it failed with where it is one named here, with the skill it names; unanswered for everything else. */
 function resultOf<Answer, Picked>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
@@ -84,7 +102,7 @@ function resultOf<Answer, Picked>(
   return Effect.match(asked, {
     onSuccess: (answer): InstalledSkillCallResult<Picked> => ({ ok: true, answer: pick(answer) }),
     onFailure: (failed): InstalledSkillCallResult<Picked> => {
-      const failure = failed._tag === "HostedRefused" ? REFUSALS.get(failed.refusal) : undefined;
+      const failure = failureOf(failed);
       if (failed._tag !== "HostedRefused" || failure === undefined) {
         return { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
       }
@@ -111,17 +129,29 @@ export class HostedInstalledSkillClient {
     });
   }
 
-  /** The skills the account sees in the workspace: the workspace's, then its own. */
-  list(
+  /**
+   * The skills the account sees in the workspace, the workspace's and its
+   * own, sealed for following over Neon Realtime for the account `userId`
+   * names, or with `poll` their rows inline: signed out where the session
+   * is another account's, and why there is none otherwise.
+   */
+  installedSkillsLive(
     workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
   ): Effect.Effect<
-    InstalledSkillCallResult<readonly InstalledSkillSummary[]>,
+    InstalledSkillsLiveAnswer | InstalledSkillsLiveFailed | typeof LIVE_SIGNED_OUT,
     never,
     HttpClient.HttpClient
   > {
-    return resultOf(
-      askHosted(this.#hosted.installedSkills.list, { workspaceId }),
-      (answer) => answer.skills,
+    const read = { workspaceId, [LIVE_USER_QUERY]: userId };
+    return Effect.catch(askLive(this.#hosted.live.installedSkills, read, poll, after), (failed) =>
+      Effect.succeed(
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+          ? LIVE_SIGNED_OUT
+          : { failure: failureOf(failed) ?? INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
+      ),
     );
   }
 
@@ -160,13 +190,13 @@ export class HostedInstalledSkillClient {
   install(
     params: InstalledSkillInstallParams,
   ): Effect.Effect<
-    InstalledSkillCallResult<readonly InstalledSkillSummary[]>,
+    InstalledSkillCallResult<typeof installedSkillInstallAnswerSchema.Type>,
     never,
     HttpClient.HttpClient
   > {
     return resultOf(
       askHosted(this.#hosted.installedSkills.install, params, HOSTED_DEADLINE.START),
-      (answer) => answer.skills,
+      (answer) => answer,
     );
   }
 
@@ -174,13 +204,17 @@ export class HostedInstalledSkillClient {
   setEnabled(
     skillId: string,
     enabled: boolean,
-  ): Effect.Effect<InstalledSkillCallResult<InstalledSkillSummary>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    InstalledSkillCallResult<typeof installedSkillAnswerSchema.Type>,
+    never,
+    HttpClient.HttpClient
+  > {
     return resultOf(
       askHosted(this.#hosted.installedSkills.setEnabled, {
         params: { id: skillId },
         body: { enabled },
       }),
-      (answer) => answer.skill,
+      (answer) => answer,
     );
   }
 
@@ -204,7 +238,7 @@ export class HostedInstalledSkillClient {
     workspaceId: string,
     skillId: string,
   ): Effect.Effect<
-    InstalledSkillCallResult<{ readonly skill: InstalledSkillSummary; readonly changed: boolean }>,
+    InstalledSkillCallResult<typeof installedSkillUpdatedAnswerSchema.Type>,
     never,
     HttpClient.HttpClient
   > {
@@ -222,23 +256,31 @@ export class HostedInstalledSkillClient {
   share(
     workspaceId: string,
     skillId: string,
-  ): Effect.Effect<InstalledSkillCallResult<InstalledSkillSummary>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    InstalledSkillCallResult<typeof installedSkillAnswerSchema.Type>,
+    never,
+    HttpClient.HttpClient
+  > {
     return resultOf(
       askHosted(this.#hosted.installedSkills.share, {
         params: { id: skillId },
         body: { workspaceId },
       }),
-      (answer) => answer.skill,
+      (answer) => answer,
     );
   }
 
   /** One skill removed with its files. */
   remove(
     skillId: string,
-  ): Effect.Effect<InstalledSkillCallResult<string>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    InstalledSkillCallResult<typeof installedSkillRemovedAnswerSchema.Type>,
+    never,
+    HttpClient.HttpClient
+  > {
     return resultOf(
       askHosted(this.#hosted.installedSkills.remove, { id: skillId }),
-      (answer) => answer.id,
+      (answer) => answer,
     );
   }
 }

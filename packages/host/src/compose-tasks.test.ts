@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
@@ -84,11 +85,12 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { entityPool } from "@repo/sync";
 import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, Result, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
   type AppHostRead,
@@ -97,10 +99,12 @@ import {
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
+import { type EntityStore, KEPT_READ, openEntityStore } from "./entity-store.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
+import { testCipher } from "./testing/test-cipher.js";
 import { windowFocus } from "./window-focus.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -1182,6 +1186,8 @@ function subject(
     sendsNetwork?: boolean;
     /** The account signed in now, Dana's where none is named. */
     accountId?: () => string;
+    /** The account's lists kept on disk, none where none is named. */
+    entities?: EntityStore;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -1225,6 +1231,7 @@ function subject(
       kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       focus: yield* windowFocus,
       pool: yield* entityPool(),
+      entities: () => options.entities,
       githubMoved: Effect.void,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -1456,6 +1463,58 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.activeTaskId, BILLING);
     assert.deepEqual(plan(BILLING)?.document, billing.document);
   }),
+);
+
+it.effect(
+  "the account gate opening draws the lists kept on disk while the service answers nothing, and reads the list past where it was kept",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("tasks-entities-");
+      const earlier = yield* Scope.make();
+      const kept = yield* Scope.provide(earlier)(
+        openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
+      );
+      yield* kept.keep(KEPT_READ.TASK_LIST, {
+        rows: { plans: [rowOfTask(task(INVITES, "Kept invitations", "# Kept", 10))], agents: [] },
+        at: "7",
+      });
+      yield* kept.keep(KEPT_READ.WORKSPACES, [PERSONAL, ACME]);
+      yield* kept.keep(KEPT_READ.SIDEBAR, {
+        sections: [],
+        entries: [],
+        agentEntries: [],
+        pins: [{ repository: "acme/relay", pinnedAt: 3 }],
+      });
+      yield* Scope.close(earlier, Exit.void);
+      const entities = yield* openEntityStore({
+        directory,
+        cipher: testCipher(),
+        accountId: "user-dana",
+      });
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
+      service.workspacesFail = true;
+      service.sidebarLive = () =>
+        Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const);
+      const asked: (string | undefined)[] = [];
+      const { listLive } = service;
+      service.listLive = (userId, sync) => {
+        asked.push(sync);
+        return listLive(userId, sync);
+      };
+      const { tasks, last, settled } = yield* subject(service, { entities });
+
+      yield* tasks.open;
+      yield* settled;
+
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.name),
+        ["Kept invitations"],
+      );
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
+      assert.equal(asked[0], "7");
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
 
 it.effect(

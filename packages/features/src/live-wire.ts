@@ -849,6 +849,8 @@ export const LIVE_READ = {
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
+  /** The skills the account sees in one workspace, the workspace's and its own, by the workspace: the service's `installedSkills` query, held for the windows that draw Settings › Skills and a few they drew lately. */
+  INSTALLED_SKILLS: "installedSkills",
   /** Where each of the account's integrations stands, by the account: the service's `integrationStatusesLive` query, with GitHub's standing fetched beside it, held while a window draws an integration. */
   INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
@@ -871,6 +873,8 @@ export const LIVE_READ = {
   DEVICE_PRESENCE: "devicePresence",
   /** One workspace's pending invitations, by the workspace: the service's `workspaceInvitations` query, held for an owner's or an admin's windows that draw them and a few they drew lately. */
   WORKSPACE_INVITATIONS: "workspaceInvitations",
+  /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */
+  THIS_MAC_HOST: "thisMacHost",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */

@@ -5,7 +5,6 @@ import {
   installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
-  installedSkillListAnswerSchema,
   installedSkillPreviewFileRequestSchema,
   installedSkillPreviewFileSchema,
   installedSkillPreviewRequestSchema,
@@ -23,7 +22,8 @@ import { wireUuidSchema } from "./service-wire.js";
  * (`installed-skill-client.ts`) and answers the window one of the shapes
  * here: the service's answer, or the failure with the skill it names and
  * why its files were refused, where the service said. Settings › Skills
- * draws them, and its Add skill dialog previews and installs a paste.
+ * draws the skills the host holds for it (`installed-skill-live.ts`), and
+ * its Add skill dialog previews and installs a paste.
  */
 
 /** Why an installed skills call has no answer. */
@@ -65,12 +65,12 @@ export type InstalledSkillFailedView = typeof failed.Type;
 
 /* ----- Params ----- */
 
-/** A workspace's skills listed beside the account's own. */
-export const installedSkillListParamsSchema = EffectSchema.Struct({
+/** A workspace's skills held beside the account's own, or read again, as the window asks it: the workspace Settings shows. */
+export const installedSkillFollowParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
 });
 
-export type InstalledSkillListParams = typeof installedSkillListParamsSchema.Type;
+export type InstalledSkillFollowParams = typeof installedSkillFollowParamsSchema.Type;
 
 /** A paste previewed in the workspace whose GitHub installation reaches its source. */
 export const installedSkillPreviewParamsSchema = installedSkillPreviewRequestSchema;
@@ -117,14 +117,6 @@ export const installedSkillShareParamsSchema = EffectSchema.Struct({
 export type InstalledSkillShareParams = typeof installedSkillShareParamsSchema.Type;
 
 /* ----- Views ----- */
-
-/** The skills the account sees in a workspace, or why there are none. */
-export const installedSkillListViewSchema = EffectSchema.Union([
-  installedSkillListAnswerSchema,
-  failed,
-]);
-
-export type InstalledSkillListView = typeof installedSkillListViewSchema.Type;
 
 /** One skill read whole, or why it was not. */
 export const installedSkillContentViewSchema = EffectSchema.Union([

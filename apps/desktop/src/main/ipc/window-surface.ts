@@ -54,6 +54,8 @@ interface WindowSurfaceDependencies {
   captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
   /** Keeps whether a panel holds unsaved work, which a quit, a restart to update, and a sign-out ask about. */
   tellUnsavedWork: (sender: WebContents, holding: boolean) => void;
+  /** Draws or hides a development build's label, answering false in a build that draws none. */
+  showBuildLabel: (shown: boolean) => boolean;
 }
 
 /** The part of a window a still is asked of, in its CSS pixels. */
@@ -75,8 +77,9 @@ const surfacePort = actPortFor<WebContents>();
  * only a panel draws a File tab, and its dialog hangs over the panel that
  * asked, and so is a still, of the panel that asked and answered to it
  * alone, since only a panel's ⌃Tab previews its tabs. An empty part is no
- * still. Unsaved work is a panel's to tell of, since only a panel edits.
- * The rest read no window.
+ * still. Unsaved work is a panel's to tell of, since only a panel edits,
+ * and the build's label a panel's to hide, since only a panel draws it, and
+ * refused in a build that draws none. The rest read no window.
  */
 export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,
@@ -158,6 +161,11 @@ export function windowSurfaceProcedures(
     ].handler(({ input, context, errors }) => {
       if (!context.actor.panel) throw errors.REFUSED();
       dependencies.tellUnsavedWork(context.actor.sender, input.holding);
+    }),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL
+    ].handler(({ input, context, errors }) => {
+      if (!context.actor.panel || !dependencies.showBuildLabel(input.shown)) throw errors.REFUSED();
     }),
     [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND

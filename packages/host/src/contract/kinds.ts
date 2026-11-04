@@ -262,13 +262,18 @@ export const CHAPTERS_ACT_KIND = {
 } as const;
 
 /**
- * Settings' Skills: the skills the account sees in a workspace listed, a
- * pasted `skills add` command or skill text previewed, one of its skills'
- * `SKILL.md` read, and installed for the account or its workspace, and one toggled, checked for an update,
- * updated, or removed.
+ * Settings' Skills: the skills the account sees in a workspace held for the
+ * window while it holds the stream open, a pasted `skills add` command or
+ * skill text previewed, one of its skills' `SKILL.md` read, and installed
+ * for the account or its workspace, and one toggled, checked for an
+ * update, updated, shared, or removed. The hold's stream carries nothing:
+ * what it holds reaches the panel on app state (`LIVE_READ.INSTALLED_SKILLS`),
+ * and each write is drawn there as it is asked or answered.
  */
 export const INSTALLED_SKILL_ACT_KIND = {
-  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_FOLLOW: "installedSkills.follow",
+  /** A workspace's held skills, which the panel reads on app state, asked again at once, as Try again asks. */
+  INSTALLED_SKILLS_RETRY: "installedSkills.retry",
   INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
@@ -515,15 +520,6 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's host as Settings › Hosts reaches it (`this-mac-host.ts`): the
- * device its record names, read while Hosts is drawn. Answered by the host,
- * which keeps it.
- */
-export const THIS_MAC_HOST_ACT_KIND = {
-  THIS_MAC_HOST_READ: "thisMacHost.read",
-} as const;
-
-/**
  * The updater as Settings' row and the sidebar's foot reach it: a check
  * asked for, answered with where the updater then stands; the ready build
  * installed; the app moved to Applications, where an install needs it; and
@@ -604,7 +600,7 @@ export const WORKSPACE_ACT_KIND = {
  * What a window asks of the system it is drawn on: the microphone asked for
  * and its route read afresh, the microphone's and the notifications' settings
  * opened, a new mail to the people who make the app, the panel focused, words
- * copied, a file saved, and feedback sent.
+ * copied, a file saved, a build's label shown or hidden, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_REQUEST: "microphone.request",
@@ -635,6 +631,12 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * while it does.
    */
   WINDOW_UNSAVED_WORK: "window.unsavedWork",
+  /**
+   * A development build's label, the branch it was cut from, drawn or hidden
+   * for a demo: the sidebar's branch row in every window and the Dock tile's
+   * band, as View > Developer > Show Build Label turns them.
+   */
+  WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -654,7 +656,6 @@ export const PORT_ACT_KIND = {
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
-  ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
@@ -787,7 +788,8 @@ export const PORT_ACT_USE = {
   CHAPTERS_MODEL_READ: ACT_USE.READ,
   CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
-  INSTALLED_SKILLS_LIST: ACT_USE.READ,
+  INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
+  INSTALLED_SKILLS_RETRY: ACT_USE.READ,
   INSTALLED_SKILLS_READ: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW_FILE: ACT_USE.FETCH,
@@ -875,8 +877,6 @@ export const PORT_ACT_USE = {
   TERMINAL_ATTACH: ACT_USE.WRITE,
   TERMINAL_DETACH: ACT_USE.WRITE,
 
-  THIS_MAC_HOST_READ: ACT_USE.READ,
-
   UPDATE_CHECK: ACT_USE.WRITE,
   UPDATE_INSTALL: ACT_USE.WRITE,
   UPDATE_MOVE_TO_APPLICATIONS: ACT_USE.WRITE,
@@ -894,6 +894,7 @@ export const PORT_ACT_USE = {
   WINDOW_SAVE_FILE: ACT_USE.WRITE,
   WINDOW_CAPTURE: ACT_USE.FETCH,
   WINDOW_UNSAVED_WORK: ACT_USE.WRITE,
+  WINDOW_SHOW_BUILD_LABEL: ACT_USE.WRITE,
   FEEDBACK_SEND: ACT_USE.WRITE,
 
   WORKSPACE_CREATE: ACT_USE.WRITE,

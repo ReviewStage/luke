@@ -286,14 +286,19 @@ interface StartedAgent extends ConversationTarget {
   readonly sessionId: string;
 }
 
-/** An agent started by the account on the plan, its eve session recorded as the store hook records it. */
-async function agentOn(userId: string, taskId: string): Promise<StartedAgent> {
+/** An agent started by the account on the plan, its eve session recorded as the store hook records it; it belongs to the run named, or to none. */
+async function agentOn(
+  userId: string,
+  taskId: string,
+  automationRunId?: string,
+): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: taskId,
     planSnapshot: "# Teammate invitations",
     prompt: null,
+    automationRunId,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
 }
@@ -1953,6 +1958,18 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-later")),
     [null, workspaceId, RELAY_FULL_NAME, later],
   );
+
+  // A run's agent on the task its run made starts one beside itself there, which belongs to its run too.
+  const fromRunTask = await peerCaller(
+    hostOf(),
+    await agentOn(caller.userId, taskIds.invitations, run),
+    eve.services,
+  );
+  assert.deepEqual(
+    await placeOf(await fromRunTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-beside")),
+    [taskIds.invitations, workspaceId, RELAY_FULL_NAME, run],
+  );
+  assert.equal(eve.sent.length, 6);
 });
 
 /** The ids of the tasks of the workspace the account reads under the name, newest first. */

@@ -192,14 +192,6 @@ export function skillGroups(
   };
 }
 
-/** A list with one skill put in place of the one of its id, or the list as it was. */
-export function withSkill(
-  skills: readonly InstalledSkillSummary[],
-  changed: InstalledSkillSummary,
-): readonly InstalledSkillSummary[] {
-  return skills.map((each) => (each.id === changed.id ? changed : each));
-}
-
 /* ----- A row's menu ----- */
 
 /** What a row's ⋯ may hold. */

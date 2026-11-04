@@ -1575,6 +1575,47 @@ export function attachRunAgent(
   );
 }
 
+const writeRunTask = SqlSchema.void({
+  Request: Schema.Struct({ runId: Schema.String, taskId: Schema.String }),
+  execute: ({ runId, taskId }) =>
+    Database.use((db) =>
+      db.update(automationRun).set({ taskId }).where(eq(automationRun.id, runId)),
+    ),
+});
+
+/** Records the task the run's agent works on, before the agent is started, so a run whose start then fails still names the task it made. */
+export function attachRunTask(runId: string, taskId: string): TaskStoreEffect<void> {
+  return writeRunTask({ runId, taskId });
+}
+
+const findRunMadeTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .where(
+          and(
+            eq(automationRun.taskId, taskId),
+            eq(automation.targetKind, AUTOMATION_TARGET.NEW_AGENT),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/**
+ * Whether the task is one a run made for itself alone, which is a run of an
+ * automation that starts a new agent each run; a same-agent automation's
+ * standing task is every run's, and no one run's to finish.
+ */
+export function isRunTask(taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(findRunMadeTask({ taskId }), Option.isSome);
+}
+
 /**
  * The agent a run started kept as the one a same-agent automation hands
  * every later run to, where the automation still holds `held`: none yet, or

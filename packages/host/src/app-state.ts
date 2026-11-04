@@ -13,6 +13,7 @@ import type {
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
+import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -416,6 +417,21 @@ export type AppWorkspaceInvitations = Readonly<
   Record<string, AppHostRead<readonly WorkspaceInvitation[]>>
 >;
 
+/**
+ * This Mac as its host reads it (`compose-this-mac-host.ts`): the machine's
+ * id in the keyed hash every host reports (`@repo/host/node`'s
+ * `machine-identity.ts`), where it could be read, and the device of the
+ * record of the account install on this Mac, where that install was
+ * enrolled with this app's service.
+ */
+export interface AppThisMacHost {
+  deviceId?: string;
+  machineId?: string;
+}
+
+/** This Mac as the host last read it, by the account signed in: the one key the host holds, none while nobody is signed in. */
+export type AppThisMacHosts = Readonly<Record<string, AppHostRead<AppThisMacHost>>>;
+
 /** One workspace's people, as the host's read of them stands: its members and who its work names but left, once it answered. */
 export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
 
@@ -465,6 +481,9 @@ export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
 
 /** Each workspace's memories the windows hold, by the workspace, most recently kept or corrected first, as the host's read of them stands, with every forget drawn over them until the read carries it (`memory-follow.ts`). */
 export type AppMemories = AppHeldById<readonly MemorySummary[]>;
+
+/** The skills the account sees in each workspace the windows hold, by the workspace, the workspace's first and then its own, as the host's read of them stands, with every write drawn over them until the read carries it (`installed-skills-follow.ts`). */
+export type AppInstalledSkills = AppHeldById<readonly InstalledSkillSummary[]>;
 
 /**
  * Each task's plan the host holds for the windows (`compose-tasks.ts`): the
@@ -517,6 +536,7 @@ export interface AppHostReads {
   [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.INSTALLED_SKILLS]: readonly InstalledSkillSummary[];
   [LIVE_READ.INTEGRATIONS]: IntegrationStatusesAnswer;
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.MEMORIES]: readonly MemorySummary[];
@@ -526,6 +546,7 @@ export interface AppHostReads {
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
+  [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
@@ -627,6 +648,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** The skills the account sees in each workspace the windows chose, by the workspace, held while Settings › Skills shows them and a while after: what that page draws. */
+  [LIVE_READ.INSTALLED_SKILLS]: AppInstalledSkills;
   /** Where every one of the account's integrations stands, held while a window draws one and a while after: what Settings › Integrations, onboarding's tools step, the composer's servers, and every server's card read. */
   [LIVE_READ.INTEGRATIONS]: AppIntegrations;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
@@ -645,6 +668,8 @@ export interface AppState {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each workspace's pending invitations an owner's or an admin's windows draw, held while a window draws them and a while after: what Settings › Workspace lists under Invitations. */
   [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
+  /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
+  [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
@@ -781,6 +806,11 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof InboxItem,
   },
+  [LIVE_READ.INSTALLED_SKILLS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof InstalledSkillSummary,
+  },
   [LIVE_READ.INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MEMORIES]: {
@@ -816,6 +846,7 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof WorkspaceInvitation,
   },
+  [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },

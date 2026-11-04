@@ -77,6 +77,8 @@ export interface TaskListDependencies {
 export interface TaskListCollections {
   /** Takes one answer of the list's follow, both its parts, whole or past a sync id, and draws it. */
   readonly answer: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<void>;
+  /** The plans and agents the list holds as the service answered them, with no write drawn over them, as the entity store keeps them. */
+  readonly synced: () => TaskListLiveRows;
 }
 
 /**
@@ -156,6 +158,7 @@ export function taskListCollections(
             drawn,
           );
         }),
+      synced: () => ({ plans: plans.synced(), agents: agents.synced() }),
     };
   });
 }

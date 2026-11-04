@@ -61,7 +61,7 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
-import { useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -77,7 +77,6 @@ import {
   shareQuestion,
   skillActions,
   skillGroups,
-  withSkill,
   workspaceGroupTitle,
 } from "./skills-model.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
@@ -101,10 +100,13 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * and View alone in its ⋯. A line at the top says where repository skills
  * come from and that a change reaches only agents started afterwards, which
  * nothing else on the page can say. Add skill opens the dialog
- * (`add-skill-dialog.tsx`), whose install lands in the list at once, its
- * rows lit once. The list is read when the page is
- * drawn; each GitHub skill the account may change is then checked for an
- * update, once.
+ * (`add-skill-dialog.tsx`), whose install lands in the list as it answers,
+ * its rows lit once. The page draws the skills as the host holds them,
+ * followed live on the service (`LIVE_READ.INSTALLED_SKILLS`), so one a
+ * teammate installs or toggles draws while the page is open, and the host
+ * draws each toggle, share, and removal the moment it is asked and an
+ * update as it answers; a row says only why one was refused. Each GitHub
+ * skill the account may change is checked for an update once.
  */
 
 /**
@@ -139,17 +141,12 @@ const SKILLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   SKILL_GROUP_SKELETON,
 ];
 
-/** The page's list as it stands: being read, refused, or read. */
+/** A skill's files as View reads them: being read, refused, or read. */
 const LIST = {
   READING: "reading",
   FAILED: "failed",
   READ: "read",
 } as const;
-
-type ListRead =
-  | { readonly kind: typeof LIST.READING }
-  | { readonly kind: typeof LIST.FAILED; readonly line: string }
-  | { readonly kind: typeof LIST.READ; readonly skills: readonly InstalledSkillSummary[] };
 
 const READING = { kind: LIST.READING } as const;
 
@@ -275,15 +272,14 @@ function SkillRowView({
   workspace,
   updateAvailable,
   landed,
-  onChanged,
-  onRemoved,
+  onUpdated,
 }: {
   row: SkillRow;
   workspace: Workspace;
   updateAvailable: boolean;
   landed: boolean;
-  onChanged: (skill: InstalledSkillSummary, updated: boolean) => void;
-  onRemoved: (skillId: string) => void;
+  /** Tells the page the skill was updated, so it offers no update until it is checked again. */
+  onUpdated: (skillId: string) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const { skill } = row;
@@ -299,7 +295,7 @@ function SkillRowView({
   // Note that the card reads the skill while it is drawn, from its opening until its fade has run, so each View reads afresh.
   const viewed = useDrawnThroughExit(viewing);
 
-  /** A toggle or an update sent, its answer put in the list, or why it is unchanged under the row. */
+  /** A toggle or an update sent, which the host draws in the list, or why it is unchanged under the row. */
   const write = (
     asked: Promise<{ readonly skill: InstalledSkillSummary } | InstalledSkillFailedView>,
     updated: boolean,
@@ -312,7 +308,7 @@ function SkillRowView({
         setBusy(false);
         if (answer === undefined) return setError(UNANSWERED_LINE);
         if ("failure" in answer) return setError(failureLine(answer));
-        onChanged(answer.skill, updated);
+        if (updated) onUpdated(skill.id);
       });
   };
 
@@ -324,15 +320,14 @@ function SkillRowView({
         .then((answer): ActionResult => {
           if (answer === undefined) return rejected(UNANSWERED_LINE);
           if ("failure" in answer) return rejected(failureLine(answer));
-          onRemoved(skill.id);
           return ACCEPTED;
         }),
     confirmFailure(FAILURE_SURFACE.SKILL_REMOVE),
   );
 
-  // Note that a share moves the skill, so the row the answer lands is the
-  // workspace's, and the list draws it there; a name the workspace already
-  // holds stays in the question, said for that workspace.
+  // Note that a share moves the skill, so the host draws it the workspace's
+  // the moment it is asked; a name the workspace already holds stays in the
+  // question, said for that workspace.
   const sharing = useConfirmDialog(
     { subject: true, surfaceOpen: true },
     () =>
@@ -341,7 +336,6 @@ function SkillRowView({
         .then((answer): ActionResult => {
           if (answer === undefined) return rejected(UNANSWERED_LINE);
           if ("failure" in answer) return rejected(shareFailureLine(answer, skill.name, workspace));
-          onChanged(answer.skill, false);
           return ACCEPTED;
         }),
     confirmFailure(FAILURE_SURFACE.SKILL_SHARE, { workspaceId: workspace.id }),
@@ -439,7 +433,7 @@ function SkillRowView({
   );
 }
 
-/** The page over one workspace: its skills read, then each GitHub one checked for an update. */
+/** The page over one workspace: its skills as the host holds them, each GitHub one checked for an update. */
 function ShownSkills({
   workspace,
   readerId,
@@ -450,8 +444,8 @@ function ShownSkills({
   pause: ((ms: number) => Promise<void>) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [list, setList] = useState<ListRead>(READING);
-  const [attempt, setAttempt] = useState(0);
+  // The skills as the host holds them, followed live while the page shows them, so one a teammate installs meanwhile draws as it lands.
+  const held = useHostRead(LIVE_READ.INSTALLED_SKILLS, workspace.id);
   const [adding, setAdding] = useState(false);
   // Note that the card keeps what is typed and previewed while it is drawn, from its opening until its fade has run, so each opening starts afresh.
   const added = useDrawnThroughExit(adding);
@@ -459,26 +453,9 @@ function ShownSkills({
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
   const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id).rows?.members;
 
-  useEffect(() => {
-    let current = true;
-    setList(READING);
-    void act(ACT_KIND.INSTALLED_SKILLS_LIST, { workspaceId: workspace.id })
-      .catch(() => undefined)
-      .then((answer) => {
-        if (!current) return;
-        if (answer === undefined)
-          return setList({ kind: LIST.FAILED, line: SKILLS_LINE.READ_FAILED });
-        if ("failure" in answer) return setList({ kind: LIST.FAILED, line: failureLine(answer) });
-        setList({ kind: LIST.READ, skills: answer.skills });
-      });
-    return () => {
-      current = false;
-    };
-  }, [act, workspace.id, attempt]);
-
   // Note that each GitHub skill the account may change is asked once, whatever else the list does,
   // so an answer is kept even after a toggle redraws the list; React drops one landing after the page closes.
-  const skills = list.kind === LIST.READ ? list.skills : undefined;
+  const skills = held.rows;
   const checked = useRef(new Set<string>());
   useEffect(() => {
     const unasked = (skills ?? []).filter(
@@ -501,24 +478,11 @@ function ShownSkills({
     }
   }, [act, skills, workspace.id]);
 
-  const changed = useCallback((skill: InstalledSkillSummary, updated: boolean) => {
-    setList((held) =>
-      held.kind === LIST.READ ? { kind: LIST.READ, skills: withSkill(held.skills, skill) } : held,
-    );
-    if (updated) setUpdates((held) => new Map(held).set(skill.id, false));
+  const updated = useCallback((skillId: string) => {
+    setUpdates((checked) => new Map(checked).set(skillId, false));
   }, []);
-  const removed = useCallback((skillId: string) => {
-    setList((held) =>
-      held.kind === LIST.READ
-        ? { kind: LIST.READ, skills: held.skills.filter((each) => each.id !== skillId) }
-        : held,
-    );
-  }, []);
-  // Note that an install lights only its own rows, each once, which say what it made.
+  // Note that an install lights only its own rows, each once, which say what it made; the host draws them.
   const installed = useCallback((made: readonly InstalledSkillSummary[]) => {
-    setList((held) =>
-      held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
-    );
     setLanded(new Set(made.map((each) => each.id)));
   }, []);
 
@@ -537,8 +501,7 @@ function ShownSkills({
           workspace={workspace}
           updateAvailable={updates.get(row.skill.id) === true}
           landed={landed.has(row.skill.id)}
-          onChanged={changed}
-          onRemoved={removed}
+          onUpdated={updated}
         />
       ))
     );
@@ -558,14 +521,11 @@ function ShownSkills({
           )}
         </SettingsRow>
       </SettingsSection>
-      {list.kind === LIST.FAILED ? (
+      {skills === undefined && held.status === HOST_READ_STATUS.FAILED ? (
         <SettingsSection>
           <SettingsLine>
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.SKILLS_READ)}
-              onRetry={() => setAttempt((count) => count + 1)}
-            >
-              {list.line}
+            <ErrorState failure={unreadShown(FAILURE_SURFACE.SKILLS_READ)} onRetry={held.retry}>
+              {SKILLS_LINE.READ_FAILED}
             </ErrorState>
           </SettingsLine>
         </SettingsSection>

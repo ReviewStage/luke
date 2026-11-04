@@ -447,3 +447,44 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
   assert.equal(await offlineShown(false), "Offline");
   assert.equal(await offlineShown(true), null);
 });
+
+test("a development build's branch row hides the branch, and its hidden row brings it back", async () => {
+  const asked: unknown[] = [];
+  const run = {
+    profile: "test",
+    packaged: false,
+    platform: "darwin",
+    capabilities: DESKTOP_CAPABILITIES,
+    appVersion: "1.0.0",
+    captureMode: false,
+    fixtureMode: false,
+    accountRequired: false,
+    commit: { sha: "a10eee5", dirty: false, branch: "feat/demo" },
+  };
+  const footWith = async (hidden: boolean) => {
+    handState({}, { run, window: { fullScreen: false, buildLabelHidden: hidden } });
+    fakeActPortAnswering((request) => {
+      if (request.kind === ACT_KIND.WINDOW_SHOW_BUILD_LABEL) asked.push(request.payload);
+      return Promise.resolve(undefined);
+    });
+    mount(DEAN);
+    await stateArrived();
+  };
+  const pressNamed = async (name: string) => {
+    const button = [...document.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === name || each.textContent === name,
+    );
+    await act(async () => (button ?? assert.fail(`the foot offers ${name}`)).click());
+  };
+
+  await footWith(false);
+  assert.ok(document.body.textContent?.includes("feat/demo"));
+  await pressNamed("Hide branch");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  await footWith(true);
+  assert.ok(!document.body.textContent?.includes("feat/demo"));
+  await pressNamed("Show branch");
+
+  assert.deepEqual(asked, [{ shown: false }, { shown: true }]);
+});
