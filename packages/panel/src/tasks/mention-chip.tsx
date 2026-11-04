@@ -74,7 +74,7 @@ import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 import { OpenedByRow, PullRequestCard } from "./pull-request-card.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
-import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
+import { useKnownNames, useWordTargets } from "./use-known-names.js";
 import {
   type LinkStanding,
   useLinkStanding,
@@ -132,7 +132,7 @@ import { useWordsDates } from "./words-dates.js";
  * link to any other place in the app, an Inbox item, an
  * automation, an agent's message (`@repo/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
- * knows it (`@repo/features/place-chip-model`): the words it was labelled
+ * knows it (`@repo/features/place-chip-model`): the words it was labeled
  * with, else the place's own name, else its kind. A plan, a section, a
  * page, an agent, a person, or an Inbox item is called by its name now
  * wherever the window holds it, whatever words its link was written with:
@@ -140,9 +140,7 @@ import { useWordsDates } from "./words-dates.js";
  * agent's as its tab names it, `PRODUCT_NAME` for the app, the member's, the item's, so
  * a chip never keeps a name its card no longer says. What it was written
  * with stands in only where the window cannot read it, a task deleted, of
- * another workspace, or not the reader's; and a task named before the
- * window ever read its task list has the list followed, once between every
- * chip, so its name lands (`useTaskNameCatchUp`). A press opens the
+ * another workspace, or not the reader's. A press opens the
  * place as any app link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
@@ -337,7 +335,6 @@ function MentionGlyph({
   return thingMark(thingOfMention(mention), {
     name,
     known,
-    where: { taskId: holderTaskId(doors.holder), workspace: doors.place.workspace },
     workspace: readLink(target)?.workspace ?? doors.place.workspace,
     tiles: agentTiles(doors),
     standing,
@@ -553,8 +550,7 @@ function MentionChip({
   });
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
-  useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
-  // Note that a plan written as its own key (`ACME-42`) says the key, as the words wrote it, and one labelled with another task's key its name.
+  // Note that a plan written as its own key (`ACME-42`) says the key, as the words wrote it, and one labeled with another task's key its name.
   const keys = useWordTargets();
   const keyTarget = keys.get(written);
   const keyNames =
@@ -725,7 +721,6 @@ function PlaceGlyph({
   return thingMark(thingOfPlace(place), {
     name,
     known,
-    where: { taskId: placeTaskId(place), workspace },
     workspace,
     tiles: agentTiles(doors),
     standing: undefined,
@@ -750,7 +745,7 @@ function PlaceChip({
   place: LinkPlace;
   /** The slug of the workspace the link was written under. */
   workspace: string;
-  /** The words it was labelled with, without an `@`; none where it was written bare. */
+  /** The words it was labeled with, without an `@`; none where it was written bare. */
   label: string | undefined;
   /** The doors of the words the link is written in, whose plan's agents wear their tabs' tiles. */
   doors: MentionDoors;
@@ -760,8 +755,6 @@ function PlaceChip({
   const openLink = useOpenLink();
   const held = useKnownNames("automationId" in place ? place.automationId : undefined);
   const known = read === undefined ? held : read(held);
-  const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
-  useTaskNameCatchUp(planned ? place.planId : undefined);
   const { name, under } = placeChipLook(place, label, known);
   const glyph = (
     <PlaceGlyph place={place} name={name} workspace={workspace} known={known} doors={doors} />

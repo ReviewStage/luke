@@ -1,4 +1,4 @@
-import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@repo/credentials";
+import { chatGptSignIn, LOOPBACK_CONSENT_CANCELED, type OpenConsent } from "@repo/credentials";
 import type { HostedAgentClient } from "@repo/features";
 import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@repo/features/agent-view";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -52,7 +52,7 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Why the service kept nothing, in a sentence for the row. */
 const REJECTION_WORDS = {
-  [PROVIDER_KEY_REJECTION.INVALID]: `OpenAI didn't grant ${PRODUCT_NAME} use of your ChatGPT subscription. Try again.`,
+  [PROVIDER_KEY_REJECTION.INVALID]: `OpenAI didn't grant ${PRODUCT_NAME} use of your ChatGPT plan. Try again.`,
   [PROVIDER_KEY_REJECTION.WRONG_PROVIDER]: "Couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.UNREACHABLE]: "Couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.TOO_MANY_TRIES]: "Too many sign-ins in the last hour. Try again later.",
@@ -119,7 +119,7 @@ function composed(
       save: saveFor(pressedBy),
     });
     if (!("reason" in outcome)) return outcome;
-    return outcome.reason === LOOPBACK_CONSENT_CANCELLED
+    return outcome.reason === LOOPBACK_CONSENT_CANCELED
       ? ({ cancelled: true } as const)
       : { refused: outcome.reason };
   });

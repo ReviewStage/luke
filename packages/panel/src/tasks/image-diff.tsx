@@ -35,7 +35,7 @@ import { pictureUnread } from "../failure-report.js";
  * before and one deleted no after; a before whose merge base the service
  * could not read is not drawn at all rather than drawn wrong, and the after
  * stands alone, saying so. The comparisons are tabs over the one panel that
- * shows the sides, labelled by the comparison it shows.
+ * shows the sides, labeled by the comparison it shows.
  */
 
 /** How an image's two sides are set against each other: beside each other, the after swiped over the before, or faded over it. */

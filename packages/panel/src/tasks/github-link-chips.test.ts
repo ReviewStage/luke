@@ -104,7 +104,7 @@ const RELAY_PULLS = new Map([
       headRef: "invite-expiry",
       labels: [
         { name: "service", color: "4fd18b" },
-        { name: "not a colour", color: "url(x)" },
+        { name: "not a color", color: "url(x)" },
       ],
       comments: 7,
       commits: 1,
@@ -592,7 +592,7 @@ test("a pull request's card names its labels, and one read from an older service
   );
   const [whole, older] = container.querySelectorAll("[data-mention-ref]");
 
-  assert.deepEqual(cardLabels(whole), ["service", "not a colour"]);
+  assert.deepEqual(cardLabels(whole), ["service", "not a color"]);
   assert.deepEqual(cardHead(older), ["acme/relay#44 · Open", undefined]);
   assert.deepEqual(cardNotes(older), []);
   assert.deepEqual(cardLabels(older), []);

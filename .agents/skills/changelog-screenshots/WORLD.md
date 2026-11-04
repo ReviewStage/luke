@@ -10,7 +10,7 @@ outlive any one release's code.
 
 ## Brand
 
-- **The organisation is acme.** Its GitHub owner picture is
+- **The organization is acme.** Its GitHub owner picture is
   `assets/acme-mark.svg`: two peaks, white and `#99f6e4`, on teal `#0f766e`,
   full bleed (the app rounds it). Never a lettered square.
 - **The account is Dean Stratakos** (`dean@example.com`, GitHub), photo

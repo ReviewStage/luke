@@ -21,6 +21,7 @@ import { afterResponse } from "../http/after-response.js";
 import {
   type PosthogBatchItem,
   type PosthogGroupFields,
+  type PosthogPerson,
   postBatchEffect,
 } from "../providers/posthog.js";
 import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./events.js";
@@ -50,7 +51,7 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./ev
  * account's own setup carries none. Each workspace's group is named, by a
  * `$groupidentify` beside its first event on an instance and again once a day
  * or on a rename, with its name as its members read it and when it was made,
- * and nothing else, as a person's name already rides the desktop's `$set`.
+ * and nothing else.
  * No workspace is ever deleted, and PostHog's API deletes no single group,
  * so a group, once named, stays in PostHog as its workspace stays here.
  *
@@ -67,6 +68,10 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./ev
  * automation's run), it reads the account's row first and posts nothing for
  * one no longer there, so a late event does not bring back the person a
  * deletion erased; one that slips in during the deletion itself is accepted.
+ * The row it read names the person, as `/api/events` names it (`events.ts`):
+ * its name and email ride each event's `$set`, never a property, so an
+ * account's sign-up, which comes before any client of its own has named it,
+ * already says who signed up.
  */
 
 export const SERVER_EVENT = {
@@ -512,7 +517,7 @@ const SERVER_EVENT_TIMEOUT_MS = 2_000;
 function stamped(properties: PosthogBatchItem["properties"], environment: string) {
   return {
     ...properties,
-    // Without it an event with no address resolves to the data centre's.
+    // Without it an event with no address resolves to the data center's.
     $geoip_disable: true,
     $lib: SERVER_EVENT_LIB,
     platform: PRODUCT_PLATFORM.SERVER,
@@ -524,10 +529,15 @@ function stamped(properties: PosthogBatchItem["properties"], environment: string
  * The item a server event posts, under the same privacy fields the desktop's
  * batch carries, stamped with the deployment that recorded it as the
  * desktop's are (`events.ts`), so a preview's or a local service's counts can
- * be told from production's, and filed under its workspace's group where it
- * has one.
+ * be told from production's, filed under its workspace's group where it
+ * has one, and naming its person.
  */
-function serverEventItem(event: ServerEvent, now: number, environment: string): PosthogBatchItem {
+function serverEventItem(
+  event: ServerEvent,
+  person: PosthogPerson,
+  now: number,
+  environment: string,
+): PosthogBatchItem {
   return {
     event: event.name,
     distinct_id: event.userId,
@@ -538,6 +548,7 @@ function serverEventItem(event: ServerEvent, now: number, environment: string): 
         ...(event.workspaceId === undefined
           ? undefined
           : { $groups: { [WORKSPACE_GROUP_TYPE]: event.workspaceId } }),
+        $set: person,
       },
       environment,
     ),
@@ -648,18 +659,21 @@ const productAnalyticsOfEnvironment = Layer.effect(
       const last = named.get(workspaceId);
       return last === undefined || now - last >= WORKSPACE_GROUP_REFRESH_MS;
     };
-    // Whether the account still stands; a deleted one's person must not be posted back.
-    const stands = (userId: string) =>
-      readAccountPerson(userId).pipe(
-        Effect.provideContext(database),
-        Effect.map((person) => person !== undefined),
-      );
     return {
       capture: (event: ServerEvent) =>
         Effect.gen(function* () {
-          if (!(yield* stands(event.userId))) return;
+          // A deleted account's person must not be posted back.
+          const person = yield* readAccountPerson(event.userId).pipe(
+            Effect.provideContext(database),
+          );
+          if (person === undefined) return;
           const now = yield* Clock.currentTimeMillis;
-          const item = serverEventItem(event, now, deployment);
+          const item = serverEventItem(
+            event,
+            { name: person.name, email: person.email },
+            now,
+            deployment,
+          );
           const workspaceId = event.workspaceId;
           if (workspaceId === undefined || !due(workspaceId, now)) return yield* post([item]);
           yield* postNaming(
@@ -777,7 +791,7 @@ export function workspaceRenamed(userId: string, workspaceId: string): Effect.Ef
 /** What a settled turn's row says of how it ended, in the count's words. */
 function turnOutcomeOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_OUTCOME> {
   if (turn.status === TURN_STATUS.SETTLED) return SERVER_TURN_OUTCOME.COMPLETED;
-  if (turn.status === TURN_STATUS.CANCELLED) return SERVER_TURN_OUTCOME.STOPPED;
+  if (turn.status === TURN_STATUS.CANCELED) return SERVER_TURN_OUTCOME.STOPPED;
   return turn.failure === TURN_FAILURE.ABANDONED
     ? SERVER_TURN_OUTCOME.ABANDONED
     : SERVER_TURN_OUTCOME.FAILED;

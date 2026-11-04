@@ -12,7 +12,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { FAILURE_REASON, remedyLabel } from "@repo/features/failure-remedy";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { TASK_MODE } from "@repo/features/task-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
@@ -50,8 +50,6 @@ import {
   readModelChoice,
   SENT_LINE_STATE,
   type SentLine,
-  settledPlanEdits,
-  sidebarCallIds,
   startedAgentOf,
   startFailureNote,
   startsOwnAgents,
@@ -294,7 +292,7 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its colour", () => {
+test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its color", () => {
   assert.deepEqual(
     Object.values(PULL_REQUEST_STATE).map((state) => pullRequestStateWord({ state })),
     [undefined, "Draft", "Merged", "Closed"],
@@ -307,7 +305,7 @@ test("the row says where the pull request stands only once it is a draft, merged
   );
 });
 
-test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
+test("a fast or Ultrafast version is folded into its base model by its id, read back as the base at that speed, and named in the choice line", () => {
   const model = (id: string, name: string) => ({
     id,
     name,
@@ -320,36 +318,61 @@ test("a fast version is folded into its base model by its id, read back as the b
     model("anthropic/claude-fable-5", "Claude Fable 5"),
     // A suffixed id with no base beside it is a model of its own.
     model("anthropic/claude-haiku-4-fast", "Claude Haiku 4 (Fast)"),
+    { ...model("openai/gpt-6.1-sol", "GPT-6.1 Sol"), provider: MODEL_PROVIDER.OPENAI },
+    {
+      ...model("openai/gpt-6.1-sol-ultrafast", "GPT-6.1 Sol (Ultrafast)"),
+      provider: MODEL_PROVIDER.OPENAI,
+    },
+    { ...model("openai/gpt-6.1-sol-fast", "GPT-6.1 Sol (Fast)"), provider: MODEL_PROVIDER.OPENAI },
   ];
   const offered = offeredModels(models);
   assert.deepEqual(
-    offered.map((each) => [each.model.id, each.fast?.id]),
+    offered.map((each) => [each.model.id, each.fast?.id, each.ultrafast?.id]),
     [
-      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast"],
-      ["anthropic/claude-fable-5", undefined],
-      ["anthropic/claude-haiku-4-fast", undefined],
+      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast", undefined],
+      ["anthropic/claude-fable-5", undefined, undefined],
+      ["anthropic/claude-haiku-4-fast", undefined, undefined],
+      ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-fast", "openai/gpt-6.1-sol-ultrafast"],
     ],
   );
   assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5-fast"), {
     base: "anthropic/claude-opus-5.5",
-    fast: true,
+    speed: MODEL_SPEED.FAST,
   });
   assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5"), {
     base: "anthropic/claude-opus-5.5",
-    fast: false,
+    speed: MODEL_SPEED.STANDARD,
   });
   assert.deepEqual(readModelChoice(models, "anthropic/claude-haiku-4-fast"), {
     base: "anthropic/claude-haiku-4-fast",
-    fast: false,
+    speed: MODEL_SPEED.STANDARD,
   });
-  const [opus, fable] = offered;
-  assert.ok(opus && fable);
-  assert.equal(choiceModelId(opus, true), "anthropic/claude-opus-5.5-fast");
-  assert.equal(choiceModelId(opus, false), "anthropic/claude-opus-5.5");
-  assert.equal(choiceModelId(fable, true), "anthropic/claude-fable-5", "no fast version to name");
+  assert.deepEqual(readModelChoice(models, "openai/gpt-6.1-sol-ultrafast"), {
+    base: "openai/gpt-6.1-sol",
+    speed: MODEL_SPEED.ULTRAFAST,
+  });
+  const [opus, fable, , sol] = offered;
+  assert.ok(opus && fable && sol);
+  assert.equal(choiceModelId(opus, MODEL_SPEED.FAST), "anthropic/claude-opus-5.5-fast");
+  assert.equal(choiceModelId(opus, MODEL_SPEED.STANDARD), "anthropic/claude-opus-5.5");
+  assert.equal(
+    choiceModelId(fable, MODEL_SPEED.FAST),
+    "anthropic/claude-fable-5",
+    "no fast version to name",
+  );
+  assert.equal(choiceModelId(sol, MODEL_SPEED.ULTRAFAST), "openai/gpt-6.1-sol-ultrafast");
+  assert.equal(
+    choiceModelId(opus, MODEL_SPEED.ULTRAFAST),
+    "anthropic/claude-opus-5.5",
+    "no Ultrafast version to name",
+  );
   assert.equal(
     choiceLabel({ model: "anthropic/claude-opus-5.5-fast", effort: "high" }, models),
     "Opus 5.5 High Fast",
+  );
+  assert.equal(
+    choiceLabel({ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }, models),
+    "GPT-6.1 Sol High Ultrafast",
   );
   assert.equal(
     choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
@@ -427,41 +450,6 @@ test("an effort carried to a model that lacks it falls to the nearest the model 
   assert.equal(effortFor([], "high"), undefined);
 });
 
-test("the plan edits that have answered are counted, not the ones still out or the other calls", () => {
-  const messages: AgentTranscriptMessage[] = [
-    {
-      id: "m1",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        {
-          type: "tool-edit_plan",
-          toolCallId: "c1",
-          state: "output-available",
-          input: {},
-          output: {},
-        },
-        { type: "tool-edit_plan", toolCallId: "c2", state: "input-available", input: {} },
-        { type: "tool-bash", toolCallId: "c3", state: "output-available", input: {}, output: {} },
-      ],
-    },
-    {
-      id: "m2",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        {
-          type: "tool-edit_plan",
-          toolCallId: "c4",
-          state: "output-available",
-          input: {},
-          output: {},
-        },
-      ],
-    },
-  ];
-  assert.equal(settledPlanEdits(messages), 2);
-  assert.equal(settledPlanEdits([]), 0);
-});
-
 test("the calls that move a task's agents are its starts, archives, and unarchives once answered, by call id, under a start's earlier name too; a call still out or of another tool names none", () => {
   const call = (callId: string, tool: string, state: string, output?: WireRecord) => ({
     type: `tool-${tool}`,
@@ -489,40 +477,6 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
 
   assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6", "c7"]);
   assert.deepEqual(agentListCallIds([]), []);
-});
-
-test("the starts that made a new task and the accepted section and task change calls are named by call id once answered, and a start on a task, a refused section or task change call, a call still out, or another tool's answer names none", () => {
-  const call = (callId: string, tool: string, output?: WireRecord) => ({
-    type: `tool-${tool}`,
-    toolCallId: callId,
-    state: output === undefined ? "input-available" : "output-available",
-    input: { newTask: "Expiry" },
-    ...(output === undefined ? undefined : { output }),
-  });
-  const made = { status: "accepted", agent: { id: "agent-2" }, newTask: { id: "task-2" } };
-  const messages: AgentTranscriptMessage[] = [
-    {
-      id: "m1",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        call("c1", "start_agent", made),
-        call("c2", "start_agent", { status: "accepted", agent: { id: "agent-3" } }),
-        call("c3", "start_agent"),
-        call("c4", "message_agent", made),
-        call("c5", "create_section", { status: "accepted", section: { id: "s-1" } }),
-        call("c6", "move_task", { status: "rejected", reason: "Not moved." }),
-        call("c7", "delete_section"),
-        call("c8", "move_task", { status: "accepted", task: { id: "task-2" }, section: null }),
-        call("c9", "update_task", { status: "accepted", task: { id: "task-3" } }),
-        call("c10", "update_task", { status: "rejected", reason: "Not archived." }),
-        call("c11", "update_task"),
-        call("c12", "create_task", { status: "accepted", task: { id: "task-4" } }),
-        call("c13", "create_task", { status: "rejected", reason: "Not made." }),
-      ],
-    },
-  ];
-
-  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9", "c12"]);
 });
 
 test("a working agent is starting until its turn opens, saying what a host's launch waits on, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
@@ -716,10 +670,10 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       messageFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
     ],
     [
-      "Your Claude subscription needs reconnecting in Settings.",
-      `Your Claude subscription has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
-      "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
-      `The subscription paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Signed out of Claude. Connect your Claude plan again in Settings.",
+      `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`,
+      "Usage limit reached",
+      `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`,
       messageFailureWords(AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
     ],
   );
@@ -851,11 +805,11 @@ test("a Start or a message refused for an API key saved but unreadable says so a
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription is signed out. Sign in again.",
+        text: "Your plan is signed out. Connect it again.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription isn't eligible to run this agent. Choose your API key.",
+        text: "Your plan isn't eligible to run this agent. Choose your API key.",
       },
       FAILURE_REASON.OTHER,
     ],
@@ -869,7 +823,7 @@ test("a Continue refused for what Settings mends names Settings, since no press 
     ),
     [
       "Your saved API key can't be read. Save it again in Settings to start an agent.",
-      "Your subscription is signed out. Sign in again in Settings to start an agent.",
+      "Your plan is signed out. Connect it again in Settings to start an agent.",
     ],
   );
 });
@@ -890,7 +844,7 @@ test("a message to a teammate's agent its starter's own key refused names the st
       },
       {
         reason: FAILURE_REASON.OTHER,
-        text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
+        text: "Ada has no plan or API key connected for this agent. They connect one in Settings to unblock it.",
       },
     ],
   );

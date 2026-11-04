@@ -12,6 +12,7 @@
     "./settings-anchors": "./src/settings-anchors.js",
     "./update": "./src/update.js",
     "./update-row": "./src/update-row.js",
+    "./dev-build": "./src/dev-build.js",
     "./diff-view": "./src/diff-view.js",
     "./shortcuts": "./src/shortcuts.js",
     "./microphone": "./src/microphone.js",

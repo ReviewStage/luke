@@ -430,23 +430,31 @@ test("on Vespin's key the resting Fast row says the same and links nowhere, sinc
   assert.equal(note.querySelector("a"), null);
 });
 
-test("a GPT model whose ChatGPT plan pays draws no Fast row at all, while a Claude model on its plan keeps it", async () => {
+test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place, which stores the version chosen", async () => {
   const sol: CatalogModel = {
     id: "openai/gpt-6.1-sol",
     name: "GPT-6.1 Sol",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
-    fastWithheldByPlan: true,
   };
-  models = [OPUS, OPUS_FAST, sol];
+  models = [
+    sol,
+    { ...sol, id: "openai/gpt-6.1-sol-fast", name: "GPT-6.1 Sol (Fast)" },
+    { ...sol, id: "openai/gpt-6.1-sol-ultrafast", name: "GPT-6.1 Sol (Ultrafast)" },
+  ];
   stored = { model: sol.id, effort: "high" };
-  const onGpt = await mount();
-  assert.equal(onGpt.querySelector('[role="switch"][aria-label="Fast"]'), null);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  stored = { model: OPUS.id, effort: "high" };
-  const onClaude = await mount();
-  assert.ok(fastSwitch(onClaude));
+  const page = await mount();
+  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  const speed = segmentedGroup(page, "Speed");
+  assert.deepEqual(readSegmented(speed), {
+    options: ["Standard", "Fast", "Ultrafast"],
+    checked: ["Standard"],
+    tabStops: ["Standard"],
+  });
+  act(() => segment(speed, "Ultrafast").click());
+  await settle();
+  assert.deepEqual(written(), [{ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }]);
+  assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]);
 });
 
 test("replacing the account's own Anthropic key reads the models again, so Fast follows the new key's organization", async () => {
@@ -464,14 +472,13 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   act(() => row.click());
   act(() =>
     (
-      document.querySelector<HTMLButtonElement>('[aria-label="Edit key"]') ??
-      assert.fail("no Edit key")
+      document.querySelector<HTMLButtonElement>('[aria-label="Replace Anthropic API key"]') ??
+      assert.fail("no Replace")
     ).click(),
   );
   const label =
-    [...document.querySelectorAll("label")].find(
-      (each) => each.textContent === "Anthropic API key",
-    ) ?? assert.fail("no Anthropic field");
+    [...document.querySelectorAll("label")].find((each) => each.textContent === "New key") ??
+    assert.fail("no New key field");
   const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
@@ -546,7 +553,7 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
   const row = picker.closest(".ui-settings-row") ?? assert.fail("no Model row");
   assert.match(
     row.textContent ?? "",
-    /Opus 5\.5 cannot run until you connect Claude with a subscription or an API key\./u,
+    /Opus 5\.5 cannot run until you connect a Claude plan or an Anthropic API key\./u,
   );
   const connect =
     [...row.querySelectorAll<HTMLButtonElement>("button")].find(

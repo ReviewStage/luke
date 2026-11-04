@@ -160,7 +160,7 @@ jobs:
           assessment=$(spctl --assess --type execute -vv "$APP_PATH" 2>&1)
           printf '%s\n' "$assessment"
           grep -q "source=Notarized Developer ID" <<< "$assessment"
-          xcrun stapler validate "$APP_PATH"
+          ./scripts/release/validate-staple.sh "$APP_PATH"
 
       - name: Verify DMG, archive, and update manifest
         run: |
@@ -179,7 +179,7 @@ jobs:
 
           codesign --verify --strict "$DIST_DIR/$DMG_ASSET_NAME"
           spctl --assess --type open --context context:primary-signature -vv "$DIST_DIR/$DMG_ASSET_NAME"
-          xcrun stapler validate "$DIST_DIR/$DMG_ASSET_NAME"
+          ./scripts/release/validate-staple.sh "$DIST_DIR/$DMG_ASSET_NAME"
           hdiutil verify "$DIST_DIR/$DMG_ASSET_NAME"
           (
             cd "$DIST_DIR"

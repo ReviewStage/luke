@@ -46,7 +46,8 @@ the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
 sandbox on our service. No part of an agent runs on this Mac, so no
 transcript, working memory, or inbox of one is held here on disk, and in
-memory only the tabs described next. On disk, under its application data, Vespin keeps only
+memory only the tabs described next and the content they showed that never
+changes once read. On disk, under its application data, Vespin keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (an agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
@@ -107,7 +108,12 @@ and output, and the lines said on calls an earlier version took) for its tab, as
 opening one of its workers reads that worker's whole session for its own
 tab. All of this is held in Vespin's memory, never on disk, goes when you leave
 the task or quit Vespin, and is left out of the screen recording (see "Screen
-recordings"). Your default model, effort, and
+recordings"). The content that never changes once read is the exception: up
+to 32 MB in all of the pictures and attachments you opened, an agent's, an
+inbox item's, a plan's, or a pull request's, with the pages' HTML and the
+files read at a commit, stays in Vespin's memory, never on disk, until you
+sign out or quit Vespin, or in a browser until its tab closes or reloads, so
+that showing one again asks our service nothing. Your default model, effort, and
 context size for an agent are kept with your account preferences on our
 service, set in Settings › Agents or by the model you last started
 with. The Claude model your Generate chapters runs on is kept with them too,
@@ -592,7 +598,8 @@ read and never sent to your Mac, logged, or kept. It never reads a file named
 `.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
 or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
 not stored by our service, and is held by Vespin only while its tab is open,
-never on disk, except that copying or downloading it reads it whole (up to
+or, read at a commit, among the 32 MB it keeps until you sign out or quit (see
+"Your conversations with agents"), never on disk, except that copying or downloading it reads it whole (up to
 that megabyte, lines uncut) and a download is written where you save it. The
 File tab's tree lists the repository's folders and file names the same way,
 through our service, which does not store them, and Vespin holds them in memory
@@ -701,7 +708,9 @@ characters of it, is then sent to that agent's model as part of its
 conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
-memory only, and never passes it to the rest of the panel. Vespin in a
+memory only, each version it drew among the 32 MB it keeps until you sign out
+or quit (see "Your conversations with agents"), and never passes it to the
+rest of the panel. Vespin in a
 browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for
@@ -1222,12 +1231,13 @@ updated, shared with a workspace, or removed (never which), a workspace memory
 forgotten (never what it held), a clip you dictated (with a rough length, never
 its words), and a terminal or a browser tab you opened in an agent's sandbox, a
 browser tab you took over or handed back, or a file you added to a plan.
-What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
+What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labeled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
-sees your network address for them, and deleting your account erases them
-with the rest of your usage data.
+sees your network address for them, with your name and email attached as the
+Mac's are, and deleting your account erases them with the rest of your usage
+data.
 
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
@@ -1450,7 +1460,10 @@ your Mac the next time Vespin opens, without being read.
 **Feedback.** If you use the feedback form, we receive what you typed, any
 screenshots you attached, and — unless you untick "Include my name and email"
 — the name and email of the account you are signed in with; they reach us
-only when you press Send.
+only when you press Send. We read them by email. Your words and that name and
+email are also recorded in PostHog as a response to our feedback survey, apart
+from your usage data and under no person, and PostHog posts them to our own
+team's Slack; the screenshots stay in the email.
 
 ## Who we send it to
 
@@ -1491,6 +1504,11 @@ only when you press Send.
   address and keeps it under its own policy. Nothing is emailed when an
   invitation is canceled. A feedback note you send also reaches us by email
   through Resend, with what it carries as described above.
+- PostHog and Slack, for the feedback form. A feedback note's words, and the
+  name and email it carries unless you untick them, go from our service to
+  PostHog as a feedback survey response, with no network address, and PostHog
+  posts them to a channel in our own team's Slack workspace, which Slack keeps
+  under its own policy.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to

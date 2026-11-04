@@ -112,7 +112,7 @@ const PLACE_LOOK = {
 } as const satisfies Record<ChipPlace, ChipLook>;
 
 /** The chip's words while it waits on a pick. */
-const CHOOSE_LABEL = "Choose a repository";
+export const CHOOSE_LABEL = "Choose a repository";
 
 /** The chip's words where the workspace's GitHub reaches nothing to pick, or where none is chosen and none may stand, and the row that chooses none. */
 const NONE_LABEL = "No repository";

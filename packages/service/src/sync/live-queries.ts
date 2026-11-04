@@ -10,12 +10,15 @@ import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-ta
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
+import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import {
   memberWorkspaceIds,
   workspacesLiveStatements,
 } from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   agentBrowserTabSync,
@@ -42,9 +45,9 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
-  workspaceFormerSlugSync,
   planPageVersionSync,
   planRevisionSync,
+  pullRequestChaptersSync,
   repositoryPinSync,
   taskBlockSync,
   taskPinSync,
@@ -53,6 +56,7 @@ import {
   taskSync,
   turnsSync,
   userSync,
+  workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -74,7 +78,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
-import { taskListLiveStatements } from "../tasks/task-list-live.js";
+import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
@@ -146,6 +150,13 @@ export const sidebarLive = defineLiveQuery({
  * with no turn starting or settling shows
  * at the hold's end, as do the rename of someone the list names who has left
  * every workspace and a Mac's last beat, which wakes nothing.
+ *
+ * A reader past a sync id is answered what moved alone
+ * (`taskListDeltaStatements`); a message or a conversation names only its
+ * conversation, so its rows are taken whatever they name, and narrow the
+ * agents to the one of that conversation the reader reaches. Its plans and
+ * its agents are each part's own rows, and a write to its account's
+ * membership or GitHub access answers it whole.
  */
 export const tasksLive = defineLiveQuery({
   name: "tasks",
@@ -169,6 +180,15 @@ export const tasksLive = defineLiveQuery({
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => taskListLiveStatements(userId),
   mode: LIVE_MODE.SNAPSHOT,
+  delta: {
+    whole: [memberSync, githubPersonalTokenSync, githubRepositoryReadSync],
+    anyTopic: [messagesSync, conversationsSync],
+    own: {
+      plans: { table: taskSync, key: task.id },
+      agents: { table: agentSync, key: agentTable.id },
+    },
+    statements: ({ userId }, moved) => taskListDeltaStatements(userId, moved),
+  },
 });
 
 /**
@@ -560,6 +580,49 @@ export const agentBrowserTabsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/** A pull request's number a read's param binds, as its procedure wrote it; zero, which numbers no pull request, where it names none. */
+function pullRequestNumberParam(param: string): number {
+  const number = Number(param);
+  return Number.isSafeInteger(number) && number > 0 ? number : 0;
+}
+
+/**
+ * One coding agent's pull request's newest chapters, by the number the
+ * reader names, as the agent's read answers them, woken by a claim, finish,
+ * or failure in the agent's workspace (`workspaceId`, which the procedure
+ * binds from the agent's own row), all of which name its chapters topic, by
+ * the agent's own row, and by what admits the reader to its workspace or
+ * repository. The agent's task is read for the reader's reach of it
+ * (`agentVisibleTo`) and wakes nothing, as a task's reach moves with what
+ * admits the reader. Note that whether the reader can generate them comes
+ * from their own keys, which no statement reads, so the procedure answers it
+ * beside the rows on every poll, and a key saved while the read is held
+ * shows on the next.
+ */
+export const pullRequestChaptersLive = defineLiveQuery({
+  name: LIVE_READ.PULL_REQUEST_CHAPTERS,
+  params: ["userId", "agentId", "number", "workspaceId"],
+  reads: [
+    pullRequestChaptersSync,
+    agentSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId, workspaceId }) => [
+    [TOPIC.WORKSPACE_CHAPTERS, workspaceId],
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId, number }) =>
+    Option.map(
+      pullRequestChaptersLiveStatement(userId, agentId, pullRequestNumberParam(number)),
+      (chapters) => ({ chapters }),
+    ),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 /**
  * A coding agent's transcript, or one of its workers' (`conversationId`,
  * under the agent's own `parentConversationId`), started by `ownerId` and
@@ -658,5 +721,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskHistoryLive,
   taskBrowserTabsLive,
   agentBrowserTabsLive,
+  pullRequestChaptersLive,
   agentTranscriptLive,
 ]);

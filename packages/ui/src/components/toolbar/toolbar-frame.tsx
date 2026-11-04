@@ -23,7 +23,7 @@ export type ToolbarInset = (typeof TOOLBAR_INSET)[keyof typeof TOOLBAR_INSET];
 export const TOOLBAR_LOOK = {
   /** The window's bar: its lead, its heading taking the room left, and its actions at the end. */
   WINDOW: "window",
-  /** A phone's: one control a corner and the title centred between them, however wide each corner's control. */
+  /** A phone's: one control a corner and the title centered between them, however wide each corner's control. */
   PHONE: "phone",
   /** A tab strip's: the strip leads the bar, and a narrow room wraps it to a row of its own under the actions. */
   TABS: "tabs",

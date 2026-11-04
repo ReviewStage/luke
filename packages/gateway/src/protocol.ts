@@ -48,7 +48,7 @@ export const GATEWAY_METHOD = {
   TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
-  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
+  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and colored here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_TREE: "tasks.tree",
@@ -70,13 +70,12 @@ export const GATEWAY_METHOD = {
   TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "tasks.page",
-  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
-  TASKS_PAGES: "tasks.pages",
   /**
    * One plan's pages, or one agent's on no task, held followed for a window
    * from now until it is let go, over Neon Realtime, and a while after among
-   * those let go lately. What they hold is heard as `PAGES_CHANGED` events,
-   * on the app state every window draws, never answered.
+   * those let go lately: the open task's, an Inbox item's plan's, an agent's
+   * page's, or a page's card's. What they hold is heard as `PAGES_CHANGED`
+   * events, on the app state every window draws, never answered.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */

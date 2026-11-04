@@ -7,32 +7,21 @@ import { type Effect, Stream } from "effect";
 import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's plan and pages stand, followed by the host over the service's held poll, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's plan stands, followed by the host over the service's held poll, so the plan is read again only once its mark moved.
  *
  * The service answers one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
  * follows them (`live-follow.ts`) for as long as the task stands open, and
- * answers each delivery with the parts it moved, which the caller reads
- * again from the service. The calls and code parts the service still
- * answers for a released desktop are read by no one: the app takes no calls,
- * and no window draws the code agents
- * showed. Only which parts moved leaves.
+ * answers each delivery that moved the plan with when it was last saved,
+ * which the caller reads again from the service. The pages, calls, and code
+ * parts the service still answers for a released desktop are compared by no
+ * one: a window holds a task's pages on their own read (`LIVE_READ.PAGES`),
+ * the app takes no calls, and no window draws the code agents showed. Only
+ * the plan's last save leaves.
  */
 
-/** A part of the record the panel reads again once its mark moves. */
-export const TASK_RECORD_PART = {
-  PLAN: "plan",
-  PAGES: "pages",
-} as const;
-
-export type TaskRecordPart = (typeof TASK_RECORD_PART)[keyof typeof TASK_RECORD_PART];
-
-/** Every part, which the first delivery moves, since the reads the task opened with may have missed what it says. */
-const EVERY_TASK_RECORD_PART: readonly TaskRecordPart[] = Object.values(TASK_RECORD_PART);
-
-/** What a delivery moved: its parts, and when the plan was last saved as it delivered it, none for a task the account no longer reaches. */
+/** What a delivery that moved the plan says: when the plan was last saved, none for a task the account no longer reaches. */
 export interface TaskRecordMove {
-  readonly parts: readonly TaskRecordPart[];
   readonly planSavedAt: number | undefined;
 }
 
@@ -44,35 +33,18 @@ export interface TaskRecordFollowDependencies {
   readonly poll: (after: string | undefined) => Effect.Effect<TaskRecordLiveAnswer | Unsealed>;
 }
 
-/** A part's rows as one comparable value. */
-function markOf<Row>(rows: readonly Row[], key: (row: Row) => string): string {
-  return JSON.stringify(rows.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0)));
+/** The plan's rows as one comparable value. */
+function planMarkOf(rows: TaskRecordLiveRows): string {
+  return JSON.stringify(
+    rows.plan.toSorted((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0)),
+  );
 }
 
 /**
- * The parts a delivery moved from the one before: the plan where its last
- * save moved, and the pages where their rows differ. The first delivery
- * moves every part.
- */
-function movedParts(
-  before: TaskRecordLiveRows | undefined,
-  rows: TaskRecordLiveRows,
-): readonly TaskRecordPart[] {
-  if (before === undefined) return EVERY_TASK_RECORD_PART;
-  const planOf = (read: TaskRecordLiveRows) => markOf(read.plan, (plan) => plan.taskId);
-  const pagesOf = (read: TaskRecordLiveRows) => markOf(read.pages, (page) => page.pageId);
-  return [
-    ...(planOf(before) === planOf(rows) ? [] : [TASK_RECORD_PART.PLAN]),
-    ...(pagesOf(before) === pagesOf(rows) ? [] : [TASK_RECORD_PART.PAGES]),
-  ];
-}
-
-/**
- * The parts of the record each delivery moved, with the plan's last save as
- * it delivered it, from the first answer for as long as the caller's scope
- * stands, a delivery that moved none left out. It fails where the read is
- * gone or a row does not decode, which the caller answers by reading it
- * again.
+ * Each delivery that moved the plan, with its last save as it delivered it,
+ * from the first answer, which always moves it, for as long as the caller's
+ * scope stands. It fails where the read is gone or a row does not decode,
+ * which the caller answers by reading it again.
  */
 export function taskRecordMoves(
   dependencies: TaskRecordFollowDependencies,
@@ -80,11 +52,11 @@ export function taskRecordMoves(
 ): Stream.Stream<TaskRecordMove, LiveBroken> {
   return decodedLiveRows({ poll: dependencies.poll }, first, taskRecordLiveRowsSchema).pipe(
     Stream.mapAccum(
-      (): TaskRecordLiveRows | undefined => undefined,
-      (before: TaskRecordLiveRows | undefined, rows: TaskRecordLiveRows) => {
-        const parts = movedParts(before, rows);
-        const planSavedAt = rows.plan[0]?.savedAt;
-        return [rows, parts.length === 0 ? [] : [{ parts, planSavedAt }]] as const;
+      (): string | undefined => undefined,
+      (before: string | undefined, rows: TaskRecordLiveRows) => {
+        const mark = planMarkOf(rows);
+        const moved = mark === before ? [] : [{ planSavedAt: rows.plan[0]?.savedAt }];
+        return [mark, moved] as const;
       },
     ),
   );

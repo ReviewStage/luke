@@ -1696,7 +1696,9 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   });
 
   // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
-  const more = host.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button");
+  const more = host.querySelector<HTMLButtonElement>(
+    ".desktop-task-main .toolbar-tab-actions button",
+  );
   assert.ok(more, "the Plan tab's ⋯ is drawn");
   act(() => more.click());
   assert.equal(deleteKeys, "⌘⌫");
@@ -2712,8 +2714,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
   assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
-test("⌘K still offers Show inbox for a task an item waits on while its agents are unread and its Inbox tab is closed", async () => {
-  const base = tasksControl();
+test("⌘K's \"This task\" still offers the task's Inbox while an item waits on it and its agents are unread", async () => {
   const tasks = tasksControl({
     activeTaskId: DOCUMENT_TASK.id,
     tasks: [
@@ -2727,12 +2728,11 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
       },
     ],
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    sidePanel: { ...base.sidePanel, tabs: [] },
     inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
   });
   await paletteUnderState(tasks);
-  chooseFilter("Commands");
-  assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
+  chooseFilter("This task");
+  assert.ok(rows().includes(`Inbox · ${DOCUMENT_TASK.name}`), "a waiting item holds the Inbox");
 });
 
 test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own", async () => {

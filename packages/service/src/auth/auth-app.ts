@@ -3,6 +3,7 @@ import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } fr
 import { hostedNotFoundRoute } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { recordAuthCount, withAuthCounts } from "./auth-counts.js";
+import { AUTH_BASE_PATH } from "./auth-policy.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's
@@ -16,7 +17,7 @@ import { recordAuthCount, withAuthCounts } from "./auth-counts.js";
  */
 
 /** What every path `vercel.json`'s `/api/auth/(.*)` entry sends to this function begins with. */
-export const AUTH_PATH_PREFIX = "/api/auth/";
+export const AUTH_PATH_PREFIX = `${AUTH_BASE_PATH}/`;
 
 /** The path set that entry sends to this function. */
 const AUTH_PATH_SET = `${AUTH_PATH_PREFIX}*`;

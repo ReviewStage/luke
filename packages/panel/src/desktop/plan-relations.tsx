@@ -295,10 +295,13 @@ export function PlanRelations({
   task,
   tasks,
   door,
+  onOpenTask,
 }: {
   task: Task;
   tasks: TasksControl;
   door: TaskRelationDoor;
+  /** Opens a row's task, as the plan's head opens a task. */
+  onOpenTask: (taskId: string) => void;
 }): React.JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const fold = (taskId: string) =>
@@ -370,7 +373,12 @@ export function PlanRelations({
           }
           actionsShown={GROUP_ACTIONS.AT_REST}
         >
-          <RelatedTasks tasks={tasks} label={GROUP_WORDS.SUB_TASKS} rows={subTasks} />
+          <RelatedTasks
+            tasks={tasks}
+            label={GROUP_WORDS.SUB_TASKS}
+            rows={subTasks}
+            onOpenTask={onOpenTask}
+          />
         </GroupHeader>
       )}
       {relations.length === 0 ? null : (
@@ -393,7 +401,12 @@ export function PlanRelations({
           }
           actionsShown={GROUP_ACTIONS.AT_REST}
         >
-          <RelatedTasks tasks={tasks} label={GROUP_WORDS.RELATIONS} rows={relations} />
+          <RelatedTasks
+            tasks={tasks}
+            label={GROUP_WORDS.RELATIONS}
+            rows={relations}
+            onOpenTask={onOpenTask}
+          />
         </GroupHeader>
       )}
     </div>

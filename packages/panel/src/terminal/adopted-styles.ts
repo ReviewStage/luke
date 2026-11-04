@@ -6,8 +6,8 @@ import { styleElementSheets, touchesStyle } from "../style-element-sheets.js";
  * The panel's policy is `style-src 'self'` (the desktop's
  * `renderer/index.html` and the web's `vercel.json`), which refuses an
  * inline `<style>` element, and xterm.js writes three of them inside the
- * element it draws in: the scrollbar's colours, and, where it draws without
- * WebGL, each cell's size and the theme's colours, without which its DOM
+ * element it draws in: the scrollbar's colors, and, where it draws without
+ * WebGL, each cell's size and the theme's colors, without which its DOM
  * renderer draws nothing legible. A constructed stylesheet is not inline
  * markup, so the policy admits it, as it admits the file tree's
  * (`file-tree/index.ts`). So each `<style>` the terminal writes under its

@@ -18,7 +18,7 @@
 
   /* The page's two insets: where the rails stand, and where words start
      inside them. The rails stand at most 1280px apart, so a window wider
-     than that centres the frame, the room outside it its margin, and the
+     than that centers the frame, the room outside it its margin, and the
      bar's links, the hero, every section, and the foot keep to it. */
   .ui-landing-page > * {
     /* off-scale: 1376px, the rails' 1280px and an inset either side */
@@ -328,15 +328,16 @@
   }
 
   /* The wordmark's foot keeps one shape at every width, so a phone draws
-     the word as densely as a desktop, only smaller. */
+     the word as densely as a desktop, only smaller. It stands between the
+     rails, as every section does, so the word never runs past them. */
   .ui-landing-foot-art {
     position: relative;
-    margin-inline: var(--ui-landing-margin);
+    margin-inline: var(--ui-landing-inset);
     aspect-ratio: 24 / 5;
     overflow: hidden;
   }
 
-  /* The 404: the numerals in dots over the line, centred in the rails, the
+  /* The 404: the numerals in dots over the line, centered in the rails, the
      page's room under the bar and over the foot's rule. */
   .ui-landing-lost {
     display: flex;

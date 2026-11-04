@@ -13,7 +13,7 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  *
  * The page owns its widths and its one scroll: the header and the filters
  * stand still over a content column that scrolls beneath them, all three at
- * one measure centred in the room, so a title, a filter, and a row's title
+ * one measure centered in the room, so a title, a filter, and a row's title
  * start on one edge. A `List` laid straight into the content reaches past
  * that edge by its rows' own inset, so its words line up with the title's
  * and its fill runs out to either side. Each state of the content opens at
@@ -57,7 +57,7 @@ export type CollectionState = (typeof COLLECTION_STATE)[keyof typeof COLLECTION_
 /** How many rows a read in progress stands, enough to fill the top of a window. */
 const LOADING_ROWS = 4;
 
-/** What the header, the filters, and the content share: the page's inset, and its measure centred in what is left. */
+/** What the header, the filters, and the content share: the page's inset, and its measure centered in what is left. */
 const COLUMN_CLASS = "box-border w-full mx-auto px-collection-page-inset";
 
 /**
@@ -94,7 +94,7 @@ const WIDTH_CLASS = {
 const TOP_CLASS =
   "flex-none box-border max-h-1/2 overflow-x-hidden overflow-y-auto scrollbar-gutter-stable pb-section-gap";
 
-/** An empty or failed collection's notice, centred in the room under the filters (its room above and below is the sheet's). */
+/** An empty or failed collection's notice, centered in the room under the filters (its room above and below is the sheet's). */
 const NOTICE_CLASS = "flex flex-1 flex-col items-center text-center";
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */

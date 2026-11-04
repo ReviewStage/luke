@@ -450,7 +450,7 @@ export function ConversationEmptyState({
 }
 
 /**
- * What floats over a log in a slot of its own, centred across it, on a
+ * What floats over a log in a slot of its own, centered across it, on a
  * ground of its own ringed and lifted off the lines: the way back to the
  * newest line over its foot, and the line saying earlier lines could not be
  * read over its top, so neither moves a row of the log as it comes and goes.

@@ -35,7 +35,8 @@ import { parsedUrl } from "./parsed-url.js";
  *   `/message/<messageId>`, and, on no task, a page it showed,
  *   `/page/<pageId>`; which task's panel it opens in is the reader's to
  *   find, by the agent;
- * - the Inbox, `/inbox`, and an item in it under the agent that posted it,
+ * - the Inbox, `/inbox`, the Inbox narrowed to one task's items,
+ *   `/inbox/task/<taskId>`, and an item in it under the agent that posted it,
  *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
  *   reader's to find, by the agent, to open the item in that task's Inbox;
  *   or by its id alone, `/inbox/<itemId>`, whose agent, task, and workspace
@@ -403,7 +404,10 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     messageId: idSchema,
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.INBOX) }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.INBOX),
+    planId: EffectSchema.optionalKey(idSchema),
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.INBOX_ITEM),
     planId: idSchema,
@@ -612,11 +616,17 @@ function placeFields(steps: readonly string[]) {
   }
 }
 
-/** The Inbox's fields past its step: the Inbox itself, or an item by its id alone, a picture in its words opening the item. */
-function inboxFields(itemId: string | undefined, rest: readonly string[]) {
-  if (itemId === undefined) return { kind: LINK_PLACE.INBOX };
+/** The Inbox's fields past its step: the Inbox itself, the Inbox narrowed to one task, `task/<taskId>`, or an item by its id alone, a picture in its words opening the item. */
+function inboxFields(step: string | undefined, rest: readonly string[]) {
+  if (step === undefined) return { kind: LINK_PLACE.INBOX };
+  if (TASK_STEPS.has(step)) {
+    const [taskId, ...more] = rest;
+    return taskId === undefined || more.length > 0
+      ? undefined
+      : { kind: LINK_PLACE.INBOX, planId: taskStepOf(taskId) };
+  }
   return rest.length === 0 || namesItemPicture(rest)
-    ? { kind: LINK_PLACE.INBOX_ITEM, itemId }
+    ? { kind: LINK_PLACE.INBOX_ITEM, itemId: step }
     : undefined;
 }
 
@@ -681,7 +691,7 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.MESSAGE:
       return [...agentPath(place.planId, place.agentId), STEP.MESSAGE, place.messageId];
     case LINK_PLACE.INBOX:
-      return [STEP.INBOX];
+      return place.planId === undefined ? [STEP.INBOX] : [STEP.INBOX, STEP.TASK, place.planId];
     case LINK_PLACE.INBOX_ITEM:
       if ("planId" in place) return [STEP.TASK, place.planId, STEP.INBOX, place.itemId];
       return "agentId" in place

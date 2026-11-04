@@ -42,6 +42,7 @@ export * from "./sandbox-terminal-lease.js";
 export * from "./session-sandbox.js";
 export * from "./slack-installation.js";
 export * from "./storage.js";
+export * from "./sync-log.js";
 export * from "./task.js";
 export * from "./task-block.js";
 export * from "./task-pin.js";

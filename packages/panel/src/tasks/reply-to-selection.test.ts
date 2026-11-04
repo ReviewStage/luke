@@ -301,6 +301,36 @@ test("words selected by a triple-click, which runs on to the start of the next b
   assert.deepEqual(tab.blocks(), [`> ${AGENT_WORDS}`, ""]);
 });
 
+test("a triple-click's selection is offered Reply past words no selection takes, as the next comment's avatar letter, and none once it takes the next block's words", async () => {
+  const tab = await mounted();
+  const words = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === AGENT_WORDS,
+  );
+  const next = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === DEVELOPER_WORDS,
+  );
+  assert.ok(words && next?.firstChild);
+  // The developer's words led by a letter drawn as an Inbox comment's avatar draws it.
+  const letter = document.createElement("span");
+  letter.style.userSelect = "none";
+  letter.textContent = "D";
+  next.before(letter);
+  const selectTo = (end: Node, offset: number) => {
+    const range = document.createRange();
+    range.setStart(words, 0);
+    range.setEnd(end, offset);
+    act(() => {
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      words.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    });
+  };
+  selectTo(next, 0);
+  assert.equal(tab.reply() === undefined, false, "Reply stands past the letter");
+  selectTo(next.firstChild, "Which".length);
+  assert.equal(tab.reply() === undefined, true, "Reply goes once the developer's words are held");
+});
+
 test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
   const tab = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   tab.select(AGENT_WORDS, "Option A", "today.");

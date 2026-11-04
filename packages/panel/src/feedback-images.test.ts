@@ -48,7 +48,7 @@ function over(top: Pixel, under: Pixel): Pixel {
 
 /**
  * Stands the platform's decoder and canvas in: every file decodes to
- * `picture`, a canvas holds pixels drawn nearest-neighbour, and its WebP is
+ * `picture`, a canvas holds pixels drawn nearest-neighbor, and its WebP is
  * those pixels' bytes as they stand, alpha and all.
  */
 function stubPlatform(picture: Omit<Bitmap, "close">): void {

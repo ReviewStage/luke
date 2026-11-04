@@ -64,6 +64,7 @@ import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,
   agentToolRejected,
+  callerAgent,
   callerUserId,
   callerWorkspace,
   choiceRefusal,
@@ -537,7 +538,7 @@ const landingNamed = (
   userId: string,
   workspaceId: string,
   agentId: string | null | undefined,
-  callerId: string,
+  callerId: string | undefined,
 ): Effect.Effect<
   Result.Result<AutomationTarget | undefined, string>,
   StoreFailure,
@@ -649,7 +650,7 @@ export function runCreateAutomation(
         userId,
         workspace.value,
         made.agentId,
-        call.caller.agent.id,
+        callerAgent(call.caller)?.id,
       );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const worked = yield* workedRepository(call.caller);
@@ -748,7 +749,12 @@ export function runUpdateAutomation(
       if (slack !== undefined) return agentToolRejected(slack);
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
-      const landing = yield* landingNamed(userId, workspace.value, agentId, call.caller.agent.id);
+      const landing = yield* landingNamed(
+        userId,
+        workspace.value,
+        agentId,
+        callerAgent(call.caller)?.id,
+      );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const action: AutomationAction | undefined = changesAction
         ? {

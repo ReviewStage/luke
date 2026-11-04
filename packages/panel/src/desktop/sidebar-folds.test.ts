@@ -78,7 +78,7 @@ test("the summary's archived agents fold under a group header that counts them f
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     createdAt: 1,
-    status: AGENT_STATUS.CANCELLED,
+    status: AGENT_STATUS.CANCELED,
     turnId: null,
     archivedAt: 2,
   } as const;

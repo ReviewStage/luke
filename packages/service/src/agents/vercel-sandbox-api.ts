@@ -257,7 +257,7 @@ export interface CommandAsk {
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
  * secret in it reaches no argv and no file. Vercel documents that its `sudo`
  * keeps that environment (setting `HOME` to root's), which the image's
- * sudoers must honour (`agent-runtime/sandbox-image.ts`).
+ * sudoers must honor (`agent-runtime/sandbox-image.ts`).
  */
 interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;

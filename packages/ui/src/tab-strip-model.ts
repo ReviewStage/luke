@@ -18,7 +18,7 @@
  * tab opened goes to the strip's end (`openedOrder`); a move takes the tab
  * out and puts it back before the tab standing at its new place
  * (`movedOrder`); and closing the chosen tab chooses the one viewed before
- * it that still stands, and only where none does its neighbour
+ * it that still stands, and only where none does its neighbor
  * (`replacementOf`), as a browser's tabs do. Each strip also keeps when each
  * tab was last viewed (`stampedViewed`), from which a tab left unviewed long
  * enough closes itself (`idleTabs`, the panel's `tasks/use-idle-tabs.ts`).
@@ -27,13 +27,14 @@
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox, the
- * thread the side panel holds beside the window's Inbox, a draft agent's tab and the "+" row that opens one, an agent the window holds
+ * thread the side panel holds beside the window's Inbox, the task's Overview, a draft agent's tab and the "+" row that opens one, an agent the window holds
  * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
   INBOX: "Inbox",
   THREAD: "Thread",
+  OVERVIEW: "Overview",
   NEW_AGENT: "New agent",
   AGENT: "Agent",
   PULL_REQUEST: "Pull request",

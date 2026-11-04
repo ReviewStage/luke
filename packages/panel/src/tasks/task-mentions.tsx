@@ -297,7 +297,7 @@ export function useSavedPlanText(
 /**
  * The task's pull requests as an `@` list offers them: each its agents
  * published, as far as the window has read them, in the order the agents
- * were started, an archived agent's among them, labelled by its agent's
+ * were started, an archived agent's among them, labeled by its agent's
  * tab's name; a pull request two agents published is offered once, under
  * the first.
  */

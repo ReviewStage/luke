@@ -94,7 +94,7 @@ const THREE_CHIPS = [
   ["link", "ACME-142/fix-the-thing"],
 ];
 
-/** The same chips where the page's plan is at hand, whose heading names the section now whatever its link was labelled. */
+/** The same chips where the page's plan is at hand, whose heading names the section now whatever its link was labeled. */
 const THREE_CHIPS_ON_PAGE = [["section", "Rollout"], ...THREE_CHIPS.slice(1)];
 
 /** Words drawn as Markdown with the page's mentions, as a version and a note draw them. */

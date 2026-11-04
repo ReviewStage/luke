@@ -33,7 +33,8 @@ import { AttachmentViewer } from "./attachment-viewer.js";
  * pixels does. Two fingers on a touch screen pinch it about the point
  * between them, and a picture asked to open at its own pixels does so from
  * its top left corner once it loads. Copy image puts the picture shown on
- * the clipboard as the PNG it is. A Mermaid file is drawn as the picture the
+ * the clipboard as the PNG it is, and a picture held by its address alone
+ * is shown and zoomed with no size, Copy, or Download. A Mermaid file is drawn as the picture the
  * diagram bundle answers, which stands in for Mermaid since it cannot lay out
  * under jsdom, and a file of any other kind imports no bundle. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
@@ -196,7 +197,7 @@ test("a pinch on the picture zooms it about the fingers, and one the other way f
   const apart = pinch(-30);
   viewer.fire(image, apart);
   assert.ok(drawn(image).scale > 1, "a pinch apart zooms in");
-  assert.ok(drawn(image).x < 0, "toward the point under the fingers, right of centre");
+  assert.ok(drawn(image).x < 0, "toward the point under the fingers, right of center");
   assert.ok(apart.defaultPrevented, "the window itself is not zoomed by it");
   for (let each = 0; each < 5; each += 1) viewer.fire(image, pinch(40));
   assert.equal(drawn(image).scale, 1, "a pinch together fits it again");
@@ -210,7 +211,7 @@ test("two fingers spread on a touch screen zoom the picture about the point betw
   viewer.fire(image, viewer.finger("pointermove", 2, 900, 250));
   const spread = drawn(image);
   assert.equal(spread.scale, 2, "fingers twice as far apart zoom it twice");
-  assert.ok(spread.x < 0, "toward the point between the fingers, right of centre");
+  assert.ok(spread.x < 0, "toward the point between the fingers, right of center");
   viewer.fire(image, viewer.finger("pointerup", 2, 900, 250));
   viewer.fire(image, viewer.finger("pointerup", 1, 500, 250));
   viewer.fire(image, viewer.pointer("click", 500, 250, 0));
@@ -414,7 +415,7 @@ test("the zoom stays with the picture: moved along the files it keeps it, and an
   );
 });
 
-test("a frame grown past the zoomed picture centres it again", () => {
+test("a frame grown past the zoomed picture centers it again", () => {
   const viewer = opened();
   const image = viewer.picture();
   viewer.key("=");
@@ -423,7 +424,7 @@ test("a frame grown past the zoomed picture centres it again", () => {
   const frame = image.parentElement ?? assert.fail("the picture stands in its frame");
   laidOut(frame, { clientWidth: 1600 });
   act(() => relayout());
-  assert.equal(drawn(image).x, 0, "1200 wide in a 1600 frame stands centred");
+  assert.equal(drawn(image).x, 0, "1200 wide in a 1600 frame stands centered");
 });
 
 test("a mouse counting its wheel in lines zooms by about as much as one counting pixels", () => {
@@ -581,6 +582,21 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   assert.equal(glyph(), "idle", "a copy answered after the next picture was shown lands nowhere");
 });
 
+test("a picture held by its address alone is shown and zoomed, with no size, Copy image, or Download", () => {
+  const photo: FileChip = {
+    name: "Ada Lovelace",
+    mediaType: "image/*",
+    url: "https://avatars.githubusercontent.com/u/1001?v=4&s=512",
+  };
+  const viewer = opened();
+  viewer.show([photo], 0);
+  assert.equal(viewer.picture().getAttribute("src"), photo.url);
+  viewer.press("Zoom in");
+  assert.equal(document.querySelector(".attachment-viewer-size")?.textContent, "");
+  assert.equal(document.querySelector('button[aria-label="Copy image"]'), null);
+  assert.equal(document.querySelector('button[aria-label="Download file"]'), null);
+});
+
 test("Copy text puts a text file's words on the clipboard and shows the check", async () => {
   const copied: string[] = [];
   fakeAppPlatform(copyingInto(copied));
@@ -615,7 +631,7 @@ test("Copy text puts a text file's words on the clipboard and shows the check", 
   assert.deepEqual(copied, ["const a = 1;\nconst b = 2;\n"]);
 });
 
-test("on a phone the viewer's header is Close alone at its start, the file's name centred over its size, and one ⋯ at its end holding every other button; the arrow keys still walk the files", () => {
+test("on a phone the viewer's header is Close alone at its start, the file's name centered over its size, and one ⋯ at its end holding every other button; the arrow keys still walk the files", () => {
   const viewer = opened(IMAGE_OPENING.FITTED, SHELL_ROOM.NARROW);
   const head =
     document.querySelector<HTMLElement>('[role="dialog"] header') ?? assert.fail("a header");

@@ -1,6 +1,6 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { commitLabel, devBuildDetail } from "./dev-build.js";
 import {
-  type BuildCommit,
   type RunningBuild,
   UPDATE_FAILURE,
   UPDATE_STATUS,
@@ -90,21 +90,10 @@ export function fixtureUpdate(
   };
 }
 
-/** The commit as `git describe --dirty` would mark it. */
-function commitLabel(commit: BuildCommit): string {
-  return commit.dirty ? `${commit.sha}-dirty` : commit.sha;
-}
-
 /** The version, with the commit beside it quietly, for a bug report to quote. */
 function versionTitle(update: UpdateSnapshot, build: RunningBuild): string {
   const version = `Version ${update.currentVersion}`;
   return build.commit ? `${version} (${commitLabel(build.commit)})` : version;
-}
-
-/** Where a development build was cut from: the branch and commit, as far as the build knew. */
-function developmentDetail(commit: BuildCommit | undefined): string {
-  if (!commit) return "Run from source.";
-  return commit.branch ? `${commit.branch} @ ${commitLabel(commit)}` : commitLabel(commit);
 }
 
 function downloadingDetail(update: UpdateSnapshot & { status: "downloading" }): string {
@@ -224,7 +213,7 @@ export function updateRow(update: UpdateSnapshot, build: RunningBuild): UpdateRo
   if (!update.installSupported && !build.packaged) {
     return {
       title: "Development build",
-      detail: developmentDetail(build.commit),
+      detail: devBuildDetail(build.commit),
       action: UPDATE_ROW_ACTION.NONE,
       current: false,
       failed: false,

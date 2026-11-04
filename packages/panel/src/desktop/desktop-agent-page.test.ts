@@ -51,7 +51,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { AGENT_PAGE_HOLDS, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -70,7 +70,9 @@ import {
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
+  handHostReads,
   handState,
+  holdPages,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -362,14 +364,6 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
       }
-      // Only the task the agents here stand on holds a page; an agent's own pages hold none.
-      if (request.kind === ACT_KIND.TASKS_PAGES) {
-        const onTask = "taskId" in request.payload && request.payload.taskId === PAGE_TASK;
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value: { pages: onTask ? [FUNNEL] : [] },
-        });
-      }
       if (request.kind === ACT_KIND.AGENTS_PAGE) {
         read.push(request.payload.agentId);
         const value = pages.length > 1 ? pages.shift() : pages[0];
@@ -598,14 +592,7 @@ let drawnPanel: SidePanelControl | undefined;
 
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
-  const sidePanel = useSidePanel(
-    undefined,
-    { id: AGENT_ID, holds: AGENT_PAGE_HOLDS },
-    agents,
-    [],
-    [],
-    agents,
-  );
+  const sidePanel = useSidePanel(undefined, { id: AGENT_ID, holds: {} }, agents, [], [], agents);
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
     tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
@@ -613,7 +600,7 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers the agent's own Inbox and none of a task's Plan or Comments", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Plan or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -660,19 +647,9 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Plan|Comments)/u.test(label ?? "")),
+    offered.filter((label) => /^(Plan|Comments|Inbox)/u.test(label ?? "")),
     [],
-    "no task's kind is offered",
-  );
-  const inbox =
-    [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) =>
-      (each.textContent ?? "").startsWith("Inbox"),
-    ) ?? assert.fail(`the agent's own Inbox is offered: ${offered.join(", ")}`);
-  act(() => inbox.click());
-  await settle();
-  assert.ok(
-    panel?.querySelector("[role='tabpanel'][aria-label='Inbox']"),
-    "the Inbox tab opens in the panel beside the agent's page",
+    "no task's kind nor an Inbox is offered",
   );
 });
 
@@ -690,7 +667,7 @@ function PagesPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
     undefined,
-    { id: AGENT_ID, holds: AGENT_PAGE_HOLDS },
+    { id: AGENT_ID, holds: {} },
     agents,
     [],
     [FUNNEL.id],
@@ -708,7 +685,7 @@ function PagesPage(): React.JSX.Element {
   });
 }
 
-test("the panel beside an agent's page offers the pages the agent showed on itself under its +, and one picked opens in a page tab drawn from the agent's own address, as a task's opens beside its plan", async () => {
+test("the panel beside an agent's page offers the pages the agent showed on itself under its +, asked at the toggle with nothing to show, and one picked opens in a page tab drawn from the agent's own address, as a task's opens beside its plan", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -731,19 +708,21 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   act(() => drawnPanel?.onToggle());
   await settle();
 
-  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the panel shows");
-  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
   assert.deepEqual(
-    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
-    ["Open a tab", "Pages", "Terminal", "Browser"],
+    [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["Pages", "Terminal", "Browser"],
   );
   const row =
-    [...well.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the empty panel offers the agent's page");
+    [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
+      (each) => (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the + offers the agent's page");
   act(() => row.click());
   await settle();
 
+  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the pick shows it");
   assert.ok(
     [...panel.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes(FUNNEL.title),
@@ -778,6 +757,10 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  // Note that only the task the agent stands on holds a page, laid on the document as the host lays the pages a card holds.
+  holdPages(handHostReads({}).deliverPages, (place) => ({
+    rows: "taskId" in place && place.taskId === PAGE_TASK ? [FUNNEL] : [],
+  }));
   const page = mount();
   await settle();
 
@@ -809,7 +792,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("its last tab closed shuts the panel, and shown again it offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+test("its last tab closed shuts the panel, and its toggle then asks for its + at the toggle, every row and heading as the panel's own +, each opening what it names", async () => {
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -871,23 +854,25 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
 
   act(() => drawnPanel?.onToggle());
   await settle();
-  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the toggle shows it");
-  const well = shown.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
-  const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
+  const rows = [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")];
   assert.deepEqual(
     rows.map((each) => each.textContent),
     offered,
   );
-  // Note that the empty panel heads its kinds' rows, which the + lists first under no heading.
+  // Note that an agent's page offers no fixed kind, so the menu heads only its own sections.
   assert.deepEqual(
-    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
-    ["Open a tab", ...headings],
+    [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    headings,
   );
   assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
-  assert.ok(changes, "the empty panel offers the agent's pull request");
+  assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
   await settle();
+  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the pick shows it");
   assert.ok(
     [...shown.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes("#2911 Await the payment mock"),
@@ -934,7 +919,7 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Pu
   );
 });
 
-test("⌘T on an agent's page opens the panel beside it on its +, the page's one", async () => {
+test("⌘T on an agent's page with nothing in its panel asks for its + at the toggle, the page's one, rather than showing the panel empty", async () => {
   const container = await mountPanelPage();
 
   act(() => {
@@ -942,7 +927,7 @@ test("⌘T on an agent's page opens the panel beside it on its +, the page's one
   });
   await settle();
 
-  assert.ok(container.querySelector("aside.side-panel"), "the panel opens");
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
   assert.ok(
     document.querySelector("input[placeholder='Search tabs']"),
     "its + opens on the tabs it offers",
@@ -1955,7 +1940,7 @@ test("a delete the service refused for an agent still starting says why in the d
   assert.equal(closed, 0);
 });
 
-test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+test("on a phone the page is headed by its way back's glyph, the agent's name centered, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
   const left: string[] = [];
   const page = mount(tasksControl({}), undefined, {
     label: "Inbox",

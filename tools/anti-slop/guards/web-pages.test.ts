@@ -12,7 +12,7 @@ const ICONS =
   '<link rel="icon" href="/favicon.ico" /><link rel="icon" href="/favicon.svg" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />';
 
 describe("the site's pages", () => {
-  it("name a page whose head misses an icon or the theme colour", () => {
+  it("name a page whose head misses an icon or the theme color", () => {
     expect(
       headProblems("ok.html", `<head>${ICONS}<meta name="theme-color" content="#ffffff" /></head>`),
     ).toEqual([]);

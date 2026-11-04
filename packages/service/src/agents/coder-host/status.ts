@@ -45,7 +45,7 @@ import { CODER_REFUSAL } from "./bounds.js";
  * `starting` before the first turn is queued, `running` while eve runs a
  * turn or a line waits for the turn it will open, and how the newest turn
  * ended after. A turn still running that carries a Stop stamp
- * reads as cancelled already, since the Stop is on its way to eve and
+ * reads as canceled already, since the Stop is on its way to eve and
  * nothing the turn still does changes where it ends. An agent with no turn
  * row long past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather
  * than starting forever, as one that never started: eve took the session,

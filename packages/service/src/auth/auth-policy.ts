@@ -8,6 +8,7 @@
 
 import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
+import { MEMBER_MCP_SCOPE } from "../member-mcp/resource.js";
 
 /**
  * The page the OAuth provider sends an authorization that holds no session
@@ -15,6 +16,28 @@ import { USER_ROLE } from "../admin/admin-access.js";
  * path in the page's place (`apps/web/server/local-sign-in.ts`).
  */
 export const LOGIN_PAGE = "/sign-in";
+
+/**
+ * The path every auth endpoint stands under, Better Auth's own default,
+ * declared so the issuer a token names (`${baseURL}/api/auth`) and the path
+ * set the auth group serves are one spelling.
+ */
+export const AUTH_BASE_PATH = "/api/auth";
+
+/**
+ * The scopes the OAuth provider knows: OpenID's own, which the desktop asks
+ * for, and the member MCP server's, which a client of it asks for
+ * (`../member-mcp/resource.ts`). A client's row narrows these to its own,
+ * so naming the MCP scope here hands it to no client that was not
+ * registered with it.
+ */
+export const OAUTH_PROVIDER_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  MEMBER_MCP_SCOPE.OFFLINE_ACCESS,
+  MEMBER_MCP_SCOPE.MCP,
+] as const;
 
 /**
  * What a GitHub sign-in asks for. It is our GitHub App's user
@@ -127,7 +150,7 @@ export const SESSION_BEARER = { requireSignature: true } as const;
  * (https://www.better-auth.com/docs/concepts/session-management#cookie-cache),
  * a `session_data` cookie beside the session's own, encrypted under the
  * deployment's secret (`jwe`: neither readable nor alterable by whoever holds
- * it) and honoured only beside the signed session cookie it was minted for.
+ * it) and honored only beside the signed session cookie it was minted for.
  * Note that a session revoked elsewhere, or a role changed in the store,
  * still reads as it was on a browser holding that cookie for up to
  * `maxAge`, which Better Auth's docs name as the cost, so `maxAge` is the
@@ -189,5 +212,10 @@ export const JWT_KEY_STORAGE = {
 
 /** We provision our own native clients; signed-in users cannot add or alter OAuth clients. */
 export function denyOAuthClientPrivileges(): false {
+  return false;
+}
+
+/** The resources are declared in code and seeded from it (`auth.ts`); signed-in users cannot add, alter, or link OAuth resources. */
+export function denyOAuthResourcePrivileges(): false {
   return false;
 }

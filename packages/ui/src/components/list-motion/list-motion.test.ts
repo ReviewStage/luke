@@ -59,11 +59,11 @@ beforeEach(() => {
   Object.defineProperty(Element.prototype, "animate", {
     configurable: true,
     value(this: Element, keyframes: Keyframe[], timing: KeyframeAnimationOptions) {
-      let cancelled = false;
+      let canceled = false;
       const motion = {
         onfinish: null as (() => void) | null,
         cancel: () => {
-          cancelled = true;
+          canceled = true;
         },
       };
       played.push({
@@ -71,7 +71,7 @@ beforeEach(() => {
         keyframes,
         timing,
         finish: () => motion.onfinish?.(),
-        stopped: () => cancelled,
+        stopped: () => canceled,
       });
       return motion;
     },

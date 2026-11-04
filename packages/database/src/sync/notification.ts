@@ -29,6 +29,12 @@ export const TOPIC = {
   ACCOUNT: "account",
   /** A workspace, by organization id. */
   WORKSPACE: "workspace",
+  /**
+   * A workspace's pull request chapters, by organization id: narrower than
+   * the workspace's own topic, so a Generate's claim and finish wake the open
+   * chapter reads of that workspace and never its members' task lists.
+   */
+  WORKSPACE_CHAPTERS: "workspace-chapters",
   TASK: "task",
   AGENT: "agent",
   CONVERSATION: "conversation",

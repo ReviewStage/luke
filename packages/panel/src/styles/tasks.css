@@ -1,5 +1,5 @@
 /* The byline's people (`DocumentByline`) each take a press a finger's
-   height on a coarse pointer, and at least as wide, centred on what they
+   height on a coarse pointer, and at least as wide, centered on what they
    draw; its lines part a little further there (`pointer-coarse:`), so one
    line's press does not cover the next's words. The time is drawn whole
    (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
@@ -533,7 +533,7 @@
   border-color: var(--agent-pointer-on-dark);
 }
 
-/* The glow behind the arrowhead while the agent types, centred a little
+/* The glow behind the arrowhead while the agent types, centered a little
    inside it from the tip, in the arrow's own amber. */
 .cloud-browser-cursor-halo {
   position: absolute;
@@ -726,7 +726,7 @@
 }
 
 /* The tree rings whichever row holds focus, a pressed one too, so until the
-   keyboard has moved focus its ring is drawn in no colour at all, as every
+   keyboard has moved focus its ring is drawn in no color at all, as every
    other control's is drawn not at all (base.css). */
 :root:not([data-keyboard="true"]) .file-tree-host {
   --trees-focus-ring-color-override: transparent;
@@ -764,7 +764,7 @@
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
    as few rows as it can, the pull request's standing as a pill in its own
-   colour beside its title, over the page read top to bottom in one
+   color beside its title, over the page read top to bottom in one
    scroller, its sections each under a quiet heading.
 
    It keeps to the panel's top row's two edges, so the tab reads down from
@@ -860,7 +860,7 @@
 }
 
 /* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
-   mark for each chapter in its risk's colour, as Files changed's strip
+   mark for each chapter in its risk's color, as Files changed's strip
    stands for its tree; this box says when it is drawn and its edge. */
 .chapter-strip {
   display: none;
@@ -948,7 +948,7 @@
 
 /* A Pull request tab as narrow as a phone's folds the chapter's risk chip
    away, so its title keeps room beside Viewed, the pager, and the list's
-   tools; the rail's row still marks the risk in its colour and says it. */
+   tools; the rail's row still marks the risk in its color and says it. */
 /* off-scale: 480px, where the bar's controls leave the title no room beside the chip */
 @container pull-request-tab (width < 480px) {
   .chapter-risk {
@@ -1020,7 +1020,7 @@
 /* The title's row: the pill at the row's inset, the title taking the room
    between, wrapping beside the controls rather than under them, and the
    controls at the row's end, each level with the title's first line rather
-   than centred on a title wrapped to two. The title's first line stands the
+   than centered on a title wrapped to two. The title's first line stands the
    controls' height, so one of a single line reads level with them. */
 .pull-request-title-row {
   display: flex;
@@ -1039,7 +1039,7 @@
   /* Note that the pill is drawn ahead of the title it follows in the
      markup, where a screen reader names the title first. */
   order: -1;
-  /* The pill, a badge's height, stands centred in a control's height, the
+  /* The pill, a badge's height, stands centered in a control's height, the
      height of the title's first line and of the controls. */
   margin-block: calc((var(--ui-control-height) - var(--ui-space-20)) / 2);
 }
@@ -1777,7 +1777,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* An agent's tab: a frame the log fills, its rows drawn by the one set of
    blocks (../tasks/transcript-blocks.tsx over ../ai-elements/). What
    follows is its own: the app's mark beside a note of its, drawn at the row's
-   16px in his voice's colour; the agent's composer; a worker's line. */
+   16px in his voice's color; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
@@ -2146,7 +2146,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 /* Reply over words selected in an agent's message: one press on the menus'
-   surface, centred over the selection, or under it where the window's top
+   surface, centered over the selection, or under it where the window's top
    leaves no room. */
 [data-ui-profile="desktop"] .reply-to-selection {
   -webkit-app-region: no-drag;
@@ -2160,88 +2160,11 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   justify-content: flex-end;
 }
 
-/* What the place opening the viewer says of the file shown, after its size
-   in the same quiet ink, a plan's picture saying who last edited it: the
-   size gives it the room the size kept before the header's buttons, and it
-   is cut before it reaches them. */
-.attachment-viewer-size:has(+ .attachment-viewer-note) {
-  margin-right: 0;
-}
-
-/* A picture or a video fits the room under the viewer's header edge to
-   edge at its own shape, and grows past its own pixels to fill it at most
-   twice over (`@repo/ui`'s ZoomImage and VideoPlayer say their pixels once
-   they are read). Where the card hugs it (`DialogCard`), as a video's does
-   off a phone, the room is the room between the arrows, less the card's edge
-   and its header, so the card takes its shape, and it waits at a
-   screenshot's shape until its pixels are read. Where the card fills its
-   room, as a picture's always does and a phone's video's does, the room is
-   the body under the header, one track its own size; a picture opened at its
-   own pixels says none. */
-.attachment-viewer-room {
-  container-type: size;
-}
-
-/* A finger swiping the viewer sideways (`@repo/ui`'s `use-page-swipe.ts`)
-   holds the file shown where the finger has taken it, with its transition
-   off, so it stays under the finger; let go short of the next file, the
-   mark comes off and it travels back on its transition, and the file walked
-   to stands in its place at once. */
-.attachment-viewer-body {
-  transition: translate var(--ui-duration-pane) var(--ui-motion-pane);
-}
-
-.attachment-viewer[data-ui-page-swipe] .attachment-viewer-body {
-  translate: var(--ui-page-swipe-offset, 0) 0;
-  transition: none;
-}
-
-.attachment-viewer[data-hug="true"] .attachment-viewer-body > .ui-video-player {
-  width: min(
-    100cqw -
-    2px,
-    (100cqh - var(--ui-control-height) - 2 * var(--ui-space-4) - 3px) *
-    var(--ui-video-natural-width, 16) /
-    var(--ui-video-natural-height, 10),
-    var(--ui-video-natural-width, 1600) *
-    2px
-  );
-}
-
-.attachment-viewer[data-hug="false"]
-  .attachment-viewer-body:has(> :is(.ui-zoom-image, .ui-video-player)) {
-  container-type: size;
-  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-}
-
-.attachment-viewer[data-hug="false"] .attachment-viewer-body > .ui-zoom-image {
-  width: min(
-    100cqw,
-    100cqh *
-    var(--ui-zoom-natural-width) /
-    var(--ui-zoom-natural-height),
-    var(--ui-zoom-natural-width) *
-    2px
-  );
-  max-height: 100%;
-}
-
-.attachment-viewer[data-hug="false"] .attachment-viewer-body > .ui-video-player {
-  width: min(
-    100cqw,
-    100cqh *
-    var(--ui-video-natural-width) /
-    var(--ui-video-natural-height),
-    var(--ui-video-natural-width) *
-    2px
-  );
-}
-
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action
    lays one slim mono bar over the screen; the screen under any state
-   without a shell connected is dimmed, never blanked: in its colours, by the
+   without a shell connected is dimmed, never blanked: in its colors, by the
    terminal (`terminal-theme.ts`), so the line it prints stays legible. */
 .terminal-tab-title [data-agent-ref] {
   flex: 0 1 auto;
@@ -2257,7 +2180,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* A dot while a command runs in the shell, centred where the × steps in. */
+/* A dot while a command runs in the shell, centered where the × steps in. */
 .terminal-shells-foot [data-agent-ref] .ui-harness-mark {
   width: var(--ui-control-icon);
   height: var(--ui-control-icon);
@@ -2302,11 +2225,11 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   grid-template-rows: auto clamp(200px, var(--ui-stage-height) - 280px, 440px);
 }
 
-/* A pull request's colour for where it stands, in GitHub's colours: open in
+/* A pull request's color for where it stands, in GitHub's colors: open in
    the success green, a draft in the muted ink, merged in the merged purple,
    closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
    chip naming it wears the shared palette's tone for it
-   (`PULL_REQUEST_TONE`). Its checks never change its colour. */
+   (`PULL_REQUEST_TONE`). Its checks never change its color. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--ui-color-complete);
 }
@@ -2336,12 +2259,12 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 /* Keyed on the mark's own attributes as well, so a place sizing it by a
-   class of its own (`.task-mark-glyph`) does not take its colour too. */
+   class of its own (`.task-mark-glyph`) does not take its color too. */
 .pull-request-mark[data-pull-request-state] {
   color: var(--pull-request-tone);
 }
 
-/* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
+/* A GitHub issue's mark in GitHub's colors (`issue-mark.tsx`): open in the
    success green, closed as done in the merged purple, and closed as not
    planned in the muted ink. */
 .issue-mark {
@@ -2373,7 +2296,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 
 /* As narrow as a phone's, on a phone: where it stands is drawn nowhere, so
    the title has the room, and still read to assistive tech, since the row
-   hides its mark from it; the mark's colour, the hint's card, and the Pull
+   hides its mark from it; the mark's color, the hint's card, and the Pull
    request tab still show it. Note that the narrow room scopes it, because a
    desktop's side panel draws the card as narrow and has the room for it. */
 /* off-scale: 420px, a phone's widest card */
@@ -2445,33 +2368,39 @@ svg.lucide {
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
    pair, and wrapping where more would leave each too narrow for a video's
-   bar (`grid-cols-picture-row`). Note that each picture fills its cell at a
-   shape between 3:4 and 2:1, cut from its top and centre past either, rather
-   than hugging its own shape, because a whole page or a phone's screenshot
-   shrunk to the row's height is a sliver beside a screenshot's wide box; a
-   press still opens it whole. A video keeps its player's own shape. */
+   bar (`grid-cols-picture-row`). Note that each picture of several fills its
+   cell at a shape between 3:4 and 2:1, cut from its top and center past
+   either, rather than hugging its own shape, because a whole page or a
+   phone's screenshot shrunk to the row's height is a sliver beside a
+   screenshot's wide box; a press still opens it whole. A picture alone in
+   its row is drawn as one in words is, whole at its own size up to the
+   column's width and a screenful's height, because filling the column would
+   blow a small picture up past its own pixels and cut it. A video keeps its
+   player's own shape. */
 .transcript-pictures > .picture-block {
   min-width: 0;
   margin: 0;
 }
 
-.transcript-pictures > .picture-block:not([data-video]) {
+.transcript-pictures > .picture-block:not([data-video], :only-child) {
   width: auto;
   container-type: inline-size;
 }
 
-.transcript-pictures > .picture-block:not([data-video]) :is(.ui-picture-tile, .picture-frame) {
+.transcript-pictures
+  > .picture-block:not([data-video], :only-child)
+  :is(.ui-picture-tile, .picture-frame) {
   width: 100%;
 }
 
 /* The frame holds the 3:4 bound, and the picture its own screenful's worth
    (`max-h-picture-most`) under it. */
-.transcript-pictures > .picture-block .picture-frame:has(> .picture-image) {
+.transcript-pictures > .picture-block:not(:only-child) .picture-frame:has(> .picture-image) {
   max-height: calc(100cqw * 4 / 3);
   overflow: clip;
 }
 
-.transcript-pictures > .picture-block .picture-image {
+.transcript-pictures > .picture-block:not(:only-child) .picture-image {
   width: 100%;
   min-height: calc(100cqw / 2);
   object-fit: cover;
@@ -2493,7 +2422,7 @@ svg.lucide {
 
 /* A version's changes (`version-view.tsx`, `markdown-message.tsx`'s change
    marks): words written in on a green wash, words struck out struck on a red
-   one and dimmed, so neither reads by its colour alone. The washes are the
+   one and dimmed, so neither reads by its color alone. The washes are the
    palette's finished green and its one red, which each appearance restates. */
 .markdown-inserted {
   border-radius: var(--ui-radius-6);
@@ -2599,7 +2528,7 @@ svg.lucide {
   pointer-events: none;
 }
 
-/* The button stands in the gutter past the column's end, centred on its
+/* The button stands in the gutter past the column's end, centered on its
    block's first line as a folded line's count is on its words' first line,
    which stands in its place on a line holding threads. */
 .comment-block-button {
@@ -2637,7 +2566,7 @@ svg.lucide {
    the column. It ends a scrollbar's room short of the scroller's edge, so a
    scrollbar drawn over the page, macOS's, never stands under it, and a count
    of more figures grows in toward the words rather than out under it. It
-   stands centred on the first line its words stand on, wherever they go on
+   stands centered on the first line its words stand on, wherever they go on
    from there, so every count reads as the line it starts. */
 .comment-count {
   --ui-control-inset: var(--ui-space-6);

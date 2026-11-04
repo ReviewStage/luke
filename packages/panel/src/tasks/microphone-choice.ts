@@ -5,8 +5,8 @@ import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "@repo/set
  *
  * Echo cancellation is deliberately off. The microphone is open only while
  * the talk key is held, and the live session's own model handles a voice
- * overlapping the app's, so nothing here depends on the canceller. What the
- * constraint would buy instead is Chromium's system echo canceller, which on
+ * overlapping the app's, so nothing here depends on the canceler. What the
+ * constraint would buy instead is Chromium's system echo canceler, which on
  * macOS runs the capture through the OS's own voice processing — and the OS then ducks and thins
  * every other app's audio for as long as the device is open. That processing,
  * not the media duck (which only moves a volume and puts it back), is what

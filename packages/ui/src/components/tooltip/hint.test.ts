@@ -27,6 +27,8 @@ import { RowHint, RowHintOptions, Tooltip } from "./hint.js";
  * only crossing a control mounts nothing for it, a card's row moved on from
  * lets the next row wait its own wait, so a pointer sweeping down a list
  * hangs no card, and a pill seen still lets the next control's show at once.
+ * A modifier held alone, as a screenshot's chord begins, neither calls a
+ * waiting hint off nor takes a standing one down.
  * Words cut short inside a control hanging a card raise its card, not their
  * pill, while a button inside it raises its own, and the pointer moving on
  * from that button to the words raises the card.
@@ -524,6 +526,24 @@ test("a key, a scroll, or the window losing the keyboard while the pointer rests
     for (const root of roots.splice(0)) act(() => root.unmount());
     vi.useRealTimers();
   }
+});
+
+test("a modifier held alone, as a screenshot's chord begins, neither calls a waiting card off nor takes a standing one down; the key it begins does", () => {
+  waiting();
+  const press = drawRows(["Alpha"]);
+  const modifier = (key: string) =>
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key })));
+  move(undefined, press("Alpha"));
+  pass(MOTION_DELAY_MS.HINT / 2);
+  modifier("Shift");
+  pass(MOTION_DELAY_MS.HINT / 2);
+  assert.deepEqual(mounted, ["Alpha"], "the waiting card still mounts");
+
+  for (const key of ["Control", "Shift", "Meta"]) modifier(key);
+  assert.equal(cardStands(), true, "the standing card stays");
+
+  modifier("4");
+  assert.equal(cardStands(), false, "the chord's key takes it down");
 });
 
 // Note that this stands last, because the warm spell it leaves is the window's own.

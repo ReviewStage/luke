@@ -39,7 +39,7 @@
  * a dead runner's stderr; what is logged of a failure is its status, and of a
  * dead runner its exit. Note that the stderr is kept in the turn's row
  * alone, never a log line or a report, because those reach Sentry, where a
- * short secret the redaction cannot recognise would outlive the turn.
+ * short secret the redaction cannot recognize would outlive the turn.
  */
 
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
@@ -273,7 +273,7 @@ class RunnerLost extends Data.TaggedError("RunnerLost")<{
  * ended, read before the store is read again so the settle follows that
  * read at once. The turns it failed are logged once as an error under the
  * agent's ids and reported as an issue, since nothing the user did ends a
- * run this way; a turn its Stop cancelled is neither.
+ * run this way; a turn its Stop canceled is neither.
  */
 const settledLostRunner = (
   writer: Pick<StoreWriter, "consume">,
@@ -292,7 +292,7 @@ const settledLostRunner = (
       detail,
       lostTurns,
     );
-    // Note that a turn cancelled by its Stop, or one the writer refused, is no runner lost to report.
+    // Note that a turn canceled by its Stop, or one the writer refused, is no runner lost to report.
     if (turnIds.length === 0) return;
     const lost = new RunnerLost({
       agentId: sandbox.agentId,

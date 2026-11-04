@@ -10,6 +10,7 @@ import type { AppStateStore, OperatorClient } from "@repo/host/client";
 import { PUSH } from "@repo/host/contract";
 import type { DesktopService } from "@repo/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@repo/settings";
+import { devBuildBadge } from "@repo/settings/dev-build";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import {
@@ -270,7 +271,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     applyLoginItem,
     start: async () => {
-      followDockIcon(path.join(config.resourceDirectory, "icon"));
+      // A development build bands its tile, so builds side by side are told apart.
+      const badge = config.packaged
+        ? undefined
+        : devBuildBadge({ instance: config.instance, commit: config.commit });
+      followDockIcon(path.join(config.resourceDirectory, "icon"), badge, config.report);
       const settings = await run(operator.ensureSettings());
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits

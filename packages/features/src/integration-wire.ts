@@ -371,7 +371,7 @@ export const integrationAccountAnswerSchema = EffectSchema.Struct({
 
 /** How a sign-in the browser never brought back to the app ended, as Vercel Connect tells it. */
 export const INTEGRATION_SIGN_IN_FAILURE = {
-  /** The developer cancelled it on Connect's own page. */
+  /** The developer canceled it on Connect's own page. */
   CANCELED: "canceled",
   /** Connect or the provider refused it; Connect's own line says why where it is safe to keep. */
   ERROR: "error",
@@ -503,7 +503,7 @@ export const INTEGRATION_LANDING = {
 export const INTEGRATION_LANDING_STATUS = {
   /** The account is connected. */
   CONNECTED: "connected",
-  /** The sign-in did not give us a grant: declined, cancelled, or abandoned. */
+  /** The sign-in did not give us a grant: declined, canceled, or abandoned. */
   NOT_COMPLETED: "not-completed",
   /** The sign-in's link was not one we issued, or it is too old to finish. */
   EXPIRED: "expired",

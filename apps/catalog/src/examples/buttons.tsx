@@ -32,7 +32,7 @@ import { CatalogSection } from "../section";
  * check when Succeed ends them and just stop when Fail does; a Retry and a
  * Reload whose arrows turn once at each press; the IconButton's looks and toggle;
  * ButtonLink's looks and an IconButtonLink; the compact marks a row reveals
- * at its end, and a compact labelled button among words; a yes or no whose
+ * at its end, and a compact labeled button among words; a yes or no whose
  * recommended press wears its badge, offered and recorded; a message's submit in each of its states, and unavailable; and
  * a long label in a narrow column.
  */

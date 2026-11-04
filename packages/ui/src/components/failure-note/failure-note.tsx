@@ -13,7 +13,7 @@
  *
  * The line is an alert, so a reader hears the failure land where it
  * happened. A failure that is history, such as a tool call's error in a
- * transcript, is no alert (`FAILURE_NOTE_TIME.PAST`): a virtualised
+ * transcript, is no alert (`FAILURE_NOTE_TIME.PAST`): a virtualized
  * transcript mounts its rows as they scroll into view, and an alert there
  * would announce an old failure again on every pass. Where trying again can mend it, Retry stands after the words
  * (`RetryButton`), and the line's first row is then a control tall, so the
@@ -45,7 +45,7 @@
  * `Banner`), where a failure note is one line among the words of what it
  * failed in. The line's first row is a caption's leading tall, or a
  * control's where a press stands in it, and the mark and the words' first
- * line are centred in that row, so a failure of several lines keeps its
+ * line are centered in that row, so a failure of several lines keeps its
  * mark by its first. The words keep at least half the line, so presses that
  * would take more wrap, whole, under them.
  */

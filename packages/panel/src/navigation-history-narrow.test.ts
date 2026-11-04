@@ -10,7 +10,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
@@ -22,6 +22,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { chooseInboxTask, leaveInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -99,6 +100,8 @@ interface Standing {
   readonly unsaved?: boolean | undefined;
   /** Whether the Admin place stands, the view standing, and its section list standing alone. */
   readonly admin?: { readonly view: AdminView } | undefined;
+  /** How many times a door naming a thing opened it in the side panel, as the real one counts them. */
+  readonly opened?: number | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -163,7 +166,9 @@ function tasksTab(
       fullScreen: at.panel.open && narrow,
       fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,
-      onShow: (_taskId, tab) => panel({ open: true, tab }),
+      opened: at.opened ?? 0,
+      onShow: (_taskId, tab) =>
+        patch((held) => ({ ...held, panel: { open: true, tab }, opened: (held.opened ?? 0) + 1 })),
       onSetOpen: setOpen,
       onToggle: () => panel({ open: !at.panel.open, tab: at.panel.tab }),
       onToggleFullScreen: () => (narrow ? shut() : undefined),
@@ -206,6 +211,8 @@ function tasksTab(
       onOpen: (agent) => patch((held) => ({ ...held, agent })),
       onClose: () => patch((held) => ({ ...held, agent: undefined })),
     },
+    // As the real door does, it opens the Inbox on no item; the task it narrows to is the window's own store's.
+    onShowInbox: () => inbox({ open: true, chosen: undefined }),
     inboxView: {
       ...base.inboxView,
       open: at.inbox.open,
@@ -504,6 +511,22 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
   assert.equal(window.standingAddress(), "/acme/inbox");
 });
 
+test("an Inbox narrowed to a task, showing one column, steps its item's way back to the task's list rather than adding a step after the item", () => {
+  chooseInboxTask(DOCUMENT_TASK.id);
+  onTestFinished(leaveInboxTask);
+  const window = mount(SHELL_ROOM.WIDE, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, single: true },
+  });
+  window.press(() => {
+    window.shown().inboxView.onChoose(ITEM);
+  });
+  window.press(() => window.shown().inboxView.onClear());
+
+  assert.equal(window.history().canGoForward, true, "a step back, the item ahead");
+  assert.equal(window.standingAddress(), `/acme/inbox/task/${DOCUMENT_TASK.id}`);
+});
+
 test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
   const window = mount(SHELL_ROOM.WIDE, {
     ...ON_TASK,
@@ -594,11 +617,11 @@ test("on a narrow stage a Settings page a link opened has no list behind it, so 
   assert.equal(window.at().tab, PANEL_TAB.TASKS, "Back leaves Settings for the task");
 });
 
-test("on the desktop's width none of a narrow room's panes is a step: the side panel opened, the Inbox's first item, a Settings page, and a version", () => {
+test("on the desktop's width none of a narrow room's panes is a step: the side panel opened by its toggle, the Inbox's first item, a Settings page, and a version", () => {
   const moves: readonly [Standing, (window: Window) => void][] = [
     [
-      ON_TASK,
-      (window) => window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB)),
+      { ...ON_TASK, panel: { open: false, tab: PAGE_TAB } },
+      (window) => window.press(() => window.shown().sidePanel.onToggle()),
     ],
     [
       { ...ON_TASK, inbox: { open: true, chosen: undefined } },
@@ -804,7 +827,7 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   assert.equal(window.held.current().at, 1, "the history stands back on it");
 });
 
-test("on a narrow stage another tab chosen in the side panel standing over the plan is a step of its own, which Back shows again", () => {
+test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));

@@ -2,12 +2,13 @@
 
 import assert from "node:assert/strict";
 import { AGENT_PAYER, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { agentUsageLine } from "./agent-model.js";
+import { agentPayerLine } from "./agent-model.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { newestTodos, taskTodos } from "./agent-todos.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
@@ -349,19 +350,21 @@ test("Vespin's read_agent, called over its MCP server and stored under its own n
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
 });
 
-test("an agent paid for by a plan says the plan where an agent on a key says dollars", () => {
-  const usage = { inputTokens: 1_200_000, outputTokens: 30_000, costUsd: 2.41 };
-  assert.equal(agentUsageLine(usage), "This agent: 1.2M tokens · $2.41");
+test("an agent paid for by a plan says the plan where an agent on a key names the key and what it has cost", () => {
   assert.equal(
-    agentUsageLine({ ...usage, payer: AGENT_PAYER.API_KEY }),
-    "This agent: 1.2M tokens · $2.41",
+    agentPayerLine(AGENT_PAYER.API_KEY, MODEL_PROVIDER.OPENAI, 0.42),
+    "OpenAI API key · $0.42 so far",
   );
   assert.equal(
-    agentUsageLine({ ...usage, payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · Claude subscription",
+    agentPayerLine(AGENT_PAYER.API_KEY, MODEL_PROVIDER.ANTHROPIC, undefined),
+    "Anthropic API key",
   );
   assert.equal(
-    agentUsageLine({ ...usage, payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION }),
-    "This agent: 1.2M tokens · ChatGPT subscription",
+    agentPayerLine(AGENT_PAYER.CLAUDE_SUBSCRIPTION, MODEL_PROVIDER.ANTHROPIC, 2.41),
+    "Using Claude plan",
+  );
+  assert.equal(
+    agentPayerLine(AGENT_PAYER.CHATGPT_SUBSCRIPTION, MODEL_PROVIDER.OPENAI, 2.41),
+    "Using ChatGPT plan",
   );
 });

@@ -1205,8 +1205,8 @@ export function linksIn(text: string): readonly MentionLink[] {
   return [...writtenLinksIn(text, true)].sort((first, second) => first.start - second.start);
 }
 
-/** The links of the words: every inline link where `labelled`, or only those whose label spells their target, then the autolinks and bare addresses. */
-function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[] {
+/** The links of the words: every inline link where `labeled`, or only those whose label spells their target, then the autolinks and bare addresses. */
+function writtenLinksIn(text: string, labeled: boolean): readonly MentionLink[] {
   const found: MentionLink[] = [];
   const taken: TextStretch[] = [];
   for (let at = text.indexOf("["); at !== -1; at = text.indexOf("[", at + 1)) {
@@ -1220,7 +1220,7 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
     taken.push({ start: picture ? at - 1 : at, end: link.end + 1 });
     const label = readLabel(text.slice(at + 1, close));
     if (picture) continue;
-    if (labelled) {
+    if (labeled) {
       found.push({ start: at, end: link.end + 1, label, target: link.target });
       continue;
     }

@@ -44,7 +44,7 @@ export const ADMIN_WORKSPACES_ACTIVITY_DAYS = ADMIN_METRICS_WINDOW.WEEK;
 
 /**
  * Where an invitation stands, as the organization plugin writes it. Only
- * pending and accepted are reachable while rejecting and cancelling stay
+ * pending and accepted are reachable while rejecting and canceling stay
  * shut (`auth-policy.ts`); any other status still counts as settled.
  */
 export const INVITATION_STATUS = {

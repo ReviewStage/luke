@@ -1,6 +1,6 @@
 /* The terminal bundle's stylesheet, loaded beside `terminal.js` the first
    time a terminal is shown: xterm.js's own rules, then the host's. The
-   colours are not here, since the canvas reads them as values
+   colors are not here, since the canvas reads them as values
    (`terminal-theme.ts`); only the box is. */
 @import "@xterm/xterm/css/xterm.css";
 

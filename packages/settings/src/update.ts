@@ -37,8 +37,9 @@ export type UpdateFailure = (typeof UPDATE_FAILURE)[keyof typeof UPDATE_FAILURE]
 /**
  * The commit a build was cut from, stamped by the desktop's `scripts/build.mjs` from the
  * checkout it ran in: the short SHA, whether the tree held uncommitted
- * changes, and the branch when one was checked out (a tag's detached head
- * has none). A build made where git could not answer carries no commit.
+ * changes, and the branch: the one checked out, or for a detached head the
+ * nearest ref holding it (`fix/x~2`) or else its worktree's folder. A build
+ * made where git could not answer carries no commit.
  */
 export interface BuildCommit {
   sha: string;

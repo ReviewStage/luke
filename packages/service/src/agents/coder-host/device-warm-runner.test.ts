@@ -101,10 +101,10 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
         Effect.gen(function* () {
           const warm = yield* warmLocalAgent;
 
-          const cancelled = yield* stopped(warm, warm.turnId);
+          const canceled = yield* stopped(warm, warm.turnId);
           yield* warm.sessions.send(warm.sessionId, typedMessage(warm.agent, "Now the emails."));
 
-          assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+          assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
           const lines = yield* linesWaiting(warm);
           assert.equal(lines.length, 1, "the message alone, to the running launch");
           assert.ok(lines[0]?.includes("Now the emails."));
@@ -132,7 +132,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
             .returning({ id: turns.id });
           assert.ok(ending !== undefined);
 
-          const cancelled = yield* stopped(warm, ending.id);
+          const canceled = yield* stopped(warm, ending.id);
           // The Mac took the stop, on which the idle runner ended, and has yet to settle its launch;
           // then the turn's IDLE landed and settled it.
           const [stop] = yield* deviceAgentLinesWaiting(userId, deviceId);
@@ -148,7 +148,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
             typedMessage(warm.agent, "And the tests."),
           );
 
-          assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+          assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
           assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
           assert.deepEqual(yield* linesWaiting(warm), [
             DEVICE_AGENT_LINE_KIND.STOP,

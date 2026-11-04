@@ -2,7 +2,7 @@ import { act } from "react";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 /**
- * selectable-list.ts -- the behaviour every list that opts into selection owes, written once and run against each: ⌘A chooses every visible row, ⌘-click puts one in or out, ⇧-click chooses the run from the anchor, ⇧↑↓ grow it, Esc lets it go, and a plain click opens its row and chooses nothing.
+ * selectable-list.ts -- the behavior every list that opts into selection owes, written once and run against each: ⌘A chooses every visible row, ⌘-click puts one in or out, ⇧-click chooses the run from the anchor, ⇧↑↓ grow it, Esc lets it go, and a plain click opens its row and chooses nothing.
  *
  * `SELECTABLE_SURFACE` names every surface that passes `selection` to a
  * `List` or stands its rows in a `SelectionRegion`, with its source and the
@@ -143,7 +143,7 @@ function release(root: HTMLElement): void {
 }
 
 /** Registers the contract's tests for `which`, drawn as `surface` draws it. */
-export function selectableListBehaviour(
+export function selectableListBehavior(
   which: SelectableSurfaceName,
   surface: SelectableSurface,
 ): void {

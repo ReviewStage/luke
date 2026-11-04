@@ -226,7 +226,7 @@ export const SHORTCUT_KEY = {
   // A bare ; and ⇧; are Files changed's own fold keys, stage-cli's, read by their place.
   SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon", placed: true },
   // Note that Return is ⏎ rather than ↩, because the system face draws ⏎ as
-  // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
+  // the Mac's own Return mark, centered on the capitals as ⌘ is, and has no ↩:
   // a ↩ is borrowed from another face and sits off the line beside it.
   ENTER: { accelerator: "Enter", glyph: "⏎", key: "Enter", code: "Enter" },
   // ⌃Tab and ⌃⇧Tab are the tab switcher's own; a bare Tab moves focus, as everywhere.

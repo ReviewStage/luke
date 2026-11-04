@@ -38,7 +38,7 @@ export class HostDrainError extends Data.TaggedError("HostDrainError")<{
  * The explicit quit's steps, run once whichever door asks for them: the
  * adaptor's `stop` with the caller's own deadline, or the scope's own close
  * with the defaults. A second ask joins the first rather than closing the
- * admissions and cancelling the runs again.
+ * admissions and canceling the runs again.
  */
 export type HostDrain = (
   options?: GatewayShutdownOptions,
@@ -48,7 +48,7 @@ export type HostDrain = (
  * The explicit quit's steps as the one drain both doors run: the first ask
  * runs them under its own options and reports what became of them, and every
  * later ask, whatever its options, is answered with that outcome, so the
- * admissions close and the runs are cancelled once however many times the
+ * admissions close and the runs are canceled once however many times the
  * quit arrives.
  */
 export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
@@ -67,7 +67,7 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
       Effect.tap((settled) =>
         Effect.sync(() => {
           report(
-            `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.cancelled.length} cancelled, ${settled.unresolved} unresolved`,
+            `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.canceled.length} canceled, ${settled.unresolved} unresolved`,
           );
         }),
       ),

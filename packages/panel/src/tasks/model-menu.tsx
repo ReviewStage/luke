@@ -1,11 +1,17 @@
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { remedyLabel } from "@repo/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
+import {
+  type CatalogModel,
+  MODEL_SPEED,
+  type ModelChoice,
+  type ModelSpeed,
+} from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import {
   ErrorState,
   type FootRow,
+  type MenuLastLine,
   type MenuRow,
   type PopoverAlign,
   type PopoverBounds,
@@ -36,6 +42,9 @@ import {
   modelLabel,
   offeredModels,
   readModelChoice,
+  SPEED_LABEL,
+  SPEED_WORD,
+  speedsOf,
   unrunnableChoice,
   unsearchedModels,
   windowLabel,
@@ -48,11 +57,11 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  *
  * The shared searchable menu over the base models the service offers,
  * the newest of each family until a search reaches the rest, under their
- * harness's mark, each fast version folded into
- * its model, the choice standing checked with its effort, Fast, and the
+ * harness's mark, each fast and Ultrafast version folded into
+ * its model, the choice standing checked with its effort, its speed, and the
  * standard window beside its name; a pick of a model keeps the effort it was
- * running or the model's first where it lacks that one, its fast version
- * where Fast is on and the model has one, and the standard window where the
+ * running or the model's first where it lacks that one, its version at the
+ * speed chosen where the model has one, and the standard window where the
  * model offers two, and closes the menu. Pinned under the list stand up to
  * three rows: Effort, naming the effort chosen now and opening a submenu
  * of the ones the chosen model lists; Context, only for a model that
@@ -60,7 +69,10 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * of the two with what the whole one costs under them; each closes the menu
  * on a pick; and Fast, a switch to the model's fast version, muted where
  * the model has none or the service withholds it, saying which, which
- * leaves the menu open. A model whose provider no subscription or API key
+ * leaves the menu open, or, for a model with an Ultrafast version, Speed in
+ * its place, naming the speed chosen now and opening a submenu of the
+ * speeds the model offers, Standard, Fast, and Ultrafast, which closes the
+ * menu on a pick as Effort does. A model whose provider no subscription or API key
  * of the account's pays for says "Connect Claude" or "Connect Codex" at its
  * row's end, and its pick, or Fast's press where it is the choice, closes
  * the menu and lands on that harness's row in Settings › Agents rather
@@ -68,14 +80,14 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * menu, whose choice a new agent starts on and the reader's own
  * credentials pay for, a choice that is such a model, as a stored Claude
  * default is once no Claude credential pays for it, has a Connect row head the
- * pinned rows and the last line say why it cannot run; a running agent's
+ * pinned rows and the last line say why it cannot run, in the place a
+ * running agent's says who pays; a running agent's
  * chip says nothing of it, since the catalog marks what the reader's
  * account lacks and the agent runs on what its starter's pays. The id a choice names is
- * the catalog's own, the fast version's where Fast is on, so the service
+ * the catalog's own, the fast or Ultrafast version's where that speed is chosen, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: an automation starts on it, and the chip
- * changes its agent, and under the pinned rows says what the agent has
- * cost.
+ * changes its agent, and under the pinned rows says who pays for it.
  */
 
 /** What the menu says in the list's place. */
@@ -89,6 +101,7 @@ const FOOT_ROW = {
   EFFORT: "effort",
   CONTEXT: "context",
   FAST: "fast",
+  SPEED: "speed",
   CONNECT: "connect",
 } as const;
 
@@ -161,10 +174,8 @@ export function ModelMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** Whether the Fast switch is pinned under the list: not for an agent whose harness runs no fast version. */
   offersFast?: boolean | undefined;
-  /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on an automation's. */
-  footNote?: string | undefined;
-  /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
-  planNote?: React.ReactNode;
+  /** The muted last line under the pinned rows: who pays for the agent, on the chip's menu; nothing on an automation's, whose line says why its choice cannot run where it cannot. */
+  lastLine?: MenuLastLine | undefined;
   /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: an automation's. */
   startsNew?: boolean | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
@@ -224,24 +235,53 @@ export function ModelMenu(props: {
     ];
   };
 
-  /** The Fast switch, where the menu offers one: never for a model whose plan runs no fast mode. */
-  const fastRow = (read: ModelChoiceRead, chosen: ModelChoice): FootRow[] => {
+  /** The choice at the chosen model's version at a speed, or the press that connects it where nothing pays for it, as its pick does. */
+  const chooseSpeed = (speed: ModelSpeed, effort: string): void => {
+    if (offered === undefined) return;
+    const missing = modelConnectFailure(offered.model);
+    if (missing !== undefined) {
+      connect(missing);
+      return;
+    }
+    const next = choiceAt(choiceModelId(offered, speed), effort);
+    if (next !== undefined) onChoose(next);
+  };
+
+  /**
+   * The Fast switch, where the menu offers one, or the Speed choice in its
+   * place for a model with an Ultrafast version.
+   */
+  const speedRow = (read: ModelChoiceRead, chosen: ModelChoice): FootRow[] => {
     if (props.offersFast === false || models === undefined) return [];
-    if (offered?.model.fastWithheldByPlan === true) return [];
+    if (offered?.ultrafast !== undefined) {
+      return [
+        {
+          id: FOOT_ROW.SPEED,
+          label: SPEED_LABEL,
+          detail: SPEED_WORD[read.speed],
+          submenu: {
+            label: SPEED_LABEL,
+            rows: speedsOf(offered).map((speed) => ({ id: speed, label: SPEED_WORD[speed] })),
+            value: read.speed,
+            onPick: (picked) => {
+              const speed = speedsOf(offered).find((each) => each === picked);
+              if (speed === undefined) return;
+              onClose();
+              chooseSpeed(speed, chosen.effort);
+            },
+          },
+        },
+      ];
+    }
+    const fast = read.speed === MODEL_SPEED.FAST;
     return [
       {
         id: FOOT_ROW.FAST,
         label: FAST_WORD,
         toggle: {
-          on: read.fast,
-          onToggle: () => {
-            if (offered === undefined) return;
-            // A model nothing pays for is never chosen, fast or not: the press goes to connect it, as its pick does.
-            const missing = modelConnectFailure(offered.model);
-            if (missing !== undefined) return connect(missing);
-            const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
-            if (next !== undefined) onChoose(next);
-          },
+          on: fast,
+          onToggle: () =>
+            chooseSpeed(fast ? MODEL_SPEED.STANDARD : MODEL_SPEED.FAST, chosen.effort),
         },
         disabled: fastRestingNote(read.base, offered, models),
       },
@@ -292,7 +332,7 @@ export function ModelMenu(props: {
             },
           },
           ...contextRow(chosen, models),
-          ...fastRow(read, chosen),
+          ...speedRow(read, chosen),
         ];
 
   return (
@@ -320,13 +360,16 @@ export function ModelMenu(props: {
       }
       noMatch={MENU_NOTE.NO_MATCH}
       onPick={(base) => {
-        // The pick keeps Fast where the model has a fast version, and drops it where it has none.
+        // The pick keeps the speed chosen where the model has a version at it, and drops to standard where it has none.
         const picked = offeredModels(models ?? []).find((each) => each.model.id === base);
         if (picked === undefined) return;
         // A model nothing pays for is never chosen: its pick goes to connect it.
         const missing = modelConnectFailure(picked.model);
         if (missing !== undefined) return connect(missing);
-        const next = choiceAt(choiceModelId(picked, read?.fast ?? false), chosen?.effort);
+        const next = choiceAt(
+          choiceModelId(picked, read?.speed ?? MODEL_SPEED.STANDARD),
+          chosen?.effort,
+        );
         if (next === undefined) return;
         onClose();
         onChoose(next);
@@ -334,8 +377,7 @@ export function ModelMenu(props: {
       onClose={onClose}
       onLeave={props.onLeave}
       foot={foot}
-      footNote={props.footNote}
-      planNote={unrunnable === undefined ? props.planNote : unrunnable.text}
+      lastLine={unrunnable === undefined ? props.lastLine : { words: unrunnable.text }}
       leaving={props.leaving}
       ref={props.ref}
     />

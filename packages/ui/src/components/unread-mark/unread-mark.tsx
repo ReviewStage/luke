@@ -6,7 +6,7 @@
  * in words of its own (its title's weight, or a hidden word), since a dot
  * alone says nothing to a reader who cannot see it. The gutter sets its
  * line in a title's type, so its baseline is the title's, and the dot
- * stands centred on the title's capitals rather than on its line's box,
+ * stands centered on the title's capitals rather than on its line's box,
  * or on the capitals a row names as its own (`--ui-mark-cap`), a lead
  * line's. The dot is the accent's ink rather than its fill, because the web's cyan
  * fill reads at 1.7:1 on its light page, under a mark's 3:1.

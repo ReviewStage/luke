@@ -42,7 +42,7 @@ import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
 
-/** The web runtime's layer names a database; nothing here queries it, so it is never dialled (`route-effect.test.ts`). */
+/** The web runtime's layer names a database; nothing here queries it, so it is never dialed (`route-effect.test.ts`). */
 const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/app";
 
 beforeEach(() => {

@@ -6,7 +6,7 @@
  * kind's own words before the host is asked; a panel's ask reaches the host
  * with its payload as the kind's schema read it, and answers what the host
  * answered; the browser opens only the addresses each kind may open; and what a task
- * holds is read through the host, a page's source coloured, and a pull
+ * holds is read through the host, a page's source colored, and a pull
  * request or an issue the service did not answer refused.
  */
 
@@ -99,12 +99,11 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: "Could not read the task's Browser tabs.",
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]:
     "Could not open a tab in that agent's browser on this system.",
-  [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: "Could not colour that code on this system.",
+  [TASKS_ACT_KIND.TASKS_COLOR_CODE]: "Could not color that code on this system.",
   [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
   [TASKS_ACT_KIND.TASKS_RESTORE]: "Could not restore that version on this system.",
   [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: "Could not read that page's source on this system.",
-  [TASKS_ACT_KIND.TASKS_PAGES]: "Could not read that plan's pages on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: "Could not read that picture on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: "Could not keep that picture on this system.",
   [TASKS_ACT_KIND.TASKS_COMMENTS]: "Could not read the task's comments on this system.",
@@ -124,8 +123,6 @@ const EDIT = { ...TASK, edit: { document: { base: "", value: "Invites expire." }
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
 /** The one picture the fake host holds. */
 const PICTURE_ID = "picture-1";
-/** The one page the fake host lists, by its id as the service spells one. */
-const PAGE_LINE_ID = "5a1c3f7e-8b2d-4e6f-9a0b-1c2d3e4f5a6b";
 const PLAN = { planId: "plan-1" };
 const PLACE = { workspaceId: "workspace-acme", repository: "acme/relay" };
 const PAGE = { ...TASK, pageId: "page-funnel", version: 2 };
@@ -235,12 +232,11 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
   { kind: TASKS_ACT_KIND.TASKS_BROWSER_TABS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, payload: BROWSER_TAB_OPEN },
-  { kind: TASKS_ACT_KIND.TASKS_COLOUR_CODE, payload: { language: "ts", code: "const a = 1;" } },
+  { kind: TASKS_ACT_KIND.TASKS_COLOR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
   { kind: TASKS_ACT_KIND.TASKS_RESTORE, payload: { ...TASK, seq: 3 } },
   { kind: TASKS_ACT_KIND.TASKS_PAGE_SOURCE, payload: PAGE },
-  { kind: TASKS_ACT_KIND.TASKS_PAGES, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_PICTURE_READ, payload: { ...PLAN, attachmentId: PICTURE_ID } },
   {
     kind: TASKS_ACT_KIND.TASKS_PICTURE_KEEP,
@@ -438,10 +434,6 @@ function windowPort(
         if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
       }),
-    tasksPages: (params) =>
-      ask(`pages:${pagePlaceId(params)}`, () => ({
-        pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
-      })),
     tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
     tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
     tasksBrowserTabsFollow: (scope) =>
@@ -462,7 +454,7 @@ function windowPort(
   const port = testActPort(
     tasksProcedures({
       host,
-      colourCode: highlightSnippet,
+      colorCode: highlightSnippet,
       openExternal: (url) => {
         browsed.push(url);
         return Promise.resolve();
@@ -808,9 +800,6 @@ it("what a task holds is read through the host from a panel, and answers what it
     answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
   });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_RESTORE, { ...TASK, seq: 3 }), { answer: true });
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_PAGES, TASK), {
-    answer: { pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }] },
-  });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_COMMENT_START, COMMENT_START), {
     answer: { refused: PLAN_COMMENT_REFUSAL.TOO_MANY },
   });
@@ -823,27 +812,26 @@ it("what a task holds is read through the host from a panel, and answers what it
     `revisions:${TASK_ID}:undefined`,
     "revision:3",
     "restore:3",
-    `pages:${TASK_ID}`,
     "comment:plan-1",
   ]);
 });
 
-it("a fenced block is coloured for a panel, its lines answered as the highlighter drew them", async () => {
+it("a fenced block is colored for a panel, its lines answered as the highlighter drew them", async () => {
   const { client } = windowPort(PANEL);
 
-  const coloured = await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, {
+  const colored = await settled(client, TASKS_ACT_KIND.TASKS_COLOR_CODE, {
     language: "ts",
     code: "const a = 1;",
   });
 
-  assert.ok("answer" in coloured && Array.isArray(coloured.answer));
-  const [line] = coloured.answer;
+  assert.ok("answer" in colored && Array.isArray(colored.answer));
+  const [line] = colored.answer;
   assert.ok(Array.isArray(line));
   assert.equal(line.map((run) => run.text).join(""), "const a = 1;");
   assert.ok(line.some((run) => run.color !== undefined));
 });
 
-it("a page's source is read through the host for a panel, line by line and plain, since the panel colours it, and its silence answered", async () => {
+it("a page's source is read through the host for a panel, line by line and plain, since the panel colors it, and its silence answered", async () => {
   const { client, asked, script } = windowPort(PANEL);
   const source = () => settled(client, TASKS_ACT_KIND.TASKS_PAGE_SOURCE, PAGE);
   const long = `<p>${"a".repeat(70_000)}</p>`;
@@ -980,15 +968,15 @@ it("a content act's payload carrying a key its schema does not name, or past its
     );
   }
   assert.deepEqual(
-    await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, {
+    await settled(client, TASKS_ACT_KIND.TASKS_COLOR_CODE, {
       language: "ts",
       code: "a".repeat(20_001),
     }),
-    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOUR_CODE] },
+    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOR_CODE] },
   );
   assert.deepEqual(
-    await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, { language: "  ", code: "a" }),
-    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOUR_CODE] },
+    await settled(client, TASKS_ACT_KIND.TASKS_COLOR_CODE, { language: "  ", code: "a" }),
+    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOR_CODE] },
   );
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_SET_STANDING, TASK), {
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_SET_STANDING],

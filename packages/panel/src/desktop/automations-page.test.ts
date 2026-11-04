@@ -1896,7 +1896,7 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
 
   assert.equal(
     pickerDetail(page, "Type"),
-    "When an issue by people is opened in acme/ledger labelled bug",
+    "When an issue by people is opened in acme/ledger labeled bug",
   );
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
@@ -2672,7 +2672,7 @@ test("a default model that could not be read is said as unknown, and a model can
 test("the reader's own automation says a model nothing of theirs pays for cannot run, while a teammate's, run on its maker's connections, says nothing of it", async () => {
   catalogUnconnected = true;
   standing = [DIGEST, SWEEP];
-  /** The pinned rows of the Model row's menu, on the automation given. */
+  /** The pinned rows of the Model row's menu and its last line, on the automation given. */
   const footOn = async (automationId: string): Promise<string> => {
     const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
     await settle();
@@ -2680,10 +2680,12 @@ test("the reader's own automation says a model nothing of theirs pays for cannot
     assert.ok(chip, "the Model row draws the default's chip");
     act(() => chip.click());
     await settle();
-    return page.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
+    return [...page.querySelectorAll(".ui-searchable-menu-foot, .ui-searchable-menu-last-line")]
+      .map((block) => block.textContent ?? "")
+      .join("");
   };
 
-  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
+  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect a Claude plan/u);
   const teammates = await footOn(SWEEP.id);
   assert.match(teammates, /Effort/u, "the menu is open on its pinned rows");
   assert.doesNotMatch(teammates, /cannot run|Connect/u);
@@ -3553,7 +3555,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   assert.match(page.textContent ?? "", /Vespin cannot receive Sentry events here/u);
 });
 
-test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {
+test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centered between them", async () => {
   const page = mountNarrow({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   const head = page.querySelector<HTMLElement>(".automations-head");

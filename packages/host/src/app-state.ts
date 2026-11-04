@@ -103,6 +103,8 @@ interface AppRunFacts {
   appVersion: string;
   /** The commit the build was cut from, for the Updates row to name. */
   commit?: BuildCommit;
+  /** The named development instance this run is (`run.sh --instance`); none for the plain one or a release. */
+  instance?: string;
   captureMode: boolean;
   fixtureMode: boolean;
   accountRequired: boolean;
@@ -464,6 +466,103 @@ export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
 type AppStateEntry = Exclude<keyof AppStateSnapshot, "version">;
 
 /**
+ * How a slice of the document is keyed: a held read's by one id, or by a
+ * kind and then an id; or by part, as the task list's view is, each part
+ * crossing whole, or as the rows that moved where it is a list of rows.
+ */
+export const READ_KEYS = {
+  ONE: "one",
+  TWO: "two",
+  PARTS: "parts",
+} as const;
+
+/** Where a slice's keys stand: in the slice itself, or in the rows its read answered, as the account's feed holds its holders. */
+export const KEYS_ON = {
+  SLICE: "slice",
+  ROWS: "rows",
+} as const;
+
+/** One list of rows in the task list's view, by its name in `TasksView`. */
+type TasksRows<Part extends keyof TasksView> = NonNullable<TasksView[Part]>;
+
+/** How one slice is laid out, which is all its delivery reads of it. */
+interface HostReadSliceEntry {
+  readonly keys: (typeof READ_KEYS)[keyof typeof READ_KEYS];
+  readonly on: (typeof KEYS_ON)[keyof typeof KEYS_ON];
+  /**
+   * The field each of a key's rows is told apart by, where a key crosses as
+   * the rows that moved in it: the key's value itself on a slice keyed on
+   * its rows, and the rows of the key's read otherwise. Absent where a key
+   * crosses whole.
+   */
+  readonly rowId?: string;
+  /** For a slice keyed by part, the field each part that is a list of rows tells its rows apart by, by the part's name; a part it does not name crosses whole. */
+  readonly rowIds?: { readonly [part: string]: string };
+}
+
+/**
+ * Each keyed slice, by its name in the document, as its delivery crosses it:
+ * the keys that moved in it rather than the slice whole, and a row-keyed
+ * key's rows that moved rather than the key whole. The held reads stand
+ * here, and the task list's view, keyed by part, whose lists of tasks,
+ * agents, and pull requests cross as their rows, since every agent's turn
+ * and every plan saved moves a row of them, and the open plan's document
+ * crosses only where it moved.
+ */
+export const HOST_READ_SLICE = {
+  [LIVE_READ.INBOX_ITEMS]: {
+    keys: READ_KEYS.TWO,
+    on: KEYS_ON.ROWS,
+    rowId: "id" satisfies keyof InboxItem,
+  },
+  [LIVE_READ.HOLDER_INBOX]: {
+    keys: READ_KEYS.TWO,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof InboxItem,
+  },
+  [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  tasks: {
+    keys: READ_KEYS.PARTS,
+    on: KEYS_ON.SLICE,
+    rowIds: {
+      tasks: "id" satisfies keyof TasksRows<"tasks">[number],
+      taskAgents: "id" satisfies keyof TasksRows<"taskAgents">[number],
+      tasklessAgents: "id" satisfies keyof TasksRows<"tasklessAgents">[number],
+      taskPullRequests: "taskId" satisfies keyof TasksRows<"taskPullRequests">[number],
+      agentPullRequests: "agentId" satisfies keyof TasksRows<"agentPullRequests">[number],
+    } satisfies { readonly [Part in keyof TasksView]?: string },
+  },
+} as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
+
+/** A slice `HOST_READ_SLICE` declares. */
+export type HostReadSlice = keyof typeof HOST_READ_SLICE;
+
+/** Where one key of a held read stands in its slice: its id, or its kind and then its id, as `HOST_READ_SLICE` declares. */
+export type HostReadKeyPath<Slice extends HostReadSlice> =
+  (typeof HOST_READ_SLICE)[Slice]["keys"] extends typeof READ_KEYS.TWO
+    ? readonly [kind: string, id: string]
+    : readonly [id: string];
+
+// SAFETY: `Object.keys` of the table names its own entries.
+const HOST_READ_SLICES = Object.keys(HOST_READ_SLICE) as HostReadSlice[];
+
+/**
+ * One key of a slice that moved, by its path (its id or part, or its kind
+ * and then its id): its value whole, or null where it is gone, since no
+ * slice here holds a key whose value is null; or, where the key is a list of
+ * rows told apart by an id and held rows when last sent and still does,
+ * each row that is not the very one sent, with the key's ids in order where
+ * its membership or order moved.
+ */
+type KeyMoved =
+  | { readonly key: readonly string[]; readonly value: unknown }
+  | {
+      readonly key: readonly string[];
+      readonly rows: readonly object[];
+      readonly ids?: readonly string[];
+    };
+
+/**
  * One push of the document to a window: what moved in it since the last that
  * window was handed, under the version it moved to. Each entry in `entries`
  * is replaced whole, each in `gone` is no longer held, and every entry named
@@ -476,71 +575,198 @@ export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
-  /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as null, in place of the feed's entry, where the window held its rows and still does. */
-  readonly inboxHolders?: InboxHoldersMoved<readonly InboxItem[]>;
-  /** Each held inbox that moved since the window's last delivery, its read whole, one let go as null, in place of the held inboxes' entry, where the window held the entry. */
-  readonly holderInboxes?: InboxHoldersMoved<AppHolderInbox>;
+  /** Each keyed slice's keys that moved since the window's last delivery, in place of its entry, where the window held the slice and still does (`HOST_READ_SLICE`). */
+  readonly moved?: { readonly [Slice in HostReadSlice]?: readonly KeyMoved[] };
 }
 
-/** The holders that moved, by kind: each whole, or null where it is gone, which an empty value is not. */
-type InboxHoldersMoved<Value extends object> = ByInboxHolder<Value | null>;
+/** One level of a slice's keys: each id's or part's value, or, above the last level, each kind's record of ids. */
+type Keyed = Readonly<Record<string, unknown>>;
+
+/** The value `keyed` holds under `id` itself, never one it inherits. */
+function ownValue(keyed: Keyed, id: string): unknown {
+  return Object.hasOwn(keyed, id) ? keyed[id] : undefined;
+}
+
+/** The record a slice's keys stand in, as `slice` holds it; none where a slice keyed on its rows holds no rows. */
+function keyedOf(entry: HostReadSliceEntry, slice: object | undefined): Keyed | undefined {
+  // SAFETY: a slice the table declares is a record of its keys, or a read whose rows are, as its `on` says.
+  return entry.on === KEYS_ON.SLICE
+    ? (slice as Keyed | undefined)
+    : (slice as AppHostRead<Keyed> | undefined)?.rows;
+}
+
+/** The field the rows of the key at `key` are told apart by; none where the key crosses whole. */
+function rowIdOf(entry: HostReadSliceEntry, key: readonly string[]): string | undefined {
+  if (entry.keys !== READ_KEYS.PARTS) return entry.rowId;
+  const [part] = key;
+  return part === undefined || entry.rowIds === undefined || !Object.hasOwn(entry.rowIds, part)
+    ? undefined
+    : entry.rowIds[part];
+}
+
+/** Whether a key's value is its list of rows itself, as a holder of the feed's and a part of the task list's are, rather than a read whose rows it holds. */
+function rowsAreValue(entry: HostReadSliceEntry): boolean {
+  return entry.on === KEYS_ON.ROWS || entry.keys === READ_KEYS.PARTS;
+}
 
 /**
- * Each holder that moved from `before` to `after`, whole, and each gone as
- * null; none where none moved. Note that a change crosses as the holders
- * it moved, since the largest workspace's feed is megabytes, a held inbox
- * is a task's whole, and a change moves one holder's. A holder is compared
- * by reference alone, because the document keeps the identity of every
- * holder a patch did not move, so one that is not the very value sent is
- * one that moved.
+ * The rows a key's value holds: the value itself, or its read's rows (see
+ * `rowsAreValue`); none where it holds none. Note that a read holding rows
+ * says nothing else (`AppHostRead`), so its rows are all of it that can move.
  */
-function inboxHoldersMoved<Value extends object>(
-  before: ByInboxHolder<Value>,
-  after: ByInboxHolder<Value>,
-): InboxHoldersMoved<Value> | undefined {
-  const ofKind = (kind: InboxHolderKind) =>
-    Object.fromEntries([
-      ...Object.entries(after[kind]).filter(([id, value]) => before[kind][id] !== value),
-      ...Object.keys(before[kind])
-        .filter((id) => !Object.hasOwn(after[kind], id))
-        .map((id) => [id, null]),
-    ]);
-  const patch = {
-    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
-    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
-  };
-  return Object.values(patch).some((holders) => Object.keys(holders).length > 0)
-    ? patch
-    : undefined;
+function rowsOf(entry: HostReadSliceEntry, value: unknown): readonly object[] | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rows: unknown = rowsAreValue(entry) ? value : Reflect.get(value, "rows");
+  return Array.isArray(rows) ? rows : undefined;
 }
 
-/** The holders once `patch` lands on `held`: each moved laid in, keeping what of it did not move, each gone dropped, and every other the very value held. */
-function withInboxHoldersMoved<Value extends object>(
-  held: ByInboxHolder<Value> | undefined,
-  patch: InboxHoldersMoved<Value>,
-): ByInboxHolder<Value> {
-  const ofKind = (kind: InboxHolderKind) => {
-    const next: Record<string, Value> = { ...held?.[kind] };
-    for (const [id, value] of Object.entries(patch[kind])) {
-      const was = next[id];
-      if (value === null) Reflect.deleteProperty(next, id);
-      else next[id] = was === undefined ? value : keepIdentity(was, value);
-    }
-    return next;
-  };
+/** A row's id, under the field its slice names. */
+function idOf(rowId: string, row: object): string {
+  // SAFETY: a row-keyed slice's rows each carry their id as a string under `rowId` (`HOST_READ_SLICE`).
+  return Reflect.get(row, rowId) as string;
+}
+
+/**
+ * How `key` crosses from `sent` to `next`: as its rows that are not the very
+ * ones sent where both hold rows of unique ids, with every id in order where
+ * any came, went, or moved past another; and whole otherwise. Note that the
+ * ids cross wherever membership differs from what was sent, so a window
+ * that missed a delivery is never left holding a row that went.
+ */
+function keyMoved(
+  entry: HostReadSliceEntry,
+  key: readonly string[],
+  sent: unknown,
+  next: unknown,
+): KeyMoved {
+  const rowId = rowIdOf(entry, key);
+  const [before, after] = [rowsOf(entry, sent), rowsOf(entry, next)];
+  if (rowId === undefined || before === undefined || after === undefined) {
+    return { key, value: next };
+  }
+  const sentRows = new Map(before.map((row) => [idOf(rowId, row), row]));
+  const sentIds = [...sentRows.keys()];
+  const ids = after.map((row) => idOf(rowId, row));
+  // Note that a list whose ids repeat cannot be laid by them, so it crosses whole.
+  if (sentRows.size !== before.length || new Set(ids).size !== ids.length) {
+    return { key, value: next };
+  }
+  const reordered = ids.length !== sentIds.length || ids.some((id, at) => id !== sentIds[at]);
   return {
-    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
-    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+    key,
+    rows: after.filter((row) => sentRows.get(idOf(rowId, row)) !== row),
+    ...(reordered ? { ids } : undefined),
   };
 }
 
-/** Each holder of the account's feed that moved from `sent` to `next`; none where either holds no rows, which crosses whole. */
-function inboxHoldersPatch(
-  sent: AppHostRead<AppInboxItems> | undefined,
-  next: AppHostRead<AppInboxItems> | undefined,
-): InboxHoldersMoved<readonly InboxItem[]> | undefined {
-  const [before, after] = [sent?.rows, next?.rows];
-  return before === undefined || after === undefined ? undefined : inboxHoldersMoved(before, after);
+/** Each id under `path` that moved from `before` to `after`, and each gone as null. */
+function idsMoved(
+  entry: HostReadSliceEntry,
+  path: readonly string[],
+  before: Keyed,
+  after: Keyed,
+): KeyMoved[] {
+  if (before === after) return [];
+  return [
+    ...Object.entries(after).flatMap(([id, value]) => {
+      const sent = ownValue(before, id);
+      return sent === value ? [] : [keyMoved(entry, [...path, id], sent, value)];
+    }),
+    ...Object.keys(before)
+      .filter((id) => !Object.hasOwn(after, id))
+      .map((id) => ({ key: [...path, id], value: null })),
+  ];
+}
+
+/**
+ * Each key of a slice that moved from `before` to `after`. Note that a key
+ * is compared by reference alone, because the document keeps the identity
+ * of every key and row a patch did not move (`client/app-state-store.ts`),
+ * so one that is not the very value sent is one that moved, and a kind no
+ * key of moved is passed at its first comparison.
+ */
+function keysMoved(entry: HostReadSliceEntry, before: Keyed, after: Keyed): KeyMoved[] {
+  if (entry.keys !== READ_KEYS.TWO) return idsMoved(entry, [], before, after);
+  const kinds = new Set([...Object.keys(before), ...Object.keys(after)]);
+  // SAFETY: each kind of a slice keyed by two holds a record of its ids.
+  const ofKind = (keyed: Keyed, kind: string) => (ownValue(keyed, kind) ?? {}) as Keyed;
+  return [...kinds].flatMap((kind) =>
+    idsMoved(entry, [kind], ofKind(before, kind), ofKind(after, kind)),
+  );
+}
+
+/** The value `held` stood at once `move` lands on it: laid in, keeping what of it did not move, or none where it is gone. */
+function valueLaid(entry: HostReadSliceEntry, held: unknown, move: KeyMoved): unknown {
+  if ("value" in move) {
+    if (move.value === null) return undefined;
+    return held === undefined ? move.value : keepIdentity(held, move.value);
+  }
+  const rowId = rowIdOf(entry, move.key);
+  if (rowId === undefined) return held;
+  const heldList = rowsOf(entry, held) ?? [];
+  const heldRows = new Map(heldList.map((row) => [idOf(rowId, row), row]));
+  const movedRows = new Map(
+    move.rows.map((row) => {
+      const was = heldRows.get(idOf(rowId, row));
+      return [idOf(rowId, row), was === undefined ? row : keepIdentity(was, row)];
+    }),
+  );
+  const rows =
+    move.ids === undefined
+      ? heldList.map((row) => movedRows.get(idOf(rowId, row)) ?? row)
+      : move.ids.flatMap((id) => movedRows.get(id) ?? heldRows.get(id) ?? []);
+  if (rows.length === heldList.length && rows.every((row, at) => row === heldList[at])) return held;
+  if (rowsAreValue(entry)) return rows;
+  return typeof held === "object" && held !== null ? { ...held, rows } : { rows };
+}
+
+/** One level of keys once `moves` land on it, by each move's last segment, and every id they do not name the very value held. */
+function withIdsMoved(
+  entry: HostReadSliceEntry,
+  held: Keyed | undefined,
+  moves: readonly KeyMoved[],
+): Keyed {
+  const next: Record<string, unknown> = { ...held };
+  for (const move of moves) {
+    const id = move.key[move.key.length - 1] ?? "";
+    const laid = valueLaid(entry, ownValue(next, id), move);
+    if (laid === undefined) Reflect.deleteProperty(next, id);
+    else next[id] = laid;
+  }
+  return next;
+}
+
+/** Each kind's keys once `moves` land on them, every kind they do not name the very record held. */
+function withKindsMoved(
+  entry: HostReadSliceEntry,
+  held: Keyed | undefined,
+  moves: readonly KeyMoved[],
+): Keyed {
+  const next: Record<string, unknown> = { ...held };
+  for (const kind of new Set(moves.map((move) => move.key[0] ?? ""))) {
+    // SAFETY: each kind of a slice keyed by two holds a record of its ids.
+    const ofKind = (held === undefined ? undefined : ownValue(held, kind)) as Keyed | undefined;
+    next[kind] = withIdsMoved(
+      entry,
+      ofKind,
+      moves.filter((move) => move.key[0] === kind),
+    );
+  }
+  return next;
+}
+
+/** A slice once `moves` land on it, every key and kind they do not name the very one held. */
+function withSliceMoved(
+  entry: HostReadSliceEntry,
+  held: object | undefined,
+  moves: readonly KeyMoved[],
+): object {
+  const keyed = keyedOf(entry, held);
+  const laid =
+    entry.keys === READ_KEYS.TWO
+      ? withKindsMoved(entry, keyed, moves)
+      : withIdsMoved(entry, keyed, moves);
+  return entry.on === KEYS_ON.SLICE ? laid : { ...held, rows: laid };
 }
 
 /**
@@ -557,44 +783,37 @@ export function appStateDelivery(
   const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
     (name) => name !== "version",
   ) as AppStateEntry[];
-  const holders = inboxHoldersPatch(sent?.[LIVE_READ.INBOX_ITEMS], next[LIVE_READ.INBOX_ITEMS]);
-  const heldBefore = sent?.[LIVE_READ.HOLDER_INBOX];
-  const holderInboxes =
-    heldBefore === undefined
-      ? undefined
-      : inboxHoldersMoved(heldBefore, next[LIVE_READ.HOLDER_INBOX]);
-  // Note that the feed's entry, and the held inboxes', are compared by their holders alone where they cross as them, so neither whole is walked twice.
+  // Note that a keyed slice crosses as the keys that moved in it wherever the window held it and still does, so it is never walked whole as well.
+  const patched = HOST_READ_SLICES.flatMap((slice) => {
+    const entry: HostReadSliceEntry = HOST_READ_SLICE[slice];
+    const [before, after] = [keyedOf(entry, sent?.[slice]), keyedOf(entry, next[slice])];
+    return before === undefined || after === undefined
+      ? []
+      : [[slice, keysMoved(entry, before, after)] as const];
+  });
+  const crossing = new Set<string>(patched.map(([slice]) => slice));
   const moved = names.filter(
-    (name) =>
-      (holders === undefined || name !== LIVE_READ.INBOX_ITEMS) &&
-      (heldBefore === undefined || name !== LIVE_READ.HOLDER_INBOX) &&
-      (sent === undefined || !Equal.equals(sent[name], next[name])),
+    (name) => !crossing.has(name) && (sent === undefined || !Equal.equals(sent[name], next[name])),
   );
+  const keys = patched.filter(([, keysOf]) => keysOf.length > 0);
   const gone = moved.filter((name) => next[name] === undefined);
-  if (
-    sent !== undefined &&
-    moved.length === 0 &&
-    holders === undefined &&
-    holderInboxes === undefined
-  ) {
-    return undefined;
-  }
+  if (sent !== undefined && moved.length === 0 && keys.length === 0) return undefined;
   return {
     version: next.version,
     entries: Object.fromEntries(
       moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
     ),
     ...(gone.length === 0 ? undefined : { gone }),
-    ...(holders === undefined ? undefined : { inboxHolders: holders }),
-    ...(holderInboxes === undefined ? undefined : { holderInboxes }),
+    ...(keys.length === 0 ? undefined : { moved: Object.fromEntries(keys) }),
   };
 }
 
 /**
  * The document a window holds once a delivery lands on it: each entry named
  * replaced, keeping the identity of every part of it that did not move, so a
- * memo keyed on a part the delivery left alone still holds; each entry gone
- * held no more; and every other entry the very object held.
+ * memo keyed on a part the delivery left alone still holds; each keyed
+ * slice's keys that moved laid in the same way; each entry gone held no more; and
+ * every other entry the very object held.
  */
 export function withAppStateDelivery(
   held: AppStateSnapshot,
@@ -607,28 +826,16 @@ export function withAppStateDelivery(
       keepIdentity(held[name as AppStateEntry], value),
     ]),
   );
-  const holders =
-    delivery.inboxHolders === undefined
-      ? undefined
-      : {
-          [LIVE_READ.INBOX_ITEMS]: {
-            rows: withInboxHoldersMoved(held[LIVE_READ.INBOX_ITEMS].rows, delivery.inboxHolders),
-          },
-        };
-  const holderInboxes =
-    delivery.holderInboxes === undefined
-      ? undefined
-      : {
-          [LIVE_READ.HOLDER_INBOX]: withInboxHoldersMoved(
-            held[LIVE_READ.HOLDER_INBOX],
-            delivery.holderInboxes,
-          ),
-        };
+  const slices = HOST_READ_SLICES.flatMap((slice) => {
+    const moves = delivery.moved?.[slice];
+    return moves === undefined
+      ? []
+      : [[slice, withSliceMoved(HOST_READ_SLICE[slice], held[slice], moves)] as const];
+  });
   const next: AppStateSnapshot = {
     ...held,
     ...entries,
-    ...holders,
-    ...holderInboxes,
+    ...Object.fromEntries(slices),
     version: delivery.version,
   };
   // Note that an entry gone is held as no key at all, as the document holds it.

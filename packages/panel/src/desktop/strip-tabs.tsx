@@ -106,7 +106,14 @@ export interface DocumentMenu extends MenuEnds {
 export interface TabDoors
   extends Pick<
     AgentMenuDoors,
-    "onCopy" | "onRename" | "onOpenTerminal" | "onOpenInTask" | "archive" | "deletion" | "copyLink"
+    | "onCopy"
+    | "onRename"
+    | "onOpenTerminal"
+    | "onOpenBrowser"
+    | "onOpenInTask"
+    | "archive"
+    | "deletion"
+    | "copyLink"
   > {
   /** Whether the tab is the one chosen, which ⌘W closes and ⌘J opens the terminal of. */
   chosen: boolean;
@@ -247,6 +254,7 @@ export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[
     onCopy,
     onRename,
     onOpenTerminal,
+    onOpenBrowser: doors.onOpenBrowser,
     onOpenInTask,
     archive,
     deletion,
@@ -371,7 +379,7 @@ export function useTabActions(actions: TabActionGroups | undefined): void {
  * The chosen tab's ⋯, drawn into its toolbar's slot (`slot`) rather than on
  * the tab, as an editor's ⋯ acts on its active editor: it drops the tab's
  * content actions (`contentActionGroups`) under itself and takes focus back
- * when its menu closes by key. Note that it is portalled from the tab rather
+ * when its menu closes by key. Note that it is portaled from the tab rather
  * than lifted to the toolbar, because what its actions open, an agent's
  * name field and its Archive's question, stands with the tab.
  */
@@ -432,7 +440,7 @@ function useShownTab(
 
 /** What a tab of either strip draws, beyond its menu. */
 export interface TabLook {
-  /** The id the tab stands under, which the panel it shows is labelled by (`Tab`'s). */
+  /** The id the tab stands under, which the panel it shows is labeled by (`Tab`'s). */
   id?: string | undefined;
   /** The id of the panel the tab shows (`Tab`'s). */
   controls?: string | undefined;
@@ -701,7 +709,7 @@ function sameTitles(
  * only as it is hung (`agentCardReading`), and a page landing in a tab would
  * otherwise draw the whole task's page again, every tab's transcript among
  * it. The held value is a new one only when a title it names moves, which a
- * subagent's tab is labelled by as it is drawn (`drawnSubagent`).
+ * subagent's tab is labeled by as it is drawn (`drawnSubagent`).
  */
 export function useTabViews(): TabViews {
   const [standings, setStandings] = useState<WorkerStandings>(() => new Map());

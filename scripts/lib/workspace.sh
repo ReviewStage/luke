@@ -109,7 +109,7 @@ app_app_lock_holder_pid() {
     fi
 
     # A stale lock can name a pid that has since been reused, so a holder that is
-    # not an Electron app is reported rather than signalled.
+    # not an Electron app is reported rather than signaled.
     local command_line
     command_line=$(ps -o command= -p "$pid" 2>/dev/null || true)
     case $command_line in
@@ -124,7 +124,7 @@ app_app_lock_holder_pid() {
 }
 
 # Stopping a holder has to wait for it to exit, because the lock is released
-# as that process goes away rather than when it is signalled. Development, test,
+# as that process goes away rather than when it is signaled. Development, test,
 # and release instances hold separate locks, so all are stopped: a launch means
 # "this build owns the screen now", whichever build was there before. A named
 # instance, given as the one argument, stops only its own earlier run, and

@@ -79,13 +79,13 @@ tolerateClosedStderr();
 // A plan's pages are served on a scheme of their own, which Electron must be
 // told of before the app is ready (`window/page-protocol.ts`).
 protocol.registerSchemesAsPrivileged([PAGE_SCHEME_PRIVILEGES]);
-// Every colour the window draws is an sRGB token, and on a wide-gamut Mac
+// Every color the window draws is an sRGB token, and on a wide-gamut Mac
 // display Chromium's own conversion and Core Animation's land one step
 // apart. The page's ground is drawn both ways at once while a region holds
 // nothing but something turning (a transcript still being read, its spinner
 // alone in the column): that region's tiles came out #0c0c0e and the rest of
 // the column #0c0c0d (the old ground), a faint box around the spinner. Drawing in sRGB leaves
-// the one conversion to macOS, so the ground is one colour wherever it falls.
+// the one conversion to macOS, so the ground is one color wherever it falls.
 // Electron reads the switch once, before the app is ready.
 app.commandLine.appendSwitch("force-color-profile", "srgb");
 

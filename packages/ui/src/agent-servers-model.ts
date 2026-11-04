@@ -174,10 +174,10 @@ export function serverAccountName(
   accounts: readonly IntegrationAccount[],
 ): string | undefined {
   const named = integrationAccountNames(accounts).get(connection);
-  const labelled = accounts.some(
+  const labeled = accounts.some(
     (account) => account.connection === connection && (account.label ?? "").trim() !== "",
   );
-  return named !== undefined && (accounts.length > 1 || labelled) ? named : undefined;
+  return named !== undefined && (accounts.length > 1 || labeled) ? named : undefined;
 }
 
 /** A server's name as its card and a call's row say it: its provider's, and the account's name after it where `serverAccountName` shows one. */
@@ -318,11 +318,11 @@ export function searchServers(rows: readonly ServerRow[], query: string): Server
     row,
     match: matchIntegration(row.provider, row.tools ?? [], tokens),
     // An account's label finds its row too, so "personal" finds Notion · Personal.
-    labelled:
+    labeled:
       row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token)),
   }));
   return {
-    rows: found.flatMap(({ row, match, labelled }) => (match?.named || labelled ? [row] : [])),
+    rows: found.flatMap(({ row, match, labeled }) => (match?.named || labeled ? [row] : [])),
     tools: found.flatMap(({ row, match }) => (match?.tools ?? []).map((tool) => ({ row, tool }))),
   };
 }

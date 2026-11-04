@@ -26,7 +26,7 @@
  *   (none)  -> QUEUED   queueAgentMessage, under the id its window minted (a
  *                       repeat under the id is a no-op)
  *   QUEUED  -> EDITING  holdQueuedMessage(held)
- *   EDITING -> QUEUED   holdQueuedMessage(let go: the edit cancelled), or
+ *   EDITING -> QUEUED   holdQueuedMessage(let go: the edit canceled), or
  *                       editQueuedMessage (the edit saved)
  *   QUEUED  -> QUEUED   editQueuedMessage, reorderAgentQueue
  *   QUEUED  -> CLAIMED  claimQueueHead (the hand-off: the head, where it is
@@ -703,7 +703,7 @@ export function editQueuedMessage(
 
 /**
  * A queued message marked as a member edits it (QUEUED -> EDITING), which
- * stops the hand-off at it, or its mark cleared, its edit cancelled
+ * stops the hand-off at it, or its mark cleared, its edit canceled
  * (EDITING -> QUEUED). Answers whether it stood unclaimed, or none where the
  * account does not reach the agent.
  */

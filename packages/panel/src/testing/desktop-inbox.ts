@@ -660,17 +660,6 @@ beforeEach(() => {
           },
         });
       }
-      if (request.kind === ACT_KIND.TASKS_PAGES) {
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value: {
-            pages:
-              "taskId" in request.payload
-                ? (world.taskPages.get(request.payload.taskId) ?? [])
-                : (world.agentPages.get(request.payload.agentId) ?? []),
-          },
-        });
-      }
       if (request.kind === ACT_KIND.AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         world.readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
@@ -789,11 +778,12 @@ export function mount(
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
   // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
-  holdPages(reads.deliverPages, (place) =>
-    "taskId" in place
-      ? (world.taskPages.get(place.taskId) ?? [])
-      : (world.agentPages.get(place.agentId) ?? []),
-  );
+  holdPages(reads.deliverPages, (place) => ({
+    rows:
+      "taskId" in place
+        ? (world.taskPages.get(place.taskId) ?? [])
+        : (world.agentPages.get(place.agentId) ?? []),
+  }));
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
@@ -880,7 +870,7 @@ export function mount(
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
   }
-  function Panelled({ at }: { at: ShellRoom }) {
+  function Paneled({ at }: { at: ShellRoom }) {
     const sidePanel = useSidePanel(
       undefined,
       { id: undefined, holds: {}, bare: true },
@@ -899,7 +889,7 @@ export function mount(
   const inbox =
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
-      : createElement(Panelled, { at: room });
+      : createElement(Paneled, { at: room });
   const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The thread's id, as read_inbox answered it."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The thread's revision, as read_inbox answered it."
+    }
+  },
+  "required": [
+    "threadId",
+    "revision"
+  ],
+  "additionalProperties": false
+}

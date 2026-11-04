@@ -45,13 +45,7 @@ import {
   pageName,
 } from "@repo/features/turn-rows";
 import { skillWord } from "@repo/ui/skill-mention";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type WireValue,
-} from "@repo/wire";
+import { isRecord, isWireNumber, isWireString, type WireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
@@ -108,7 +102,7 @@ export interface ToolCallView {
   readonly connection?: string;
 }
 
-/** The escape every terminal colour and cursor sequence starts with. */
+/** The escape every terminal color and cursor sequence starts with. */
 const ESCAPE = String.fromCharCode(27);
 
 /** A control sequence (`ESC [ … m`) or an operating-system command (`ESC ] … BEL`), which a terminal would have eaten. */
@@ -729,27 +723,6 @@ function agentUpdateKind(input: WireValue | undefined): CallKind {
   return archived === false ? CALL_KIND.UNARCHIVE_AGENT : CALL_KIND.UPDATE_AGENT;
 }
 
-/** The tools that keep the member's sidebar sections or make or change a task, whose accepted call changes the sidebar. */
-const SIDEBAR_TOOLS: ReadonlySet<string> = new Set([
-  AGENT_TOOL.CREATE_TASK,
-  AGENT_TOOL.CREATE_SECTION,
-  AGENT_TOOL.DELETE_SECTION,
-  RETIRED_TOOL.MOVE_TASK,
-  AGENT_TOOL.UPDATE_TASK,
-]);
-
-/**
- * Whether an answered call changed what the sidebar draws, so the window
- * reads the tasks again: a task made, a start that made one before
- * `create_task` did, or a section made, deleted, or a task moved or changed,
- * each only once it was accepted.
- */
-export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
-  if (!isRecord(output)) return false;
-  if (tool === AGENT_TOOL.START_AGENT) return isRecord(output.newTask);
-  return SIDEBAR_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
-}
-
 /** What a call to another agent sent it, in the caller's own words: the words, and a start's note beside them. */
 export interface SentWords {
   readonly words: string | undefined;
@@ -1279,6 +1252,15 @@ export type ToolTarget =
     }
   | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
 
+/** The place in the app a row naming a task names: the task, or one of its agents where the row names one. */
+export function placeOfTaskTarget(
+  target: Extract<ToolTarget, { readonly kind: typeof TOOL_TARGET.TASK }>,
+): LinkPlace {
+  return target.agent === undefined
+    ? { kind: LINK_PLACE.TASK, planId: target.task }
+    : { kind: LINK_PLACE.AGENT, planId: target.task, agentId: target.agent };
+}
+
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
@@ -1374,6 +1356,19 @@ function shownPage(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.page : undefined;
   const page = stringAt(answer, "id");
   return page === undefined ? undefined : { kind: TOOL_TARGET.PAGE, page };
+}
+
+/** The page and version a `show_page` call showed, which its answer names once it has; nothing for any other call, one refused, or one still running. */
+export function shownPageVersion(
+  call: TargetedCall,
+): { readonly page: string; readonly version: number } | undefined {
+  if (call.tool !== AGENT_TOOL.SHOW_PAGE || call.output === undefined || refused(call.output)) {
+    return undefined;
+  }
+  const answer = isRecord(call.output) ? call.output.page : undefined;
+  const page = stringAt(answer, "id");
+  const version = isRecord(answer) ? answer.version : undefined;
+  return page === undefined || typeof version !== "number" ? undefined : { page, version };
 }
 
 /** The page a read answered, which opens its tab where it is on the call's own task, or the calling agent's own on no task; one of another task or agent opens nothing here. */

@@ -14,7 +14,7 @@ import { GLYPH, OctagonMinusIcon } from "../../icons/icons.js";
  *
  * A mark stands a size under the glyph it follows, so it reads as a note on
  * the row rather than a second glyph, its own glyph filling it, in the ink
- * of what it says: a failure in the danger colour, a draft in the muted ink
+ * of what it says: a failure in the danger color, a draft in the muted ink
  * beside the row's other marks. It is a picture named for a reader by
  * `label`, a fixed word, so nothing a row holds rides it. A hint may hang
  * from it (`Tooltip`), which hands it the hint's own handlers.
@@ -78,7 +78,7 @@ export function RowMark({
   );
 }
 
-/** The mark of a piece of work that failed: the failure glyph in the danger colour, named Failed. */
+/** The mark of a piece of work that failed: the failure glyph in the danger color, named Failed. */
 export function FailedMark(anchor: MarkAnchor): React.JSX.Element {
   return (
     <RowMark

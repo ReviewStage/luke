@@ -41,7 +41,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * sign-in the window waits on (`integration-sign-in.ts`): begun here, ended
  * by the reads, given up on by any read past its own deadline, which the
  * window's focus shortens to a grace and one more read is armed for, and
- * cancelled here, which ends it
+ * canceled here, which ends it
  * at the service so the provider no longer stands pending. A Cancel the
  * service answers connected came too late: the sign-in had finished, and
  * the row stands connected.
@@ -411,7 +411,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
           }).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return false;
       settle(server, answer.status);
-      // A first sign-in cancelled is gone from the service, so the account it was to be leaves the list, and Try again adds one.
+      // A first sign-in canceled is gone from the service, so the account it was to be leaves the list, and Try again adds one.
       if (answer.status === INTEGRATION_STATUS.DISCONNECTED) {
         change((book) => ({
           ...book,

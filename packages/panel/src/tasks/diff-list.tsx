@@ -497,7 +497,7 @@ export function PierreDiffList({
           surface: FAILURE_SURFACE.DIFF_READ,
           cause: Cause.squash(loaded.cause),
         })}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
         onRetry={retry}
       >
         {DIFF_LOAD_FAILED}

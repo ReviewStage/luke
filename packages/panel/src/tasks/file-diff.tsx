@@ -116,7 +116,7 @@ export function PierreDiff({
   excerpt?: boolean;
   /** What stands under the patch's lines; none where absent. */
   notes?: readonly PierreDiffNote[];
-  /** Whether it is coloured off the window's thread, as one of many drawn at once; read as it is mounted. */
+  /** Whether it is colored off the window's thread, as one of many drawn at once; read as it is mounted. */
   pooled?: boolean;
   /** The box's classes, a card's. */
   className: string;
@@ -179,7 +179,7 @@ export function PierreDiff({
           surface: FAILURE_SURFACE.DIFF_READ,
           cause: Cause.squash(loaded.cause),
         })}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
         onRetry={retry}
       >
         {DIFF_LOAD_FAILED}

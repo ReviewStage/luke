@@ -5,9 +5,9 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { terminalTheme } from "./terminal-theme.js";
 
 /**
- * A terminal's colours as the stylesheet's tokens resolve them. jsdom
+ * A terminal's colors as the stylesheet's tokens resolve them. jsdom
  * resolves no `var()`, so the platform's answer is staged: each token is
- * the colour a browser would compute for it.
+ * the color a browser would compute for it.
  */
 const TOKENS: Record<string, string> = {
   "--terminal-ground": "rgb(0, 0, 0)",
@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a dimmed screen takes its output's colours 42% of the way back to the ground and leaves the note's colour whole", () => {
+test("a dimmed screen takes its output's colors 42% of the way back to the ground and leaves the note's color whole", () => {
   const host = document.createElement("div");
   const bright = terminalTheme(host, false);
   const dimmed = terminalTheme(host, true);

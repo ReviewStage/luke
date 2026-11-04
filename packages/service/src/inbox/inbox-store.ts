@@ -232,7 +232,7 @@ interface MessageFile {
   readonly bytes: Uint8Array;
 }
 
-/** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
+/** A file an item's answer carried as a read answers it: the type it traveled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
   readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
@@ -966,11 +966,12 @@ const closeItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a read looks: one task's items, any member's agents' alike; one agent's own, under the member who started it; or one agent's, as any member of its workspace reads them. */
+/** Where a read looks: one task's items, any member's agents' alike; one agent's own, under the member who started it; one agent's, as any member of its workspace reads them; or every item of one workspace a member may read. */
 const INBOX_SCOPE = {
   TASK: "plan",
   AGENT: "agent",
   AGENT_OF_WORKSPACE: "agent-of-workspace",
+  WORKSPACE: "workspace",
 } as const;
 
 const ScopeSchema = Schema.Struct({
@@ -981,13 +982,15 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the task's or the agent's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read as it acts as itself. */
+/** The rows a scope names: the task's, the agent's, or the workspace's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read as it acts as itself. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
     case INBOX_SCOPE.TASK:
       return and(eq(inboxItem.taskId, scope.id), itemVisibleTo(scope.userId));
     case INBOX_SCOPE.AGENT_OF_WORKSPACE:
       return and(eq(inboxItem.agentId, scope.id), itemVisibleTo(scope.userId));
+    case INBOX_SCOPE.WORKSPACE:
+      return and(eq(inboxItem.organizationId, scope.id), itemVisibleTo(scope.userId));
     case INBOX_SCOPE.AGENT:
       return and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
   }
@@ -2537,6 +2540,24 @@ export function memberAgentInboxItems(
     { userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId },
     INBOX_BOUNDS.MAX_ITEMS_READ,
     userId,
+  );
+}
+
+/**
+ * Every item of one workspace the member may read, a task's or an agent's
+ * with no task, any member's agents' alike: every open one, then the latest
+ * settled as many as an agent's own read is told (`MAX_SETTLED_TOLD`), what
+ * an outside agent acting for the member reads of their inbox
+ * (`member-mcp/inbox.ts`). Note that it is handed no member's key, since
+ * the reader is no window that sent one.
+ */
+export function workspaceInboxItems(
+  userId: string,
+  workspaceId: string,
+): InboxStoreEffect<readonly InboxItem[]> {
+  return scopeItems(
+    { userId, scope: INBOX_SCOPE.WORKSPACE, id: workspaceId },
+    INBOX_BOUNDS.MAX_SETTLED_TOLD,
   );
 }
 

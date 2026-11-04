@@ -1,11 +1,15 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { LANDING_TONE } from "@repo/features/landing-outcome";
 import { type SocialProvider, socialProviderFromState } from "@repo/features/sign-in-provider";
-import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialProviderButton } from "@repo/ui";
+import {
+  AuthMark,
+  AuthPage,
+  SIGN_IN_UNFINISHED,
+  SocialProviderButton,
+  SocialSignInCard,
+} from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
-import { openAppFromMac } from "./open-app";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -14,7 +18,8 @@ import { mountPrerenderedPage } from "./mount-page";
 
 // The provider client forwards the authorization server's signed `oauth_query`
 // through social sign-in, so the new Better Auth session resumes this exact
-// desktop authorization request when Google or GitHub returns.
+// authorization request, the desktop's or another client's, when Google or
+// GitHub returns.
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 function providerHint(): SocialProvider | undefined {
@@ -23,10 +28,12 @@ function providerHint(): SocialProvider | undefined {
 
 /**
  * The page opens on the provider's mark, unbadged while it offers that
- * provider's button. An address that names no provider is a sign-in that
- * cannot go on, so it opens on the app's mark badged as failed, says so in the
- * consent page's failure wording, and offers the Open link instead; it drops the
- * closing note, which promises a confirmation that will never come.
+ * provider's button, where the desktop's `state` names the provider its card
+ * chose, and starts that sign-in at once. An authorization whose `state`
+ * names no provider, another client's, opens on the app's mark and offers
+ * every provider; either sign-in resumes the authorization, which goes on to
+ * consent. It drops the closing note there, since the browser goes on to
+ * that client rather than back to the app.
  */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
@@ -42,26 +49,25 @@ function SignIn(): React.JSX.Element {
     begin(provider);
   }, [provider, begin]);
 
+  if (!provider) {
+    return (
+      <SocialSignInCard
+        mark={<AuthMark />}
+        title={`Sign in to ${PRODUCT_NAME}`}
+        pending={pending}
+        failed={failed ? UNREPORTED.NO_REPORTER : undefined}
+        onPress={begin}
+      />
+    );
+  }
   return (
     <AuthPage
-      mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.DANGER} />}
-      title={provider ? `Sign in to ${PRODUCT_NAME}` : `${PRODUCT_NAME} could not continue`}
-      description={provider ? undefined : "Start sign-in again."}
+      mark={<AuthMark provider={provider} />}
+      title={`Sign in to ${PRODUCT_NAME}`}
       error={failed ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER } : undefined}
-      action={provider ? undefined : openAppFromMac()}
-      footnote={
-        provider
-          ? `You can close this window after ${PRODUCT_NAME} confirms the sign-in.`
-          : undefined
-      }
+      footnote={`You can close this window after ${PRODUCT_NAME} confirms the sign-in.`}
     >
-      {provider ? (
-        <SocialProviderButton
-          provider={provider}
-          pending={pending}
-          onPress={() => begin(provider)}
-        />
-      ) : null}
+      <SocialProviderButton provider={provider} pending={pending} onPress={() => begin(provider)} />
     </AuthPage>
   );
 }

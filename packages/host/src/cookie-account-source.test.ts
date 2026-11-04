@@ -931,7 +931,7 @@ describe("the cookie account source", () => {
   );
 
   it.effect(
-    "keeps the tab where it is when the sign-in is cancelled while the service answers",
+    "keeps the tab where it is when the sign-in is canceled while the service answers",
     () =>
       Effect.gen(function* () {
         const { held, release } = heldAnswer();
@@ -1113,13 +1113,20 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(account.signedIn(), true);
 
     // The preferences reconcile reads the service under the session's account.
+    const accountRead = Effect.map(
+      Effect.orDie(settings.store.snapshot()),
+      (snapshot) => snapshot.accountRead,
+    );
+    assert.equal(yield* accountRead, false);
     yield* settings.reconcileAccountPreferences();
     const experiments = Effect.map(
       Effect.orDie(settings.store.snapshot()),
       (snapshot) => snapshot.experiments,
     );
     const linkOpen = Effect.orDie(settings.store.get("linkOpen"));
-    yield* until(() => Effect.map(linkOpen, (chosen) => chosen === LINK_OPEN.MAC_APP));
+    // The account reads as read only once its choices stand, so a window waiting on them never reads this device's in their place.
+    yield* until(() => accountRead);
+    assert.equal(yield* linkOpen, LINK_OPEN.MAC_APP);
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
     // The choice the account made is applied here, and the service keeps it.
     assert.equal(yield* linkOpen, LINK_OPEN.MAC_APP);
@@ -1145,6 +1152,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     // The first account's choices are no longer drawn for the one now signed in.
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], undefined);
     assert.equal(yield* linkOpen, undefined);
+    assert.equal(yield* accountRead, false);
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),

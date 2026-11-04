@@ -241,7 +241,7 @@ export function DialogCard({
 /** The dimmed window under a bare dialog, which keeps its own margins (`CARD_LOOK`). */
 const WINDOW_ROOM = "ui-dialog-backdrop p-0";
 
-/** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin, and dims and clears on the sheet's own beat. */
+/** The dimmed window under a sheet, which stands on its foot, centered across it, with no margin, and dims and clears on the sheet's own beat. */
 const SHEET_ROOM =
   "ui-dialog-backdrop items-end justify-items-center p-0 animate-sheet-scrim data-ending-style:animate-sheet-leave";
 
@@ -346,7 +346,7 @@ interface RowPlace {
 }
 
 /** The row after `place`'s, or its list's first row but its own, whichever still stands within reach. */
-function neighbourIn({ row, next, list }: RowPlace): HTMLElement | null {
+function neighborIn({ row, next, list }: RowPlace): HTMLElement | null {
   const after = rowFocus(next);
   if (after !== null) return after;
   for (const each of list.children) {
@@ -373,13 +373,13 @@ function rowPlaces(opener: HTMLElement): RowPlace[] {
  * stands in, and one leaving its list, out of reach, is passed over; where
  * the act took the whole list with it, as a thread goes with the one comment
  * it held, the row around that list is looked past the same way, and so on
- * out. An opener in no list has no neighbour.
+ * out. An opener in no list has no neighbor.
  */
 export const nextRowOrHead: RestoreTo = (opener) => {
   const places = rowPlaces(opener);
   return () => {
     for (const place of places) {
-      const found = neighbourIn(place);
+      const found = neighborIn(place);
       if (found !== null) return found;
     }
     return null;

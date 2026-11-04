@@ -4,7 +4,7 @@ import { BUTTON_VARIANT, type BusyProps, Button } from "../button/button.js";
  * auth-step-foot.tsx -- the foot of an AuthPage that is one step of several: Back, where the step stands among them, Skip, and its way on.
  *
  * The foot is three columns, so where the step stands holds the card's
- * centre whatever stands beside it, and does not move as Back arrives on
+ * center whatever stands beside it, and does not move as Back arrives on
  * the second step. Back stands at the start; Skip and the way on at the end,
  * Skip before it. Note that a foot too narrow for the three in a line, a
  * phone's card, stands where the step is on a line of its own under them,

@@ -1,9 +1,9 @@
 /**
- * landing-paint.ts -- what the landing's canvases share: a role's colour read off the page, the ordered dither's threshold map, and the frame loop that draws only while a canvas is on screen.
+ * landing-paint.ts -- what the landing's canvases share: a role's color read off the page, the ordered dither's threshold map, and the frame loop that draws only while a canvas is on screen.
  *
  * Every canvas on the landing paints in the theme's own roles, read at mount
- * through a probe so whatever CSS colour a role holds resolves, and lands each
- * cell on a flat colour through an 8×8 Bayer map rather than a gradient. The
+ * through a probe so whatever CSS color a role holds resolves, and lands each
+ * cell on a flat color through an 8×8 Bayer map rather than a gradient. The
  * loop draws once and stands still where motion is held (reduced motion, a
  * capture run), and skips its frames while its canvas is scrolled away.
  */
@@ -22,7 +22,7 @@ export function bayerAt(i: number, j: number): number {
   return BAYER_8[(j % 8) * 8 + (i % 8)] ?? 0.5;
 }
 
-/** A role's colour as sRGB channels between 0 and 1, read through a probe laid beside `near`. */
+/** A role's color as sRGB channels between 0 and 1, read through a probe laid beside `near`. */
 export function roleChannels(near: HTMLElement, role: string): readonly [number, number, number] {
   const probe = document.createElement("span");
   probe.style.color = `var(${role})`;

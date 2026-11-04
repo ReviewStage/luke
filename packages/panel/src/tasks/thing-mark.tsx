@@ -18,7 +18,7 @@ import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { usePerson } from "../member-directory.js";
-import { APP_SLICE, APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { providerOf } from "./agent-model.js";
 import { WorkspaceDirectory } from "./chip-cards.js";
 import { fileName } from "./file-ref-model.js";
@@ -30,7 +30,7 @@ import { PullRequestMark } from "./pull-request-mark.js";
 import { SkillMark } from "./skill-ref.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { useTaskStatus } from "./use-known-names.js";
-import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
+import type { LinkStanding } from "./use-link-standing.js";
 
 /**
  * thing-mark.tsx -- the mark a chip leads with for each kind of thing it names, one entry per kind (`@repo/features/thing-kind`).
@@ -53,11 +53,9 @@ import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-li
 
 /** What a chip hands its thing's mark: what it calls the thing, where it stands, and what it holds of it. */
 export interface ThingMarkAt {
-  /** The name the chip calls it by, which a person not among the members read, and an agent on no task, are found by. */
+  /** The name the chip calls it by, which a person not among the members read is found by. */
   readonly name: string;
   readonly known: KnownNames;
-  /** Where the chip stands, whose workspace an agent on no task is found in. */
-  readonly where: ChipWhere;
   /** The slug of the workspace the link was written under, whose members a person is drawn as. */
   readonly workspace: string;
   /** The tiles of one plan's agents, as the place drawing the chip holds them; none where it holds none. */
@@ -100,20 +98,13 @@ function harnessMark(model: string | undefined): ReactNode {
 /**
  * The mark of an agent the place holds no tile of: the harness the window
  * last read it running on, and where the window holds no model of it, an
- * archived agent's or one past the few its task's row names, the one read
- * for it (`ReadAgentModel`).
+ * archived agent's or one past the few its task's row names, the one the
+ * task list carries for it (`ReadAgentModel`).
  */
 function KnownAgentMark({ agentId, at }: { agentId: string; at: ThingMarkAt }): ReactNode {
-  const workspaceId = useWordsWorkspaceId(at.where);
-  const held = useAppSlice(APP_STATE_HELD);
   const model = at.known.agentModels.get(agentId);
-  // Note that nothing is read before main's document lands, because the agent may be among those it lists.
-  if (model !== undefined || !held) return harnessMark(model);
-  return (
-    <ReadAgentModel agentId={agentId} taskId={undefined} workspaceId={workspaceId} name={at.name}>
-      {harnessMark}
-    </ReadAgentModel>
-  );
+  if (model !== undefined) return harnessMark(model);
+  return <ReadAgentModel agentId={agentId}>{harnessMark}</ReadAgentModel>;
 }
 
 /** An agent's mark: its tab's tile where the place holds its plan's agents, else its harness's. */

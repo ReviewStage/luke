@@ -1,18 +1,14 @@
 import type { AgentInboxScope } from "@repo/features/agent-view";
-import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import {
-  PAGE_OWNER,
-  type PageLine,
-  type PageOwner,
-  type PagePlace,
-} from "@repo/features/page-wire";
+import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type {
-  AppHolderInbox,
-  AppHolderPages,
-  AppHostRead,
-  AppInboxItems,
+import {
+  type AppHostRead,
+  type AppHostReads,
+  type AppStateSnapshot,
+  HOST_READ_SLICE,
+  KEYS_ON,
+  READ_KEYS,
 } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect } from "react";
@@ -30,10 +26,13 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, or a task's or an agent's pages, is held by the surface that reads it: the host follows it while any surface
- * holds it and a while after, so a holder chosen again, or a surface drawn
- * again, draws from where its read stands. Nothing else in the panel opens a
- * follow (`anti-slop/no-follow-outside-host-read`).
+ * own inbox, or a task's or an agent's pages, is held by the surface that
+ * reads it: the host follows it while any surface holds it and a while
+ * after, so a holder chosen again, or a surface drawn again, draws from
+ * where its read stands. Each read is one entry of `HOST_READS`, which the
+ * one hook path reads, so a read added is an entry rather than a hook.
+ * Nothing else in the panel opens a follow
+ * (`anti-slop/no-follow-outside-host-read`).
  */
 
 export const HOST_READ_STATUS = {
@@ -58,108 +57,228 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
 /** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
 export type InboxHolderKey = AgentInboxScope;
 
+/** A read the host holds for the panel, by its name (`AppHostReads`). */
+type HostReadName = keyof AppHostReads;
+
 /** Where a read stands, from what the host holds of it. */
 function statusOf(held: AppHostRead<unknown> | undefined): HostReadStatus {
   if (held?.rows !== undefined) return HOST_READ_STATUS.READY;
   return held?.failed === true ? HOST_READ_STATUS.FAILED : HOST_READ_STATUS.LOADING;
 }
 
-/** One holder's own inbox as the host holds it, by its kind and then its id, told to its readers only as that holder's read moves. */
-const holderInboxAtom = Atom.family((kind: InboxHolderKey["kind"]) =>
-  Atom.family((id: string) =>
-    Atom.map(APP_SLICE.HOLDER_INBOX, (held): AppHolderInbox | undefined => held?.[kind][id]),
-  ),
-);
+/** How deep a key of `read` stands in its slice: not at all for a read whose slice is one read, as the feed's is, else one segment per id its slice is keyed by (`HOST_READ_SLICE`). */
+function depthOf(read: HostReadName): number {
+  const slice = HOST_READ_SLICE[read];
+  if (slice.on === KEYS_ON.ROWS) return 0;
+  return slice.keys === READ_KEYS.TWO ? 2 : 1;
+}
 
-/** No holder read, for a surface holding none. */
-const NO_HOLDER: Atom.Atom<AppHolderInbox | undefined> = Atom.make(undefined);
-
-/** One task's or agent's pages as the host holds them, by what they stand on and then its id, told to their readers only as those pages move. */
-const pagesAtom = Atom.family((kind: PageOwner["kind"]) =>
-  Atom.family((id: string) =>
-    Atom.map(APP_SLICE.PAGES, (held): AppHolderPages | undefined => held?.[kind][id]),
-  ),
-);
-
-/** No pages read, for a surface holding none. */
-const NO_PAGES_HELD: Atom.Atom<AppHolderPages | undefined> = Atom.make(undefined);
-
-/** The feed of every item the account reaches, held for the session. */
-function useAccountItems(): HostRead<AppInboxItems> {
-  const held = useAppSlice(APP_SLICE.INBOX_ITEMS);
-  const retry = useCallback(() => tellAct(ACT_KIND.AGENTS_INBOX_ITEMS_RETRY), []);
-  return { rows: held?.rows, status: statusOf(held), retry };
+/** What `value` holds at `path`, record by record; none where it holds none. */
+function valueAt(value: unknown, path: readonly string[]): unknown {
+  let at = value;
+  for (const segment of path) {
+    at =
+      typeof at === "object" && at !== null && Object.hasOwn(at, segment)
+        ? Reflect.get(at, segment)
+        : undefined;
+  }
+  return at;
 }
 
 /**
- * One holder's own inbox, held by this surface while `key` names one: the
- * hold is a stream on the act port, which carries nothing and which the
- * host keeps the holder followed for; the rows arrive on app state.
+ * The atom of what `slice` holds at each path `depth` segments long, by one
+ * `Atom.family` per segment, so a path asked for again is the very atom and
+ * its readers are told only as what it holds moves. Note that each family is
+ * keyed by a string, since an object key need not compare equal.
  */
-function useHolderInbox(key: InboxHolderKey | undefined): HostRead<readonly InboxItem[]> {
-  const kind = key?.kind;
-  const id = key?.id;
-  const held = useAppSlice(
-    kind === undefined || id === undefined ? NO_HOLDER : holderInboxAtom(kind)(id),
+function atomsAt(
+  slice: Atom.Atom<unknown>,
+  depth: number,
+  prefix: readonly string[] = [],
+): (path: readonly string[]) => Atom.Atom<unknown> {
+  if (depth === 0) {
+    const leaf = prefix.length === 0 ? slice : Atom.map(slice, (held) => valueAt(held, prefix));
+    return () => leaf;
+  }
+  const below = Atom.family((segment: string) => atomsAt(slice, depth - 1, [...prefix, segment]));
+  return ([segment = "", ...rest]) => below(segment)(rest);
+}
+
+/** One read as `HOST_READS` holds it, by its name, the key a surface names it by, and its Try again. */
+interface HostReadEntry<Read extends HostReadName, Key, Retry> {
+  /** The read at a key's path in its slice, told to its readers only as that read moves. */
+  readonly at: (path: readonly string[]) => Atom.Atom<AppHostRead<AppHostReads[Read]> | undefined>;
+  /** The path `key` stands at in the read's slice; none for a read held for the session, which takes no key. */
+  readonly path: ((key: Key) => readonly string[]) | undefined;
+  /** The hold on `key`'s read, a stream on the act port that carries nothing and that the host keeps the read followed for; none for a read held for the session. */
+  readonly hold:
+    | ((key: Key) => Promise<AsyncIteratorObject<unknown, unknown, unknown>>)
+    | undefined;
+  /** Try again on `key`'s read; none for a read the host reads again on its own. */
+  readonly retry: Retry;
+}
+
+/**
+ * One entry of `HOST_READS`: the read's slice atom, the path a key stands
+ * at in it, the act that holds a key, and the act that reads it again, each
+ * a closure of its own so each act is called with its own kind, and each
+ * stated undefined where the read has none, so its type says so.
+ */
+function hostRead<
+  Read extends HostReadName,
+  Key = never,
+  Retry extends ((key: Key) => void) | undefined = undefined,
+>(
+  read: Read,
+  declared: {
+    readonly slice: Atom.Atom<AppStateSnapshot[Read] | undefined>;
+    readonly path: ((key: Key) => readonly string[]) | undefined;
+    readonly hold:
+      | ((key: Key) => Promise<AsyncIteratorObject<unknown, unknown, unknown>>)
+      | undefined;
+    readonly retry: Retry;
+  },
+): HostReadEntry<Read, Key, Retry> {
+  const at = atomsAt(declared.slice, depthOf(read));
+  return {
+    // SAFETY: what a read's slice holds at a key's whole path is that key's read (`HOST_READ_SLICE`).
+    at: (path) => at(path) as Atom.Atom<AppHostRead<AppHostReads[Read]> | undefined>,
+    path: declared.path,
+    hold: declared.hold,
+    retry: declared.retry,
+  };
+}
+
+/**
+ * Every read a surface reads through `useHostRead`, by its name: the feed of
+ * every item the account reaches, held for the session; one holder's own
+ * inbox; and one task's pages, or one agent's on no task, which the open
+ * task's page, the panel beside an Inbox item, an agent's page, and a
+ * page's card or frame each hold. Pages offer no Try again, because the
+ * host reads pages that did not answer again on its own, and pages it was
+ * refused, a plan's or an agent's the reader cannot reach, stand failed
+ * until every surface lets them go and one holds them anew (`@repo/host`'s
+ * `live-push.ts`).
+ */
+const HOST_READS = {
+  [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
+    slice: APP_SLICE.INBOX_ITEMS,
+    path: undefined,
+    hold: undefined,
+    retry: () => tellAct(ACT_KIND.AGENTS_INBOX_ITEMS_RETRY),
+  }),
+  [LIVE_READ.HOLDER_INBOX]: hostRead(LIVE_READ.HOLDER_INBOX, {
+    slice: APP_SLICE.HOLDER_INBOX,
+    path: (key: InboxHolderKey) => [key.kind, key.id],
+    hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
+    retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
+  }),
+  [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
+    slice: APP_SLICE.PAGES,
+    path: (place: PagePlace) =>
+      "taskId" in place ? [PAGE_OWNER.TASK, place.taskId] : [PAGE_OWNER.AGENT, place.agentId],
+    hold: (place) =>
+      askAct(
+        ACT_KIND.TASKS_PAGES_FOLLOW,
+        "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
+      ),
+    retry: undefined,
+  }),
+} as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
+
+type HostReads = typeof HOST_READS;
+
+/** What a surface names one of `Read`'s keys by, none while it reads none; nothing for a read held for the session. */
+type HostReadKey<Read extends HostReadName> =
+  HostReads[Read] extends HostReadEntry<Read, infer Key, infer _Retry>
+    ? [Key] extends [never]
+      ? []
+      : [key: Key | undefined]
+    : never;
+
+/** `Read` as a surface draws it: with Try again where its entry offers one. */
+type HostReadOf<Read extends HostReadName> = HostReads[Read]["retry"] extends undefined
+  ? HeldRead<AppHostReads[Read]>
+  : HostRead<AppHostReads[Read]>;
+
+/** No read, for a surface reading none. */
+const NO_READ: Atom.Atom<AppHostRead<never> | undefined> = Atom.make(undefined);
+
+/** The path of a read held for the session, which is its slice whole. */
+const WHOLE_SLICE: readonly string[] = [];
+
+/**
+ * `read` as a surface draws it, held by this surface while `key` names one:
+ * its slice atom at the key's path, one hold, and one Try again, the same
+ * three hooks for every read, called in the same order on every render.
+ * Note that the hold and Try again move with the key's path alone, never
+ * with the object a surface named it by, which a render may build anew.
+ */
+export function useHostRead<Read extends HostReadName>(
+  read: Read,
+  ...[key]: HostReadKey<Read>
+): HostReadOf<Read> {
+  const entry = HOST_READS[read];
+  // SAFETY: the key a surface hands is the one its read's entry takes (`HostReadKey`).
+  const keyed = key as never;
+  const path =
+    entry.path === undefined ? WHOLE_SLICE : key === undefined ? undefined : entry.path(keyed);
+  // Note that a key's path is at most two segments (`READ_KEYS`), so the effects below name a fixed number of them.
+  const [first, second] = path ?? [];
+  const held = useAppSlice<AppHostRead<unknown> | undefined>(
+    path === undefined ? NO_READ : entry.at(path),
   );
   useEffect(() => {
-    if (kind === undefined || id === undefined) return;
+    if (path === undefined || entry.hold === undefined) return;
+    const hold = entry.hold;
     return streamFrom(
-      () => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
+      () => hold(keyed),
       () => undefined,
     );
-  }, [kind, id]);
+  }, [entry, first, second]);
   const retry = useCallback(() => {
-    if (kind !== undefined && id !== undefined) tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id });
-  }, [kind, id]);
-  return { rows: held?.rows, status: statusOf(held), retry };
+    if (path !== undefined) entry.retry?.(keyed);
+  }, [entry, first, second]);
+  const drawn = { rows: held?.rows, status: statusOf(held) };
+  // SAFETY: a read's rows are its entry's (`AppHostReads`), and Try again stands where its entry offers one (`HostReadOf`).
+  return (entry.retry === undefined ? drawn : { ...drawn, retry }) as HostReadOf<Read>;
 }
+
+/** No place's pages, for a surface whose tabs stand on none beside its own. */
+const NO_PAGES_SLICE: Atom.Atom<undefined> = Atom.make(undefined);
 
 /**
- * One task's pages, or one agent's on no task, held by this surface while
- * `place` names one, as a holder's inbox is. Note that it offers no Try
- * again, because the host reads pages that did not answer again on its own
- * (`@repo/host`'s `live-push.ts`).
+ * The pages of each place given, a task's or an agent's on no task, held by
+ * this surface while it names them, each on the pages' entry of
+ * `HOST_READS` as `useHostRead` holds one: what a side panel reads of the
+ * places its page tabs stand on beside the one it stands for. Answers each
+ * place's pages, none until they are read.
  */
-function useHolderPages(place: PagePlace | undefined): HeldRead<readonly PageLine[]> {
-  const kind =
-    place === undefined ? undefined : "taskId" in place ? PAGE_OWNER.TASK : PAGE_OWNER.AGENT;
-  const id = place === undefined ? undefined : "taskId" in place ? place.taskId : place.agentId;
-  const held = useAppSlice(
-    kind === undefined || id === undefined ? NO_PAGES_HELD : pagesAtom(kind)(id),
-  );
+export function usePlacesPages(
+  places: readonly PagePlace[],
+): (place: PagePlace) => readonly PageLine[] | undefined {
+  const pages = HOST_READS[LIVE_READ.PAGES];
+  const held = useAppSlice(places.length === 0 ? NO_PAGES_SLICE : APP_SLICE.PAGES);
   useEffect(() => {
-    if (kind === undefined || id === undefined) return;
-    const asked: PagePlace = kind === PAGE_OWNER.TASK ? { taskId: id } : { agentId: id };
-    return streamFrom(
-      () => askAct(ACT_KIND.TASKS_PAGES_FOLLOW, asked),
-      () => undefined,
+    const hold = pages.hold;
+    if (hold === undefined) return;
+    const holds = places.map((place) =>
+      streamFrom(
+        () => hold(place),
+        () => undefined,
+      ),
     );
-  }, [kind, id]);
-  return { rows: held?.rows, status: statusOf(held) };
-}
-
-export function useHostRead(read: typeof LIVE_READ.INBOX_ITEMS): HostRead<AppInboxItems>;
-export function useHostRead(
-  read: typeof LIVE_READ.HOLDER_INBOX,
-  key: InboxHolderKey | undefined,
-): HostRead<readonly InboxItem[]>;
-export function useHostRead(
-  read: typeof LIVE_READ.PAGES,
-  key: PagePlace | undefined,
-): HeldRead<readonly PageLine[]>;
-export function useHostRead(
-  read: typeof LIVE_READ.INBOX_ITEMS | typeof LIVE_READ.HOLDER_INBOX | typeof LIVE_READ.PAGES,
-  key?: InboxHolderKey | PagePlace,
-): HostRead<AppInboxItems> | HostRead<readonly InboxItem[]> | HeldRead<readonly PageLine[]> {
-  // Note that each read is one hook, called in the same order on every render, since the read a surface asks for never changes.
-  const items = useAccountItems();
-  const holder = useHolderInbox(
-    read === LIVE_READ.HOLDER_INBOX && typeof key === "object" && "kind" in key ? key : undefined,
+    return () => {
+      for (const release of holds) release();
+    };
+  }, [pages, places]);
+  return useCallback(
+    (place) => {
+      const path = pages.path?.(place);
+      // SAFETY: what the pages' slice holds at a place's path is that place's read (`HOST_READ_SLICE`).
+      const read = path === undefined ? undefined : valueAt(held, path);
+      return (read as AppHostRead<readonly PageLine[]> | undefined)?.rows;
+    },
+    [pages, held],
   );
-  const pages = useHolderPages(
-    read === LIVE_READ.PAGES && typeof key === "object" && !("kind" in key) ? key : undefined,
-  );
-  if (read === LIVE_READ.INBOX_ITEMS) return items;
-  return read === LIVE_READ.HOLDER_INBOX ? holder : pages;
 }

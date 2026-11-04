@@ -73,7 +73,7 @@ const decodeRetiredFile = Schema.decodeUnknownSync(Schema.fromJsonString(Retired
   onExcessProperty: "error",
 });
 
-// ---------------------------------------------------------------- the catalogue
+// ---------------------------------------------------------------- the catalog
 
 /** One thing a retired file keeps out, flattened from its list. */
 export interface Retirement {

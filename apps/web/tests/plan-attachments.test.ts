@@ -50,7 +50,7 @@ import { SqlClient } from "effect/sql";
  * plan's count of videos; and a plan at its bound refuses in band. An upload is answered by the hosted oRPC router at the
  * plan's public path, and refuses exactly as the old route did. A file a
  * comment on the plan carries is served at the same path, under the type
- * it travelled as, to the same members alone.
+ * it traveled as, to the same members alone.
  *
  * Synthetic accounts, bearers, and pictures throughout.
  */
@@ -244,9 +244,9 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
   it.effect("bytes that are not the image their label names are refused, and nothing is kept", () =>
     Effect.gen(function* () {
       const { owner, planId: taskId } = yield* openSharedTask;
-      const mislabelled = PNG_URL.replace("image/png", "image/webp");
+      const mislabeled = PNG_URL.replace("image/png", "image/webp");
 
-      const refused = yield* ask(upload(taskId, owner, pictureBody(mislabelled)));
+      const refused = yield* ask(upload(taskId, owner, pictureBody(mislabeled)));
 
       assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
       assert.equal(

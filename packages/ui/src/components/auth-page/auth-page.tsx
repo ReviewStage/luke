@@ -4,17 +4,17 @@ import { BUTTON_SIZE, BUTTON_VARIANT, ButtonLink } from "../button/button.js";
 import { FailureCopy } from "../failure-copy/failure-copy.js";
 
 /**
- * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centred in the window, with nothing else on the page.
+ * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centered in the window, with nothing else on the page.
  *
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
- * a step's foot where the page is one step of several (`AuthStepFoot`),
+ * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
  * what went wrong, the one way on it offers, and a closing note. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
  * phone's width, and what it holds stretches to the card's inner width, so a
  * provider's button or a form's field is never wider than the screen. The way
- * on is a link drawn as an outline button, centred under the words. A caller
+ * on is a link drawn as an outline button, centered under the words. A caller
  * hands it words and controls, never a class.
  *
  * The artwork is decoration, hidden from a reader, since the title says what
@@ -67,7 +67,7 @@ export function AuthPage({
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
-  /** The foot of a page that is one step of several, an `AuthStepFoot`, under what the step holds. */
+  /** The foot under what the page holds: a step's `AuthStepFoot`, or a consent's answers. */
   foot?: ReactNode;
   /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;

@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { eq, sql } from "drizzle-orm";
+import { asc, count, eq, sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { timestamptz } from "../../schemas/_helpers.js";
+import { syncLog } from "../../schemas/sync-log.js";
 import { expectTopicsFire, getTestDB, installSyncTables, syncDrift } from "../../testing/index.js";
 import { TOPIC } from "../notification.js";
-import { defineSyncTable } from "../sync-table.js";
+import { defineSyncTable, LOG, type SyncLogWrites } from "../sync-table.js";
 import { SYNC_TABLES } from "../tables.js";
 
 /**
@@ -17,7 +18,8 @@ import { SYNC_TABLES } from "../tables.js";
  * workspace and task itself, and takes its agents from the parents of its
  * group, which it names by a key many parents share. What a write notifies
  * is heard on the test database's own listener, so on PGlite and on the CI
- * Postgres alike.
+ * Postgres alike. Logged, the same table writes the sync log, which is read
+ * back as it stands.
  */
 
 const PROBE_PARENT = pgTable("sync_probe_parent", {
@@ -45,19 +47,24 @@ const PROBE_SQL = [
   "create table sync_probe (id uuid primary key, workspace_id text not null, task_id text, group_id uuid, title text not null, touched_at timestamptz)",
 ];
 
-const probeSync = defineSyncTable(PROBE, {
-  topics: [
-    { kind: TOPIC.WORKSPACE, column: PROBE.workspaceId },
-    { kind: TOPIC.TASK, column: PROBE.taskId },
-    {
-      through: PROBE_PARENT,
-      key: PROBE_PARENT.groupId,
-      by: PROBE.groupId,
-      topics: [{ kind: TOPIC.AGENT, column: PROBE_PARENT.agentId }],
-    },
-  ],
-  ignore: [PROBE.touchedAt],
-});
+/** The probe declared synced, and logged where `log` names its writes. */
+const probeSyncLogging = (log?: SyncLogWrites) =>
+  defineSyncTable(PROBE, {
+    topics: [
+      { kind: TOPIC.WORKSPACE, column: PROBE.workspaceId },
+      { kind: TOPIC.TASK, column: PROBE.taskId },
+      {
+        through: PROBE_PARENT,
+        key: PROBE_PARENT.groupId,
+        by: PROBE.groupId,
+        topics: [{ kind: TOPIC.AGENT, column: PROBE_PARENT.agentId }],
+      },
+    ],
+    ignore: [PROBE.touchedAt],
+    ...(log === undefined ? {} : { log }),
+  });
+
+const probeSync = probeSyncLogging();
 
 const probeWithNoteSync = defineSyncTable(PROBE_WITH_NOTE, {
   topics: [
@@ -104,6 +111,31 @@ const insertProbe = (row: typeof PROBE.$inferInsert) =>
 
 const updateProbe = (id: string, set: Partial<typeof PROBE.$inferInsert>) =>
   Effect.flatMap(Database, (db) => db.update(PROBE).set(set).where(eq(PROBE.id, id)));
+
+const deleteProbe = (id: string) =>
+  Effect.flatMap(Database, (db) => db.delete(PROBE).where(eq(PROBE.id, id)));
+
+/**
+ * The log rows the writes wrote, in the order of their transactions and, in
+ * one, of their keys: each one's table, the ids its keys name, and its
+ * topics. Each statement here is a transaction of its own, so the rows the
+ * writes logged follow every row logged before them.
+ */
+const loggedBy = <E, R>(writes: Effect.Effect<unknown, E, R>) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [before] = yield* db.select({ rows: count() }).from(syncLog);
+    yield* writes;
+    const rows = yield* db
+      .select({ table: syncLog.tableName, key: syncLog.key, topics: syncLog.topics })
+      .from(syncLog)
+      .orderBy(asc(syncLog.txid), asc(sql`${syncLog.key}::text collate "C"`));
+    return rows.slice(before?.rows ?? 0).map((row) => ({
+      table: row.table,
+      ids: (row.key as readonly { readonly id: string }[]).map((key) => key.id).sort(),
+      topics: row.topics,
+    }));
+  });
 
 it.layer(probeDB)("what a write to a synced table notifies", (it) => {
   it.effect("an insert notifies its own topics and its parent's, with its transaction's id", () =>
@@ -183,6 +215,67 @@ it.layer(probeDB)("what a write to a synced table notifies", (it) => {
       const fired = yield* expectTopicsFire(Effect.flip(rolledBack), []);
 
       assert.equal(fired.value, "rolled back");
+    }),
+  );
+});
+
+it.layer(probeDB)("what a write to a logged table logs", (it) => {
+  it.effect(
+    "one row per row written, naming its keys, the old and the new where it moved, and its topics",
+    () =>
+      Effect.gen(function* () {
+        yield* installSyncTables([probeSyncLogging(LOG.EVERY)]);
+        const workspaceId = randomUUID();
+        const taskId = randomUUID();
+        const [first, second, moved] = [randomUUID(), randomUUID(), randomUUID()];
+        const topics = [
+          [TOPIC.TASK, taskId],
+          [TOPIC.WORKSPACE, workspaceId],
+        ];
+
+        const logged = yield* loggedBy(
+          Effect.gen(function* () {
+            yield* Effect.flatMap(Database, (db) =>
+              db
+                .insert(PROBE)
+                .values(
+                  [first, second].map((id) => ({ id, workspaceId, taskId, title: "Logged" })),
+                ),
+            );
+            yield* updateProbe(first, { title: "Retitled" });
+            yield* updateProbe(second, { id: moved });
+            yield* deleteProbe(first);
+          }),
+        );
+
+        const inserted = [first, second].sort();
+        assert.deepEqual(logged, [
+          { table: "sync_probe", ids: [inserted[0]], topics },
+          { table: "sync_probe", ids: [inserted[1]], topics },
+          { table: "sync_probe", ids: [first], topics },
+          { table: "sync_probe", ids: [moved, second].sort(), topics },
+          { table: "sync_probe", ids: [first], topics },
+        ]);
+      }),
+  );
+
+  it.effect("a table logging its rows logs their arrival and removal, never an update", () =>
+    Effect.gen(function* () {
+      yield* installSyncTables([probeSyncLogging(LOG.ROWS)]);
+      const row = { id: randomUUID(), workspaceId: randomUUID(), title: "Rows" };
+
+      const logged = yield* loggedBy(
+        Effect.gen(function* () {
+          yield* insertProbe(row);
+          yield* updateProbe(row.id, { title: "Retitled" });
+          yield* deleteProbe(row.id);
+        }),
+      );
+
+      assert.deepEqual(
+        logged.map((entry) => entry.ids),
+        [[row.id], [row.id]],
+      );
     }),
   );
 });

@@ -79,7 +79,7 @@ body {
   outline: none; /* no ring: the caret marks the field */
 }
 
-/* A brand whose one-colour mark is published in named inks wears them by
+/* A brand whose one-color mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-ui-theme="dark"]
 :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
@@ -189,7 +189,7 @@ body {
 .catalog-mark {
   width: 96px;
   height: 96px;
-  color: var(--ui-color-working);
+  color: var(--ui-color-accent-text);
 }
 
 .catalog-mark > .ui-product-mark {
@@ -356,7 +356,7 @@ body {
   width: 200px;
 }
 
-/* A region a failed read would have filled, its failure centred in it. */
+/* A region a failed read would have filled, its failure centered in it. */
 .catalog-error-region {
   align-items: center;
   justify-content: center;
@@ -460,7 +460,7 @@ body {
   background: var(--ui-color-surface);
 }
 
-/* A picture in a bare dialog's own card: the picture centred on its own
+/* A picture in a bare dialog's own card: the picture centered on its own
    ground under its bar. */
 .catalog-window-picture {
   display: grid;
@@ -601,7 +601,7 @@ body {
   color: var(--ui-color-accent-text);
 }
 
-/* A region of a pane, tall enough to centre what it holds. */
+/* A region of a pane, tall enough to center what it holds. */
 .catalog-region {
   display: flex;
   height: 120px;
@@ -628,7 +628,7 @@ body {
 }
 
 /* A frame the size of a screen a page pattern fills: a tablet's width, or
-   a phone's, as tall as the window, so the page centres in it as it would. */
+   a phone's, as tall as the window, so the page centers in it as it would. */
 .catalog-screens {
   display: flex;
   flex-wrap: wrap;
@@ -753,7 +753,7 @@ body {
   display: block;
   width: 52px;
   height: 52px;
-  color: var(--ui-color-working);
+  color: var(--ui-color-accent-text);
 }
 
 .catalog-auth-mark svg {
@@ -921,13 +921,13 @@ body {
   width: 320px;
 }
 
-/* A strip on the window's frame stands on the frame's own colour. */
+/* A strip on the window's frame stands on the frame's own color. */
 .catalog-tab-row[data-frame="true"] {
   background: var(--ui-color-sidebar);
 }
 
 /* A failure's mark at a tab's end, as an app draws its own: the alert in
-   the danger colour, a size under the glyph it follows. */
+   the danger color, a size under the glyph it follows. */
 .catalog-end-mark {
   display: inline-flex;
   width: 14px;

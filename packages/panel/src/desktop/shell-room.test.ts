@@ -92,6 +92,16 @@ let stageWidth = 0;
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The panel left open on an earlier launch, since a first launch leaves it shut.
+  window.localStorage.setItem(
+    "app.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: ["plan", "inbox", "comments"],
+      tab: "comments",
+      width: 400,
+    }),
+  );
   fakeAppPlatform(QUIET_PANEL);
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -287,22 +297,17 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
   });
 }
 
-/** The phone's view of the task named `name`, from the ⋯ heading it in the panel's toggle's place, its menu opened to find it. */
-function paneView(page: HTMLElement, name: string): HTMLElement {
-  const more = page.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
-  assert.ok(more, "the task's header holds its ⋯");
-  if (more.getAttribute("aria-expanded") !== "true") act(() => more.click());
-  const view = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent === name,
-  );
-  assert.ok(view, `the task's ${name} view stands`);
-  return view;
+/** The way back that leads the phone's task header. */
+function headBack(page: HTMLElement): HTMLButtonElement {
+  const back = page.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button");
+  assert.ok(back, "the task's header leads with its way back");
+  return back;
 }
 
 test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's header standing for its toggle and the sidebar's", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
-  // A first launch opens the panel, which the narrow stage holds full screen.
+  // The panel left open, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
   assert.equal(
     page.querySelector('.title-bar-controls[data-edge="end"]'),
@@ -314,8 +319,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     null,
     "the header's way back stands for the sidebar's toggle and New task",
   );
-  // Note that the panel opens on the board, which is a tab past the plan, so Activity is the view standing.
-  assert.equal(paneView(page, "Activity").getAttribute("aria-checked"), "true");
+  // Note that the panel opens on the board, a tab pushed over the column's Overview, which its way back names.
+  assert.equal(headBack(page).getAttribute("aria-label"), "Back to Overview");
 
   resizeStage(WIDE);
   assert.deepEqual(
@@ -327,10 +332,18 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   assert.equal(page.querySelector(".task-head"), null, "a wide stage draws no header of its own");
 
   resizeStage(PHONE);
-  const agents = paneView(page, "Agents");
-  act(() => agents.click());
-  assert.equal(page.querySelector("aside.side-panel"), null, "Agents shuts the panel");
-  assert.equal(paneView(page, "Agents").getAttribute("aria-checked"), "true");
+  act(() => headBack(page).click());
+  // Note that the panel is asked for as a boolean, since an element a failed assertion prints is the whole document's.
+  assert.equal(
+    page.querySelector("aside.side-panel") === null,
+    true,
+    "the way back shuts the panel",
+  );
+  assert.equal(
+    headBack(page).getAttribute("aria-label"),
+    null,
+    "over the column's Overview, whose way back leads out of the task by its words",
+  );
 });
 
 test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's More opens it over the work, and a press outside puts it away", () => {

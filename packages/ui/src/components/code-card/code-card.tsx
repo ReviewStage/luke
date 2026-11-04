@@ -9,7 +9,7 @@ import { TextButton } from "../text-button/text-button.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
 
 /**
- * code-card.tsx -- the window's one card for a block of code: a header naming its language or file with the one Copy, its lines in the host's colours, and a cut at 40 lines.
+ * code-card.tsx -- the window's one card for a block of code: a header naming its language or file with the one Copy, its lines in the host's colors, and a cut at 40 lines.
  *
  * Every block of code the window draws (a reply's fenced block, an Inbox
  * item's) stands in this card,
@@ -19,11 +19,11 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * lines on the code's own ground. The lines keep whole and scroll sideways
  * inside the card rather than widening the column they stand in.
  *
- * The card colours nothing itself. Its lines are coloured by the one
+ * The card colors nothing itself. Its lines are colored by the one
  * highlighter the window has, the host's, which the File tab and
- * a reply's blocks are coloured by (`CodeLines`), handed in once they land;
- * until then, or where nothing colours them, the lines are drawn plain in
- * the code's own ink. A run keeps its colour in each appearance as custom
+ * a reply's blocks are colored by (`CodeLines`), handed in once they land;
+ * until then, or where nothing colors them, the lines are drawn plain in
+ * the code's own ink. A run keeps its color in each appearance as custom
  * properties its runs pick between (`light-dark()`, the theme's
  * `code-run`), so the code follows the appearance
  * without being drawn again.
@@ -37,7 +37,7 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * `<details>` opens. Copy copies the whole block
  * whichever way it stands. Its lines are left out of the screen recording
  * (`ph-no-capture`), a second line behind the recording's text masking,
- * since their colours draw the code's shape.
+ * since their colors draw the code's shape.
  *
  * It is drawn in the Tailwind theme's utilities: the header on the hover
  * fill over a hairline, a glyph before its title where it wears one, its title holding to one line and fading where the
@@ -94,7 +94,7 @@ const TITLE_CLASS = {
 /** A glyph before the title, at an icon's size on the title's line. */
 const GLYPH = "ui-code-card-glyph mr-icon-gap inline-flex flex-none [&>svg]:size-icon-16";
 
-/** The lines, whole and scrolling sideways, each run in its colour for the appearance it stands in. */
+/** The lines, whole and scrolling sideways, each run in its color for the appearance it stands in. */
 const BODY =
   "ui-code-card-body m-0 overflow-x-auto overscroll-x-contain py-row-inset font-mono text-caption leading-reading wrap-normal whitespace-pre text-code [tab-size:2] [&_span]:text-code-run [&>code]:[font:inherit]";
 
@@ -102,19 +102,19 @@ const BODY =
 const BODY_LINES = `${BODY} px-list-inset`;
 const BODY_ROWS = `${BODY} px-0 [&>code]:block [&>code]:min-w-fit`;
 
-/** A run's colour in each appearance, as the properties the sheet picks between; nothing for the code's own ink. */
-function runColours({ color, lightColor }: CodeToken): React.CSSProperties | undefined {
+/** A run's color in each appearance, as the properties the sheet picks between; nothing for the code's own ink. */
+function runColors({ color, lightColor }: CodeToken): React.CSSProperties | undefined {
   if (color === undefined && lightColor === undefined) return undefined;
-  const colours: Record<string, string> = {};
-  if (color !== undefined) colours["--ui-code-run-dark"] = color;
-  if (lightColor !== undefined) colours["--ui-code-run-light"] = lightColor;
-  return cssCustomProperties(colours);
+  const colors: Record<string, string> = {};
+  if (color !== undefined) colors["--ui-code-run-dark"] = color;
+  if (lightColor !== undefined) colors["--ui-code-run-light"] = lightColor;
+  return cssCustomProperties(colors);
 }
 
-/** One line's runs, each in its colour where the host coloured them. */
+/** One line's runs, each in its color where the host colored them. */
 function lineRuns(tokens: CodeLines[number]): ReactNode {
   return tokens.map((token, at) => (
-    <span key={at} style={runColours(token)}>
+    <span key={at} style={runColors(token)}>
       {token.text}
     </span>
   ));
@@ -148,7 +148,7 @@ function CodeRows({
   });
 }
 
-/** The block's lines, each run in its colour where the host coloured them. */
+/** The block's lines, each run in its color where the host colored them. */
 function CodeRuns({
   text,
   lines,
@@ -200,7 +200,7 @@ export function CodeCard({
   title: ReactNode;
   /** Whether a text title is a name, in mono, or words. */
   titleIs?: CodeCardTitle;
-  /** The block's lines as the host coloured them; none while they are asked for, or for lines drawn plain. */
+  /** The block's lines as the host colored them; none while they are asked for, or for lines drawn plain. */
   lines?: CodeLines | undefined;
   /** What each line does, to tint it; none for lines that stand as they are. */
   rows?: readonly CodeRow[] | undefined;

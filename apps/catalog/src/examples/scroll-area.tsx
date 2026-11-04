@@ -31,7 +31,7 @@ import { CatalogSection } from "../section";
 
 const ROWS = Array.from({ length: 24 }, (_, index) => `Review pull request #${3600 + index}`);
 
-const COLUMNS = ["Backlog", "Todo", "In progress", "In review", "Done", "Cancelled", "Duplicate"];
+const COLUMNS = ["Backlog", "Todo", "In progress", "In review", "Done", "Canceled", "Duplicate"];
 
 /** The area's rows, each on a line of its own, inside the caller's padded element. */
 function Rows({ count }: { count: number }): React.JSX.Element {

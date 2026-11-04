@@ -53,7 +53,7 @@ import {
   useResizeEdge,
   useRovingKeys,
 } from "@repo/ui";
-import { type Actor, actorName, personActor } from "@repo/ui/actor-model";
+import { actorName, personActor } from "@repo/ui/actor-model";
 import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@repo/ui/icons";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import {
@@ -179,7 +179,10 @@ import { cardTitle } from "./tool-call-model.js";
  * which a chip over the list then says, its × listing the developer's own
  * again. Open addressed to the developer is Needs you, the threads the
  * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
- * checked, and every choice is kept across launches. Every row, in the window's Inbox and a
+ * checked, and every choice is kept across launches. An Inbox narrowed to one
+ * task lists every item it holds, open and settled, addressed to anyone,
+ * with no view's menu, and names the task in a chip over the list, its ×
+ * listing every task's items again under the view kept. Every row, in the window's Inbox and a
  * task's own alike, names its task on its first line, over its title.
  * Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
@@ -619,14 +622,22 @@ function windowEntries(
   ];
 }
 
-/** The key the chip over the list is followed by, as it arrives and leaves. */
-const WHOSE_CHIP_KEY = "whose";
+/** The keys the chips over the list are followed by, as each arrives and leaves. */
+const FILTER_CHIP_KEY = { TASK: "task", WHOSE: "whose" } as const;
 
-/** The chip over the list as last drawn, so it leaves looking as it did: the teammate's mark and their words. */
-interface WhoseChipEntry {
-  readonly key: typeof WHOSE_CHIP_KEY;
-  readonly actor: Actor;
+/** What the task's chip's × says it does. */
+const CLEAR_TASK = "Show every task's items";
+
+/** What the task's chip names while the task is not listed yet. */
+const UNNAMED_TASK = "Task";
+
+/** A chip over the list as last drawn, so it leaves looking as it did: its mark, its words, and its ×. */
+interface FilterChipEntry {
+  readonly key: (typeof FILTER_CHIP_KEY)[keyof typeof FILTER_CHIP_KEY];
+  readonly mark: React.ReactNode;
   readonly words: string;
+  readonly removeLabel: string;
+  readonly onRemove: () => void;
 }
 
 /** What a press on the chip leaving does, out of reach as it is: nothing. */
@@ -634,39 +645,74 @@ function stays(): void {}
 
 /** The chip Addressed to calls for, the teammate's face and name; none while it names the reader or anyone. */
 function whoseChipEntries(
-  chosen: InboxWhoseChoice["whose"],
+  { whose: chosen, onWhose }: InboxWhoseChoice,
   directory: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
-): WhoseChipEntry[] {
+): FilterChipEntry[] {
   if (chosen.kind !== INBOX_WHOSE.PERSON) return [];
   const { members, former, readerId: known } = directory;
   const actor = personActor(chosen, members, known ?? readerId, former);
-  return [{ key: WHOSE_CHIP_KEY, actor, words: actorName(actor) }];
+  return [
+    {
+      key: FILTER_CHIP_KEY.WHOSE,
+      mark: <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />,
+      words: actorName(actor),
+      removeLabel: CLEAR_WHOSE,
+      onRemove: () => onWhose(MINE),
+    },
+  ];
+}
+
+/** The chip the task the Inbox is narrowed to calls for, by its name; none while it lists every task's. */
+function taskChipEntries(
+  name: string | undefined,
+  onClear: (() => void) | undefined,
+): FilterChipEntry[] {
+  if (onClear === undefined) return [];
+  return [
+    {
+      key: FILTER_CHIP_KEY.TASK,
+      mark: <GLYPH.TASK />,
+      words: name ?? UNNAMED_TASK,
+      removeLabel: CLEAR_TASK,
+      onRemove: onClear,
+    },
+  ];
 }
 
 /**
- * The chip itself. Note that this is its own component under the line's
+ * The chips themselves. Note that this is its own component under the line's
  * `ListMotion`, because `useLeaving` finds the motion through the context
  * the motion provides.
  */
-function WhoseChipLine({
+function FilterChipLine({
   line,
   whose,
+  task,
   readerId,
 }: {
   line: RefObject<HTMLDivElement | null>;
-  whose: InboxWhoseChoice;
+  whose: InboxWhoseChoice | undefined;
+  task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
-  const chosen = whose.whose;
+  const chosen = whose?.whose;
+  const onWhose = whose?.onWhose;
+  const taskName = task?.name;
+  const onClearTask = task?.onClear;
   // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(
-    () => whoseChipEntries(chosen, directory, readerId),
-    [chosen, directory, readerId],
+    () => [
+      ...taskChipEntries(taskName, onClearTask),
+      ...(chosen === undefined || onWhose === undefined
+        ? []
+        : whoseChipEntries({ whose: chosen, onWhose }, directory, readerId)),
+    ],
+    [taskName, onClearTask, chosen, onWhose, directory, readerId],
   );
   const drawn = useLeaving(listed, (entry) => entry.key);
-  // Note that the box around the row stands hidden while no teammate is chosen, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
+  // Note that the box around the row stands hidden while no task and no teammate is chosen, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
       <div
@@ -678,10 +724,10 @@ function WhoseChipLine({
             key={key}
             motionKey={key}
             look={CHIP_LOOK.FILTER}
-            removeLabel={CLEAR_WHOSE}
-            onRemove={leaving ? stays : () => whose.onWhose(MINE)}
+            removeLabel={value.removeLabel}
+            onRemove={leaving ? stays : value.onRemove}
           >
-            <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
+            {value.mark}
             <ChipName>{value.words}</ChipName>
           </Chip>
         ))}
@@ -691,23 +737,26 @@ function WhoseChipLine({
 }
 
 /**
- * The chip over the list while Addressed to names a teammate: their face
- * and name, and a × that lists the reader's own again (`@repo/ui`'s
- * removable filter chip, as the sidebar's Created by stands over its
- * tasks). It scales in as Addressed to chooses a teammate and out as the ×
- * lifts it, as the Tasks page's filter chips do.
+ * The chips over the list: the task the Inbox is narrowed to, by its name,
+ * and a × that lists every task's items again; and, while Addressed to
+ * names a teammate, their face and name, and a × that lists the reader's
+ * own again (`@repo/ui`'s removable filter chip, as the sidebar's Created
+ * by stands over its tasks). Each scales in as it is chosen and out as its
+ * × lifts it, as the Tasks page's filter chips do.
  */
-function WhoseChip({
+function FilterChips({
   whose,
+  task,
   readerId,
 }: {
-  whose: InboxWhoseChoice;
+  whose: InboxWhoseChoice | undefined;
+  task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
   const line = useRef<HTMLDivElement | null>(null);
   return (
     <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
-      <WhoseChipLine line={line} whose={whose} readerId={readerId} />
+      <FilterChipLine line={line} whose={whose} task={task} readerId={readerId} />
     </ListMotion>
   );
 }
@@ -903,7 +952,9 @@ function ListHead({
           />
         )}
         {search}
-        {view === undefined ? null : <WhoseChip whose={view} readerId={readerId} />}
+        {view === undefined && head.task === undefined ? null : (
+          <FilterChips whose={view} task={head.task} readerId={readerId} />
+        )}
       </>
     );
   }
@@ -918,13 +969,15 @@ function ListHead({
         <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
       )}
       {search}
-      {view === undefined ? null : <WhoseChip whose={view} readerId={readerId} />}
+      {view === undefined && head.task === undefined ? null : (
+        <FilterChips whose={view} task={head.task} readerId={readerId} />
+      )}
     </>
   );
 }
 
-/** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
-export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
+/** What a list its search left empty says, under its rows, on the window's Inbox. */
+function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
   return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
 }
 
@@ -1004,6 +1057,7 @@ export function InboxListNote({
   onRetry,
   searched,
   onNewTask,
+  none = NEEDS_YOU.NONE,
 }: {
   failed: boolean;
   reading: boolean;
@@ -1021,6 +1075,8 @@ export function InboxListNote({
   onRetry: () => void;
   /** The words the list's search narrows it by, where it narrows it, which an empty list says found nothing. */
   searched?: string | undefined;
+  /** What the list standing alone says holding none: that nothing needs the reader, or `NOTHING_HERE` on a task's. */
+  none?: string | undefined;
 }): React.JSX.Element | null {
   if (failed) {
     return (
@@ -1043,7 +1099,7 @@ export function InboxListNote({
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   return (
     <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
-      {NEEDS_YOU.NONE}
+      {none}
     </EmptyState>
   );
 }
@@ -1058,7 +1114,7 @@ export interface InboxListHead {
   readonly search?: InboxSearchHead | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
-   * phone's places: its one start control, New task, the title centred, and
+   * phone's places: its one start control, New task, the title centered, and
    * the ⋯ holding View options and Mark all as read, which a phone has no
    * right-click to reach, the search standing under it; none elsewhere.
    */
@@ -1073,6 +1129,14 @@ export interface InboxListHead {
   readonly tab?: boolean | undefined;
   /** Copy link, the open item's, which a task's own Inbox tab hands its ⋯ first (`useTabActions`); none while no item is open, since a link names no task's Inbox whole. */
   readonly link?: MenuAction | undefined;
+  /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
+  readonly task?: InboxTaskHead | undefined;
+}
+
+/** The task the window's Inbox is narrowed to, as the chip over its list names it: its name, none while it is not listed yet, and the × that clears it. */
+interface InboxTaskHead {
+  readonly name: string | undefined;
+  readonly onClear: () => void;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

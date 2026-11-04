@@ -44,7 +44,7 @@ function outcomeOf(
   if (turn.status === TURN_STATUS.FAILED) {
     return { plain: turn.failure === null ? "Run failed." : `Run failed: ${turn.failure}.` };
   }
-  if (turn.status === TURN_STATUS.CANCELLED) return { plain: "Run stopped." };
+  if (turn.status === TURN_STATUS.CANCELED) return { plain: "Run stopped." };
   if (words === undefined) return { plain: "Run finished." };
   return { plain: slackClipped(words, NOTIFICATION_CHARS), words };
 }

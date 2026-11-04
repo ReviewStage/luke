@@ -14,7 +14,7 @@ import {
 
 /**
  * What the agent box's context ring and its popover say of a page's
- * context: the share in words, the ring's colour by how near eve's
+ * context: the share in words, the ring's color by how near eve's
  * compaction the last step read, the parts the read divides into with a
  * "~" on every estimate, and the lines under them. Synthetic counts
  * throughout.

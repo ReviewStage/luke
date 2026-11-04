@@ -31,12 +31,16 @@ import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { useReadMarks } from "../tasks/use-task-looks.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useMarkedUnread } from "../tasks/use-task-looks.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
-import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
+import {
+  type OpenedTask,
+  TASK_MENU_SURFACE,
+  type TaskRowTab,
+  useTaskMenuItems,
+} from "./task-actions.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
 
@@ -110,6 +114,7 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
 export function TaskListRow({
   tasks,
   task,
+  opened,
   workspaceName,
   cells,
   content,
@@ -127,8 +132,10 @@ export function TaskListRow({
   unlisted = false,
   more = true,
 }: {
-  tasks: TasksControl;
+  tasks: TaskRowTab;
   task: TaskSummary;
+  /** The task the window has open (`openedTaskOf`), which its menu reads where it is this one. */
+  opened: OpenedTask | undefined;
   workspaceName: string;
   /** The cells its list draws, the same for every row of it. */
   cells: readonly TaskRowCell[];
@@ -159,14 +166,15 @@ export function TaskListRow({
   /** Whether it draws its menu's ⋯, as its list says (`TaskRows`'s `more`). */
   more?: boolean | undefined;
 }): React.JSX.Element {
-  const reads = useReadMarks();
+  const unread = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
-    unread: reads.markedUnread(task.id),
+    unread,
     surface: TASK_MENU_SURFACE.ROW,
+    opened,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);

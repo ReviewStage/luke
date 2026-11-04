@@ -59,7 +59,7 @@ import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import type { DeviceSignedIn } from "@repo/features/device-agent-wire";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
@@ -111,6 +111,18 @@ const REFUSAL_OF_ACCESS = {
 /** The effort Codex takes for the agent's own, where it names one of Codex's. */
 function effortOf(effort: string): CodexEffort | undefined {
   return Object.values(CODEX_EFFORT).find((level) => level === effort);
+}
+
+/**
+ * The service tiers the agent's model runs on, as the runner takes them: a
+ * fast version on `fast`, and an Ultrafast one on `ultrafast` with `fast`
+ * beside it, so a runner from before Ultrafast runs the fast tier rather
+ * than the standard one. The runner asks for neither on the plan.
+ */
+function speedKeysOf(agent: Agent): { readonly fast: boolean; readonly ultrafast?: true } {
+  const speed = providerModelOf(agent.model)?.speed;
+  if (speed === MODEL_SPEED.ULTRAFAST) return { fast: true, ultrafast: true };
+  return { fast: speed === MODEL_SPEED.FAST };
 }
 
 /** The model Codex is asked for: the agent's own, where it is one of OpenAI's. */
@@ -290,13 +302,14 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         return yield* new LaunchRefused({ reason: "no codex" });
       }
       const effort = effortOf(agent.effort);
+      const speed = speedKeysOf(agent);
       const written: CodexConfig = {
         harness: RUNNER_HARNESS.CODEX,
         cwd: layout.checkoutPath,
         executable: layout.codexExecutable ?? CODEX_PATH.EXECUTABLE,
         model,
         ...(effort === undefined ? undefined : { effort }),
-        ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
+        ...(speed.fast ? speed : undefined),
         developerInstructions: yield* options.instructions(agent, layout),
         ...(resume === undefined ? undefined : { threadId: resume }),
         ...(rewindBefore === undefined ? undefined : { rewindBefore }),
@@ -322,9 +335,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     const effort = effortOf(agent.effort);
     const choice: InputLine = {
       type: INPUT_LINE.MODEL,
-      ...(model === undefined
-        ? undefined
-        : { model, fast: providerModelOf(agent.model)?.fast === true }),
+      ...(model === undefined ? undefined : { model, ...speedKeysOf(agent) }),
       ...(effort === undefined ? undefined : { effort }),
     };
     // Note that an agent on its Mac's sign-in or its API key has no plan to ask, and its runner holds what it launched with.

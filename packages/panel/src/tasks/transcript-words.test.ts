@@ -39,7 +39,7 @@ const SAMPLES = {
   links: "See [the docs](https://example.com/docs), www.example.com, and <https://example.org>.",
   headings: "# One\n\nWords.\n\n## Two\n\n### Three\n\n#### Four",
   lists: "- one\n- two\n  - nested\n\n1. first\n2. second\n\n- [ ] open\n- [x] done",
-  table: "| Left | Centre | Right |\n| :--- | :---: | ---: |\n| a | b | c |\n| `d` | **e** | f |",
+  table: "| Left | Center | Right |\n| :--- | :---: | ---: |\n| a | b | c |\n| `d` | **e** | f |",
   code: "```\nplain block\n```\n\n```ts\nconst a = 1;\n```\n\n    indented block",
   quote: "> quoted\n> words\n\n---\n\nAfter a rule.",
   footnote: "A claim.[^1]\n\n[^1]: Its source.",
@@ -48,7 +48,7 @@ const SAMPLES = {
   angles: "Generics like Array<string> and Map<K, V>, and a < b > c.",
   inlineHtml: "Press <kbd>Cmd</kbd>+<kbd>K</kbd>, H<sub>2</sub>O, x<sup>2</sup>, a<br>break.",
   blockHtml:
-    '<details>\n<summary>More</summary>\n\nHidden **bold** words.\n\n</details>\n\n<div align="center">centred</div>',
+    '<details>\n<summary>More</summary>\n\nHidden **bold** words.\n\n</details>\n\n<div align="center">centered</div>',
   unsafeHtml:
     '<script>alert(1)</script>\n\n<img src="x" onerror="alert(2)">\n\n<iframe src="https://example.com"></iframe>\n\n<a href="javascript:alert(3)" onclick="alert(4)">link</a>',
   brokenHtml: "<div>open\n\nwords </span> and <p>unclosed\n\n<!-- a comment -->\n\nafter",
@@ -66,7 +66,7 @@ beforeAll(() =>
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // A fenced block with a language asks main for its colours; refused, it is drawn plain.
+  // A fenced block with a language asks main for its colors; refused, it is drawn plain.
   fakeAppBridge({});
 });
 

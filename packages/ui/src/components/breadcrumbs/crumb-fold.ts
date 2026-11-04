@@ -12,7 +12,7 @@ import { BREADCRUMB_SHOWN, type Crumb } from "./breadcrumbs.js";
  * reader stands on, always stands. Only once nothing is left to fold does a
  * crumb give way, by its share, down to a floor the stylesheet keeps
  * legible, the last crumb last of all. Only a crumb of words or a plain press may be folded: one that
- * opens something, a glyph that is the toolbar's way back, and one a bar's
+ * is `kept`, one that opens something, a glyph that is the toolbar's way back, and one a bar's
  * widths already stand in for (`shownAt`) are the caller's own folds, and
  * the fold stops short of them.
  *
@@ -43,11 +43,12 @@ interface DrawnCrumb {
   readonly folded: boolean;
 }
 
-/** Whether a crumb may be left out of a narrow path: words or a plain press, always drawn. */
+/** Whether a crumb may be left out of a narrow path: words or a plain press, always drawn, that is not `kept`. */
 function foldable(crumb: Crumb): boolean {
   return (
     crumb.icon === undefined &&
     crumb.popup === undefined &&
+    crumb.kept !== true &&
     crumb.shown !== false &&
     (crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS) === BREADCRUMB_SHOWN.ALWAYS
   );

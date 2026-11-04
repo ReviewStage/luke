@@ -19,10 +19,9 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import { pageFrameUrl } from "@repo/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import { PAGE_SHOWER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
@@ -31,7 +30,12 @@ import {
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@repo/host/app-state";
+import type {
+  AppHolderPages,
+  AppHostRead,
+  AppInboxItems,
+  AppStateSnapshot,
+} from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -41,7 +45,7 @@ import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { stateWith } from "../testing/app-state.js";
+import { handHostReads, holdPages, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -85,6 +89,15 @@ const SWEEP_PAGE: PageLine = {
   version: 2,
   at: AT,
   shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
+};
+
+/** The page the open plan holds. */
+const UNFURL_PAGE: PageLine = {
+  id: PAGE_ID,
+  title: "Unfurl matrix",
+  version: 3,
+  at: AT,
+  shownBy: { kind: PAGE_SHOWER.APP },
 };
 
 /** A plan the window does not hold open, and a page on it, read as its card is hung. */
@@ -197,15 +210,6 @@ const STATE: AppStateSnapshot = (() => {
       ],
       workspaces: [ACME, BETA],
       activeTaskId: TASK_ID,
-      pages: [
-        {
-          id: PAGE_ID,
-          title: "Unfurl matrix",
-          version: 3,
-          at: AT,
-          shownBy: { kind: PAGE_SHOWER.APP },
-        },
-      ],
     },
     inbox: {
       ...snapshot.inbox,
@@ -289,8 +293,22 @@ const told: AnyAct[] = [];
 /** Every workspace whose automations the act port was asked for, in order. */
 const automationReads: (string | undefined)[] = [];
 
-/** Every agent on no task whose pages the act port was asked for, in order. */
+/** Every agent on no task whose pages the window held, in order. */
 const agentPageReads: string[] = [];
+
+/**
+ * The pages each plan and agent on no task holds, as the host lays them on
+ * the window's document once held: the open plan's page, another plan's,
+ * the agent's own, and a refusal for an agent the reader cannot reach.
+ */
+function heldPagesOf(place: PagePlace): AppHolderPages {
+  if ("taskId" in place) {
+    if (place.taskId === TASK_ID) return { rows: [UNFURL_PAGE] };
+    return { rows: place.taskId === OTHER_TASK ? [ROLLOUT_PAGE] : [] };
+  }
+  agentPageReads.push(place.agentId);
+  return place.agentId === SWEEP_AGENT ? { rows: [SWEEP_PAGE] } : { failed: true };
+}
 
 let root: Root | undefined;
 
@@ -350,12 +368,9 @@ async function drawn(
 ): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () =>
-      Promise.resolve({
-        ...state,
-        [LIVE_READ.INBOX_ITEMS]: feed,
-      }),
+    requestAppState: () => Promise.resolve(state),
   });
+  const reads = handHostReads({ items: feed });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
@@ -364,17 +379,9 @@ async function drawn(
       const beta = payload.workspaceId === BETA.id;
       return Promise.resolve({ automations: beta ? [AUDIT] : [SWEEP] });
     },
-    // The agent on no task's pages are its own; an agent the reader cannot reach lists none, as the service answers it.
-    [ACT_KIND.TASKS_PAGES]: (place) => {
-      if (!("agentId" in place)) {
-        return Promise.resolve({ pages: place.taskId === OTHER_TASK ? [ROLLOUT_PAGE] : [] });
-      }
-      agentPageReads.push(place.agentId);
-      return Promise.resolve(
-        place.agentId === SWEEP_AGENT ? { pages: [SWEEP_PAGE] } : { pages: [] },
-      );
-    },
   });
+  // Note that a page's card holds its plan's or its agent's pages, which the host lays on the document.
+  holdPages(reads.deliverPages, heldPagesOf);
   fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -508,7 +515,7 @@ test("a plan's chip on another plan's page hangs the card the plan's tab hangs, 
   assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-task-card", "Someone's plan"]);
 });
 
-test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds says it can't be read", async () => {
+test("a page's chip hangs its title, its version and who showed it, and when it moved, its plan's pages held as it is first hung, the open plan's or another's; one its plan's pages hold not says it can't be read", async () => {
   const container = await drawn(
     [
       mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "", PLACE),
@@ -551,18 +558,6 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
   assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Vespin"]]);
-});
-
-test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
-  const { pages: _landing, ...opening } = STATE.tasks;
-  const container = await drawn(
-    mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "Unfurl", PLACE),
-    PAGE,
-    { ...STATE, tasks: opening },
-  );
-
-  const card = await cardOf(chipsOf(container)[0]);
-  assert.deepEqual([card.name, card.notes], ["Unfurl", [PAGE_UNREAD]]);
 });
 
 test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, says it can't be read", async () => {
@@ -661,7 +656,7 @@ test("an Inbox item's chip hangs its Inbox row's own card, whether the item wait
   assert.equal(sweep.name, "Quarantine the flaky test?");
 });
 
-test("an Inbox item's labelled chip is called by the item's title, whether it waits or was answered", async () => {
+test("an Inbox item's labeled chip is called by the item's title, whether it waits or was answered", async () => {
   const container = await drawn(
     [
       `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,

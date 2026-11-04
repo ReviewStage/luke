@@ -30,7 +30,7 @@ import { VersionView } from "./version-view.js";
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain
  * link wherever words are drawn: a transcript, the plan read and edited, and
- * a version. A bare address says its host and path and a labelled one its
+ * a version. A bare address says its host and path and a labeled one its
  * label, and a plain link pressed opens in the browser, in the plan or a
  * version without opening the section's editor. Synthetic plan and
  * repository.

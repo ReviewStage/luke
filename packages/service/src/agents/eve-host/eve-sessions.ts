@@ -129,14 +129,14 @@ type EveSent =
   | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
   | EveFailed;
 
-/** How a session answered a cancel: a turn cancelled, none under way, or a failure. */
+/** How a session answered a cancel: a turn canceled, none under way, or a failure. */
 export const EVE_CANCEL_OUTCOME = {
   ACCEPTED: EVE_CANCEL_STATUS.ACCEPTED,
   NO_ACTIVE_TURN: EVE_CANCEL_STATUS.NO_ACTIVE_TURN,
   FAILED: "failed",
 } as const;
 
-type EveCancelled =
+type EveCanceled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.ACCEPTED }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | {
@@ -200,9 +200,9 @@ export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
    * turn under way, because between a caller's read and the answer that
    * turn can be the one queued after the one the caller meant.
    */
-  cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
+  cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCanceled, EveUnreachable>;
   /**
-   * Retires the session for good: a turn under way is cancelled and the
+   * Retires the session for good: a turn under way is canceled and the
    * session takes nothing again; a session that no longer runs answers
    * `no_active_session`.
    */

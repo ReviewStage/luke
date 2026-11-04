@@ -48,7 +48,7 @@ const FONT_SIZE = "14px";
 /** What a refused fence answers. */
 const REFUSED: DiagramDrawing = { kind: DIAGRAM_DRAWING.REFUSED };
 
-/** Mermaid's configuration in an appearance, its colours read off the window's palette as the draw begins (`diagram-theme.ts`). */
+/** Mermaid's configuration in an appearance, its colors read off the window's palette as the draw begins (`diagram-theme.ts`). */
 function configIn(appearance: DiagramAppearance): MermaidConfig {
   return {
     startOnLoad: false,

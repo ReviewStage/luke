@@ -138,7 +138,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * Ready, the view is a rail of the chapters on its left, as Files changed's
  * tree stands on its right, and the chapter chosen beside it. Each row of
  * the rail is drawn as the Inbox's are (`ListRow`), the open one in the
- * accent's tint: its risk as a mark in its colour, its title on up to two
+ * accent's tint: its risk as a mark in its color, its title on up to two
  * lines, and under the title the lines it adds and removes, summed as Files
  * changed sums them, or how many files it holds where it counts no line,
  * with how many review threads stand on its hunks at that line's end, and a
@@ -382,7 +382,7 @@ function Generating({
   );
 }
 
-/** A chapter's risk as its row's mark, in the risk's colour; none for "Other changes". Decoration: the row's name says it. */
+/** A chapter's risk as its row's mark, in the risk's color; none for "Other changes". Decoration: the row's name says it. */
 function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
   return (
     <span
@@ -591,7 +591,7 @@ function ChapterRail({
   );
 }
 
-/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
+/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's color, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
 function ChapterStrip({
   rows,
   at,
@@ -845,7 +845,7 @@ function ChaptersReading({
             title={chapter.title}
             detail={
               chapter.risk === null ? undefined : (
-                // A phone's bar folds the chip away, the rail's row marking the risk in its colour and saying it to a reader.
+                // A phone's bar folds the chip away, the rail's row marking the risk in its color and saying it to a reader.
                 <span className="chapter-risk flex">
                   <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
                 </span>
@@ -1000,7 +1000,7 @@ function chaptersState(
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.AGENT_CHAPTERS_READ)}
           onRetry={read.ask}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {CHAPTERS_WORDS.FAILED}
         </ErrorState>
@@ -1046,7 +1046,7 @@ function chaptersState(
             cause: state.failureKind,
           })}
           onRetry={state.generatable ? read.generate : undefined}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {FAILURE_WORDS[state.failureKind]}
         </ErrorState>
@@ -1100,7 +1100,7 @@ export function AgentChaptersTab({
       <ErrorState
         failure={failureShown({ surface: FAILURE_SURFACE.AGENT_CHANGES_READ, cause: answer })}
         onRetry={changes.ask}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {CHANGES_WORDS.FAILED}
       </ErrorState>

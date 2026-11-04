@@ -326,10 +326,12 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
  * An agent whose session has ended for good can hear nothing again, so its
  * item keeps the answer.
  *
- * Exported for a caller with no request of its own, our Slack route
+ * Exported for a caller with no request of its own: our Slack route
  * (`slack/slack-events-app.ts`), which answers a press in a DM as the
  * member it maps the presser to, and names the line that DM says once the
- * answer is taken (`chosen`).
+ * answer is taken (`chosen`); and the member MCP server
+ * (`member-mcp/inbox.ts`), which answers as the member an outside agent
+ * acts for.
  */
 export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
@@ -348,10 +350,11 @@ export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
     answerInboxAsk(userId, itemId, { answers, text, clientKey, files: attachments }),
   );
   if (Option.isNone(answered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { item, outcome, txid } = answered.value;
+  const { item, outcome, refusal, txid } = answered.value;
   const writtenIn = txid === undefined ? {} : { txid };
   if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
-    return { item, outcome, ...writtenIn };
+    // Why a refused answer does not fit its ask, in the check's own words, for a caller that tells it.
+    return { item, outcome, ...(refusal === undefined ? undefined : { refusal }), ...writtenIn };
   }
   // An answer sent again under the key it was taken under is the same answer, counted once.
   const counted =
@@ -433,8 +436,12 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
  * by is handed off again, which the steer's own key makes reach the agent
  * once. An agent whose session has ended for good can hear nothing again,
  * so its item stays closed.
+ *
+ * Exported for a caller with no request of its own, the member MCP server
+ * (`member-mcp/inbox.ts`), which closes as the member an outside agent
+ * acts for.
  */
-const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   itemId: string,
@@ -523,9 +530,11 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
  * `answeredByReply` takes one; one without is a plain reply, which never
  * answers, even while an ask stands open.
  *
- * Exported for a caller with no request of its own, our Slack route
+ * Exported for a caller with no request of its own: our Slack route
  * (`slack/slack-agent-starts.ts`), which posts a member's reply in the Slack
- * thread of a DM the bot wrote them as their reply on the DM's thread.
+ * thread of a DM the bot wrote them as their reply on the DM's thread; and
+ * the member MCP server (`member-mcp/inbox.ts`), which writes as the member
+ * an outside agent acts for.
  */
 export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
@@ -749,7 +758,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       context,
     }) {
       const itemId = yield* pathUuid(input.params.id);
-      return yield* closed(writer, context.userId, itemId, input.body);
+      return yield* closeAsMember(writer, context.userId, itemId, input.body);
     }),
     // Note that an item the account may not read is answered as one that does not exist, so a link by its id says nothing of it.
     home: signedIn.home.effect(function* ({ input, context }) {

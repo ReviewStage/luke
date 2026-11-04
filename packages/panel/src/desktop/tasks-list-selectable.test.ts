@@ -10,7 +10,7 @@ import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
-import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
+import { selectableListBehavior } from "@repo/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -132,4 +132,4 @@ async function mount() {
   };
 }
 
-selectableListBehaviour("TASKS", { mount });
+selectableListBehavior("TASKS", { mount });

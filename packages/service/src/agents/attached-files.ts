@@ -117,7 +117,7 @@ const SENDER_LABEL_TAIL = ", a teammate]";
 /**
  * The part naming a teammate who sent a message, a member other than the
  * agent's developer, ahead of their words, by their mention link. Note that
- * the developer's own words go unlabelled, as they always went, because every
+ * the developer's own words go unlabeled, as they always went, because every
  * other sender's line already opens on who sent it. It is the model's alone:
  * the row keeps the words without it and names its sender in its own column.
  */

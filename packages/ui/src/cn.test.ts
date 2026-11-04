@@ -3,12 +3,12 @@ import { test } from "vitest";
 import { cn } from "./cn.js";
 
 /**
- * cn.test.ts -- the joiner keeps a theme's type size beside a text colour,
+ * cn.test.ts -- the joiner keeps a theme's type size beside a text color,
  * and lets a later length, padding, corner, width, motion, or disabled fade
  * from the theme replace an earlier one, as it does Tailwind's own.
  */
 
-test("a theme's type size and a text colour both stand, and a later size replaces an earlier", () => {
+test("a theme's type size and a text color both stand, and a later size replaces an earlier", () => {
   assert.equal(cn("text-body text-foreground"), "text-body text-foreground");
   assert.equal(cn("text-label text-button-ink"), "text-label text-button-ink");
   assert.equal(cn("text-body text-foreground", "text-caption"), "text-foreground text-caption");
@@ -32,7 +32,7 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
 
-test("a later row or navigation length replaces an earlier, and a size-only type stands beside a colour", () => {
+test("a later row or navigation length replaces an earlier, and a size-only type stands beside a color", () => {
   assert.equal(
     cn("min-h-control ps-ui-4", "min-h-disclosure-row ps-0"),
     "min-h-disclosure-row ps-0",
@@ -42,7 +42,7 @@ test("a later row or navigation length replaces an earlier, and a size-only type
   assert.equal(cn("text-tag-size text-on-accent"), "text-tag-size text-on-accent");
 });
 
-test("a task surface's caption size stands beside a colour, and its later lengths and edges replace earlier ones", () => {
+test("a task surface's caption size stands beside a color, and its later lengths and edges replace earlier ones", () => {
   assert.equal(
     cn("text-picture-caption text-muted-foreground"),
     "text-picture-caption text-muted-foreground",

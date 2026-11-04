@@ -2,7 +2,7 @@
  * expired-invite-picture.ts -- generated: the screenshot the "Add teammate invitations" agent took in its sandbox of the expired invite page (1392x520 PNG, 2x), for shot D.
  *
  * Rendered from a mock page with headless Chrome at a device scale of 2 and
- * quantized to 96 colours; regenerate with: base64 -w0 page.png. Throwaway:
+ * quantized to 96 colors; regenerate with: base64 -w0 page.png. Throwaway:
  * never committed.
  */
 export const EXPIRED_INVITE_PNG_BASE64 =

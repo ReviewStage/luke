@@ -68,6 +68,7 @@
     "./models/conversation-rewind": "./src/models/conversation-rewind.js",
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
+    "./models/sync-log": "./src/models/sync-log.js",
     "./models/workspace-seams": "./src/models/workspace-seams.js",
     "./models/workspace-slug-store": "./src/models/workspace-slug-store.js",
     "./models/workspace-store": "./src/models/workspace-store.js",

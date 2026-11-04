@@ -26,6 +26,7 @@ import {
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { formatCount } from "@repo/features/number-format";
+import { pageFrameUrl } from "@repo/features/page-frame";
 import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { pasteCutWords } from "@repo/features/words";
@@ -75,6 +76,7 @@ import {
   draftReply,
   EXPIRY,
   EXPIRY_ASK,
+  FUNNEL,
   faceKind,
   footWords,
   handFiles,
@@ -360,6 +362,38 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
   );
   // What the item's words draw stands inside the pane's masked region.
   assert.ok(page.querySelector(".ph-no-capture [data-lone-link]"));
+});
+
+test("a page's link alone on its line, naming its task by the task's number, is the page's row with the page itself drawn under it", async () => {
+  const numbered = { ...BILLING, number: 182 };
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        tasks: [numbered],
+        workspaces: [
+          {
+            id: BILLING.workspaceId,
+            name: "Stage",
+            slug: "stage",
+            role: WORKSPACE_ROLE.OWNER,
+            github: null,
+          },
+        ],
+      },
+    },
+  );
+  const link = `https://vespin.dev/stage/task/182/page/${FUNNEL.id}`;
+  world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
+  const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
+  await settle();
+  assert.equal(
+    page
+      .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
+      ?.getAttribute("src"),
+    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  );
 });
 
 test("a picture of an item opens a viewer the arrow keys walk across every picture of the item, its Markdown's pair and a picture it carried alike, in the order they are drawn", async () => {
@@ -671,7 +705,7 @@ test("the thread names its agent as one button wherever it does, its message's c
 });
 
 test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
-  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELED, archivedAt: 4_000 }];
   let { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   let [named] = threadRefs(page);
@@ -958,6 +992,26 @@ test("an item whose box holds unsent words wears the Draft pencil on its row whi
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the list standing alone hides its box");
+});
+
+test("an item's unsent words outlast a reload of the window, its row marked while another is chosen, though its agent posted on it meanwhile", async () => {
+  const before = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  typeInComposer(itemPane(before.page), "Use 90% instead");
+  await settle();
+  act(() => world.root?.unmount());
+  world.root = undefined;
+
+  world.inboxes = new Map([
+    [BILLING.id, [{ ...THRESHOLD, revision: 2 }, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount([], { chosen: { taskId: INVITES.id, itemId: EXPIRY.id } });
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the reloaded window marks the draft");
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
 });
 
 test("files picked or dropped in an item's box are drawn as chips and go with its reply, standing for the developer's own words where they wrote none", async () => {
@@ -2258,7 +2312,7 @@ function answersOf(answered: readonly AgentInboxAnswerParams[]) {
   return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
 }
 
-test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgement was refused tries again", async () => {
+test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgment was refused tries again", async () => {
   const notice = noticeItem();
   const { answered, messaged } = noticeWrites(() => true);
   const pane = await mountThread(notice);
@@ -2284,7 +2338,7 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
 
 test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
   const notice = noticeItem();
-  // The first acknowledgement is refused, so the box stands open to take the draft.
+  // The first acknowledgment is refused, so the box stands open to take the draft.
   let refusals = 1;
   const { answered, messaged } = noticeWrites(() => {
     refusals -= 1;

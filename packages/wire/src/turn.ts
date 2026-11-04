@@ -30,7 +30,8 @@ export const TURN_STATUS = {
   QUEUED: "queued",
   RUNNING: "running",
   SETTLED: "settled",
-  CANCELLED: "cancelled",
+  /** Its value keeps the British spelling rows and clients already hold. */
+  CANCELED: "cancelled",
   FAILED: "failed",
 } as const;
 

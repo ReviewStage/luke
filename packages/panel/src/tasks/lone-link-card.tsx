@@ -1,7 +1,7 @@
 import { CHECK_SUMMARY } from "@repo/features/agent-wire";
 import { INBOX_BLOCK } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LINK_PLACE, readLink, taskNumberOf } from "@repo/features/link-grammar";
 import { LONE_LINK, type LoneLink, loneLinkOf } from "@repo/features/lone-link";
 import {
   decodeMention,
@@ -20,9 +20,10 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { githubName, MentionChipCard } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
+import { ShownNewestPage } from "./shown-page.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
-import { useLinkStanding } from "./use-link-standing.js";
+import { useLinkStanding, useNumberedTaskId } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -40,7 +41,9 @@ import { useOpenLink } from "./use-open-link.js";
  * key, state, size, opener, branches, labels, and counts, and a page's
  * the page's own card, a preview of it (`page-card.tsx`), where the window
  * holds the page, or, for a page of an agent on no task, where the agent's
- * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does. Lines
+ * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does.
+ * Where the place hands its doors, an Inbox thread, a page's row has the
+ * page itself under it, live at its newest version (`shown-page.tsx`). Lines
  * of a file are the card an Inbox code block draws (`inbox-code-card.tsx`),
  * read through the doors the place drawing the words hands
  * (`LoneLinkCards`); where it hands none, the link stays its chip. Any
@@ -220,6 +223,42 @@ function PageRowCard({
 }
 
 /**
+ * A page's row, and under it the page itself, live at its newest version,
+ * where `live`. A link may name the page's task by its number in the
+ * workspace rather than its id, which both are read by, so the number is
+ * found among the tasks the window lists first, as a chip finds it.
+ */
+function PageCards({
+  page,
+  target,
+  words,
+  live,
+}: {
+  page: Extract<LoneLink, { kind: typeof LONE_LINK.PAGE }>;
+  target: string;
+  words: string;
+  live: boolean;
+}): React.JSX.Element {
+  const read = readLink(target);
+  const numbered = useNumberedTaskId(
+    read?.workspace ?? "",
+    read === undefined ? undefined : taskNumberOf(read.place),
+  );
+  const named = "taskId" in page && numbered !== undefined ? { ...page, taskId: numbered } : page;
+  return (
+    <>
+      <PageRowCard page={named} target={target} words={words} />
+      {live ? (
+        <ShownNewestPage
+          place={"taskId" in named ? { taskId: named.taskId } : { agentId: named.agentId }}
+          pageId={named.pageId}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
  * A link standing alone in its paragraph: the card of what it names where
  * it earns one, and `fallback`, the paragraph as it was, where it earns
  * none, or where its card's doors are not handed here.
@@ -246,7 +285,7 @@ export function LoneLinkCard({
       );
     }
     case LONE_LINK.PAGE:
-      return <PageRowCard page={lone} target={target} words={words} />;
+      return <PageCards page={lone} target={target} words={words} live={doors !== undefined} />;
     case LONE_LINK.CODE: {
       if (doors === undefined) return fallback;
       const { repo, path, sha, startLine, endLine } = lone;

@@ -265,11 +265,7 @@ test("a Codex or Claude Code agent's box says nothing under it of the plan that 
   for (const runtime of [AGENT_RUNTIME.CODEX, AGENT_RUNTIME.CLAUDE_CODE]) {
     const tab = await drawnTab([], { ...AGENT_SUMMARY, runtime });
     const box = composerEditor(tab.container).closest(".agent-composer") ?? tab.container;
-    for (const words of [
-      "Using ChatGPT subscription",
-      "Using your Claude subscription",
-      "Manage usage",
-    ]) {
+    for (const words of ["Using ChatGPT plan", "Using Claude plan", "Manage usage"]) {
       assert.ok(!box.textContent?.includes(words), `${runtime} draws no "${words}"`);
     }
   }
@@ -338,8 +334,8 @@ test("a line another hand sent after a stopped turn, its page saying the agent r
   // The tab's summary still says the turn was stopped; the page the line lands on says the agent runs.
   const tab = await drawnTab(
     [handedOn],
-    { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELLED, runtime: AGENT_RUNTIME.CLAUDE_CODE },
-    [AGENT_STATUS.CANCELLED, AGENT_STATUS.RUNNING],
+    { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELED, runtime: AGENT_RUNTIME.CLAUDE_CODE },
+    [AGENT_STATUS.CANCELED, AGENT_STATUS.RUNNING],
   );
   assert.match(tab.container.textContent ?? "", /Stopped/u, "the stopped turn ends on Stopped");
 

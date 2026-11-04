@@ -140,7 +140,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
       Option.isSome(pusher) ? AGENT_AUTHOR.DEVELOPER : AGENT_AUTHOR.APP_NO_PUSH,
     ),
     Effect.catchTag("GitHubSignInRequired", () => Effect.succeed(AGENT_AUTHOR.APP_UNLINKED)),
-    // Note that GitHub refusing the token outright is a sign-in it no longer honours, whatever the row says.
+    // Note that GitHub refusing the token outright is a sign-in it no longer honors, whatever the row says.
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.succeed(
         failure.status === GITHUB_HTTP_STATUS.UNAUTHORIZED

@@ -67,7 +67,7 @@ const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-ui-6 text-muted-foreground";
 
 /**
  * Each look's own. A call's row is at least 28px tall (a finger's 44px on a
- * coarse pointer, its words still centred), so a narrow column whose
+ * coarse pointer, its words still centered), so a narrow column whose
  * caller lets its words wrap grows the row around them; its words are in
  * the caption's type and the muted ink, held in by a hairline at its ends,
  * lit under the pointer and deeper under the press. A quote is two lines

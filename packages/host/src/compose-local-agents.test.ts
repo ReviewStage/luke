@@ -128,7 +128,7 @@ const followingDevice = (
     readonly lines?: readonly DeviceAgentLine[];
     readonly linesAfter?: Duration.Input;
     /** The runner runs until its process group is killed, rather than ending by itself a second in. */
-    readonly runsUntilSignalled?: boolean;
+    readonly runsUntilSignaled?: boolean;
     /** How long making the agent's repository takes, no time where none is named. */
     readonly worktreeTakes?: Duration.Input;
     /** Making the agent's repository fails, as a clone that cannot be fetched does. */
@@ -149,8 +149,8 @@ const followingDevice = (
     let minted = 0;
     const signal = yield* Deferred.make<void>();
     const runner: Script =
-      options.runsUntilSignalled === true
-        ? // Note that the runner ends as its group is signalled, as the runner on a SIGTERM does.
+      options.runsUntilSignaled === true
+        ? // Note that the runner ends as its group is signaled, as the runner on a SIGTERM does.
           {
             exitCode: 143,
             until: Deferred.await(signal),
@@ -741,12 +741,12 @@ it.effect(
 );
 
 it.effect(
-  "a runner whose launch the service no longer names is stopped as a stop line stops it, its process group signalled and killed after a grace, and its exit settled",
+  "a runner whose launch the service no longer names is stopped as a stop line stops it, its process group signaled and killed after a grace, and its exit settled",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { service, settled, spawned, reported } = yield* followingDevice(() => Effect.void, {
-          runsUntilSignalled: true,
+          runsUntilSignaled: true,
         });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* beatsOn(1);
@@ -771,7 +771,7 @@ it.effect("a runner claimed after the beat was sent is not stopped by that beat'
   Effect.scoped(
     Effect.gen(function* () {
       const { service, spawned, beats } = yield* followingDevice(() => Effect.void, {
-        runsUntilSignalled: true,
+        runsUntilSignaled: true,
         linesAfter: Duration.seconds(1),
       });
       // Note that the first beat is answered three seconds after it was read, by which time the launch was claimed.
@@ -850,7 +850,7 @@ it.effect(
           sleep: (duration) => test.sleep(duration),
         };
         const { asked, spawned, files } = yield* followingDevice(() => Effect.void, {
-          runsUntilSignalled: true,
+          runsUntilSignaled: true,
           clock,
         });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
@@ -872,7 +872,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { service, settled, spawned } = yield* followingDevice(() => Effect.void, {
-          runsUntilSignalled: true,
+          runsUntilSignaled: true,
           listsNoLaunches: true,
         });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
@@ -993,7 +993,7 @@ it.effect(
       const { archive, release } = yield* newerTarball;
       const { update, fetched, current, versions } = yield* updatingHost(archive);
       const { service, spawned, said } = yield* followingDevice(() => Effect.void, {
-        runsUntilSignalled: true,
+        runsUntilSignaled: true,
         update: update.follower,
       });
       service.release = release;
@@ -1025,7 +1025,7 @@ it.effect(
       const { update, current } = yield* updatingHost(archive);
       // Note that the launch's claim is under way from the fourteenth second to the seventeenth, across the beat at the fifteenth.
       const { service, spawned, said, beats } = yield* followingDevice(() => Effect.void, {
-        runsUntilSignalled: true,
+        runsUntilSignaled: true,
         linesAfter: Duration.seconds(14),
         claim: () => Effect.delay(Effect.succeed(LAUNCH), Duration.seconds(3)),
         update: update.follower,

@@ -23,7 +23,7 @@ import { user } from "./auth.js";
  * highest as it is queued and written again for every row when the queue is
  * put in a new order. `user_id` is the member who queued it, whose message
  * it goes as. `editing` is whether a member is editing it, which stops the
- * hand-off at it until the edit is saved or cancelled. `claimed_at` is when
+ * hand-off at it until the edit is saved or canceled. `claimed_at` is when
  * the hand-off took it to send, after which no member's edit, delete, or
  * new order reaches it and no window lists it; null until then, and lapsed
  * once a line's grace has passed, so a send cut off is sent again under its

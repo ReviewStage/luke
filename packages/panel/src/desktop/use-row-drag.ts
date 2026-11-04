@@ -31,7 +31,7 @@
  *
  * A list may also let its rows go elsewhere: carried over another drop zone
  * (an element wearing `data-row-drop`, a sidebar section or a board's
- * column), the placeholder stands home with its neighbours, and the zone is
+ * column), the placeholder stands home with its neighbors, and the zone is
  * marked as the one it would land in, with a line before the row it would
  * land above where the zone keeps an order of its own (its rows under
  * `data-row-drop-rows`). Letting go there hands the zone's id and that place
@@ -287,7 +287,7 @@ function mark(press: RowPress, landing: ZoneLanding | undefined): void {
  * at the row's place and width on screen: in a shell of the list's tag and
  * classes, inside its scope's classes worn with no box of their own, so the
  * rules that draw the row draw the copy, and in the list's own type and
- * colour, which it inherits there. The shell keeps none of a column's
+ * color, which it inherits there. The shell keeps none of a column's
  * scrolling, inset, or faded edge. The layer is hidden from assistive
  * technology, since the row it copies is still there.
  */

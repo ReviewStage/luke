@@ -15,7 +15,7 @@ import { TRANSPORT_RETRY } from "./preview-probe.js";
  * record's own, and the wait is on that record's status rather than on a
  * clock or a guess. A build Vercel's `ignoreCommand` skipped is its own
  * state, not a failure: nothing under the deployed tree changed, so there is
- * no preview of the head and nothing to see. A cancelled build is not the
+ * no preview of the head and nothing to see. A canceled build is not the
  * end either: Vercel starts two deployments of a freshly pushed PR head and
  * cancels one within seconds, writing the record `inactive`, and the record
  * is moved to `success` with the surviving build's own address only when

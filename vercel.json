@@ -92,6 +92,14 @@
           "dest": "/api/default.js?route=hosts/install-script"
         },
         {
+          "src": "/\\.well-known/oauth-protected-resource/api/mcp",
+          "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
+        },
+        {
+          "src": "/\\.well-known/oauth-protected-resource",
+          "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
+        },
+        {
           "src": "/api/auth/(.*)",
           "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
@@ -196,6 +204,14 @@
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
         },
         {
+          "src": "/api/mcp",
+          "dest": "/api/member-mcp.js?route=mcp"
+        },
+        {
+          "src": "/api/mcp/resource-metadata",
+          "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
+        },
+        {
           "src": "/api/pages/sandbox",
           "dest": "/api/page-sandbox.js?route=pages/sandbox"
         },
@@ -214,6 +230,14 @@
         {
           "src": "/api/feedback\\.mjs",
           "dest": "/api/feedback.mjs"
+        },
+        {
+          "src": "/api/live/socket",
+          "dest": "/api/live/socket"
+        },
+        {
+          "src": "/api/live/socket\\.js",
+          "dest": "/api/live/socket.js"
         },
         {
           "src": "/api/terminal/sessions",

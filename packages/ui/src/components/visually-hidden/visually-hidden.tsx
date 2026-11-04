@@ -1,7 +1,7 @@
 /**
  * visually-hidden.tsx -- words read by assistive tech and drawn nowhere.
  *
- * A control says its state in a glyph, a ring, or a colour; these are the
+ * A control says its state in a glyph, a ring, or a color; these are the
  * words behind it that a screen reader speaks. The element is chosen by what
  * the words are (a `legend` names a fieldset, a `p` or a `span` with a live
  * `role` announces a change), and the words stay in the page, so a copy or a

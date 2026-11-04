@@ -39,7 +39,7 @@ const PITCH = 5;
 /** The mark's side, in CSS pixels: the 16px icon seat. */
 const SIDE = 16;
 
-/** Where the first cell starts, from the mark's corner: the grid centred in the side. */
+/** Where the first cell starts, from the mark's corner: the grid centered in the side. */
 const INSET = (SIDE - (2 * PITCH + CELL)) / 2;
 
 /** The cells of the track, in the order the chasers lap them. */

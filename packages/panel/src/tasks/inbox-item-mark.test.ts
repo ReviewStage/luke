@@ -3,28 +3,23 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import {
-  type AnyAct,
-  FAKE_ANSWER,
-  type FakeActAnswer,
-  fakeActs,
-  fakeAppBridge,
-} from "../testing/app-bridge.js";
+import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
 
 /**
  * inbox-item-mark.test.ts -- an Inbox item whose agent was archived still
- * stands, and its row's mark wears the harness that agent ran on, read from
- * its task's agents, archived ones among them, since the task's row names
- * no archived agent. Synthetic task and agent.
+ * stands, and its row's mark wears the harness that agent ran on, as the
+ * task list carries its tasks' agents, archived ones among them, since the
+ * task's row names no archived agent. Synthetic task and agent.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -53,32 +48,29 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-test("an item an archived agent posted wears the harness that agent ran on, read from its task's agents", async () => {
-  fakeActs({
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.AGENTS_LIST
-          ? {
-              status: FAKE_ANSWER.DONE,
-              value: {
-                agents: [
-                  {
-                    id: ARCHIVED,
-                    planId: TASK_ID,
-                    model: "openai/gpt-6.1-sol",
-                    effort: "high",
-                    title: "Retired sweep",
-                    createdAt: AT,
-                    status: AGENT_STATUS.COMPLETED,
-                    turnId: null,
-                    archivedAt: AT,
-                  },
-                ],
-              },
-            }
-          : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
-      ),
-  });
+test("an item an archived agent posted wears the harness that agent ran on, as the task list carries its task's agents", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        tasks: [TASK],
+        taskAgents: [
+          {
+            id: ARCHIVED,
+            planId: TASK_ID,
+            model: "openai/gpt-6.1-sol",
+            effort: "high",
+            title: "Retired sweep",
+            createdAt: AT,
+            status: AGENT_STATUS.COMPLETED,
+            turnId: null,
+            archivedAt: AT,
+          },
+        ],
+      },
+    },
+  );
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>

@@ -40,14 +40,14 @@ const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Could not read your API keys on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Could not save your API key on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Could not remove your API key on this system.",
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Couldn't read your API keys on this system.",
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Couldn't save your API key on this system.",
+  [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Couldn't remove your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOR_AGENTS]:
-    "Could not change your plan's default on this system.",
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
+    "Couldn't change your plan's default on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Couldn't continue with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
-    "Could not cancel the ChatGPT sign-in on this system.",
+    "Couldn't stop waiting for ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read the workspace's memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",

@@ -67,13 +67,13 @@ function exactText(max: number): EffectSchema.Codec<string, string> {
 export const exactId = exactText(512);
 
 /**
- * The longest fenced block a transcript asks main to colour. Note that a
- * longer one is drawn plain rather than cut, because colouring costs main
+ * The longest fenced block a transcript asks main to color. Note that a
+ * longer one is drawn plain rather than cut, because coloring costs main
  * a pass over every character and a block that long is a log, not a snippet.
  */
-export const COLOURED_CODE_MAX_CHARS = 20_000;
+export const COLORED_CODE_MAX_CHARS = 20_000;
 
-/** The longest language name a fence may give for its block to be coloured. */
+/** The longest language name a fence may give for its block to be colored. */
 export const FENCE_LANGUAGE_MAX_CHARS = 32;
 
 /** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */

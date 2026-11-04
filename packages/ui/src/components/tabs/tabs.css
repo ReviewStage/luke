@@ -172,7 +172,7 @@
     color: var(--ui-color-text);
   }
 
-  /* The tab holding the keyboard stands over its neighbours, so the chosen
+  /* The tab holding the keyboard stands over its neighbors, so the chosen
      tab's fill beside it leaves its ring whole. */
   .ui-tab:has(:focus-visible) {
     z-index: 1;
@@ -382,7 +382,7 @@
   }
 
   /* Folded to glyphs, a tab other than the chosen one narrower than 72px is
-     its glyph alone, centred: its label, its detail, its end mark, and its
+     its glyph alone, centered: its label, its detail, its end mark, and its
      × give way, and its hint says its name. Note that under the pointer,
      folded or not, a tab that narrow wears no fade at its end, because the
      fade makes room for a × it no longer has, or is wider than the glyph's

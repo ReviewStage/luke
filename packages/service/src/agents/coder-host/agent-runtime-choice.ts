@@ -8,8 +8,8 @@
  *   a fast version running with Claude Code's own fast mode on, where the
  *   account keeps a Claude setup-token.
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model; Codex runs no fast mode on the plan, so an account whose
- *   ChatGPT plan pays is offered no GPT fast version (`accountFastOffer`), where the account
+ *   GPT model, a fast version running on Codex's `fast` service tier and
+ *   no Ultrafast one, which OpenAI limits to few plans (`accountFastOffer`), where the account
  *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
  *   that OpenAI has not signed out and the deployment can still open.
  *
@@ -531,10 +531,11 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
 });
 
 /**
- * Which fast versions the account is offered (`offeredToAccount`): by the
- * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
- * GPT agents, as Start would choose it here, since Codex runs no fast mode on the plan
- * and a Fast it cannot run is never offered.
+ * Which fast and Ultrafast versions the account is offered
+ * (`offeredToAccount`): by the Anthropic key its steps run on, and whether
+ * its ChatGPT plan pays for its GPT agents, as Start would choose it here,
+ * since Codex runs an Ultrafast version on an OpenAI API key alone and one
+ * it cannot run is never offered.
  */
 export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,

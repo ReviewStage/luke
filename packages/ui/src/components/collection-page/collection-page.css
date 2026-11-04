@@ -34,7 +34,7 @@
      toolbar's own edges, where its title's words start and its actions end
      (`toolbar.css`'s page inset, a column's inset and a row's), in any
      room, so the bar lines up with what it heads rather than with a
-     measure centred under it. Note that it says so in the page's own
+     measure centered under it. Note that it says so in the page's own
      properties, the measure as wide as the room, so whatever reads them
      answers it. */
   .ui-collection-page[data-frame="toolbar"] > * {
@@ -112,7 +112,7 @@
     flex: 3 1 0;
   }
 
-  /* An EmptyState, a centred ErrorState among them, stands itself a little
+  /* An EmptyState, a centered ErrorState among them, stands itself a little
      above the middle of the room it fills, so the notice hands it the whole
      room rather than a sixth of it, which clipped a way on under its line. */
   .ui-collection-page-notice:has(> .ui-empty-state)::before,

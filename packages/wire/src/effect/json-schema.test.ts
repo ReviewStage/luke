@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Result, Schema } from "effect";
 import { test } from "vitest";
-import { emitJsonSchema, readEither, wireKeys } from "./index.js";
+import { emitJsonSchema, readEither, standardSchemaOf, wireKeys } from "./index.js";
 
 const SAID = Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(10));
 
@@ -33,6 +33,24 @@ test("a struct with wire keys emits the wire's keys with every field's bounds", 
   const said = { type: "string", minLength: 1, maxLength: 10 };
 
   assert.deepEqual(emitJsonSchema(RENAMED), {
+    type: "object",
+    properties: { planId: said, note: said },
+    required: ["planId"],
+    additionalProperties: false,
+  });
+});
+
+test("a standard schema validates as a read does, an unlisted key and a bound refused, and shows the emitted node", async () => {
+  const standard = standardSchemaOf(RENAMED)["~standard"];
+
+  assert.deepEqual(await standard.validate({ planId: " p-1 " }), { value: { taskId: "p-1" } });
+  assert.ok(
+    (await standard.validate({ planId: "p-1", extra: 1 })).issues,
+    "an unlisted key is refused",
+  );
+  assert.ok((await standard.validate({ planId: "eleven char" })).issues, "a bound holds");
+  const said = { type: "string", minLength: 1, maxLength: 10 };
+  assert.deepEqual(standard.jsonSchema.input({ target: "draft-2020-12" }), {
     type: "object",
     properties: { planId: said, note: said },
     required: ["planId"],

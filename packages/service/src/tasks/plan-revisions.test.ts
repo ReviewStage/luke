@@ -57,7 +57,7 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: task.id, workspaceId: task.workspaceId };
 });
 
-/** The title the agent goes by, which its revisions are labelled with. */
+/** The title the agent goes by, which its revisions are labeled with. */
 const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>

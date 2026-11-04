@@ -110,7 +110,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
         </SiteBarPages>
         {/* The negative margins take back the room round the mark inside
               its 44px square, the same on either side, so the mark stands as
-              far from its neighbours as one word stands from the next. */}
+              far from its neighbors as one word stands from the next. */}
         <span className="-mx-3 flex">
           <IconButtonLink
             href={REPOSITORY_URL}

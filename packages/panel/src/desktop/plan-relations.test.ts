@@ -100,6 +100,7 @@ function draw(
           task,
           tasks,
           door: { workspaceName: ACME.name, tasks: listed },
+          onOpenTask: tasks.onSelect,
         }),
       ),
     ),

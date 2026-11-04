@@ -1,6 +1,9 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
   DIALOG_SIZE,
   Dialog,
+  PICTURE_TILE_FACE,
   PictureTile,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -17,8 +20,9 @@ import { CatalogSection } from "../section";
  * picture-tiles.tsx -- a picture that opens when pressed, sinking a little
  * under the press: one hugging its picture in a column of words, one with
  * no words of its own, a row of tiles that fill the room each is given,
- * captioned under the picture, and one a pointer's press falls through,
- * which a key alone opens, with the plain pointer and no sink. A press on
+ * captioned under the picture, one a pointer's press falls through,
+ * which a key alone opens, with the plain pointer and no sink, and a
+ * person's disc, its face and ring round. A press on
  * those only counts, since opening a picture over the window is the app's;
  * the last opens one, growing from the tile into the card and, put away,
  * shrinking back into it.
@@ -158,6 +162,13 @@ function PictureTiles(): React.JSX.Element {
             <span className="catalog-picture-frame">
               <img src={BEFORE} alt="A diagram" draggable={false} />
             </span>
+          </PictureTile>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="picture-tiles-round" title="A person's disc, its face round">
+        <div className="catalog-stack">
+          <PictureTile name="Ada Lovelace" face={PICTURE_TILE_FACE.ROUND} onOpen={openHugged}>
+            <Avatar name="Ada Lovelace" size={AVATAR_SIZE.MASTHEAD} decorative />
           </PictureTile>
         </div>
       </CatalogSection>

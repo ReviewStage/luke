@@ -5,11 +5,11 @@ import React from "react";
 void React;
 
 interface ProductMarkProps {
-  /** Draws the mark in the muted text colour, where it stands behind what is said over it. */
+  /** Draws the mark in the muted text color, where it stands behind what is said over it. */
   muted?: boolean;
   /** Fills the box that holds it rather than standing at the font's size. */
   fill?: boolean;
-  /** Draws the mark in its holder's ink, where the holder says what it is by its colour. */
+  /** Draws the mark in its holder's ink, where the holder says what it is by its color. */
   inherit?: boolean;
   /** Draws the small cut, its V opened wider, for a mark 32 pixels across or smaller. */
   small?: boolean;
@@ -18,7 +18,7 @@ interface ProductMarkProps {
 /**
  * The product's mark, drawn from `@repo/brand`'s generated `MARK_ART` so every
  * surface that wears it stays tied to the artwork the icons are cut from, in
- * one colour, `currentColor`, so its holder decides the ink. Decorative:
+ * one color, `currentColor`, so its holder decides the ink. Decorative:
  * whatever stands beside it already says the product's name.
  *
  * It stands at the font's size until its holder gives it a box, in the

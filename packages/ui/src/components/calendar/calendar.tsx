@@ -191,7 +191,7 @@ function restingDay(month: string, start: string | undefined, today: string): st
   return `${month}-01`;
 }
 
-/** The ink a day's number is drawn in: on the accent where picked, then today's, then a neighbouring month's, then the text's own. */
+/** The ink a day's number is drawn in: on the accent where picked, then today's, then a neighboring month's, then the text's own. */
 function dayInk(place: CalendarPlace | undefined, today: boolean, outside: boolean): string {
   if (place !== undefined && place !== CALENDAR_PLACE.BETWEEN) return CALENDAR_DAY_INK.PICKED;
   if (today) return CALENDAR_DAY_INK.TODAY;

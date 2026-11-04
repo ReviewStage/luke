@@ -1,7 +1,7 @@
 /* chart.css -- the chart's own frame around recharts' plot, and its tooltip's card.
 
    Recharts is the engine and draws the plot; what it paints in its stock
-   greys (an axis tick, the grid, the hover cursor) is redrawn here in the
+   grays (an axis tick, the grid, the hover cursor) is redrawn here in the
    shared palette, and the outlines of its inner parts are dropped. Every
    value is a `--ui-*` token, so the chart reads the same in whichever app
    mounts it. */
@@ -58,7 +58,7 @@
     outline: none; /* no ring: no Tab stops here */
   }
 
-  /* Note that forced colours keep an outline on what holds the keyboard's
+  /* Note that forced colors keep an outline on what holds the keyboard's
      focus, drawn transparent, because the system paints it in its own ink
      there and it is the focus's only cue; on the rest it would ring every
      layer at once. */

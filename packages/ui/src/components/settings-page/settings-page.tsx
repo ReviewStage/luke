@@ -50,7 +50,7 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * On a phone (`TOOLBAR_LOOK.PHONE`), the look a page standing alone in a
  * small window takes too, the bar is a phone's header: its way back in one
  * corner, what acts on the whole page in the other (a ⋯ the caller hands as
- * `actions`), and the page's title, its `h1`, centred between them, as a
+ * `actions`), and the page's title, its `h1`, centered between them, as a
  * phone heads every page. The page then draws no header of its own: it
  * opens on the quiet line saying what holds for all of it, a section's gap
  * under the bar's way back (`title-under-bar`), so no lone row of the way

@@ -56,20 +56,25 @@ import {
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
-import { type Highlighting, preferredHighlighter, startHighlighting } from "./highlight-pool.js";
+import {
+  HIGHLIGHT_CACHE_ENTRIES,
+  type Highlighting,
+  preferredHighlighter,
+  startHighlighting,
+} from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { markLineIndents } from "./line-indents.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
 
 /**
- * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
+ * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colors.
  *
  * An entry of the renderer's build (`scripts/build.mjs`), imported by the
  * first diff shown (`../bundle-loader.ts`), so the bundle every
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
- * drawn. Shiki colours the code in the theme chosen for each appearance,
+ * drawn. Shiki colors the code in the theme chosen for each appearance,
  * the File tab's two GitHub themes (`@repo/host`'s `task-code.ts`) until
  * another is, each taken as the system's appearance changes, and runs its
  * grammars on its JavaScript engine, since the panel's policy admits no
@@ -80,9 +85,9 @@ import { wholeOf } from "./whole-diff.js";
  * whole as one classic script and hands this bundle its text
  * (`DIFF_HIGHLIGHT_WORKER`), which each worker is started from as a
  * `blob:`, the one place the policy admits a worker from. A file is drawn
- * in plain text until its colours come back, and each file's patch is read
+ * in plain text until its colors come back, and each file's patch is read
  * under a name of its own (`readPatch`), so the pool's cache hands a file
- * scrolled back into view its colours again rather than highlighting it
+ * scrolled back into view its colors again rather than highlighting it
  * anew. Where no worker can start, or the build carried none, as under a
  * test, Pierre highlights on the window's own thread, as one diff alone
  * always does.
@@ -91,7 +96,7 @@ import { wholeOf } from "./whole-diff.js";
  * through the `--diffs-*` properties a sheet adopted there sets from the
  * window's tokens (`styles/base.css`), which a shadow root inherits, and the
  * chosen type through the same properties set on its host, each font one
- * every Mac has; the markup Pierre writes its layout and colours in is
+ * every Mac has; the markup Pierre writes its layout and colors in is
  * applied through the CSSOM (`./inline-styles.ts`). The host is marked for
  * the tab's find, which reads the shadow root's words and leaves out its
  * gutter, as a File tab's numbers are, and the same sheet paints the find's
@@ -149,12 +154,12 @@ import { wholeOf } from "./whole-diff.js";
  * A whole file with no diff, a File tab's, a page's source, or a text file
  * opened over the window, is drawn through the same \`CodeView\` holding the
  * one file (\`mountFile\`): only the lines near the view drawn at all, however
- * long the file, coloured in the same pool, its lines lit as a thread's are,
+ * long the file, colored in the same pool, its lines lit as a thread's are,
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
  * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries the app's;
- * a feed of such cards colours each in the same pool (\`pooled\`), so many
+ * a feed of such cards colors each in the same pool (\`pooled\`), so many
  * landing at once never hold the window's thread.
  *
  * Where the view comments on lines, code selected as text is read once the
@@ -543,8 +548,8 @@ let patchesRead = 0;
 
 /**
  * A file's patch read under a name of its own, which the pool keeps its
- * colours by, so a patch read again, a file whose patch changed, is never
- * handed the colours of the one before; one that does not read as a single
+ * colors by, so a patch read again, a file whose patch changed, is never
+ * handed the colors of the one before; one that does not read as a single
  * file's patch is refused, as `getSingularPatch` refuses it.
  */
 function readPatch(patch: string): FileDiffMetadata {
@@ -563,9 +568,10 @@ function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
     ...sharedOptions(props.look),
     hunkSeparators: props.excerpt === true ? "simple" : "line-info-basic",
     disableFileHeader: true,
-    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by; lines that scroll sideways hang by none.
     onPostRender: (node: HTMLElement, _instance: unknown, phase: PostRenderPhase) => {
-      if (phase !== "unmount" && node.shadowRoot !== null) markLineIndents(node.shadowRoot);
+      if (phase !== "unmount" && node.shadowRoot !== null && props.look.wrap)
+        markLineIndents(node.shadowRoot);
     },
     ...(renderAnnotation === undefined
       ? {}
@@ -590,7 +596,7 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, lookSheets().fill);
   typeset(container, props.look);
-  // A pooled patch is read under a name of its own, so the pool's cache never hands it another's colours.
+  // A pooled patch is read under a name of its own, so the pool's cache never hands it another's colors.
   const highlighting = props.pooled === true ? listHighlighting(props.look) : undefined;
   const read = highlighting === undefined ? getSingularPatch : readPatch;
   const view = new PierreFileDiff<string, undefined>(optionsOf(props), highlighting?.pool);
@@ -609,7 +615,7 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
         patch = next.patch;
         fileDiff = read(patch);
       }
-      // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the patch's own.
+      // A look the pool's workers do not hold yet is handed them first, since the pool's colors stand over the patch's own.
       if (highlighting !== undefined && !sameLook(next.look, look))
         void highlighting.follow(next.look);
       look = next.look;
@@ -923,10 +929,12 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
     watchGaps(element, phase);
-    // Each note drawn anew is marked with the band of the line it stands under, and each line with its indent, as Pierre draws its rows again.
+    // Each note drawn anew is marked with the band of the line it stands under, and each line with its indent where lines wrap, as Pierre draws its rows again.
+    // Note that a file with no notes and lines that do not wrap is left unread, because Pierre draws again on every scroll that brings rows in, and a walk of every row then is what makes a long list stutter.
     if (phase !== "unmount" && element.shadowRoot !== null) {
-      markAnnotationBands(element.shadowRoot);
-      markLineIndents(element.shadowRoot);
+      if ((drawnFiles.get(path)?.file.annotations.length ?? 0) > 0)
+        markAnnotationBands(element.shadowRoot);
+      if (latest.look.wrap) markLineIndents(element.shadowRoot);
     }
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
@@ -1099,7 +1107,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       latest = next;
       typeset(host, next.look);
       if (!sameLook(next.look, was.look)) {
-        // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the list's own.
+        // A look the pool's workers do not hold yet is handed them first, since the pool's colors stand over the list's own.
         void highlighting.follow(next.look);
       }
       if (
@@ -1159,10 +1167,10 @@ const WHOLE_FILE_EDGE = 6;
 /**
  * How many files' keys `wholeFileKey` keeps, each a name at a revision with
  * the text it was handed: as many as the pool keeps results for
- * (\`HIGHLIGHT_CACHE_ENTRIES\`), since a key past those names colours the pool
+ * (\`HIGHLIGHT_CACHE_ENTRIES\`), since a key past those names colors the pool
  * no longer holds, the oldest let go first.
  */
-const WHOLE_FILE_KEYS_KEPT = 16;
+const WHOLE_FILE_KEYS_KEPT = HIGHLIGHT_CACHE_ENTRIES;
 
 /** A whole file's key, kept with the text it was handed under its name at its revision. */
 interface WholeFileKey {
@@ -1179,11 +1187,11 @@ let wholeFileKeys: readonly WholeFileKey[] = [];
 let wholeFilesRead = 0;
 
 /**
- * The key a whole file's colours are kept under in the pool's cache: the one
+ * The key a whole file's colors are kept under in the pool's cache: the one
  * it was last read under, where the same name at the same revision holds the
- * same text, so a file opened again takes its colours at once; and one
+ * same text, so a file opened again takes its colors at once; and one
  * counted afresh for any other, so a text that changed never takes another's
- * colours. Note that a count names it, not the name and revision, because a
+ * colors. Note that a count names it, not the name and revision, because a
  * key is never built from identifiers (\`AGENTS.md\`'s TypeScript rules); and
  * that only the newest \`WHOLE_FILE_KEYS_KEPT\` are kept, whatever their names,
  * so no file's texts pile up across its revisions.
@@ -1275,7 +1283,7 @@ function wholeFileOptions(
  * file: only the lines near the view drawn at all, however long the file,
  * in a shadow root the find reads and the look's sheet dresses, edge to
  * edge on the theme's ground with no card, as a list's file wears, and
- * coloured in the kept pool's workers, plain until the colours land. The
+ * colored in the kept pool's workers, plain until the colors land. The
  * lines lit are Pierre's own lit lines, as a review thread's are; a press of
  * the numbers picks lines in their place until the view lights others.
  * Note that the item is handed anew, its version counted up, only when what
@@ -1303,8 +1311,8 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
     }
     drawnElement = element;
     quietGutter(element);
-    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
-    if (element.shadowRoot !== null) markLineIndents(element.shadowRoot);
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by; lines that scroll sideways hang by none.
+    if (element.shadowRoot !== null && latest.look.wrap) markLineIndents(element.shadowRoot);
     if (!dressed.has(element) && element.shadowRoot !== null) {
       dressed.add(element);
       element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
@@ -1352,7 +1360,7 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
       latest = next;
       typeset(host, next.look);
       if (!sameLook(next.look, was.look)) {
-        // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the file's own.
+        // A look the pool's workers do not hold yet is handed them first, since the pool's colors stand over the file's own.
         void highlighting.follow(next.look);
         view.setOptions(optionsFor(next));
       }

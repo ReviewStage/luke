@@ -4,7 +4,7 @@
    measure a run of words sets is in `em`, so a rule reads at the window's
    caption size and at the site's body size alike; a code span's tint is
    `--ui-prose-tint`, which a surface whose ink is not the page's own, a
-   sent bubble's, mixes from its own colour.
+   sent bubble's, mixes from its own color.
 
    Below them, a note's Markdown (`.ui-markdown`, `@repo/ui/markdown`):
    the plan, its versions, a comment, a file's note, and the caption. */
@@ -45,8 +45,8 @@
      rather than a code span. `line-height: 1` because an inline-block's
      whole box, padding and borders included, sizes the line it sits on, and
      at the inherited leading the cap would stretch its line taller than its
-     neighbours. The raise is measured, not chosen: on the baseline the cap's
-     box centres below the words' own, and `middle` still leaves it low. */
+     neighbors. The raise is measured, not chosen: on the baseline the cap's
+     box centers below the words' own, and `middle` still leaves it low. */
   .ui-prose kbd {
     display: inline-block;
     padding: 0.1em 0.45em;
@@ -68,7 +68,7 @@
      the plan, a comment, a file's note, and the caption bar. Every measure is
      in `em` so the same rules read at the caption's ten pixels and the
      thread's twelve and a half, and every tint is mixed from `currentColor`,
-     so the same rule reads on the raised bubble's grey and on the sent
+     so the same rule reads on the raised bubble's gray and on the sent
      bubble's accent without a per-speaker override. Blocks are spaced by
      margin rather than a flex gap: the caption's root is an ordinary block
      whose wrapped height is measured. */
@@ -127,7 +127,7 @@
 
   /* Code keeps each source line whole and scrolls only sideways: a wrapped
      identifier reads as one the author never wrote. Left-aligned even inside
-     the centred caption, because indentation is part of what code says. */
+     the centered caption, because indentation is part of what code says. */
   .ui-markdown pre {
     margin: 0;
     padding: 0.6em 0.8em;
@@ -190,7 +190,7 @@
   /* A note's box (`markdown-tasks.tsx`, a wordless `Checkbox`, read-only
      where the reader cannot tick it) stands in the bullet's gutter, exactly where the box alone stands, at
      the words' size; on a coarse pointer its label takes a press a finger's
-     width across and as tall, centred on the box (`checkbox.css`). The
+     width across and as tall, centered on the box (`checkbox.css`). The
      plan's editor gives its own label the same press. A loose list's item
      holds its words in a paragraph, the box among them, which stands in the
      same gutter. */
@@ -347,7 +347,7 @@
   /* A screenshot stands on the hairline card the rest of the site puts
      artwork on. Every one stands as tall as a whole-window screenshot at
      full measure (2400 by 1591), so a close-up cut from one is the same
-     height, only narrower, and centred in the column. Each is a link to its
+     height, only narrower, and centered in the column. Each is a link to its
      own full-size file, and the cursor is what says so. */
   .ui-prose-document:has(img) {
     container-type: inline-size;
@@ -374,7 +374,7 @@
    document draws one: flush with the words around it, set off by a thin
    rule and a short step of room after it, in the quiet ink at the same size
    and upright. A quote inside a quote adds one more rule and step and
-   nothing else. The ink is the quote's colour and not its opacity, so a
+   nothing else. The ink is the quote's color and not its opacity, so a
    picture or a code block inside it stays at full strength. Note that the
    rules over its blocks name the element and stand after the lists, so
    they outrank the note's `p` and lists above, and the browser's own

@@ -35,7 +35,6 @@ import {
   sameShape,
 } from "@repo/features/turn-rows";
 import { replyFromWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
@@ -91,7 +90,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref.js";
 import {
   Conversation,
@@ -159,8 +157,6 @@ import {
   SENT_LINE_STATE,
   type SentLine,
   type StartingLaunch,
-  settledPlanEdits,
-  sidebarCallIds,
   slackLineOf,
   type TurnStretch,
   teammateStarter,
@@ -219,11 +215,13 @@ import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
+import { ShownPage } from "./shown-page.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
+import { type AgentThreads, ThreadsDock } from "./threads-dock.js";
 import {
   calledAgent,
   cardTitle,
@@ -231,6 +229,7 @@ import {
   isServerCallTool,
   loadedSkill,
   sentWords,
+  shownPageVersion,
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
@@ -321,8 +320,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
  * drawn and goes nowhere. No line here names a price: a price in the
- * window is the whole run's, said only at the model menu's foot
- * (`agentUsageLine`). Every word here is the agent's or the plan's, so the
+ * window is the whole run's, said only on the model menu's last line
+ * (`agentPayerLine`). Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
@@ -898,8 +897,11 @@ function TargetCallView({
   );
 }
 
+/** What a page's frame is titled for tooling where its call names no title. */
+const UNTITLED_PAGE = "Page";
+
 /**
- * What the chip of what a call made is labelled with until the window
+ * What the chip of what a call made is labeled with until the window
  * holds its name: the call's own title, a page's or a thread's or a task's;
  * and the link bare for the plan and a pull request, which the chip then
  * calls by the plan's name and the pull request's number.
@@ -912,7 +914,10 @@ function madeLabel(target: ToolTarget, subject: string | undefined, href: string
 /**
  * A call's row, naming what the call made or is about, a page, the plan, a
  * thread, a task, or a pull request, after its verb by the chip and hover
- * card the window draws for its link anywhere, whose press alone opens it.
+ * card the window draws for its link anywhere, whose press alone opens it;
+ * and under the row of a `show_page`, the page itself at the version the
+ * call showed, live (`shown-page.tsx`), where the place holds the task or
+ * the agent the page is on.
  * Note that a call still running, one that made nothing, and one whose
  * place cannot link what it made draw any call's row through this same
  * view, so a row opened while it runs stays open as its answer lands.
@@ -931,24 +936,33 @@ function MadeCallView({
   const standsOn = useLiveDoors(doors)?.cards?.standsOn;
   const agentId = useContext(TranscriptAgent);
   const { kind, subject } = toolCallView(part);
+  const holder = mentions.holder ?? standsOn;
   const href =
     target === undefined
       ? undefined
-      : targetLink(target, {
-          workspace: mentions.place.workspace,
-          holder: mentions.holder ?? standsOn,
-          agentId,
-        });
+      : targetLink(target, { workspace: mentions.place.workspace, holder, agentId });
   const chip =
     target === undefined || href === undefined
       ? undefined
       : linkChip(href, madeLabel(target, subject, href), mentions);
+  const shown = target?.kind === TOOL_TARGET.PAGE ? shownPageVersion(part) : undefined;
+  // Note that the row stands first in one fragment whether or not a page follows it, so a row opened while its call runs stays open as the page lands.
   return (
-    <ToolCallView
-      part={part}
-      jobs={doors?.jobs}
-      made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
-    />
+    <>
+      <ToolCallView
+        part={part}
+        jobs={doors?.jobs}
+        made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
+      />
+      {shown === undefined || holder === undefined ? null : (
+        <ShownPage
+          place={holder}
+          pageId={shown.page}
+          version={shown.version}
+          title={subject === undefined || subject === "" ? UNTITLED_PAGE : subject}
+        />
+      )}
+    </>
   );
 }
 
@@ -1398,7 +1412,7 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
   if (workedFor === null && copy === null) return null;
   return (
-    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
+    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centering them would push the words down.
     <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
       <MessageLine
         align={MESSAGE_LINE_ALIGN.START}
@@ -1752,7 +1766,7 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
 
 /**
  * The end line's row: the line, then the press it ends on (Continue in new
- * agent), on one row, centred on the line's words, which wraps the press
+ * agent), on one row, centered on the line's words, which wraps the press
  * under them only where the column is too narrow for both.
  */
 /**
@@ -1776,7 +1790,7 @@ function AgentEndRow({
   onOpenApiKeys,
   about,
   press,
-  centred = false,
+  centered = false,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
@@ -1784,13 +1798,13 @@ function AgentEndRow({
   onOpenApiKeys: (() => void) | undefined;
   about: FailureAbout;
   press: ReactNode;
-  /** Whether it stands in the empty state's own centred column, centred as its column is. */
-  centred?: boolean;
+  /** Whether it stands in the empty state's own centered column, centered as its column is. */
+  centered?: boolean;
 }): React.JSX.Element {
   // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
   return (
     <div
-      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centred ? " justify-center" : ""}`}
+      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centered ? " justify-center" : ""}`}
     >
       <AgentEndLine
         ended={ended}
@@ -2532,7 +2546,7 @@ function AgentTranscriptView({
           about: { agentId },
         })}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {TRANSCRIPT_FAILED_LINE}
       </ErrorState>
@@ -2540,7 +2554,7 @@ function AgentTranscriptView({
   }
   // The log's first page, and what stands around it, wait in the tab's own placeholder, which it opened on (`AgentTab`).
   if (holding || (reading && ended === undefined)) return <TranscriptSkeleton />;
-  // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
+  // Note that the centered column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
       {
@@ -2555,7 +2569,7 @@ function AgentTranscriptView({
               onOpenApiKeys={onOpenApiKeys}
               about={failureAbout ?? { agentId, taskId }}
               press={endPress}
-              centred
+              centered
             />
           )}
           {endTrail}
@@ -2581,6 +2595,7 @@ function AgentTabView({
   model,
   servers,
   published,
+  threads,
   doors,
   startedAt,
   counts,
@@ -2625,6 +2640,8 @@ function AgentTabView({
   servers: AgentServersControl;
   /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
+  /** The threads the agent posted that wait on the developer (`ThreadsDock`). */
+  threads?: AgentThreads | undefined;
   doors: PublishedDoors;
   /** When the agent's run began, as its summary says, which the working line counts from where its lines say nothing. */
   startedAt: number | undefined;
@@ -2897,6 +2914,7 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
+        <ThreadsDock threads={threads} />
         <AgentPicturesProvider value={pictures}>
           <AgentQueueDock
             messages={queue.messages}
@@ -2985,6 +3003,8 @@ function AgentTabView({
 interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: AgentOrigin | undefined;
+  /** The threads the agent posted that wait on the developer, docked over its box (`ThreadsDock`); none where nothing waits or none are read. */
+  threads?: AgentThreads | undefined;
   control: AgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
@@ -3057,7 +3077,6 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
 export function AgentTab(props: AgentTabProps): React.JSX.Element {
   const { agent, control, shown, onHeld, agentId: _agentId, ...rest } = props;
   const agentId = props.agentId === undefined ? props.agent.id : props.agentId;
-  const { tell } = useAct();
   const transcript = useAgentTranscript({
     transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
     shown,
@@ -3072,15 +3091,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     const status = pageStatus;
     onHeld(agentId, { messages, status, runStartedAt, title: undefined, subagentTitles });
   }, [onHeld, agentId, messages, pageStatus, runStartedAt, subagentTitles]);
-  // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
-  // the edits already on screen when the tab opened are the plan's as it was read.
-  const settledEdits = settledPlanEdits(transcript.messages);
-  const seenEdits = useRef(settledEdits);
-  useEffect(() => {
-    if (settledEdits <= seenEdits.current) return;
-    seenEdits.current = settledEdits;
-    tell(ACT_KIND.TASKS_REFRESH);
-  }, [settledEdits, tell]);
   // An agent this one started, archived, or brought back moves in the plan's agents only once
   // they are read again, so a call that answered after the tab opened has them read; those
   // already there were read with the plan.
@@ -3092,15 +3102,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
   }, [listCalls, readAgents]);
-  // A start that made a new task, or a call that made, deleted, or filled a section, changes the
-  // sidebar only once the tasks are read again.
-  const sidebarCalls = useMemo(() => sidebarCallIds(transcript.messages), [transcript.messages]);
-  const seenSidebarCalls = useRef<ReadonlySet<string>>(new Set(sidebarCalls));
-  useEffect(() => {
-    const landed = sidebarCalls.some((id) => !seenSidebarCalls.current.has(id));
-    seenSidebarCalls.current = new Set(sidebarCalls);
-    if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [sidebarCalls, tell]);
   // The tab stands in its own shape until the agent is here; its log stands the same lines until its first page is (`TranscriptSkeleton`).
   if (agent === undefined) return <AgentTabSkeleton />;
   return (
@@ -3119,6 +3120,7 @@ function AgentTabBody({
   onOpenTarget,
   cards,
   run,
+  threads,
 }: Omit<AgentTabDoors, "onHeld"> & {
   agent: AgentSummary;
   transcript: AgentTranscriptControl;
@@ -3254,6 +3256,7 @@ function AgentTabBody({
         model={model}
         servers={servers}
         published={published}
+        threads={threads}
         doors={{
           openGitHub,
           copy: copyWithToast,

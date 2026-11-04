@@ -15,7 +15,7 @@
  */
 
 import { LIST_FOLD_ORDER, type ListColumn, listPropertiesFitting } from "@repo/ui/tasks-page-model";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /** Whether two runs of columns are the same, in the same order. */
 function sameColumns(one: readonly ListColumn[], other: readonly ListColumn[]): boolean {
@@ -48,5 +48,6 @@ export function useFittedColumns<Column extends ListColumn>(
     return () => observer.disconnect();
   }, [list, steady, narrow, reserved]);
   const left: readonly ListColumn[] = narrow ? LIST_FOLD_ORDER : folded;
-  return steady.filter((column) => !left.includes(column));
+  // Note that the answer is made once while the columns and the folds stand, so a row handed it holds (`memo`).
+  return useMemo(() => steady.filter((column) => !left.includes(column)), [steady, left]);
 }

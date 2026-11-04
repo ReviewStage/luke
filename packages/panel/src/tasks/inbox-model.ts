@@ -220,6 +220,24 @@ export function inboxBoard(
   };
 }
 
+/**
+ * The thread a call's row names by its key among a board's items: the
+ * latest posted under it, of the agent whose row it was where the row names
+ * one, since more than one agent may post under the same key.
+ */
+export function keyedItem(
+  board: InboxBoardView,
+  key: string,
+  agentId: string | undefined,
+): InboxItem | undefined {
+  return [...board.open, ...board.settled]
+    .filter((item) => item.key === key && (agentId === undefined || item.agentId === agentId))
+    .reduce<InboxItem | undefined>(
+      (latest, item) => (latest === undefined || item.postedAt > latest.postedAt ? item : latest),
+      undefined,
+    );
+}
+
 /** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;
@@ -383,7 +401,7 @@ function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | 
 }
 
 /**
- * The draft after the option labelled is picked by its number: the one
+ * The draft after the option labeled is picked by its number: the one
  * pick of a choice of one, which picking again keeps, or one more of a
  * choice of several, which picking again lets go, as a press on its row
  * would.
@@ -682,7 +700,7 @@ export function inboxThreadSend(
   return refusal === undefined ? { text, attachments, answers } : undefined;
 }
 
-/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in grey, since holding back failed nothing. */
+/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in gray, since holding back failed nothing. */
 export const ANSWER_TONE = {
   AHEAD: "ahead",
   BACK: "back",
@@ -1155,6 +1173,23 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
+/** What a line of threads waiting on the developer says: "1 thread needs you", "3 threads need you". */
+export function threadsWaitingWords(waiting: number): string {
+  return waiting === 1
+    ? `1 thread ${NEEDS_YOU.COUNT.one}`
+    : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
+}
+
+/** The items given that wait on the developer, by the agent that posted each, in their order. */
+export function waitingByAgent(
+  waiting: readonly InboxItem[],
+): ReadonlyMap<string, readonly InboxItem[]> {
+  const byAgent = new Map<string, InboxItem[]>();
+  for (const item of waiting)
+    byAgent.set(item.agentId, [...(byAgent.get(item.agentId) ?? []), item]);
+  return byAgent;
+}
+
 /** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
@@ -1498,7 +1533,7 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 /**
  * Whether opening the item acknowledges it, as Got it did: a notice that
  * offers Got it (`awaitsNod`), the reader's own (`needsReader`) by an id already
- * known, since an acknowledgement settles it for every member, and one
+ * known, since an acknowledgment settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice
  * that asks to be heard back would reach its agent on a mere open. A box
  * holding no words or files for it offers no Got it.
@@ -1512,6 +1547,13 @@ export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined
 /** Whether a listed item needs the reader (`needsReader`), whatever its task's status. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
   return needsReader(listed.item, readerId);
+}
+
+/** The groups of an Inbox narrowed to one task: that task's alone, as a task's "needs you" count opens it. */
+export function taskGroups(groups: readonly InboxGroup[], taskId: string): readonly InboxGroup[] {
+  return groups.filter(
+    ({ holder }) => holder.kind === INBOX_HOLDER.TASK && holder.task.id === taskId,
+  );
 }
 
 /**

@@ -466,6 +466,14 @@ export interface ReadMarks {
   readonly mark: (task: Pick<TaskSummary, "id"> & TaskChanges, unread: boolean) => void;
 }
 
+/** The write a mark by hand makes of the kept looks: the plan unread until it next opens, or read, as a look at its newest change. */
+function markChange(task: Pick<TaskSummary, "id"> & TaskChanges, unread: boolean): LooksChange {
+  return {
+    change: unread ? flagged(task.id) : raised({ [task.id]: newestChangeOf(task) }, true),
+    seeded: false,
+  };
+}
+
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
 export function useReadMarks(): ReadMarks {
   const looks = useAtomValue(looksAtom);
@@ -474,10 +482,28 @@ export function useReadMarks(): ReadMarks {
   return {
     watched,
     markedUnread: (taskId) => markedUnread(looks.marks[taskId]),
-    mark: (task, unread) =>
-      keep({
-        change: unread ? flagged(task.id) : raised({ [task.id]: newestChangeOf(task) }, true),
-        seeded: false,
-      }),
+    mark: (task, unread) => keep(markChange(task, unread)),
   };
+}
+
+/**
+ * Whether one plan is marked unread by hand, read off its own mark, so a
+ * row reading it draws again only as its own plan is marked, never another.
+ */
+const markedUnreadAtom = Atom.family((taskId: string) =>
+  Atom.map(looksAtom, (looks) => markedUnread(looks.marks[taskId])),
+);
+
+/** Whether the developer marked a plan unread by hand, as its row reads it (`markedUnreadAtom`). */
+export function useMarkedUnread(taskId: string): boolean {
+  return useAtomValue(markedUnreadAtom(taskId));
+}
+
+/**
+ * The mark a menu sets by hand (`ReadMarks.mark`) and nothing it reads, so
+ * a menu that only writes one never draws again as any plan is marked.
+ */
+export function useReadMark(): ReadMarks["mark"] {
+  const keep = useAtomSet(looksAtom);
+  return (task, unread) => keep(markChange(task, unread));
 }

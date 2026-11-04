@@ -126,7 +126,7 @@ function batchWorkspaceOf(
  * at each item's top level, where PostHog's capture docs ask for it, and an
  * item without one is answered 200 and silently dropped;
  * `$geoip_disable` is what keeps the processor from resolving an event with no
- * address to the data centre's own location; and `historical_migration` stays
+ * address to the data center's own location; and `historical_migration` stays
  * false because this is live traffic rather than a backfill.
  *
  * The account's name and address ride as person properties rather than event

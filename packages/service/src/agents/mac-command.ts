@@ -308,7 +308,7 @@ export function claimedMacCommand(
  * those kinds claimed for it as soon as one waits, looked for again as each
  * write to the account's commands lands, or with none once the hold ends. A
  * command of any other kind is left waiting for a Mac that runs it, or for
- * its call to give up on it. Note that a command ageing out of the claim
+ * its call to give up on it. Note that a command aging out of the claim
  * window wakes nothing, because it only leaves what the read waits for.
  */
 export function macCommandsFor(

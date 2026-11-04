@@ -21,7 +21,7 @@ import { cn } from "../cn.js";
  *   `<nav>` is the landmark already and its caller names it.
  * - The row is our own: its items a small step apart, and without numbers
  *   (no `data-numbered`) its two steps at either end of the row, rather
- *   than shadcn's centred row.
+ *   than shadcn's centered row.
  * - `PaginationEllipsis` draws the "…" the caller hands it, read as it is,
  *   dimmed (`data-idle`), rather than lucide's glyph hidden beside a
  *   "More pages" for readers, because no icon library rides in `@repo/ui`

@@ -155,8 +155,8 @@ function itemSubject(
  * The tile of the agent that posted an item, hanging the agent's card and
  * leaving the press to its row; where the holder names no such agent, an
  * archived one say, whose items still stand, a bare tile of the harness
- * read for it on its task (`ReadAgentModel`), and of no known harness
- * while that is read and where nothing is.
+ * the task list carries for it (`ReadAgentModel`), and of no known harness
+ * until the list carries it and where it never does.
  */
 export function ItemMark({
   holder,
@@ -176,7 +176,7 @@ export function ItemMark({
   if (subject === undefined) {
     if (holder.kind !== INBOX_HOLDER.TASK) return <ActorMark actor={UNNAMED_AGENT} />;
     return (
-      <ReadAgentModel agentId={agentId} taskId={holder.task.id}>
+      <ReadAgentModel agentId={agentId}>
         {(model) => (
           <ActorMark
             actor={{

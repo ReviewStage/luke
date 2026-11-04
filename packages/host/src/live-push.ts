@@ -8,7 +8,11 @@ import { LiveBroken, liveRows, type SealedRead, type TxWait } from "./live-follo
  * rows are decoded where they arrive, and the value they stand for is
  * published each time they move. A read the service did not answer is
  * published as a failure and asked for again, and a follow that stops for
- * good is read again, each after `LIVE_RESEAL`. Only the value is published.
+ * good is read again, each after `LIVE_RESEAL`. A read the service refused
+ * for good, one naming nothing the account reaches, is published as a
+ * failure and ends there, so a read held of a plan or an agent the reader
+ * cannot reach is not asked again for as long as it is held. Only the value
+ * is published.
  */
 
 /** How long after a read went unanswered, or a follow stopped for good, it is read again. */
@@ -28,15 +32,18 @@ export interface LivePushDependencies<Part extends string, Value> {
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
-/** The read followed until interrupted, each change published. */
+/** The read followed until interrupted, each change published, or until the service refuses it for good. */
 export function pushLive<Part extends string, Value>(
   dependencies: LivePushDependencies<Part, Value>,
-): Effect.Effect<never> {
+): Effect.Effect<void> {
+  // Each attempt answers whether the read is to be sealed again.
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.seal(false);
     if ("failure" in sealed) {
       dependencies.publish(undefined);
-      return yield* Effect.sleep(LIVE_RESEAL);
+      if (sealed.gone === true) return false;
+      yield* Effect.sleep(LIVE_RESEAL);
+      return true;
     }
     const rows = liveRows(
       {
@@ -52,6 +59,7 @@ export function pushLive<Part extends string, Value>(
       }),
     ).pipe(Effect.catch(() => Effect.void));
     yield* Effect.sleep(LIVE_RESEAL);
+    return true;
   });
-  return Effect.forever(attempt);
+  return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
 }

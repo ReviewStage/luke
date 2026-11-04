@@ -3,9 +3,9 @@ import { cssCustomProperties } from "../../css.js";
 import { pulseOnPress } from "../../press-pulse.js";
 
 /**
- * swatch.tsx -- a colour dot a reader presses to choose that colour.
+ * swatch.tsx -- a color dot a reader presses to choose that color.
  *
- * A Swatch is a toggle: `pressed` says whether its colour is the one
+ * A Swatch is a toggle: `pressed` says whether its color is the one
  * chosen, which it draws as a ring and announces as a pressed button. One
  * given no `color` stands for none, a dot struck through. It is named by its
  * `label`, since a dot says nothing to a reader who cannot see it, and it
@@ -19,11 +19,11 @@ export function Swatch({
   onClick,
   ref,
 }: {
-  /** Any CSS colour the dot is filled with; none draws the struck-through dot. */
+  /** Any CSS color the dot is filled with; none draws the struck-through dot. */
   color?: string | undefined;
-  /** Its accessible name: the colour it chooses. */
+  /** Its accessible name: the color it chooses. */
   label: string;
-  /** Whether its colour is the one chosen. */
+  /** Whether its color is the one chosen. */
   pressed: boolean;
   /** Whether Tab stops on it; false takes it out of the order. */
   tabbable?: boolean | undefined;

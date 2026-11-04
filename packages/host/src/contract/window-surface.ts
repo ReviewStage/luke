@@ -149,7 +149,7 @@ export const windowSurfaceActsContract = {
     .input(exactInput(EffectSchema.Struct({ png: pngBase64 })))
     .output(EffectSchema.Void),
   // A File tab's file, saved where the developer chooses in the system's
-  // save dialog; answers whether it was saved rather than the dialog cancelled.
+  // save dialog; answers whether it was saved rather than the dialog canceled.
   [WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE]: actProcedure(
     "Could not save that file on this system.",
   )

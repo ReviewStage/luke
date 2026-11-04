@@ -30,7 +30,6 @@ import {
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-  type AgentUsage,
   CONTEXT_WINDOW,
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
@@ -54,8 +53,12 @@ import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
+  MODEL_SPEED,
   type ModelChoice,
   type ModelProvider,
+  type ModelSpeed,
+  modelSpeedOf,
+  standardModelIdOf,
 } from "@repo/features/models-wire";
 import { formatCompact, formatUsd } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -114,7 +117,6 @@ import { devicePlatformOf } from "../device-platform.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
 import {
-  changesSidebar,
   plainWords,
   remoteCallOf,
   TOOL_TARGET,
@@ -139,28 +141,51 @@ import {
 /** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
-/** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
-const PLAN_USAGE: Partial<Record<AgentPayer, string>> = {
-  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
-  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
-};
+/** Each payer as the model menu's last line names it; a key's line goes on to what the agent has cost. */
+const PAYER_WORDS = {
+  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Using Claude plan",
+  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "Using ChatGPT plan",
+  [AGENT_PAYER.APP]: `${PRODUCT_NAME}'s API key`,
+  [AGENT_PAYER.MAC_SIGN_IN]: "Using your Mac's sign-in",
+} as const satisfies Record<Exclude<AgentPayer, typeof AGENT_PAYER.API_KEY>, string>;
+
+/** The member's own API key, named by the provider it is for. */
+const API_KEY_WORDS = {
+  [MODEL_PROVIDER.ANTHROPIC]: "Anthropic API key",
+  [MODEL_PROVIDER.OPENAI]: "OpenAI API key",
+} as const satisfies Record<ModelProvider, string>;
+
+/** A key whose provider the choice does not say. */
+const ANY_API_KEY = "API key";
+
+/** The payers billed by the token, whose line says what the agent has cost so far. */
+const PRICED_PAYERS: ReadonlySet<AgentPayer> = new Set([AGENT_PAYER.API_KEY, AGENT_PAYER.APP]);
 
 /**
- * What the agent has cost, for the model menu's foot: "This agent: 1.2M
- * tokens · $0.42", the dollars left off where the service could not price
- * every step; nothing before a turn settled. An agent paid for by a plan
- * says the plan in the dollars' place, "This agent: 1.2M tokens · Claude
- * plan", since a subscription has no bill per token. Note that this is the
- * one place the window draws a price, and it is the whole run's, the agent's
- * own turns and its workers', at the catalog's list prices.
+ * Who pays for the agent, for the model menu's last line: "Using ChatGPT
+ * plan", "Using Claude plan", or a key by its provider and what the run has
+ * cost on it, "OpenAI API key · $0.42 so far", the key alone where the
+ * service could not price every step; nothing where no payer is named.
+ * Note that a plan's line names no tokens, since the composer's context
+ * ring already says how full the window is and a subscription has no bill
+ * per token, and that the price is the whole run's, the agent's own turns
+ * and its workers', at the catalog's list prices.
  */
-export function agentUsageLine(usage: AgentUsage | undefined): string | undefined {
-  if (usage === undefined) return undefined;
-  const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
-  const paid =
-    (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
-    (usage.costUsd === undefined ? undefined : formatUsd(usage.costUsd));
-  return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
+export function agentPayerLine(
+  payer: AgentPayer | undefined,
+  provider: ModelProvider | undefined,
+  costUsd: number | undefined,
+): string | undefined {
+  if (payer === undefined) return undefined;
+  const words =
+    payer === AGENT_PAYER.API_KEY
+      ? provider === undefined
+        ? ANY_API_KEY
+        : API_KEY_WORDS[provider]
+      : PAYER_WORDS[payer];
+  return PRICED_PAYERS.has(payer) && costUsd !== undefined
+    ? `${words}${LINE_SEPARATOR}${formatUsd(costUsd)} so far`
+    : words;
 }
 
 /**
@@ -376,7 +401,7 @@ export interface EndLineParts {
  * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
  * where its work still is, in place of its failure's words.
  * Note that it names no price, because a price in the window means the
- * whole run's, which the model menu's foot says (`agentUsageLine`).
+ * whole run's, which the model menu's last line says (`agentPayerLine`).
  */
 export function endLineParts(
   status: AgentStatus,
@@ -386,7 +411,7 @@ export function endLineParts(
   ranDirectly?: { readonly folder: string },
 ): EndLineParts | undefined {
   switch (status) {
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
@@ -446,7 +471,7 @@ export function agentGlyphState(status: AgentStatus): GlyphState {
 
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: AgentStatus): string | undefined {
-  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELLED);
+  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELED);
 }
 
 /** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
@@ -457,6 +482,9 @@ export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task
 
 /** What a message no answer came back for says, which may have reached the agent all the same. */
 const NOT_HEARD_BACK = "No answer came back.";
+
+/** What a plan's reached limit says where no reset is known; with one, `limitResetsWords`. */
+const LIMIT_REACHED_WORDS = "Usage limit reached";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
@@ -470,13 +498,12 @@ const SHARED_FAILURE_NOTE = {
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
   [AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "The subscription paying for this agent is signed out. Its starter signs in again in Settings.",
+    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
-    "The subscription's provider didn't answer. Try again in a moment.",
-  [AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
-    "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
+    "The plan's provider didn't answer. Try again in a moment.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]: LIMIT_REACHED_WORDS,
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "The subscription paying for this agent isn't eligible to run it.",
+    "The plan paying for this agent isn't eligible to run it.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
@@ -740,9 +767,15 @@ export interface ConnectFailure {
   readonly provider: ModelProvider;
 }
 
+/** What would run a provider's models, as the connect note names it: the harness's plan or the provider's API key. */
+const CONNECT_CREDENTIALS = {
+  [MODEL_PROVIDER.ANTHROPIC]: "a Claude plan or an Anthropic API key",
+  [MODEL_PROVIDER.OPENAI]: "a ChatGPT plan or an OpenAI API key",
+} as const satisfies Record<ModelProvider, string>;
+
 /**
  * The press a model menu's row holds for a model whose provider no
- * subscription or API key of the account's pays for: "Connect Claude" at
+ * plan or API key of the account's pays for: "Connect Claude" at
  * the row's end (`remedyLabel`), landing on its harness's row in Settings ›
  * Agents (`useRepositoryRemedy`); none for a model something pays for.
  */
@@ -750,7 +783,7 @@ export function modelConnectFailure(model: CatalogModel): ConnectFailure | undef
   if (model.credentialMissing !== true) return undefined;
   return {
     reason: FAILURE_REASON.CONNECT_AGENTS,
-    text: `${modelLabel(model.id, [model])} cannot run until you connect ${harnessNameOf(model.provider)} with a subscription or an API key.`,
+    text: `${modelLabel(model.id, [model])} cannot run until you connect ${CONNECT_CREDENTIALS[model.provider]}.`,
     provider: model.provider,
   };
 }
@@ -764,7 +797,7 @@ export function modelConnectWords(model: CatalogModel): string | undefined {
 /**
  * Why a choice cannot run, and the press that connects what would run it:
  * the note a model menu and Settings' Default model stand under the choice
- * where no subscription or API key of the account's pays for its model, as
+ * where no plan or API key of the account's pays for its model, as
  * an account finds the Claude default it stored once its Claude credential
  * is gone; none for a choice something pays for, or one the catalog no
  * longer lists.
@@ -789,17 +822,17 @@ function credentialMissingWords(
 
 /** What a Start refused by the plan that would pay says, to its own member, beside the press that opens Settings. */
 const START_PLAN_REFUSAL = {
-  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]: "Your subscription is signed out. Sign in again.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]: "Your plan is signed out. Connect it again.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "Your subscription isn't eligible to run this agent. Choose your API key.",
+    "Your plan isn't eligible to run this agent. Choose your API key.",
 } as const;
 
 /** The same refusals where no press beside them opens Settings, so the words name it. */
 const START_PLAN_REFUSAL_ALONE = {
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "Your subscription is signed out. Sign in again in Settings to start an agent.",
+    "Your plan is signed out. Connect it again in Settings to start an agent.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+    "Your plan isn't eligible to run this agent. Choose your API key in Settings to start one.",
 } as const;
 
 /** What an unreadable API key says beside the press that opens Settings. */
@@ -860,18 +893,12 @@ export function planPayerOf(runtime: AgentRuntime | undefined): AgentPayer | und
 
 /** What a message refused by the Claude plan that pays for its agent says. */
 const CLAUDE_PLAN_REFUSAL = {
-  SIGNED_OUT: "Your Claude subscription needs reconnecting in Settings.",
-  LIMIT_REACHED:
-    "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
+  SIGNED_OUT: "Signed out of Claude. Connect your Claude plan again in Settings.",
 } as const;
 
 /** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
-function limitResetsWords(payer: AgentPayer | undefined, resetsAt: number): string {
-  const whose =
-    payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? "Your Claude subscription has"
-      : "The subscription paying for this agent has";
-  return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
+function limitResetsWords(resetsAt: number): string {
+  return `${LIMIT_REACHED_WORDS} · Resets ${dayAndTimeText(resetsAt)}`;
 }
 
 /**
@@ -882,10 +909,7 @@ function limitResetsWords(payer: AgentPayer | undefined, resetsAt: number): stri
  */
 function planRefusalWords(refused: RefusedCall, payer: AgentPayer | undefined): string | undefined {
   if (refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
-    if (refused.resetsAt !== undefined) return limitResetsWords(payer, refused.resetsAt);
-    return payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? CLAUDE_PLAN_REFUSAL.LIMIT_REACHED
-      : undefined;
+    return refused.resetsAt === undefined ? undefined : limitResetsWords(refused.resetsAt);
   }
   if (
     refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
@@ -1079,7 +1103,7 @@ function starterKeyWords(failure: AgentCallFailure, starter: string): string | u
     return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
   }
   if (failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return `${starter} has no API key or subscription connected for this agent. They connect one in Settings to unblock it.`;
+    return `${starter} has no plan or API key connected for this agent. They connect one in Settings to unblock it.`;
   }
   return undefined;
 }
@@ -1268,12 +1292,9 @@ const LEAD_FAMILIES: readonly string[] = [
   "terra",
 ];
 
-/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast` beside `anthropic/claude-opus-5.5`. */
-const FAST_ID_SUFFIX = "-fast";
-
 /**
  * Where a model's family stands in `LEAD_FAMILIES`: the last word of its
- * own name, its version and any fast suffix aside, so `claude-opus-5.5` is
+ * own name, its version and any speed's suffix aside, so `claude-opus-5.5` is
  * Opus and `gpt-6-astra` Astra, while `gpt-6-astra-mini` is no lead family's
  * and stands after them all.
  */
@@ -1313,8 +1334,18 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
 /** What the model menu and Settings say where the catalog could not be read. */
 export const MODELS_READ_FAILED = readFailedWords("the models");
 
+/** The word a choice label, the Fast row, and the Speed choice say for each speed. */
+export const SPEED_WORD = {
+  [MODEL_SPEED.STANDARD]: "Standard",
+  [MODEL_SPEED.FAST]: "Fast",
+  [MODEL_SPEED.ULTRAFAST]: "Ultrafast",
+} as const satisfies Record<ModelSpeed, string>;
+
 /** The word a choice label and the Fast row say for the fast version. */
-export const FAST_WORD = "Fast";
+export const FAST_WORD = SPEED_WORD[MODEL_SPEED.FAST];
+
+/** The word the Speed choice is named by, which stands in the Fast row's place for a model with an Ultrafast version. */
+export const SPEED_LABEL = "Speed";
 
 /** What the Fast row says where the service withholds the model's fast version because Anthropic never granted the organization of the key the account's agents run on fast mode. */
 const FAST_NOT_ENABLED_NOTE = "Fast isn't enabled for this key's Anthropic organization";
@@ -1325,36 +1356,44 @@ export const FAST_ACCESS_URL = "https://claude.com/fast-mode";
 /** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
 const CHOICE_WORD_SEPARATOR = " ";
 
-/** A model as the menus offer it: the base model, and its fast version where the catalog lists one beside it. */
+/** A model as the menus offer it: the base model, and its fast and Ultrafast versions where the catalog lists each beside it. */
 export interface OfferedModel {
   readonly model: CatalogModel;
   readonly fast: CatalogModel | undefined;
+  readonly ultrafast: CatalogModel | undefined;
 }
 
-/** The id a fast version's id is the fast version of, or nothing for an id without the suffix. */
+/** The id a fast or Ultrafast version's id is a version of, or nothing for an id without a speed's suffix. */
 function baseIdOf(id: string): string | undefined {
-  return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
+  return modelSpeedOf(id) === MODEL_SPEED.STANDARD ? undefined : standardModelIdOf(id);
 }
 
 /**
- * The catalog folded to its base models, each with its fast version, in the
- * menus' order. The signal is the id: a model whose id is another offered
- * model's with the fast suffix is that model's fast version, and is not
- * listed on its own. Neither the name's "(Fast)" nor the catalog's `fast`
- * tag would do: the tag sits on the base and the fast version alike, the
- * wire carries no tags in any case, and a name is display text. A suffixed
- * id with no base beside it is a model of its own.
+ * The catalog folded to its base models, each with its fast and Ultrafast
+ * versions, in the menus' order. The signal is the id: a model whose id is
+ * another offered model's with a speed's suffix is that model's version at
+ * that speed, and is not listed on its own. Neither the name's "(Fast)" nor
+ * the catalog's `fast` tag would do: the tag sits on the base and the fast
+ * version alike, the wire carries no tags in any case, and a name is
+ * display text. A suffixed id with no base beside it is a model of its own.
  */
 export function offeredModels(models: readonly CatalogModel[]): readonly OfferedModel[] {
   const ids = new Set(models.map((model) => model.id));
-  const fastOf = new Map<string, CatalogModel>();
+  const versionsOf = new Map<string, Map<ModelSpeed, CatalogModel>>();
   for (const model of models) {
     const base = baseIdOf(model.id);
-    if (base !== undefined && ids.has(base)) fastOf.set(base, model);
+    if (base === undefined || !ids.has(base)) continue;
+    const versions = versionsOf.get(base) ?? new Map<ModelSpeed, CatalogModel>();
+    versions.set(modelSpeedOf(model.id), model);
+    versionsOf.set(base, versions);
   }
   return orderedModels(models)
-    .filter((model) => !isFastVersion(model.id, ids))
-    .map((model) => ({ model, fast: fastOf.get(model.id) }));
+    .filter((model) => !isSpeedVersion(model.id, ids))
+    .map((model) => ({
+      model,
+      fast: versionsOf.get(model.id)?.get(MODEL_SPEED.FAST),
+      ultrafast: versionsOf.get(model.id)?.get(MODEL_SPEED.ULTRAFAST),
+    }));
 }
 
 /**
@@ -1388,40 +1427,54 @@ export function fastRestingNote(
   return `No fast version of ${modelLabel(baseId, models)}`;
 }
 
-/** Whether the id is the fast version of a model the catalog offers. */
-function isFastVersion(id: string, ids: ReadonlySet<string>): boolean {
+/** Whether the id is the fast or Ultrafast version of a model the catalog offers. */
+function isSpeedVersion(id: string, ids: ReadonlySet<string>): boolean {
   const base = baseIdOf(id);
   return base !== undefined && ids.has(base);
 }
 
-/** A stored id as the menus draw it: the base model's id, and whether it named the fast version. */
+/** The model's version at the speed given, where the catalog lists one beside it: the base itself at standard speed. */
+function versionAt(offered: OfferedModel, speed: ModelSpeed): CatalogModel | undefined {
+  if (speed === MODEL_SPEED.FAST) return offered.fast;
+  if (speed === MODEL_SPEED.ULTRAFAST) return offered.ultrafast;
+  return offered.model;
+}
+
+/** The speeds a model offers, slowest first: standard, and fast and Ultrafast where the catalog lists each. */
+export function speedsOf(offered: OfferedModel): readonly ModelSpeed[] {
+  return Object.values(MODEL_SPEED).filter((speed) => versionAt(offered, speed) !== undefined);
+}
+
+/** A stored id as the menus draw it: the base model's id, and the speed it named. */
 export interface ModelChoiceRead {
   readonly base: string;
-  readonly fast: boolean;
+  readonly speed: ModelSpeed;
 }
 
 export function readModelChoice(models: readonly CatalogModel[], modelId: string): ModelChoiceRead {
   const offered = offeredModels(models).find(
-    (each) => each.model.id === modelId || each.fast?.id === modelId,
+    (each) =>
+      each.model.id === modelId || each.fast?.id === modelId || each.ultrafast?.id === modelId,
   );
-  if (offered === undefined) return { base: modelId, fast: false };
-  return { base: offered.model.id, fast: offered.fast?.id === modelId };
+  if (offered === undefined) return { base: modelId, speed: MODEL_SPEED.STANDARD };
+  const speed = modelId === offered.model.id ? MODEL_SPEED.STANDARD : modelSpeedOf(modelId);
+  return { base: offered.model.id, speed };
 }
 
-/** The catalog id a base and a Fast switch name: the fast version's where it is on and the model has one, else the base's. */
-export function choiceModelId(offered: OfferedModel, fast: boolean): string {
-  return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
+/** The catalog id a base and a speed name: the version at that speed where the model has one, else the base's, at standard speed. */
+export function choiceModelId(offered: OfferedModel, speed: ModelSpeed): string {
+  return (versionAt(offered, speed) ?? offered.model).id;
 }
 
 /**
- * What a choice says after its model's name: the effort, Fast where the
- * fast version is on, and the standard window's size where it runs on that,
+ * What a choice says after its model's name: the effort, Fast or Ultrafast
+ * where that version is on, and the standard window's size where it runs on that,
  * so the model's whole window, which every choice runs on unless it says,
  * says nothing.
  */
-function choiceDetail(effort: string, fast: boolean, standardTokens?: number): string {
+function choiceDetail(effort: string, speed: ModelSpeed, standardTokens?: number): string {
   const words = [effortLabel(effort)];
-  if (fast) words.push(FAST_WORD);
+  if (speed !== MODEL_SPEED.STANDARD) words.push(SPEED_WORD[speed]);
   if (standardTokens !== undefined) words.push(windowLabel(standardTokens));
   return words.join(CHOICE_WORD_SEPARATOR);
 }
@@ -1516,7 +1569,7 @@ export function choiceWords(choice: ModelChoice, models: readonly CatalogModel[]
       : undefined;
   return {
     model: modelLabel(read.base, models),
-    detail: choiceDetail(choice.effort, read.fast, standard),
+    detail: choiceDetail(choice.effort, read.speed, standard),
   };
 }
 
@@ -1570,7 +1623,7 @@ export function effortFor(
   return below?.effort ?? ranked[0]?.effort ?? efforts[0];
 }
 
-/** The catalog's effort names a sentence-case label does not spell by capitalising. */
+/** The catalog's effort names a sentence-case label does not spell by capitalizing. */
 const EFFORT_LABEL: ReadonlyMap<string, string> = new Map([["xhigh", "Extra high"]]);
 
 /** The catalog's effort names are lowercase words; a menu and a segment read them in sentence case. */
@@ -1763,7 +1816,7 @@ export const CONCLUSION_WORDS = {
   [GITHUB_CHECK_CONCLUSION.SUCCESS]: "Passed",
   [GITHUB_CHECK_CONCLUSION.FAILURE]: "Failed",
   [GITHUB_CHECK_CONCLUSION.NEUTRAL]: "Neutral",
-  [GITHUB_CHECK_CONCLUSION.CANCELLED]: "Cancelled",
+  [GITHUB_CHECK_CONCLUSION.CANCELED]: "Canceled",
   [GITHUB_CHECK_CONCLUSION.SKIPPED]: "Skipped",
   [GITHUB_CHECK_CONCLUSION.TIMED_OUT]: "Timed out",
   [GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED]: "Needs action",
@@ -1948,18 +2001,6 @@ function storedPartRead(part: WireValue): AgentPart {
  */
 const partsRead = new WeakMap<AgentTranscriptMessage, readonly AgentPart[]>();
 
-/** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
-export function settledPlanEdits(messages: readonly AgentTranscriptMessage[]): number {
-  return messages
-    .flatMap(agentParts)
-    .filter(
-      (part) =>
-        part.kind === AGENT_PART.TOOL &&
-        part.tool === AGENT_TOOL.EDIT_PLAN &&
-        part.state === TOOL_STATE.OUTPUT_AVAILABLE,
-    ).length;
-}
-
 /**
  * The coding agent a call started, read off its answer, which is the agent
  * its row opens; nothing for any other call, one still running, or a start
@@ -1993,15 +2034,6 @@ export function agentListCallIds(messages: readonly AgentTranscriptMessage[]): r
       part.kind === AGENT_PART.TOOL && AGENT_LIST_TOOLS.has(part.tool) && part.output !== undefined
         ? [part.callId]
         : [],
-    );
-}
-
-/** The answered calls of a transcript that changed the sidebar (`changesSidebar`), by call id: what the tasks are read again on as each lands, so the sidebar draws the change. */
-export function sidebarCallIds(messages: readonly AgentTranscriptMessage[]): readonly string[] {
-  return messages
-    .flatMap(agentParts)
-    .flatMap((part) =>
-      part.kind === AGENT_PART.TOOL && changesSidebar(part.tool, part.output) ? [part.callId] : [],
     );
 }
 
@@ -2054,7 +2086,7 @@ export function isTodos(
   );
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures, a page, or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
     if (part.kind === AGENT_PART.TOOL) return part.callId;
@@ -2067,7 +2099,7 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.AGENT;
     // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
-    return isTodos(part) || isShownSet(part) || keptRecording(part)
+    return isTodos(part) || isShownSet(part) || isShownPage(part) || keptRecording(part)
       ? ROW_PART.LONE_CALL
       : ROW_PART.CALL;
   },
@@ -2111,6 +2143,16 @@ function isShownSet(part: AgentPart): part is ToolPart {
     isRecord(part.output) &&
     part.output.status === ACTION_RESULT_STATUS.ACCEPTED
   );
+}
+
+/**
+ * Whether a part is a `show_page` call, whose page is drawn under its row
+ * and, as a set of pictures is, never folds away. Note that the call stands
+ * on a row of its own from the moment it starts, not only once it showed
+ * its page, so a row opened while it runs stays open as the page lands.
+ */
+function isShownPage(part: AgentPart): boolean {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.SHOW_PAGE;
 }
 
 /** Whether a part is a browser call that kept a recording, which a reader watches as a shown set and never folds away. */
@@ -2223,8 +2265,8 @@ function afterStepOf(line: AgentTranscriptMessage): number {
  * its agent's does, since a run of calls reads the same whoever made it.
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
- * standing is never folded away, and so does every set of pictures the
- * agent showed, which is its answer as much as its words are. A line that
+ * standing is never folded away, and so does every set of pictures and
+ * every page the agent showed, which is its answer as much as its words are. A line that
  * reached the turn while it ran (`arrived`) stands among its parts where it
  * arrived, splitting the fold of a finished turn around it.
  */
@@ -2242,6 +2284,7 @@ export function agentRows(
     kept: (part) =>
       (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
       isShownSet(part) ||
+      isShownPage(part) ||
       keptRecording(part),
   };
   return turnRows(parts, reading, { key: message.id, moving, done: !moving });
@@ -2472,7 +2515,7 @@ export function workerToolState(status: AgentStatus): ToolState {
     case AGENT_STATUS.FAILED:
       return TOOL_STATE.OUTPUT_ERROR;
     case AGENT_STATUS.COMPLETED:
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return TOOL_STATE.OUTPUT_AVAILABLE;
   }
 }
@@ -2707,7 +2750,7 @@ export const AGENT_STATUS_TONE = {
   [AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
   [AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
   [AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+  [AGENT_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
 } as const satisfies Record<AgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */

@@ -6,9 +6,19 @@ import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-b
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { writePage } from "@repo/database/models/plan-pages";
+import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
+import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
+import { messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  openTaskAgent,
+  openWorkspace,
+  startTask,
+} from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
@@ -36,6 +46,10 @@ import {
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import {
+  pullRequestChaptersLiveAnswerSchema,
+  pullRequestChaptersOfLive,
+} from "@repo/features/pull-request-chapters-live";
 import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
@@ -44,13 +58,21 @@ import {
   workspacesLiveAnswerSchema,
   workspacesLiveRowsSchema,
 } from "@repo/features/workspace-live";
-import type { WireBoundaryInput } from "@repo/wire";
-import { sql } from "drizzle-orm";
+import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
+import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { markInboxItemRead, postInboxThread } from "../inbox/inbox-store.js";
+import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
+import {
+  connectWorkspaceGitHub,
+  type FakeGitHub,
+  githubReaching,
+  type InstallationFixture,
+} from "../testing/github-app-fake.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
@@ -113,6 +135,17 @@ const ask = (options: {
     // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
+  });
+
+/** Whether the transaction `txid` is visible in `snapshot`, as Postgres reads the two. */
+const visibleIn = (txid: string, snapshot: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const [read] = yield* sql.unsafe<{ readonly visible: boolean }>(
+      "select pg_visible_in_snapshot($1::xid8, $2::pg_snapshot) as visible",
+      [txid, snapshot],
+    );
+    return read?.visible === true;
   });
 
 /** A new account, as the store holds one. */
@@ -187,6 +220,13 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   it.effect("every part of the account inbox is answered polled, each with its rows inline", () =>
     Effect.gen(function* () {
       const dana = yield* openUser;
+      // A task started in a workspace Dana is not in, so every part of hers stays empty.
+      const eli = yield* openUser;
+      const { txid } = yield* createTaskCommitted(eli, {
+        organizationId: yield* openWorkspace(eli),
+        name: "Teammate invitations",
+      });
+      assert.ok(txid !== undefined, "a task started answers the transaction it was written in");
       const polled = yield* ask({ bearer: dana });
       assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
       const answer = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(polled.body);
@@ -201,6 +241,10 @@ it.layer(getTestDB())("the account's live reads", (it) => {
       ]);
       for (const [part, sealed] of Object.entries(answer.queries)) {
         assert.deepEqual(sealed.rows, [], `${part} holds nothing yet`);
+        assert.ok(
+          sealed.snapshot !== undefined && (yield* visibleIn(txid, sealed.snapshot)),
+          `${part} was read at a snapshot that shows the task's transaction`,
+        );
       }
     }),
   );
@@ -461,9 +505,12 @@ function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlCl
   });
 }
 
-/** The rows kept that carry a column of the read's own, rather than a look's digest alone. */
+/** The columns a look at a read's digest answers, none of them the read's own. */
+const LOOK_COLUMNS: ReadonlySet<string> = new Set(["digest", "snapshot"]);
+
+/** The rows kept that carry a column of the read's own, rather than a look's digest and snapshot alone. */
 const rowsOfTheRead = (kept: readonly KeptRow[]) =>
-  kept.filter((row) => Object.keys(row).some((column) => column !== "digest"));
+  kept.filter((row) => Object.keys(row).some((column) => !LOOK_COLUMNS.has(column)));
 
 it.layer(getTestDB())("a held live read's looks", (it) => {
   const path = "/api/live/task-pages";
@@ -506,6 +553,10 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         );
         assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
         assert.equal(liveDigestOf(held.queries), digest);
+        assert.ok(
+          held.queries.pages.snapshot !== undefined,
+          "unchanged carries its look's snapshot",
+        );
         const hold = kept.slice(looked);
         assert.ok(hold.length > 0, "the hold looked at the rows' digests");
         assert.deepEqual(rowsOfTheRead(hold), [], "no row of the read left the database");
@@ -1075,5 +1126,299 @@ it.layer(getTestDB())("the account's sidebar's live read", (it) => {
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
         );
       }),
+  );
+});
+
+const RELAY = { owner: "Acme", name: "Relay" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+
+/** The one installation the chapters' read reaches the repository through. */
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 9_300,
+  login: RELAY.owner,
+  repositories: [RELAY],
+};
+
+/** A deployment that seals members' API keys under the fixture ring and holds nothing else. */
+const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: AGENT_KEY_RING,
+};
+
+/** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */
+const askChapters = (options: {
+  readonly bearer: string;
+  readonly agentId: string;
+  readonly number: number;
+  readonly github: FakeGitHub;
+}) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      Layer.succeed(HostedEnvironment, CHAPTERS_ENVIRONMENT),
+      options.github.layer,
+    );
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+    });
+    const url = new URL("/api/live/pull-request-chapters", ORIGIN);
+    url.searchParams.set("id", options.agentId);
+    url.searchParams.set("number", String(options.number));
+    url.searchParams.set(LIVE_USER_QUERY, options.bearer);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
+    return { status: response.status, body };
+  });
+
+it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
+  it.effect(
+    "a member is answered the agent's own workspace's newest chapters polled, with whether they can generate them, and an account outside it is not found though its own workspace keeps chapters of the same pull request",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Invitations", repository: RELAY_FULL_NAME });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        yield* connectAgentApiKeys(teammate);
+        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+        const started = yield* createAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: RELAY_FULL_NAME,
+          planSnapshot: "# Invitations\n",
+          prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        assert.ok(Option.isSome(started));
+        const agentId = started.value.agent.id;
+        const claimed = (
+          organizationId: string,
+          requestedBy: string,
+          headSha: string,
+          at: number,
+        ) =>
+          claimChapterGeneration({
+            organizationId,
+            repository: RELAY_FULL_NAME,
+            pullRequestNumber: 7,
+            baseSha: "ba5e000",
+            headSha,
+            requestedBy,
+            now: new Date(at),
+          });
+        yield* claimed(task.workspaceId, owner, "c0ffee1", 1_000);
+        // The stranger's own workspace claims the same pull request later, which no read through the agent may answer.
+        yield* claimed(yield* openWorkspace(stranger), stranger, "dec0de2", 2_000);
+        const github = githubReaching([RELAY_INSTALLATION]);
+
+        const polled = yield* askChapters({ bearer: teammate, agentId, number: 7, github });
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(pullRequestChaptersLiveAnswerSchema)(polled.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          pullRequestChaptersOfLive(answer.queries.chapters.rows ?? [], 7, answer.generatable),
+          {
+            pullRequest: {
+              number: 7,
+              generatable: true,
+              chapters: {
+                status: "generating",
+                headSha: "c0ffee1",
+                baseSha: "ba5e000",
+                startedAt: 1_000,
+              },
+            },
+          },
+        );
+        assert.deepEqual(yield* askChapters({ bearer: stranger, agentId, number: 7, github }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+      }),
+  );
+});
+
+/** The task list asked as `bearer`, in delta mode past `sync` where it names one ("" for none yet), its answer decoded. */
+const askTasks = (bearer: string, sync?: string) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    );
+    const procedures = liveProcedures({ resolveUserId: () => Effect.succeed(Option.some(bearer)) });
+    const url = readOf("/api/live/tasks", bearer);
+    url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    if (sync !== undefined) url.searchParams.set(LIVE_POLL.SYNC, sync);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${bearer}` } }),
+    );
+    assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
+    const body: unknown = JSON.parse(yield* Effect.promise(() => response.text()));
+    return Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries;
+  });
+
+/** Each part's row ids, as a delta answers its rows. */
+const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
+  (part.rows ?? []).map((row) => (row as { readonly id: string }).id).toSorted();
+
+/** The agent's conversation. */
+const conversationOf = (agentId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [agent] = yield* db
+      .select({ conversationId: agentTable.conversationId })
+      .from(agentTable)
+      .where(eq(agentTable.id, agentId));
+    return agent?.conversationId ?? assert.fail("no such agent");
+  });
+
+/** A turn of the agent's starting, as the writer opens one. */
+const startTurn = (userId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    yield* db.insert(turns).values({
+      userId,
+      conversationId: yield* conversationOf(agentId),
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.RUNNING,
+      startedAt: new Date(yield* Clock.currentTimeMillis),
+    });
+  });
+
+/** A line of the developer's to the agent no turn has taken yet, as a send queues one; its id. */
+const queueLine = (userId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const now = new Date(yield* Clock.currentTimeMillis);
+    const [line] = yield* db
+      .insert(messages)
+      .values({
+        userId,
+        conversationId: yield* conversationOf(agentId),
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: "Rebase on main" }],
+        createdAt: now,
+        placedAt: now,
+      })
+      .returning({ id: messages.id });
+    return line?.id ?? assert.fail("the line was not queued");
+  });
+
+/** The agent's row among a part's rows, as the task list reads its awaiting line. */
+const agentRowOf = (part: { readonly rows?: readonly unknown[] }, agentId: string) =>
+  (part.rows ?? []).find((row) => (row as { readonly id: string }).id === agentId) as
+    | { readonly awaitingLineAt: number | null }
+    | undefined;
+
+it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
+  it.effect(
+    "a reader past its sync id is answered what moved alone: a task added, one deleted gone, an agent whose turn started, and nothing of another workspace's",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const erin = yield* openUser;
+        const deleted = yield* startTask(dana, { name: "Old invitations" });
+        const kept = yield* startTask(dana, { name: "Teammate invitations" });
+        const agentId = yield* openTaskAgent(dana, kept.workspaceId, kept.id);
+        const erinsGone = yield* startTask(erin, { name: "Billing" });
+        const whole = yield* askTasks(dana, "");
+        const past = whole.plans.sync?.next;
+        assert.ok(past !== undefined && whole.plans.sync?.past === undefined);
+
+        const added = yield* startTask(dana, { name: "Onboarding" });
+        yield* deleteTask(dana, deleted.id);
+        yield* startTurn(dana, agentId);
+        const erinsAdded = yield* startTask(erin, { name: "Payroll" });
+        yield* deleteTask(erin, erinsGone.id);
+        const moved = yield* askTasks(dana, past);
+
+        assert.deepEqual(idsOf(moved.plans), [added.id]);
+        assert.deepEqual(moved.plans.gone, [deleted.id]);
+        assert.deepEqual(idsOf(moved.agents), [agentId]);
+        assert.equal(moved.plans.sync?.past, past);
+        const erins = new Set([erinsGone.id, erinsAdded.id]);
+        for (const part of Object.values(moved)) {
+          assert.ok(![...idsOf(part), ...(part.gone ?? [])].some((id) => erins.has(id)));
+        }
+
+        const next = moved.plans.sync?.next;
+        assert.ok(next !== undefined);
+        const quiet = yield* Effect.forkChild(askTasks(dana, next));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = yield* Fiber.join(quiet);
+        assert.deepEqual(
+          Object.values(held).flatMap((part) => idsOf(part)),
+          [],
+          "a hold nothing moved ends with nothing",
+        );
+        assert.equal(held.plans.sync?.past, next);
+      }),
+  );
+
+  it.effect(
+    "a line withdrawn moves its agent in the next delta, which reads it awaiting nothing",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const agentId = yield* openTaskAgent(dana, started.workspaceId, started.id);
+        const lineId = yield* queueLine(dana, agentId);
+        const whole = yield* askTasks(dana, "");
+        const past = whole.agents.sync?.next;
+        assert.ok(past !== undefined);
+        assert.ok(agentRowOf(whole.agents, agentId)?.awaitingLineAt != null, "the line awaits");
+
+        yield* Effect.flatMap(Database, (db) =>
+          db.update(messages).set({ withdrawnAt: new Date() }).where(eq(messages.id, lineId)),
+        );
+        // Note that the hold is let run to its end, so a withdrawal no log row records answers nothing moved rather than holding the test.
+        const asked = yield* Effect.forkChild(askTasks(dana, past));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = yield* Fiber.join(asked);
+
+        assert.deepEqual(idsOf(moved.agents), [agentId]);
+        assert.equal(agentRowOf(moved.agents, agentId)?.awaitingLineAt, null);
+      }),
+  );
+
+  it.effect.each([
+    { case: "past an id below the oldest the log kept", joins: false },
+    { case: "whose membership moved", joins: true },
+  ])("a reader $case is answered whole, with the sync id to ask past next", ({ joins }) =>
+    Effect.gen(function* () {
+      const dana = yield* openUser;
+      const started = yield* startTask(dana, { name: "Teammate invitations" });
+      const past = (yield* askTasks(dana, "")).plans.sync?.next;
+      assert.ok(past !== undefined);
+      if (joins) yield* joinWorkspace(yield* openWorkspace(yield* openUser), dana);
+
+      const answered = yield* askTasks(dana, joins ? past : "1");
+
+      assert.deepEqual(idsOf(answered.plans), [started.id]);
+      assert.equal(answered.plans.sync?.past, undefined);
+      assert.ok(answered.plans.sync?.next !== undefined);
+    }),
   );
 });

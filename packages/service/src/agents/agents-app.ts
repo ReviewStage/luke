@@ -130,7 +130,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
 /**
  * GET serves one attachment of an inbox item, an image block's picture or a
  * file the developer's answer carried, as its bytes under the media type
- * the service sniffed a picture to be or a file travelled as, to the
+ * the service sniffed a picture to be or a file traveled as, to the
  * members of the item's workspace alone: an attachment of another
  * workspace's, or of another item's, is not found, as an item is.
  */

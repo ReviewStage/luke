@@ -10,7 +10,7 @@ import { toHtml } from "./inline-styles.js";
  * to draw from again is left as it was. Synthetic markup only.
  */
 
-/** A column with its row span, holding a token coloured in both themes and a plain one. */
+/** A column with its row span, holding a token colored in both themes and a plain one. */
 function column(): Element {
   return {
     type: "element",

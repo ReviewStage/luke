@@ -11,7 +11,7 @@
 import { PROBE_FILES } from "./pins.js";
 import { TURN_DONE } from "./verdict.js";
 
-/** The marker the second turn's command is recognised by in the stream. */
+/** The marker the second turn's command is recognized by in the stream. */
 export const STOPPED_COMMAND = "sleep 600";
 
 export function firstTurn(nonce: string): string {

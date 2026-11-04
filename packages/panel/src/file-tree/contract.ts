@@ -175,7 +175,7 @@ export interface FileTreeHandle {
 /**
  * A file's type icon as the tree draws it: the symbol to draw, from the
  * sheet the bundle adds to the document the first time one is asked for,
- * and the type it stands for, which the panel colours it by
+ * and the type it stands for, which the panel colors it by
  * (`styles/tasks.css`).
  */
 export interface FileTypeIcon {

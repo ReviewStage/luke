@@ -76,10 +76,31 @@ const CATALOG: JsonValue = {
     entry("anthropic/claude-haiku-4", "Claude Haiku 4", { tags: ["tool-use"] }),
     entry("openai/gpt-6.1-sol", "GPT-6.1 Sol", {
       reasoning: [{ type: "toggle" }, { type: "effort", values: ["none", "low", "high"] }],
-      pricing: { input: "varies", output: "0.00001" },
+      contextWindow: 1_050_000,
+      pricing: {
+        input: "varies",
+        output: "0.00001",
+        service_tiers: {
+          priority: { input: "0.00002", output: "0.0001" },
+          ultrafast: {
+            input: "0.00006",
+            output: "0.0003",
+            input_cache_read: "0.000006",
+            long_context: {
+              threshold: 272001,
+              input: "0.00012",
+              output: "0.00045",
+              input_cache_read: "0.000012",
+            },
+          },
+        },
+      },
     }),
     entry("openai/gpt-6.1-sol-fast", "GPT-6.1 Sol (Fast)", {
       reasoning: [{ type: "toggle" }, { type: "effort", values: ["none", "low", "high"] }],
+    }),
+    entry("openai/gpt-6.1-sol-batch", "GPT-6.1 Sol (Batch)", {
+      reasoning: [{ type: "effort", values: ["none", "low", "high"] }],
     }),
     entry("openai/gpt-4.1", "GPT-4.1", { tags: ["tool-use"], reasoning: null }),
     entry("openai/gpt-image-2", "GPT Image 2", {
@@ -110,15 +131,35 @@ it.effect("the default choice is one the catalog as published accepts", () =>
   }),
 );
 
-it.effect("a GPT model's fast version is offered beside it, which Codex runs on its fast tier", () =>
-  Effect.gen(function* () {
-    const { layer } = gateway(() => jsonResponse(CATALOG));
-    const offered = yield* readCatalog.pipe(Effect.provide(layer));
-    assert.deepEqual(
-      offered.map((model) => model.id).filter((id) => id.startsWith("openai/")),
-      ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-fast"],
-    );
-  }),
+it.effect(
+  "a GPT model's fast version is offered beside it, which Codex runs on its fast tier, and its batch version never is, since no turn can wait on the Batch API, and where its entry prices OpenAI's Ultrafast tier an Ultrafast version priced at that tier",
+  () =>
+    Effect.gen(function* () {
+      const { layer } = gateway(() => jsonResponse(CATALOG));
+      const offered = yield* readCatalog.pipe(Effect.provide(layer));
+      assert.deepEqual(
+        offered.map((model) => model.id).filter((id) => id.startsWith("openai/")),
+        ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-ultrafast", "openai/gpt-6.1-sol-fast"],
+      );
+      // The tier's prices, and past its 272K threshold twice the input and 1.5 times the output.
+      assert.deepEqual(
+        offered.find((model) => model.id === "openai/gpt-6.1-sol-ultrafast"),
+        {
+          id: "openai/gpt-6.1-sol-ultrafast",
+          name: "GPT-6.1 Sol (Ultrafast)",
+          provider: "openai",
+          efforts: ["none", "low", "high"],
+          contextWindows: {
+            standardTokens: 272_000,
+            longTokens: 1_050_000,
+            longInputPriceFactor: 2,
+            longOutputPriceFactor: 1.5,
+          },
+          contextWindow: 1_050_000,
+          pricing: { inputUsd: 0.00006, outputUsd: 0.0003, cachedInputUsd: 0.000006 },
+        },
+      );
+    }),
 );
 
 it.effect("a refetch that fails past the hour answers the catalog read before it", () =>

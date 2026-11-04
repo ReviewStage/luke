@@ -7,7 +7,7 @@
 
 /**
  * acme's mark: two peaks on deep teal, as a full-bleed square the way
- * GitHub serves an organisation's picture (the UI rounds it).
+ * GitHub serves an organization's picture (the UI rounds it).
  */
 const ACME_MARK =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +

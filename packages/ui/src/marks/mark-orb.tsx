@@ -10,7 +10,7 @@ import { fitCanvas, paintLoop, roleChannels } from "../components/landing/landin
  * of the mark's cut catches it, so the disc's rim and the V's walls read as
  * cut metal. The cut is the mark itself: `MARK_ART`'s path drawn into a
  * texture the shader reads, so the ball and the logo never part. Every
- * pixel lands on one of five flat colours read off the page's own roles at
+ * pixel lands on one of five flat colors read off the page's own roles at
  * mount (the ground, a deep copper mixed from the accent and the ground, the
  * accent, the link copper, the ink), so there is no gradient and a theme's
  * brand layer carries the ball with it.

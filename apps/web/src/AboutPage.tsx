@@ -32,7 +32,7 @@ type Founder = {
  * no business publishing, GPS among it, so what ships is the same JPEG cut
  * losslessly rather than the file that came off the phone: the EXIF, XMP, and
  * MPF segments are gone, and so is the HDR gain map the phone appended after
- * the image with an XMP block of its own. Only the JFIF header, the colour
+ * the image with an XMP block of its own. Only the JFIF header, the color
  * profile, and the picture remain.
  */
 const FOUNDERS: readonly Founder[] = [

@@ -208,7 +208,7 @@ test("a control as wide as the row stands under its words, named by the label an
 });
 
 /** A switch's row whose words label its switch, holding the switch's state as a settings write would. */
-function LabelledSwitchRow({ adornment }: { adornment?: string | undefined }): React.JSX.Element {
+function LabeledSwitchRow({ adornment }: { adornment?: string | undefined }): React.JSX.Element {
   const [checked, setChecked] = useState(false);
   return createElement(SettingsRow, {
     label: "Show captions",
@@ -228,7 +228,7 @@ function LabelledSwitchRow({ adornment }: { adornment?: string | undefined }): R
 
 test("a press on a switch row's words sets its switch, as a press on the switch does, with or without an adornment", () => {
   for (const adornment of [undefined, "Modified"]) {
-    const container = mount(createElement(LabelledSwitchRow, { adornment }));
+    const container = mount(createElement(LabeledSwitchRow, { adornment }));
     const control = container.querySelector<HTMLButtonElement>('button[role="switch"]');
     const words = [...container.querySelectorAll("*")].find(
       (element) => element.children.length === 0 && element.textContent === "Show captions",

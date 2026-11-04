@@ -52,8 +52,6 @@ import {
   type TasksPageAnswer,
   type TasksPageParams,
   type TasksPageSourceAnswer,
-  type TasksPagesAnswer,
-  type TasksPagesParams,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPictureKeepParams,
@@ -132,7 +130,6 @@ export interface TasksProceduresDependencies {
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
-    tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
     /** A plan's or agent's pages held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
@@ -146,8 +143,8 @@ export interface TasksProceduresDependencies {
     tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
     tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   };
-  /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
-  colourCode: (language: string, code: string) => Effect.Effect<CodeLines>;
+  /** A transcript's fenced block colored as its fence's language, by the highlighter the File tab's lines are colored with. */
+  colorCode: (language: string, code: string) => Effect.Effect<CodeLines>;
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
@@ -161,7 +158,7 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 
 /**
  * A page's HTML as its tab's source reads it: line by line, plain, since the
- * panel draws it as every code is, through Pierre's diffs, which colours it
+ * panel draws it as every code is, through Pierre's diffs, which colors it
  * (`@repo/panel`'s `whole-file.tsx`).
  */
 function pageSourceLines(html: string): CodeLines {
@@ -484,12 +481,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       );
       return streamed(yield* Stream.toAsyncIterableEffect(tabs));
     }),
-    [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* dependencies.colourCode(input.language, input.code);
-      },
-    ),
+    [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOR_CODE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* dependencies.colorCode(input.language, input.code);
+    }),
     [TASKS_ACT_KIND.TASKS_FIND]: actPort[TASKS_ACT_KIND.TASKS_FIND].effect(function* ({
       input,
       context,
@@ -522,7 +521,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksRestore(input);
     }),
-    // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
+    // The version is read as its frame reads it, kept in the host's memory by its version (`kept-content.ts`) and never in app state, so its HTML reaches the tab that asked alone.
     [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: actPort[TASKS_ACT_KIND.TASKS_PAGE_SOURCE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -568,14 +567,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return streamed(yield* Stream.toAsyncIterableEffect(pages));
       },
     ),
-    [TASKS_ACT_KIND.TASKS_PAGES]: actPort[TASKS_ACT_KIND.TASKS_PAGES].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksPages(input);
-    }),
     // Note that the picture's answer, a failure among them, is the panel's to
     // read, as a workspace photo's is, because a picture that hears none
     // draws its words rather than a refusal.

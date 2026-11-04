@@ -1222,7 +1222,7 @@ export function settleGoneDeviceAgentLaunches(
  * not, with no stop queued after it, as the machine reads a runner live
  * (`device-machine.ts`'s `findPlaces`), on a device that beat since
  * `seenSince`, so a device whose lease lapsed is left to the lease sweep;
- * and the agent's run ended, its newest turn settled, cancelled, or failed
+ * and the agent's run ended, its newest turn settled, canceled, or failed
  * before `endedBefore`, or before `waitingEndedBefore` where its device last
  * beat that it waits to switch release (`HOST_UPDATE.WAITING`). Read with no
  * account in hand, because the maintenance sweep reads every account's.

@@ -5,6 +5,8 @@ export {
   emitJsonSchema,
   readEither,
   SchemaRefusalError,
+  type StandardSchemaWithJson,
+  standardSchemaOf,
   verbatimJsonSchema,
   wireKeys,
   wireRefusal,

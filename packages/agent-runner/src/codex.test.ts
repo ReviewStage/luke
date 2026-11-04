@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -21,6 +21,7 @@ import {
 } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
+import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import { askCodexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
 import { processTable } from "./processes.js";
@@ -58,7 +59,7 @@ const FIRST_SEQUENCE = 11;
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
 it.effect(
-  "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a fast version runs on the fast tier",
+  "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a model line moving to an Ultrafast version runs the next turn on the ultrafast tier its own catalog lists",
   () =>
     Effect.gen(function* () {
       const apiKey = "openai-api-key-for-tests";
@@ -70,12 +71,24 @@ it.effect(
         { ...ENV, [RUNNER_ENV.OPENAI_API_KEY]: apiKey },
         {},
       );
-      yield* write({ ...CONFIG, fast: true });
+      yield* write({ ...CONFIG, model: "gpt-6.1-sol", fast: true });
+      yield* write({ type: INPUT_LINE.MODEL, fast: true, ultrafast: true });
       yield* write(message("Run sleep 600.", LINE.FIRST));
       yield* service.seen;
+      // The catalog app-server reads in place of its bundled one, while it runs: every bundled model, each listing Ultrafast.
+      const catalogPath = JSON.parse(override(spawned[0], "model_catalog_json") ?? '""');
+      const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+      const bundled = JSON.parse(CODEX_BUNDLED_MODELS_JSON);
+      assert.deepEqual(
+        catalog.models.map((model: { slug: string }) => model.slug),
+        bundled.models.map((model: { slug: string }) => model.slug),
+      );
+      const sol = catalog.models.find((model: { slug: string }) => model.slug === "gpt-6.1-sol");
+      assert.ok(sol.service_tiers.some((tier: { id: string }) => tier.id === "ultrafast"));
       yield* write({ type: INPUT_LINE.STOP });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+      assert.ok(!existsSync(catalogPath), "the launch removes its catalog as it ends");
       const [process] = spawned;
       const overrides = (process?.args ?? []).filter((_, index, args) => args[index - 1] === "-c");
       assert.deepEqual(
@@ -95,9 +108,10 @@ it.effect(
           'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "OPENAI_API_KEY"]',
         ),
       );
-      // A fast version runs on Codex's documented fast tier, turned on for the provider.
+      // An Ultrafast version runs on Codex's ultrafast tier, turned on beside the fast one.
       assert.ok(overrides.includes("features.fast_mode=true"));
-      assert.equal(received(process, "turn/start")[0]?.serviceTier, "fast");
+      assert.ok(overrides.includes("features.ultrafast_mode=true"));
+      assert.equal(received(process, "turn/start")[0]?.serviceTier, "ultrafast");
       assert.equal(process?.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
       assert.ok(!(process?.args ?? []).join(" ").includes(apiKey));
       assert.ok(!JSON.stringify(service.applied).includes(apiKey));
@@ -343,12 +357,12 @@ it.effect(
 );
 
 it.effect(
-  "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
+  "starts app-server with the plan's provider, runs a fast version on the fast tier, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
       const service = fakeService("ci-watch");
       const { spawned, write, run } = yield* launch([WORKFLOW], service);
-      yield* write(CONFIG);
+      yield* write({ ...CONFIG, fast: true });
       yield* write({
         type: INPUT_LINE.MESSAGE,
         uuid: LINE.FIRST,
@@ -400,6 +414,7 @@ it.effect(
         'model_providers.openai_chatgpt_plan.wire_api="responses"',
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
+        "features.fast_mode=true",
         'mcp_servers.workspace.url="https://app.test/runner/mcp"',
         'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.workspace.default_tools_approval_mode="approve"',
@@ -440,7 +455,7 @@ it.effect(
       assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
-      assert.equal(start !== undefined && "serviceTier" in start, false);
+      assert.equal(start?.serviceTier, "fast");
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },

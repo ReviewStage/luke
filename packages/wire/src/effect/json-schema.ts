@@ -8,6 +8,7 @@ import {
   SchemaAST,
   SchemaIssue,
   SchemaTransformation,
+  type StandardSchema,
 } from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
@@ -74,7 +75,7 @@ export const verbatimJsonSchema = <S extends Schema.Top>(
   node: JsonSchemaNode,
 ): S["Rebuild"] => schema.annotate({ [WIRE_ANNOTATION.JSON_SCHEMA]: node });
 
-/** A struct's fields with the keys a mapping names travelling under the names it gives them. */
+/** A struct's fields with the keys a mapping names traveling under the names it gives them. */
 type WireKeyedFields<F extends Schema.Struct.Fields, M extends WireKeyMapping<F>> = {
   [K in keyof F as K extends keyof M ? (M[K] extends string ? M[K] : K) : K]: F[K];
 };
@@ -92,7 +93,7 @@ const renamed =
     ) as To;
 
 /**
- * A struct read under the keys its code names, travelling under the wire's
+ * A struct read under the keys its code names, traveling under the wire's
  * own name for each key the mapping names. Note that the wire side is the
  * struct's own fields under the wire's keys, rather than Effect's
  * `encodeKeys`, because that encodes each field as its encoded form alone,
@@ -511,6 +512,40 @@ function emit(ast: SchemaAST.AST, above: Gathered, visiting: Set<SchemaAST.AST>)
 /** The JSON Schema node a model is shown for this declaration. */
 export function emitJsonSchema(schema: Schema.Top): JsonSchemaNode {
   return emit(schema.ast, NOTHING_GATHERED, new Set());
+}
+
+/** A declaration as the Standard Schema spec's schema with a JSON Schema: what a library that takes any schema library's declaration reads. */
+export type StandardSchemaWithJson<S extends Schema.Top> = StandardSchema.StandardSchemaV1<
+  S["Encoded"],
+  S["Type"]
+> &
+  StandardSchema.StandardJSONSchemaV1<S["Encoded"], S["Type"]>;
+
+/**
+ * The declaration as the Standard Schema spec (https://standardschema.dev)
+ * states one, with its JSON Schema beside its validation, which is how a
+ * library that takes any schema library's declaration reads it: the MCP
+ * SDK's `registerTool` takes a tool's input this way, validating a call's
+ * arguments through `validate` and listing the tool with what `jsonSchema`
+ * answers. `validate` is Effect's own, under the read `readEither` makes, a
+ * key the declaration does not name refused. `jsonSchema` answers the node a
+ * model is shown, whatever dialect is asked for, because that node is a
+ * golden's bytes rather than a translation of the declaration, and nothing
+ * reads Effect's own JSON Schema (`emitJsonSchema`).
+ */
+export function standardSchemaOf<S extends Schema.Top & Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+): StandardSchemaWithJson<S> {
+  const node = emitJsonSchema(schema);
+  const standard = Schema.toStandardSchemaV1(schema, {
+    parseOptions: { onExcessProperty: EXCESS_KEYS.REFUSE },
+  });
+  return {
+    "~standard": {
+      ...standard["~standard"],
+      jsonSchema: { input: () => node, output: () => node },
+    },
+  };
 }
 
 /** Why a value was refused and where, as the one error a wire read fails with. */

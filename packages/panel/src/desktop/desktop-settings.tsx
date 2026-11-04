@@ -135,7 +135,7 @@ function ListBack({ onList }: { onList: () => void }): React.JSX.Element {
 /**
  * The head of the page list: the window's drag strip, the history's Back and
  * Forward, the way out, and the list's label; or on a phone its header, the
- * way out alone and Settings centred, the history's buttons left out since
+ * way out alone and Settings centered, the history's buttons left out since
  * the way out is the one.
  */
 function ListHead({
@@ -244,9 +244,9 @@ function PageGroup({
  * chosen there, by a search, or by a link stands alone the whole width, and a
  * way back at its head returns to the list. The list's edge resizes nothing
  * then. In a narrow room each is headed as a phone heads every page
- * (`phone-head.tsx`): the list by its way out and Settings centred, with no
+ * (`phone-head.tsx`): the list by its way out and Settings centered, with no
  * Back and Forward; a page by the way back to the list, the name its bar
- * picks up centred, and its reset in a ⋯. Wider, the list keeps the
+ * picks up centered, and its reset in a ⋯. Wider, the list keeps the
  * window's head, and a page standing alone the phone's, under the title
  * bar's row.
  */

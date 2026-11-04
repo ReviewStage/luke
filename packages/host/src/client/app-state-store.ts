@@ -185,6 +185,7 @@ interface ClientRunFacts {
   readonly runMode: Pick<RunMode, "requiresAccount" | "sendsNetwork">;
   readonly appVersion: string;
   readonly commit?: BuildCommit;
+  readonly instance?: string;
   readonly packaged: boolean;
   readonly platform: string;
 }
@@ -209,6 +210,7 @@ export function initialAppState(
       capabilities,
       appVersion: config.appVersion,
       ...(config.commit ? { commit: config.commit } : undefined),
+      ...(config.instance === undefined ? undefined : { instance: config.instance }),
       captureMode: launch.captureMode,
       fixtureMode: launch.fixtureMode,
       accountRequired: runMode.requiresAccount,

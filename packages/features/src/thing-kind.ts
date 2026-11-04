@@ -307,7 +307,7 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
 /**
  * The word a screen reader hears before a thing's name: its kind's
  * (`THING_WORD`), or nothing where the name already starts with it, as
- * "Inbox", the app's own name, and "Changes by Ada" do. Note that a link labelled with
+ * "Inbox", the app's own name, and "Changes by Ada" do. Note that a link labeled with
  * words of its own, `[my queue](…/inbox)`, still says its kind.
  */
 export function thingWordHeard(kind: ThingKind, name: string): string | undefined {

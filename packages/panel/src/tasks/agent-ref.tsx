@@ -14,7 +14,6 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import type { HeldTranscripts } from "../desktop/strip-tabs.js";
-import { useMemberDirectory } from "../member-directory.js";
 import {
   agentActor,
   agentName,
@@ -386,12 +385,11 @@ export function AgentActorRef({
 
 /**
  * An agent of the workspace's own card, as a place that holds no tab of it
- * hangs it: its tab's card read as it is first hung, on the task it works
- * on or in the workspace the place's members are of
- * (`mentioned-agent-card.tsx`), its tile and name standing while it is
- * read, and where the read answers nothing. Note that the tile leads the
- * head at a card's size in every state, as the loaded card wears it, so
- * the head does not move as the read lands.
+ * hangs it: its tab's card as the task list carries the agent
+ * (`mentioned-agent-card.tsx`), its tile and name standing until the list
+ * first answers, and where it carries no such agent. Note that the tile
+ * leads the head at a card's size in every state, as the loaded card wears
+ * it, so the head does not move as the list lands.
  */
 export function AgentHoverCard({
   actor,
@@ -400,7 +398,6 @@ export function AgentHoverCard({
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
   agentId: string;
 }): React.ReactNode {
-  const { workspaceId } = useMemberDirectory();
   const mark = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
   const fallback = (
     <HoverCard data-agent-card="">
@@ -410,9 +407,6 @@ export function AgentHoverCard({
   return (
     <MentionedAgentCard
       agentId={agentId}
-      taskId={actor.taskId}
-      name={actor.name}
-      workspaceId={workspaceId}
       reading={<HoverCardSkeleton mark={mark} name={actor.name} sub data-agent-card="" />}
       fallback={fallback}
     />
@@ -422,7 +416,7 @@ export function AgentHoverCard({
 /**
  * Another coding agent named as a line's sender, by the id the service
  * answered for it: its harness's mark and its name, as it sent the line,
- * hanging its tab's card as it stands now, read as the card is first hung
+ * hanging its tab's card as the task list carries it now
  * (`mentioned-agent-card.tsx`), and opening its tab on a press.
  */
 export function SendingAgent({

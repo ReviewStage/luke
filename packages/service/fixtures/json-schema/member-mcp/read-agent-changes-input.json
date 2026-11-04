@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The agent's id, as list_agents answered it."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "One file the pull request changes, by its path from the repository's root as files names it, to read its patch as well; leave it out to list the files alone."
+    }
+  },
+  "required": [
+    "agentId"
+  ],
+  "additionalProperties": false
+}

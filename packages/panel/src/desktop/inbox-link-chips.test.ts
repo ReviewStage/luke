@@ -142,7 +142,12 @@ async function inbox(options: {
   // The account's feed holds the task's items, and the sweep agent's, which the Inbox draws from.
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasks: [TASK],
+      taskAgents: [],
+      workspaces: options.workspaces ?? [ACME, GLOBEX],
+    },
     [LIVE_READ.INBOX_ITEMS]: {
       rows: {
         [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: options.taskItems },
@@ -167,8 +172,6 @@ async function inbox(options: {
                 : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
           });
         }
-        case ACT_KIND.AGENTS_LIST:
-          return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [] } });
         default:
           return Promise.resolve({
             status: FAKE_ANSWER.REFUSED,

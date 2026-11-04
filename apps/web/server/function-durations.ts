@@ -1,4 +1,5 @@
 import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { LIVE_SOCKET } from "@repo/features/live-wire";
 import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { WORKSPACE_MCP_FUNCTION, WORKSPACE_MCP_PATH } from "@repo/service/agents/workspace-mcp/app";
 import {
@@ -9,13 +10,16 @@ import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@repo/service/maintenance/maintenance-bounds";
+import { MEMBER_MCP_FUNCTION, MEMBER_MCP_METADATA_ROUTE } from "@repo/service/member-mcp/app";
+import { MEMBER_MCP_PATH } from "@repo/service/member-mcp/resource";
 import { PAGE_LINK_ROUTE } from "@repo/service/pages/page-links";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the terminal relay and the Browser
- * tab's live view, carry the platform's longest generally available duration.
+ * may run, so the WebSocket functions, the terminal relay, the Browser tab's
+ * live view, and the live reads' socket, carry the platform's longest
+ * generally available duration.
  */
 const WEBSOCKET_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -43,6 +47,7 @@ function routeKeyOf(path: string): string {
 const FUNCTION_GROUP = {
   DEFAULT: "default",
   WORKSPACE_MCP: "workspace-mcp",
+  MEMBER_MCP: "member-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
   PAGE_SANDBOX: "page-sandbox",
   PULL_REQUEST_CHAPTERS: "pull-request-chapters",
@@ -90,14 +95,22 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: WORKSPACE_MCP_FUNCTION.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(WORKSPACE_MCP_PATH)],
   },
+  // An outside MCP client's call answers once its tool has, which a later child's tool may hold for an agent's start.
+  {
+    file: FUNCTION_GROUP.MEMBER_MCP,
+    maxDuration: MEMBER_MCP_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(MEMBER_MCP_PATH), routeKeyOf(MEMBER_MCP_METADATA_ROUTE)],
+  },
   // A page on the sandbox's host answers within the platform's default, in a function holding no other route.
   { file: FUNCTION_GROUP.PAGE_SANDBOX, routes: [routeKeyOf(PAGE_LINK_ROUTE.PATH)] },
 ];
 
-/** The WebSocket services, each a function of its own: the terminal relay and the Browser tab's live view. */
-const STANDALONE_ROUTES: readonly string[] = [TERMINAL_RELAY.PATH, BROWSER_LIVE.PATH].map(
-  routeKeyOf,
-);
+/** The WebSocket services, each a function of its own: the terminal relay, the Browser tab's live view, and the live reads' socket. */
+const STANDALONE_ROUTES: readonly string[] = [
+  TERMINAL_RELAY.PATH,
+  BROWSER_LIVE.PATH,
+  LIVE_SOCKET.PATH,
+].map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:

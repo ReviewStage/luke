@@ -187,7 +187,7 @@ it.effect(
 
 for (const hostFails of [false, true]) {
   it.effect(
-    `a Cancel pressed while the service is asked for the host opens no browser and reads as cancelled${hostFails ? ", the read failing too" : ""}`,
+    `a Cancel pressed while the service is asked for the host opens no browser and reads as canceled${hostFails ? ", the read failing too" : ""}`,
     () =>
       Effect.gen(function* () {
         const composer = { cancel: () => undefined as unknown };

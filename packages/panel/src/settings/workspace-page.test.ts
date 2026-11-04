@@ -907,7 +907,7 @@ async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   await drain();
 }
 
-test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pixels a side, and Upload photo in the ⋯ opens the picker", async () => {
+test("an owner's picked photo is sent drawn as its center square in WebP, 256 pixels a side, and Upload photo in the ⋯ opens the picker", async () => {
   const webp = webpBytes();
   const drawn = stubCanvas(400, 300, webp);
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
@@ -2208,7 +2208,7 @@ test("an invitation's answer that lands after the stream told a newer list does 
   assert.deepEqual(invitationRows(page), []);
 });
 
-test("Cancelling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
+test("Canceling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");

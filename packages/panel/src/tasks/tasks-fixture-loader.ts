@@ -23,6 +23,7 @@ type TasksFixture = {
   TasksModule,
   | "fixtureTasksView"
   | "fixtureSidePanel"
+  | "fixtureColumnTab"
   | "fixtureRepositories"
   | "fixtureActAnswer"
   | "fixtureAppState"
@@ -36,6 +37,7 @@ let loading: Promise<void> | undefined;
 function laidOver(tasks: TasksModule, inbox: InboxModule): TasksFixture {
   return {
     fixtureSidePanel: tasks.fixtureSidePanel,
+    fixtureColumnTab: tasks.fixtureColumnTab,
     fixtureRepositories: tasks.fixtureRepositories,
     fixturePlace: tasks.fixturePlace,
     fixtureTasksView: (run) => {

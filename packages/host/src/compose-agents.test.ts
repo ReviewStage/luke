@@ -63,6 +63,7 @@ import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
+import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import type { RowWrite } from "./live-collection.js";
 import { type AgentRow, taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
@@ -397,7 +398,7 @@ function fakeService() {
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
-        return { agent: { ...AGENT, status: AGENT_STATUS.CANCELLED } };
+        return { agent: { ...AGENT, status: AGENT_STATUS.CANCELED } };
       }),
     rewind: (agentId, messageId) =>
       Effect.sync(() => {
@@ -800,6 +801,7 @@ function subject(
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: options.accountId ?? (() => "user-dana"),
+      kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
       ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
@@ -966,7 +968,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
     );
     assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_STOP, { agentId: AGENT_ID }), {
-      agent: { ...AGENT, status: AGENT_STATUS.CANCELLED },
+      agent: { ...AGENT, status: AGENT_STATUS.CANCELED },
     });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
@@ -1542,7 +1544,7 @@ it.effect(
         pageNow("1:0", {
           holds: false,
           text: "Reading the invites.",
-          status: AGENT_STATUS.CANCELLED,
+          status: AGENT_STATUS.CANCELED,
         }),
       );
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
@@ -2115,6 +2117,44 @@ it.effect(
 );
 
 it.effect(
+  "an agent's picture read once is answered again without asking the service, until a switch of account, a sign-out, or the agent archived or deleted lets it go",
+  () =>
+    Effect.gen(function* () {
+      const picture = { agentId: AGENT_ID, pictureId: PICTURE_ID };
+      const pictureReads = (asked: readonly string[]) =>
+        asked.filter((ask) => ask === `picture:${AGENT_ID}:${PICTURE_ID}:`).length;
+
+      const kept = yield* subject();
+      const first = yield* kept.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      const again = yield* kept.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      assert.deepEqual(again, first);
+      assert.equal(pictureReads(kept.asked), 1);
+
+      let account = "user-dana";
+      const switched = yield* subject({ accountId: () => account });
+      yield* switched.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      account = "user-eli";
+      yield* switched.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      assert.equal(pictureReads(switched.asked), 2);
+
+      type Harness = Effect.Success<ReturnType<typeof subject>>;
+      const lettingGo = [
+        (harness: Harness) => harness.reset,
+        (harness: Harness) =>
+          harness.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
+        (harness: Harness) => harness.call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }),
+      ];
+      for (const letGo of lettingGo) {
+        const harness = yield* subject();
+        yield* harness.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+        yield* letGo(harness);
+        yield* harness.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+        assert.equal(pictureReads(harness.asked), 2);
+      }
+    }),
+);
+
+it.effect(
   "only the transcripts told most recently are held, the least recent let go past the bound",
   () =>
     Effect.gen(function* () {
@@ -2373,7 +2413,7 @@ function deliverAccount(
 }
 
 it.effect(
-  "what waits across the account is told from its live read each time it moves, whole, and a failed run ageing out of the week tells it again",
+  "what waits across the account is told from its live read each time it moves, whole, and a failed run aging out of the week tells it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);

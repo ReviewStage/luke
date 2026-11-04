@@ -1,5 +1,5 @@
 import type { CodeLines } from "@repo/features/tasks-view";
-import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@repo/host/acts";
+import { ACT_KIND, COLORED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@repo/host/acts";
 import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@repo/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@repo/ui/github-html";
 import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
@@ -21,17 +21,17 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * Streamdown, the markdown renderer behind AI Elements' Response, draws a
  * fenced block and a table with components of its own: a bordered card on
  * the sidebar's fill with a second bordered box inside it, a language label,
- * and copy and download buttons, coloured by `@streamdown/code` where that
+ * and copy and download buttons, colored by `@streamdown/code` where that
  * plugin is installed and drawn plain where, as here, it is not; a table
  * boxed twice with copy, download, and fullscreen buttons over it. Those
  * are replaced here through Streamdown's own `components`, so nothing of
  * theirs is drawn and no stylesheet fights their classes. A fenced block
- * is coloured by main, by the highlighter the Code and File tabs' lines
- * are coloured with (`ACT_KIND.TASKS_COLOUR_CODE`), so the colours and
+ * is colored by main, by the highlighter the Code and File tabs' lines
+ * are colored with (`ACT_KIND.TASKS_COLOR_CODE`), so the colors and
  * the type are theirs; the window's content policy and its bundle size
  * keep that highlighter out of the window. Only a block that is whole is
  * asked for: one whose closing fence has not arrived is still streaming,
- * and is drawn plain until it does, so a long answer is coloured once
+ * and is drawn plain until it does, so a long answer is colored once
  * rather than once a word. What main answered is held by language and
  * code, so a block drawn again, or twice, asks once. A block stands in
  * `@repo/ui`'s `CodeCard`, as every block of code in the window does, so
@@ -39,7 +39,7 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * leaving its lines out are the card's.
  */
 
-/** What a block whose fence names no language is labelled. */
+/** What a block whose fence names no language is labeled. */
 const PLAIN_LANGUAGE = "text";
 
 /** The language a suggestion is written in, and what a suggestion's block's header calls it. */
@@ -103,18 +103,18 @@ const FENCE_OPENING = /^ {0,3}(`{3,}|~{3,})/u;
 /** The quote marks a line inside a quote opens on. */
 const QUOTE_MARKS = /^[\s>]*/u;
 
-/** How many coloured blocks the window holds before forgetting the oldest. */
-const COLOURINGS_HELD = 200;
+/** How many colored blocks the window holds before forgetting the oldest. */
+const COLORINGS_HELD = 200;
 
-/** One block's colouring: main's lines once they land, and the ask that brings them. */
-interface Colouring {
+/** One block's coloring: main's lines once they land, and the ask that brings them. */
+interface Coloring {
   lines: CodeLines | undefined;
   readonly asked: Promise<CodeLines | undefined>;
 }
 
-/** The colourings asked for, by language and then by code, oldest first. */
-const colourings = new Map<string, Map<string, Colouring>>();
-let colouringCount = 0;
+/** The colorings asked for, by language and then by code, oldest first. */
+const colorings = new Map<string, Map<string, Coloring>>();
+let coloringCount = 0;
 
 /**
  * The markdown a transcript's words were drawn from, which a block reads to
@@ -123,46 +123,46 @@ let colouringCount = 0;
  */
 const MarkdownSource = createContext("");
 
-/** Forgets the oldest colouring, so a long session's window holds a bounded number. */
+/** Forgets the oldest coloring, so a long session's window holds a bounded number. */
 function forgetOldest(): void {
-  const [language, blocks] = colourings.entries().next().value ?? [];
+  const [language, blocks] = colorings.entries().next().value ?? [];
   const oldest = blocks?.keys().next().value;
   if (language === undefined || blocks === undefined || oldest === undefined) return;
   blocks.delete(oldest);
-  if (blocks.size === 0) colourings.delete(language);
-  colouringCount -= 1;
+  if (blocks.size === 0) colorings.delete(language);
+  coloringCount -= 1;
 }
 
-/** A block's colouring, asked of main the first time it is wanted and held after. */
-function colouringOf(act: ActHandle["act"], language: string, code: string): Colouring {
-  const held = colourings.get(language)?.get(code);
+/** A block's coloring, asked of main the first time it is wanted and held after. */
+function coloringOf(act: ActHandle["act"], language: string, code: string): Coloring {
+  const held = colorings.get(language)?.get(code);
   if (held !== undefined) return held;
-  if (colouringCount >= COLOURINGS_HELD) forgetOldest();
-  const colouring: Colouring = {
+  if (coloringCount >= COLORINGS_HELD) forgetOldest();
+  const coloring: Coloring = {
     lines: undefined,
     // Note that a refusal draws the block plain and is held as one, so it is not asked again.
-    asked: act(ACT_KIND.TASKS_COLOUR_CODE, { language, code }).then(
+    asked: act(ACT_KIND.TASKS_COLOR_CODE, { language, code }).then(
       (lines) => {
-        colouring.lines = lines;
+        coloring.lines = lines;
         return lines;
       },
       () => undefined,
     ),
   };
-  const blocks = colourings.get(language) ?? new Map<string, Colouring>();
-  blocks.set(code, colouring);
-  colourings.set(language, blocks);
-  colouringCount += 1;
-  return colouring;
+  const blocks = colorings.get(language) ?? new Map<string, Coloring>();
+  blocks.set(code, coloring);
+  colorings.set(language, blocks);
+  coloringCount += 1;
+  return coloring;
 }
 
-/** Whether main is asked to colour a block at all: a named language, and code within the bound. */
-function colourable(language: string, code: string): boolean {
+/** Whether main is asked to color a block at all: a named language, and code within the bound. */
+function colorable(language: string, code: string): boolean {
   return (
     language !== "" &&
     language.length <= FENCE_LANGUAGE_MAX_CHARS &&
     code.trim() !== "" &&
-    code.length <= COLOURED_CODE_MAX_CHARS
+    code.length <= COLORED_CODE_MAX_CHARS
   );
 }
 
@@ -187,17 +187,17 @@ function blockText(node: MarkdownNodeProps["node"]): string {
 }
 
 /**
- * A block's lines as main coloured them, or none while they are asked for,
- * while the block streams, or for a block not coloured at all.
+ * A block's lines as main colored them, or none while they are asked for,
+ * while the block streams, or for a block not colored at all.
  */
-function useColouredLines(language: string, code: string, whole: boolean): CodeLines | undefined {
+function useColoredLines(language: string, code: string, whole: boolean): CodeLines | undefined {
   const { act } = useAct();
-  const asking = whole && colourable(language, code);
+  const asking = whole && colorable(language, code);
   const [answered, setAnswered] = useState<{ language: string; code: string; lines: CodeLines }>();
   useEffect(() => {
     if (!asking) return undefined;
     let shown = true;
-    void colouringOf(act, language, code).asked.then((lines) => {
+    void coloringOf(act, language, code).asked.then((lines) => {
       if (shown && lines !== undefined) setAnswered({ language, code, lines });
     });
     return () => {
@@ -205,7 +205,7 @@ function useColouredLines(language: string, code: string, whole: boolean): CodeL
     };
   }, [act, asking, language, code]);
   if (!asking) return undefined;
-  const held = colourings.get(language)?.get(code)?.lines;
+  const held = colorings.get(language)?.get(code)?.lines;
   if (held !== undefined) return held;
   return answered?.language === language && answered.code === code ? answered.lines : undefined;
 }
@@ -275,8 +275,8 @@ function TranscriptCodeBlock({
   const whole =
     start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
   const suggesting = language === SUGGESTION.LANGUAGE || language === SUGGESTED_CHANGE_LANGUAGE;
-  // Note that a suggestion names no language of its own to colour it in.
-  const lines = useColouredLines(language, code, whole && !suggesting);
+  // Note that a suggestion names no language of its own to color it in.
+  const lines = useColoredLines(language, code, whole && !suggesting);
   const rows = rowsOf(language, code);
   const id = language.toLowerCase();
   const extension = LANGUAGE_EXTENSION[id] ?? id;

@@ -330,8 +330,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
         );
         for (const { eve, owner, sessionId } of [stopped, archived, withTask]) {
-          assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-          assert.deepEqual(eve.cancelledAs, [harnessFor(owner)]);
+          assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
+          assert.deepEqual(eve.canceledAs, [harnessFor(owner)]);
         }
         assert.notEqual(
           Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id)).archivedAt,
@@ -417,7 +417,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           true,
         );
         assert.deepEqual(
-          eve.cancelled.toSorted(([one], [other]) => one.localeCompare(other)),
+          eve.canceled.toSorted(([one], [other]) => one.localeCompare(other)),
           [
             [first.sessionId, "turn_0"],
             [second.sessionId, "turn_0"],
@@ -467,8 +467,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
           true,
         );
-        assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
-        assert.deepEqual(stopped.eve.cancelledAs, [harnessFor(stopped.other)]);
+        assert.deepEqual(stopped.eve.canceled, [[stopped.sessionId, "turn_0"]]);
+        assert.deepEqual(stopped.eve.canceledAs, [harnessFor(stopped.other)]);
         assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
         assert.deepEqual(stopped.eve.resetAs, [harnessFor(stopped.other)]);
       }),
@@ -508,7 +508,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
         }
         assert.deepEqual(
-          [eve.sent, eve.cancelled, eve.reset],
+          [eve.sent, eve.canceled, eve.reset],
           [[], [], []],
           "the owner's Start is all eve heard",
         );
@@ -547,7 +547,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
         assert.match(JSON.stringify(deleted.body), /^\{"deleted":true,"txid":"\d+"\}$/u);
-        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.reset, [sessionId]);
         assert.ok(Option.isNone(yield* readAgent(owner, agent.id)));
         const db = yield* Database;
@@ -585,7 +585,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         const outside = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
         assert.deepEqual(outside, notFound);
-        assert.deepEqual([eve.cancelled, eve.reset], [[], []]);
+        assert.deepEqual([eve.canceled, eve.reset], [[], []]);
         assert.ok(Option.isSome(yield* readAgent(owner, agent.id)));
 
         const deleted = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
@@ -593,7 +593,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
         assert.deepEqual(again, notFound);
-        assert.deepEqual([eve.cancelled, eve.reset], [[], [sessionId]]);
+        assert.deepEqual([eve.canceled, eve.reset], [[], [sessionId]]);
         assert.ok(Option.isSome(yield* readTask(owner, task.id)));
       }),
   );
@@ -634,7 +634,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refused,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(eve.cancelled, [], "no agent's turn was stopped");
+        assert.deepEqual(eve.canceled, [], "no agent's turn was stopped");
         const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
         // The agent's Start by hand assigned its starter, which the refused change leaves standing.
         assert.equal(standing?.assignee?.userId, owner);
@@ -731,7 +731,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           });
 
         assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
         assert.deepEqual(yield* standing(), {
           status: TASK_STATUS.CANCELED,
           finished: true,
@@ -790,7 +790,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).archivedAt, null);
-        assert.deepEqual(eve.cancelled, []);
+        assert.deepEqual(eve.canceled, []);
       }),
   );
 

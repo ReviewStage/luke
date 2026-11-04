@@ -394,14 +394,14 @@ and lands each request by `api-rewrites.json` through the same replay the tests
 use (`server/local-deployment.ts`, `server/platform-landing.ts`). Every path no
 rewrite takes is the site's, which Vite serves in middleware mode from the page
 the web service's page routes in `vercel.json` land it on, as `/app` and a
-workspace's links land on `app.html`, without those routes' headers. The two
+workspace's links land on `app.html`, without those routes' headers. The three
 WebSocket functions and the feedback courier are not served, and the scheduled
 sweep is called in process on the cron's cadence under `CRON_SECRET`.
 
 It refuses to start beside any `VERCEL*` variable or over a database host off
 the loopback (`@repo/service/local/local-server-guard`), and imports no route
 until it has, because the auth service reads the environment as it loads. It
-sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honours only
+sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honors only
 where the same guard passes over its own environment
 (`@repo/service/local/local-demo`): there a Start on a task with no repository
 runs where its agents run on a host. Where
@@ -666,7 +666,7 @@ route through the one fallback rewrite of `server/function-rewrites.ts`,
 which carries the whole path in `route-path` for the dispatcher to restore,
 and a path no procedure matches is the router's own JSON 404. Vercel runs the
 web service's routes before the filesystem, so the functions that answer by
-their own name (the two WebSocket functions and the feedback courier) each
+their own name (the three WebSocket functions and the feedback courier) each
 stand on a pass-through rule ahead of the fallback.
 Every answer the route gives, a refusal and an unmatched path's 404 among
 them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
@@ -779,7 +779,7 @@ answers the plugin's profile-return endpoint (`/callback/:id/oauth-proxy`),
 which creates a session from any profile encrypted with that secret, so the
 secret every Preview holds can mint production sessions; and production relays
 a profile and its provider tokens to whatever return the encrypted proxy state
-names. Both were accepted on 2026-10-13 in favour of running the
+names. Both were accepted on 2026-10-13 in favor of running the
 plugin as Better Auth prescribes. Treat the proxy secret as sensitive everywhere
 it is stored, especially in Preview.
 
@@ -818,7 +818,7 @@ goes. It is a private endpoint, so it takes a personal key rather than the proje
 token, and `POSTHOG_API_HOST` overrides *its* host, which is not the ingestion
 host. Without that pair the delete simply has no erasure seam to run. Every
 forwarded event carries `$geoip_disable`, without which an event arriving with
-no address resolves to the data centre's own location and the privacy claim in
+no address resolves to the data center's own location and the privacy claim in
 `PRIVACY.md` becomes false; the project's IP-capture setting should be set to
 discard as well, so the guarantee does not rest on one property in one file.
 
@@ -897,8 +897,9 @@ minutes, and an email to the issue's owners on a high-priority issue.
 
 ### Deploying
 
-The terminal relay and the Browser tab's live view are WebSocket functions,
-each exporting the `http.Server` Vercel upgrades into, so enable the
+The terminal relay, the Browser tab's live view, and the live reads' socket
+(`/api/live/socket`, which answers a host's live polls) are WebSocket
+functions, each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys. A native agent's runner reports to the deployment's own origin, its

@@ -35,7 +35,7 @@ import { Base64Url } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import {
-  LOOPBACK_CONSENT_CANCELLED,
+  LOOPBACK_CONSENT_CANCELED,
   type LoopbackConsent,
   type LoopbackConsentOutcome,
   type LoopbackExchange,
@@ -71,7 +71,7 @@ export const CHATGPT_SIGN_IN_REASON = {
   TIMED_OUT: "ChatGPT sign-in timed out.",
   UNREACHABLE: "Couldn't reach ChatGPT. Try again.",
   NOT_REGISTERED: `ChatGPT didn't finish connecting ${PRODUCT_NAME}. Try again.`,
-  USAGE_NOT_ENABLED: `ChatGPT subscription use wasn't enabled for ${PRODUCT_NAME}. Try again and allow it in the browser.`,
+  USAGE_NOT_ENABLED: `ChatGPT plan use wasn't enabled for ${PRODUCT_NAME}. Try again and allow it in the browser.`,
   NOT_VERIFIED: "Couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
 
@@ -421,7 +421,7 @@ export function chatGptSignIn<Saved extends object>(
           getJson(CHATGPT_SIGN_IN.DISCOVERY_URL),
           options.http,
         );
-        if (cancels !== asked) return { reason: LOOPBACK_CONSENT_CANCELLED };
+        if (cancels !== asked) return { reason: LOOPBACK_CONSENT_CANCELED };
         const endpoints = Option.flatMap(document, readDiscovery);
         if (Option.isNone(endpoints)) return { reason: CHATGPT_SIGN_IN_REASON.UNREACHABLE };
         const trip: Effect.Effect<

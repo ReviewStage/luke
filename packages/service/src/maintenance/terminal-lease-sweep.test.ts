@@ -129,7 +129,7 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
   );
 
   it.effect(
-    "a lease whose agent's Stop eve never confirmed is swept once the turn settles as cancelled, and a turn running inside its bounds keeps its own",
+    "a lease whose agent's Stop eve never confirmed is swept once the turn settles as canceled, and a turn running inside its bounds keeps its own",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -174,7 +174,7 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
           );
 
         assert.deepEqual(askedWithinBound, [], "eve may still confirm the Stop");
-        assert.equal(yield* status(turnIds.stopped), TURN_STATUS.CANCELLED);
+        assert.equal(yield* status(turnIds.stopped), TURN_STATUS.CANCELED);
         assert.deepEqual(
           vercel.stopAsked.filter((id) => mine.has(id)),
           [stopped.sessionId],

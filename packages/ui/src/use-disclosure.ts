@@ -79,7 +79,7 @@ export function useDisclosure(open: boolean, onGone?: () => void): Disclosure {
       leave();
       return undefined;
     }
-    // Note that an exit cancelled counts as done, since nothing is left to
+    // Note that an exit canceled counts as done, since nothing is left to
     // wait for; an open again cancels it too, but leaves this effect behind
     // first, which `current` answers.
     let current = true;

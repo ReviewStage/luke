@@ -11,21 +11,19 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import type { CodeRef, TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { NO_EXPERIMENTS } from "@repo/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
-  type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
   fakeActPort,
@@ -122,13 +120,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function answer(request: AnyAct): Promise<FakeActAnswer> {
-  if (request.kind === ACT_KIND.AGENTS_LIST) {
-    return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [AGENT] } });
-  }
-  return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
-}
-
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -142,9 +133,15 @@ async function inbox() {
   /** Each file asked for on a task, and each tab asked for on a task the window was to go to. */
   const went: string[] = [];
   fakeAppPlatform(QUIET_PANEL);
-  fakeActs({ act: answer });
+  fakeActs({
+    act: (): Promise<FakeActAnswer> =>
+      Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
   fakeActPort({ ...fakeActPortCalls() });
-  handState(NO_EXPERIMENTS);
+  // The task list carries the item's agent, as it carries every task's agents once it answers live.
+  handState(NO_EXPERIMENTS, {
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], taskAgents: [AGENT], workspaces: [ACME] },
+  });
   // The account's feed holds the task's one item, which the Inbox draws from.
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [ITEM] }, [INBOX_SCOPE_KIND.AGENT]: {} },
@@ -203,20 +200,14 @@ async function inbox() {
   return { container, links, went };
 }
 
-/** Presses the chip of the item's words that says the name given, with ⌘ where asked. */
-async function pressChip(
-  container: HTMLElement,
-  name: string,
-  { command }: { command: boolean } = { command: false },
-): Promise<void> {
+/** Presses the chip of the item's words that says the name given. */
+async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
     ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
   ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent === name);
   assert.ok(chip, `no chip says ${name}`);
   act(() => {
-    chip.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: command }),
-    );
+    chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
   await settle();
 }
@@ -239,22 +230,4 @@ test("a file an item of a task names in the older form opens beside the Inbox as
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.deepEqual([...links, ...went], [], "nothing left the Inbox");
-});
-
-test("a file an item of a task names, pressed with ⌘, goes to the task on its tab, and its lines to the task at their commit", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, links, went } = await inbox();
-
-    await pressChip(container, "invites.ts", { command: true });
-    await pressChip(container, "invites.ts:3–5", { command: true });
-
-    assert.deepEqual(went, [
-      `${TASK.id} ${JSON.stringify({ file: "src/invites.ts" })}`,
-      `${TASK.id} file ${JSON.stringify({ path: "src/invites.ts", startLine: 3, endLine: 5 })} ${COMMIT}`,
-    ]);
-    assert.deepEqual(links, [], "nothing opened as a link");
-  } finally {
-    stop();
-  }
 });

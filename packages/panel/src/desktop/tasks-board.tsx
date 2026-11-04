@@ -102,7 +102,7 @@ import {
 } from "@repo/ui/tasks-page-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -111,6 +111,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -119,7 +120,7 @@ import {
   TaskKey,
 } from "../tasks/task-standing.js";
 import { linkPressOf } from "../tasks/use-open-link.js";
-import { useReadMarks } from "../tasks/use-task-looks.js";
+import { useMarkedUnread } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -134,7 +135,14 @@ import {
 import { useTasksWaiting } from "./places-waiting.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
-import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
+import {
+  type OpenedTask,
+  openedTaskOf,
+  TASK_MENU_SURFACE,
+  type TaskRowTab,
+  useTaskMenuItems,
+  useTaskRowTab,
+} from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -289,11 +297,14 @@ const BOARD_CARD_PILLS =
  * sidebar header's menu does.
  */
 function TaskBoardRepository({
-  tasks,
   repository,
+  openGitHub,
+  pictures,
 }: {
-  tasks: TasksControl;
   repository: string;
+  openGitHub: (url: string) => void;
+  /** Whether it is drawn by its owner's picture. */
+  pictures: boolean;
 }): React.JSX.Element {
   return (
     <Tooltip label={repository}>
@@ -302,11 +313,11 @@ function TaskBoardRepository({
         size={CHIP_SIZE.COMPACT}
         data-task-repository=""
         href={repositoryPageUrl(repository)}
-        onClick={linkPressOf(tasks.repositories.openGitHub, repositoryPageUrl(repository))}
+        onClick={linkPressOf(openGitHub, repositoryPageUrl(repository))}
       >
         <RepositoryPicture
           repository={repository}
-          pictures={tasks.repositories.pictures}
+          pictures={pictures}
           fallback={<FolderGitIcon />}
           size={AVATAR_SIZE.GLYPH}
         />
@@ -332,44 +343,55 @@ function TaskBoardRepository({
  * draws none, so its pills have the foot's whole width. One press, under its
  * pills, opens it. Renamed from that menu, its name is its field until the
  * edit ends.
+ *
+ * Note that it is held while what it is handed stands (`memo`), each prop a
+ * plain value or a steady door, so a change to one task draws its card
+ * alone, and the minute moves only its time.
  */
-function TaskBoardCard({
+const TaskBoardCard = memo(function TaskBoardCard({
   tasks,
   task,
+  opened,
   workspaceName,
   properties,
   waiting,
-  subTasks,
-  now,
+  subTasksFinished,
+  subTasksTotal,
   chosen,
-  onOpen,
+  onSelect,
   onStanding,
 }: {
-  tasks: TasksControl;
+  tasks: TaskRowTab;
   task: TaskSummary;
+  /** The task the window has open, where it is this one (`openedTaskOf`). */
+  opened: OpenedTask | undefined;
   workspaceName: string;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
   /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
-  /** How many of its sub-tasks are finished, of all of them; none where it has none. */
-  subTasks: ChildTaskCount | undefined;
-  now: number;
+  /** How many of its sub-tasks are finished, of all of them, `subTasksTotal`; none where it has none. */
+  subTasksFinished: number;
+  subTasksTotal: number;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
-  onOpen: () => void;
-  onStanding: (standing: TaskStanding) => void;
+  /** Opens a task by its id. */
+  onSelect: (taskId: string) => void;
+  onStanding: (task: TaskSummary, standing: TaskStanding) => void;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
-  const reads = useReadMarks();
+  const unread = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
-    unread: reads.markedUnread(task.id),
+    unread,
     surface: TASK_MENU_SURFACE.ROW,
+    opened,
   });
+  const onOpen = () => onSelect(task.id);
+  const setStanding = (standing: TaskStanding) => onStanding(task, standing);
   const press = useRef<HTMLButtonElement | null>(null);
   const coarse = useCoarsePointer();
   const nameId = useId();
@@ -418,7 +440,7 @@ function TaskBoardCard({
             </span>
           ) : null}
           {drawn(TASK_PROPERTY.UPDATED) ? (
-            <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+            <Time at={taskTime(task, TASK_ORDER.UPDATED)} hint={false} />
           ) : null}
           {drawn(TASK_PROPERTY.CREATOR) ? (
             <span className="tasks-board-face inline-flex min-w-0 items-center gap-tight-gap">
@@ -439,7 +461,7 @@ function TaskBoardCard({
       </span>
       <span className={BOARD_CARD_TITLE}>
         {drawn(TASK_PROPERTY.STATUS) ? (
-          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={setStanding} />
         ) : null}
         {rename.editing ? (
           <span className="tasks-board-name flex overflow-visible text-label font-ui-medium text-foreground wrap-anywhere">
@@ -481,19 +503,23 @@ function TaskBoardCard({
         <div className={BOARD_CARD_PILLS}>
           {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
           {drawn(TASK_PROPERTY.PRIORITY) ? (
-            <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+            <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={setStanding} />
           ) : null}
           {drawn(TASK_PROPERTY.ASSIGNEE) ? (
-            <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+            <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={setStanding} />
           ) : null}
           {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
-            <TaskBoardRepository tasks={tasks} repository={task.repository} />
+            <TaskBoardRepository
+              repository={task.repository}
+              openGitHub={tasks.onOpenGitHub}
+              pictures={tasks.pictures}
+            />
           )}
-          {subTasks === undefined ? null : (
+          {subTasksTotal === 0 ? null : (
             <ProgressCount
-              done={subTasks.finished}
-              total={subTasks.total}
-              label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+              done={subTasksFinished}
+              total={subTasksTotal}
+              label={`${subTasksFinished} of ${subTasksTotal} sub-tasks finished`}
               look={PROGRESS_COUNT_LOOK.BADGE}
             />
           )}
@@ -511,7 +537,7 @@ function TaskBoardCard({
       {actions.dialog}
     </Card>
   );
-}
+});
 
 /**
  * A column's quick add line (`quick-add.tsx`): the draft as the card it is
@@ -611,6 +637,8 @@ function columnValue(head: TasksGroupHead): string {
  */
 function TaskBoardColumnView({
   tasks,
+  rowTab,
+  opened,
   column,
   columns,
   workspaceName,
@@ -620,13 +648,16 @@ function TaskBoardColumnView({
   people,
   waitingOn,
   subTasksOf,
-  now,
   chosenOf,
-  onOpen,
+  onSelect,
   onStanding,
   onShowOlder,
 }: {
   tasks: TasksControl;
+  /** What a card reads of the tab (`useTaskRowTab`). */
+  rowTab: TaskRowTab;
+  /** The task the window has open, which only its own card is handed. */
+  opened: OpenedTask | undefined;
   column: TasksGroup;
   /** Every column standing, which a card is dropped onto. */
   columns: readonly TasksGroup[];
@@ -640,10 +671,10 @@ function TaskBoardColumnView({
   waitingOn: ReadonlyMap<string, number>;
   /** How many of a task's sub-tasks are finished, of all of them, by its id; none for a task with none. */
   subTasksOf: ReadonlyMap<string, ChildTaskCount>;
-  now: number;
   /** The selection a card of the task stands in, where it is one of several chosen (`useTasksSelection`). */
   chosenOf: (taskId: string) => ChosenTasks | undefined;
-  onOpen: (task: TaskSummary) => void;
+  /** Opens a task by its id. */
+  onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
   /** Shows every settled task, as the column's "+ N older" line asks. */
   onShowOlder: () => void;
@@ -661,12 +692,17 @@ function TaskBoardColumnView({
   });
   const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
+  // Note that the properties a card under its assignee's column draws are made once, so a card handed them holds (`memo`).
+  const unassigned = useMemo(
+    () => properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE),
+    [properties],
+  );
   // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another, and so does a card held under a column that no longer names its assignee.
   const drawn = (task: TaskSummary) =>
     column.head.kind === TASKS_GROUP.ASSIGNEE &&
     !narrow &&
     column.head.assigneeId === (task.assignee?.userId ?? null)
-      ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
+      ? unassigned
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
   const into = quickAddInto(column.head);
@@ -736,16 +772,17 @@ function TaskBoardColumnView({
               {cards.map(({ value: task }) => (
                 <TaskBoardCard
                   key={task.id}
-                  tasks={tasks}
+                  tasks={rowTab}
                   task={task}
+                  opened={opened?.task.id === task.id ? opened : undefined}
                   workspaceName={workspaceName}
                   properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
-                  subTasks={subTasksOf.get(task.id)}
-                  now={now}
+                  subTasksFinished={subTasksOf.get(task.id)?.finished ?? 0}
+                  subTasksTotal={subTasksOf.get(task.id)?.total ?? 0}
                   chosen={chosenOf(task.id)}
-                  onOpen={() => onOpen(task)}
-                  onStanding={(standing) => onStanding(task, standing)}
+                  onSelect={onSelect}
+                  onStanding={onStanding}
                 />
               ))}
             </Stack>
@@ -803,7 +840,11 @@ export function TasksBoard({
         now,
       }),
   );
-  const setStanding = useStandingDoor(tasks);
+  // Note that every door a card is handed stands across draws, so a card held while what it is handed does (`memo`) holds.
+  const setStanding = useSteadyDoor(useStandingDoor(tasks));
+  const rowTab = useTaskRowTab(tasks);
+  const { region, agents } = tasks;
+  const opened = useMemo(() => openedTaskOf({ region, agents }), [region, agents]);
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
@@ -813,6 +854,13 @@ export function TasksBoard({
   }, [chosenStands]);
   const shown = chosenStands ? chosen : values.includes(FIRST_SHOWN) ? FIRST_SHOWN : values[0];
   const panelId = `${ids}panel`;
+  // Note that the motion is handed what lays the cards out, so a draw that moved none measures none.
+  const properties = display.properties;
+  const shownColumn = narrow ? shown : undefined;
+  const laidOut = useMemo(
+    () => ({ columns, properties, shownColumn }),
+    [columns, properties, shownColumn],
+  );
   const drawnColumns = narrow
     ? columns.filter((column) => columnValue(column.head) === shown)
     : columns;
@@ -873,7 +921,7 @@ export function TasksBoard({
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
           onRetry={tasks.onRetryList}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {UNREAD_LINE}
         </ErrorState>
@@ -888,7 +936,7 @@ export function TasksBoard({
           {REFRESH_FAILED_WORDS}
         </ErrorState>
       ) : null}
-      <ListMotion root={board}>
+      <ListMotion root={board} change={laidOut}>
         <SelectionRegion
           id={selection.regionId}
           selection={{ selected: selection.selected, onChange: selection.onChange }}
@@ -903,18 +951,19 @@ export function TasksBoard({
               <TaskBoardColumnView
                 key={columnValue(column.head)}
                 tasks={tasks}
+                rowTab={rowTab}
+                opened={opened}
                 column={column}
                 columns={columns}
                 workspaceName={workspaceName}
                 narrow={narrow}
                 panelId={panelId}
-                properties={display.properties}
+                properties={properties}
                 people={people}
                 waitingOn={waitingOn}
                 subTasksOf={subTasksOf}
-                now={now}
                 chosenOf={selection.chosenOf}
-                onOpen={(task) => tasks.onSelect(task.id)}
+                onSelect={tasks.onSelect}
                 onStanding={setStanding}
                 onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
               />

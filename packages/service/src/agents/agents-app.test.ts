@@ -295,16 +295,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
 
         yield* startFrom({ agentId: source.id, messageId: firstTurn });
-        assert.deepEqual(eve.cancelled, [], "a fork stops nothing");
+        assert.deepEqual(eve.canceled, [], "a fork stops nothing");
         assert.equal(yield* sourceStatus, AGENT_STATUS.RUNNING);
 
         yield* startFrom({ agentId: source.id });
-        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-        assert.equal(yield* sourceStatus, AGENT_STATUS.CANCELLED);
+        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
+        assert.equal(yield* sourceStatus, AGENT_STATUS.CANCELED);
 
         yield* startFrom({ agentId: source.id });
         assert.deepEqual(
-          eve.cancelled,
+          eve.canceled,
           [[sessionId, "turn_0"]],
           "a source stopped is not stopped again",
         );
@@ -422,7 +422,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
 
         assert.deepEqual(started.from?.agentId, source.id);
-        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
         const page = readAnswer(
           agentPageAnswerSchema,
           HOSTED_HTTP_STATUS.OK,

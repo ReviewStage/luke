@@ -90,18 +90,23 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@repo/ui`'s dialog drawn bare over the dimmed window, its top clear of the
  * traffic lights, and the viewer's own card (`DialogCard`) filling the room
- * the arrows and the strip leave it, the file fitted inside it edge to edge: a picture or a
- * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
+ * the arrows and the strip leave it, the file fitted inside it: a picture no
+ * larger than its own pixels, a video up to twice its own, a text file at its
+ * reading width. The window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window or the room around the file, and the way out all close it and
  * hand focus back to the chip that opened it. A picture opened from its
  * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
- * read back with the transcript open the same. A message's files are its
+ * read back with the transcript open the same. A picture the place holds
+ * by its address alone, as an account's photo on its provider's host, is
+ * shown and zoomed all the same, but says no size and offers no Copy or
+ * Download, since the window holds none of its bytes to count, copy, or
+ * save. A message's files are its
  * developer's own, so everything the card holds is left out of the screen
  * recording (`ph-no-capture`) as a second line behind the masking.
  *
  * On a phone the header is a phone's (`phone-head.tsx`): Close alone at its
- * start, the file's name centred over its size and note, and one ⋯ at its
+ * start, the file's name centered over its size and note, and one ⋯ at its
  * end holding every other button of the header, the arrow keys still
  * walking the files. On a touch screen a finger swiping sideways across the
  * viewer walks the files too, the file shown following it until it is let
@@ -192,6 +197,11 @@ function ViewerLink({
   );
 }
 
+/** Whether the window holds the file's own bytes in its `data:` URL, rather than an address it is drawn from. */
+function heldBytes(file: FileChip): boolean {
+  return file.url.startsWith("data:");
+}
+
 /** Saves the file where the system's download asks, under its own name. */
 function download(file: FileChip): void {
   const link = document.createElement("a");
@@ -280,6 +290,8 @@ function viewerGroups(input: {
   readonly text: string | undefined;
   /** The picture shown, the file's own or its diagram's, which is copied and zoomed; none where no picture is shown. */
   readonly picture: string | undefined;
+  /** Whether the window holds the file's bytes, which alone are copied and saved (`heldBytes`). */
+  readonly held: boolean;
   /** Whether the file is a picture or a video, which the place's action is offered for. */
   readonly media: boolean;
   readonly zoom: ImageZoom;
@@ -287,7 +299,7 @@ function viewerGroups(input: {
   readonly copyText: (words: string, label: string) => void;
   readonly copyImage: (url: string, label: string) => void;
 }): MenuAction[][] {
-  const { file, at, count, walk, text, picture, media, zoom, action } = input;
+  const { file, at, count, walk, text, picture, held, media, zoom, action } = input;
   const place = `${String(at + 1)} of ${String(count)}`;
   const walking: MenuAction[] =
     count > 1
@@ -316,13 +328,17 @@ function viewerGroups(input: {
             onSelect: () => input.copyText(text, COPIED.TEXT),
           },
         ]),
-    ...(picture !== undefined
+    ...(picture !== undefined && held
       ? [
           {
             label: `Copy ${COPY_WHAT.IMAGE}`,
             icon: <CopyIcon aria-hidden="true" />,
             onSelect: () => input.copyImage(picture, COPIED.IMAGE),
           },
+        ]
+      : []),
+    ...(picture !== undefined
+      ? [
           {
             label: VIEWER_LABEL.ZOOM_OUT,
             icon: <ZoomOutIcon aria-hidden="true" />,
@@ -338,11 +354,15 @@ function viewerGroups(input: {
   ];
   const keeping: MenuAction[] = [
     ...(action === undefined || !media ? [] : actionItems(action, file)),
-    {
-      label: VIEWER_LABEL.DOWNLOAD,
-      icon: <DownloadIcon aria-hidden="true" />,
-      onSelect: () => download(file),
-    },
+    ...(held
+      ? [
+          {
+            label: VIEWER_LABEL.DOWNLOAD,
+            icon: <DownloadIcon aria-hidden="true" />,
+            onSelect: () => download(file),
+          },
+        ]
+      : []),
   ];
   return [walking, looking, keeping].filter((group) => group.length > 0);
 }
@@ -399,7 +419,7 @@ function AttachmentBody({
   }
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
-      // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
+      // A video plays on the veil, centered, as large as the card leaves it under its header at its own shape.
       <div
         className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil"
         {...DIALOG_VEIL}
@@ -519,6 +539,7 @@ export function AttachmentViewer({
 
   if (file === undefined) return null;
   const image = picture !== undefined;
+  const held = heldBytes(file);
   const video = view === ATTACHMENT_VIEW.VIDEO;
   // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code.
   const media = view === ATTACHMENT_VIEW.IMAGE || video;
@@ -565,7 +586,7 @@ export function AttachmentViewer({
         data-hug={hug}
         {...DIALOG_VEIL}
       >
-        {/* The arrows stand on the dimmed window either side of the card, centred down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
+        {/* The arrows stand on the dimmed window either side of the card, centered down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
         <div
           className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-ui-16"
           {...DIALOG_VEIL}
@@ -605,7 +626,9 @@ export function AttachmentViewer({
                         <OneLine>{file.name}</OneLine>
                       </Text>
                       <span className="flex min-w-0 max-w-full">
-                        <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
+                        {held ? (
+                          <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
+                        ) : null}
                         {note === undefined || note === null ? null : (
                           <span className={`my-0 mr-0 ml-ui-8 ${NOTE_CLASS}`}>{note}</span>
                         )}
@@ -624,6 +647,7 @@ export function AttachmentViewer({
                           walk,
                           text: words,
                           picture,
+                          held,
                           media,
                           zoom,
                           action,
@@ -650,7 +674,7 @@ export function AttachmentViewer({
                   </Text>
                   {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
                   <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>
-                    {sizeLabel(base64)}
+                    {held ? sizeLabel(base64) : null}
                   </span>
                   {note === undefined || note === null ? null : (
                     <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
@@ -658,7 +682,7 @@ export function AttachmentViewer({
                   {words === undefined ? null : <CopyTextButton text={words} />}
                   {picture === undefined ? null : (
                     <>
-                      <CopyImageButton url={picture} />
+                      {held ? <CopyImageButton url={picture} /> : null}
                       <HeaderButton
                         label={VIEWER_LABEL.ZOOM_OUT}
                         chord={ZOOM_CHORD.OUT}
@@ -680,11 +704,13 @@ export function AttachmentViewer({
                   ) : (
                     <ViewerLink action={action} address={action.address(file)} />
                   )}
-                  <HeaderButton
-                    label={VIEWER_LABEL.DOWNLOAD}
-                    onClick={() => download(file)}
-                    icon={<DownloadIcon aria-hidden="true" />}
-                  />
+                  {held ? (
+                    <HeaderButton
+                      label={VIEWER_LABEL.DOWNLOAD}
+                      onClick={() => download(file)}
+                      icon={<DownloadIcon aria-hidden="true" />}
+                    />
+                  ) : null}
                   <HeaderButton
                     label={VIEWER_LABEL.CLOSE}
                     chord={VIEWER_CHORD.CLOSE}

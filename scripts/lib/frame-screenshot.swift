@@ -16,7 +16,7 @@
 // times larger, its page zoomed to match) holds that many times the pixels
 // for a crop of the same points. Two layouts serve the notch era, which drew
 // no ordinary window: `top` hangs a borderless panel flush from the top edge
-// of the standard canvas, centred, as it hung from the notch, and `bleed`
+// of the standard canvas, centered, as it hung from the notch, and `bleed`
 // lays a transparent full-display overlay across the wallpaper and cuts it to
 // the standard proportions. The wallpaper is the first
 // frame of macOS's Golden Gate Sunset aerial (Marshall's Beach), read once from
@@ -53,7 +53,7 @@ let OUTPUT_HEIGHT = Int(
 enum Layout: String {
     /// An ordinary window, its shadow kept, wallpaper around it.
     case window
-    /// A borderless panel flush with the top edge of the standard canvas, centred.
+    /// A borderless panel flush with the top edge of the standard canvas, centered.
     case top
     /// A transparent full-display overlay across the whole wallpaper.
     case bleed
@@ -101,7 +101,7 @@ func parseCrop(_ text: String) throws -> CGRect {
     return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
 }
 
-/// A canvas with the wallpaper scaled to cover it and centred.
+/// A canvas with the wallpaper scaled to cover it and centered.
 func wallpaperCanvas(width: Int, height: Int, wallpaper: CGImage) throws -> CGContext {
     guard
         let context = CGContext(
@@ -204,7 +204,7 @@ func windowBody(_ image: CGImage) throws -> CGRect {
     return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
 }
 
-/// The window on the wallpaper: the wallpaper scaled to cover the canvas and centred, the window drawn shadow and all.
+/// The window on the wallpaper: the wallpaper scaled to cover the canvas and centered, the window drawn shadow and all.
 func frame(
     capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT_WIDTH, margin: Int = MARGIN
 ) throws -> CGImage {
@@ -239,7 +239,7 @@ func composeWindow(capture: CGImage, zoom: CGFloat, wallpaper: CGImage) throws -
     return Whole(image: image, origin: CGPoint(x: margin, y: margin))
 }
 
-/// A panel hung flush from the top of the standard canvas, centred, the crop counting from where a standard window's corner would be.
+/// A panel hung flush from the top of the standard canvas, centered, the crop counting from where a standard window's corner would be.
 func composeTop(capture: CGImage, scale: CGFloat, wallpaper: CGImage) throws -> Whole {
     let body = try windowBody(capture)
     let width = Int(((STANDARD_WINDOW.width + 2 * MARGIN_POINTS) * scale).rounded())
@@ -301,7 +301,7 @@ func framed(capture: CGImage, layout: Layout, crop: CGRect?, scale: CGFloat, zoo
     case .bleed: whole = try composeBleed(capture: capture, wallpaper: wallpaper)
     }
     guard let crop else {
-        // Note that a whole bleed is cut from its centre, because a display is rarely the standard proportions.
+        // Note that a whole bleed is cut from its center, because a display is rarely the standard proportions.
         // Note that the region is whole pixels no wider than the standard proportions, because rounding a fractional edge outward can tip it past them.
         let image = whole.image
         let aspect = CGFloat(OUTPUT_WIDTH) / CGFloat(OUTPUT_HEIGHT)

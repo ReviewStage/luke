@@ -7,7 +7,7 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
 /**
  * web-pages.ts -- what the site's pages carry in their heads and the stylesheets they draw with.
  *
- * Every page names Vespin's icons and a theme colour, each icon a file the
+ * Every page names Vespin's icons and a theme color, each icon a file the
  * site serves, so no page ships a blank tab; the web app installs from a
  * manifest whose icons are the sizes they claim; a pasted Vespin link unfurls
  * as the landing page's card under Vespin's name, since an unfurler reads it
@@ -62,7 +62,7 @@ function metaOf(html: string): ReadonlyMap<string, string> {
   );
 }
 
-/** Where a page's head misses an icon, links another, or names no theme colour. */
+/** Where a page's head misses an icon, links another, or names no theme color. */
 export function headProblems(page: string, html: string): readonly string[] {
   const problems: string[] = [];
   const icons = linksOf(html).filter((link) => link.rel.includes("icon"));
@@ -127,7 +127,7 @@ export function manifestProblems(
   // Note that the splash and the installed app's chrome are the page's own ground.
   const themeColor = THEME_COLOR.exec(html)?.[1];
   if (manifest.theme_color !== themeColor || manifest.background_color !== themeColor)
-    say(`its theme and background colours are not app.html's theme-color, ${themeColor ?? "none"}`);
+    say(`its theme and background colors are not app.html's theme-color, ${themeColor ?? "none"}`);
   const icons = Array.isArray(manifest.icons)
     ? manifest.icons.map((icon) => record(icon, "an icon"))
     : [];
@@ -258,6 +258,6 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
 
 export const webPagesGuard: RepositoryGuard = {
   holds:
-    "the site's pages carry their icons, theme colour, card and policy, and every Tailwind entry takes @repo/ui's theme, and the panel's root stops a phone's text autosizing",
+    "the site's pages carry their icons, theme color, card and policy, and every Tailwind entry takes @repo/ui's theme, and the panel's root stops a phone's text autosizing",
   problems: webPageProblems,
 };

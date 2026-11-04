@@ -1,5 +1,5 @@
 /* list-row.css -- a List's rows: the row's press and its acts side by side
-   in one filled line, its metadata and its acts centred on the row's middle.
+   in one filled line, its metadata and its acts centered on the row's middle.
    The fill is the item's, so the pointer anywhere on the row, an act
    included, lights the whole of it as one.
 
@@ -151,7 +151,7 @@
   }
 
   /* A list whose rows a finger opens stands each a finger's press tall on a
-     coarse pointer, its words still centred; a mouse keeps its height. */
+     coarse pointer, its words still centered; a mouse keeps its height. */
   @media (pointer: coarse) {
     .ui-list[data-finger-tall="true"] .ui-list-row-main {
       min-height: var(--ui-touch-target);
@@ -422,7 +422,7 @@
   /* A lead line's first line is drawn exactly, in any face: every part of
      it stands on the name's baseline, the time's words included, and every
      mark, which keeps no baseline of its own (`contain: layout`), stands on
-     it by its bottom edge and is carried to the name's cap-height centre,
+     it by its bottom edge and is carried to the name's cap-height center,
      half its own height less half the name's cap height. The name's cap
      height is read once where each part's box takes the name's size, and
      handed to the marks as `--ui-mark-cap`, as the unread dot reads it. */
@@ -594,7 +594,7 @@
   }
 
   /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
-     centred in it, rather than taking its press past its own 24px box
+     centered in it, rather than taking its press past its own 24px box
      (`button.css`): it stands at the row's end, whose edge would cut that
      press short. */
   @media (pointer: coarse) {
@@ -683,7 +683,7 @@
      settling on the motion tokens, so reduced motion and a capture run hold
      it still. Nothing is painted behind the acts, so whatever the row stands
      on shows through them: its fill, the window's ground, or the Mac's
-     frosted sidebar. The acts take no height of their own, centred on the
+     frosted sidebar. The acts take no height of their own, centered on the
      row's middle or level with its title's line, so a row stands as tall
      as its words whatever its acts are. */
   .ui-list-row[data-actions="hover"] {
@@ -864,7 +864,7 @@
     }
   }
 
-  /* Note that the row holding the keyboard stands over its neighbours,
+  /* Note that the row holding the keyboard stands over its neighbors,
      because its ring reaches past the list's gap and the next row's fill
      would otherwise paint over the ring's foot. */
   .ui-list-row:has(:focus-visible) {
@@ -879,7 +879,7 @@
      head gives its glyph way (`group-header.tsx`), and on a screen with no
      hover, where nothing would bring it, the chevron stands at rest. Note
      that the chevron's box is the mark's own, the cell less the press's
-     inset before it and the mark's gap after it, so the two share a centre
+     inset before it and the mark's gap after it, so the two share a center
      whatever the mark's size, and stands level with the mark on a mail-style
      row as the ⋯ does. */
   .ui-list-row-fold {

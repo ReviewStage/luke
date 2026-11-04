@@ -2,12 +2,12 @@
    beyond its utilities.
 
    The row holding the keyboard, or whose menu is open, stands over its
-   neighbours, so its ring is drawn whole. A quick add's draft fills the
+   neighbors, so its ring is drawn whole. A quick add's draft fills the
    name's room with its title, so the caret's line reaches the row's end as a
    plan's line reaches its page's; an add still out stands muted until its
    row draws.
 
-   The ⋯ stands out of the row's columns in its end inset, centred on the
+   The ⋯ stands out of the row's columns in its end inset, centered on the
    row's middle, and comes in there while the row is in hand, holds the
    keyboard, or has its menu open (`row-menu.css` fades it), as a
    `NavItem`'s and a `ListRow`'s acts do, nothing else in the row moving.

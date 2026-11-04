@@ -211,7 +211,7 @@ export function TerminalTab({
           {session.failed ? (
             <ErrorState
               failure={unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)}
-              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
               onRetry={session.retryBundle}
             >
               {TERMINAL_LOAD_FAILED}

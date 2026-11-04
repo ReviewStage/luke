@@ -53,6 +53,43 @@ export const AGENT_FALLBACK_CHOICE = {
 /** What a first-time account starts an agent on, until it chooses, where a Claude credential pays or none does. */
 export const AGENT_DEFAULT_CHOICE = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.ANTHROPIC];
 
+/**
+ * How fast a catalog id's version of its model runs, which the id's suffix
+ * says: AI Gateway's own `-fast` slug beside its base model
+ * (`anthropic/claude-opus-5.5-fast`), and the `-ultrafast` id the service
+ * gives a GPT model whose catalog entry prices OpenAI's Ultrafast tier
+ * (`openai/gpt-6.1-sol-ultrafast`, `model-catalog.ts`); every other id runs
+ * at standard speed.
+ */
+export const MODEL_SPEED = {
+  STANDARD: "standard",
+  FAST: "fast",
+  ULTRAFAST: "ultrafast",
+} as const;
+
+export type ModelSpeed = (typeof MODEL_SPEED)[keyof typeof MODEL_SPEED];
+
+/** The suffix of a catalog id naming each speed but standard's, whose id has none. Note that neither ends the other: `-ultrafast` has no dash before its `fast`. */
+export const MODEL_SPEED_SUFFIX = {
+  [MODEL_SPEED.FAST]: "-fast",
+  [MODEL_SPEED.ULTRAFAST]: "-ultrafast",
+} as const satisfies Record<Exclude<ModelSpeed, typeof MODEL_SPEED.STANDARD>, string>;
+
+/** The speed a catalog id names, by its suffix. */
+export function modelSpeedOf(catalogId: string): ModelSpeed {
+  if (catalogId.endsWith(MODEL_SPEED_SUFFIX[MODEL_SPEED.ULTRAFAST])) return MODEL_SPEED.ULTRAFAST;
+  if (catalogId.endsWith(MODEL_SPEED_SUFFIX[MODEL_SPEED.FAST])) return MODEL_SPEED.FAST;
+  return MODEL_SPEED.STANDARD;
+}
+
+/** The id of the model a catalog id is a version of, which runs at standard speed; a standard id as it is. */
+export function standardModelIdOf(catalogId: string): string {
+  const speed = modelSpeedOf(catalogId);
+  return speed === MODEL_SPEED.STANDARD
+    ? catalogId
+    : catalogId.slice(0, -MODEL_SPEED_SUFFIX[speed].length);
+}
+
 /** A model provider as the wire spells it. */
 export const modelProviderSchema = EffectSchema.Literals(Object.values(MODEL_PROVIDER));
 
@@ -95,12 +132,6 @@ export const catalogModelSchema = EffectSchema.Struct({
    * does not know reads a key it does not know as nothing at all.
    */
   fastNotEnabled: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * Whether this model's fast version is withheld because the plan that pays
-   * for the account's agents on it runs no fast mode (the ChatGPT plan, on
-   * Codex), so no Fast is drawn for it; absent otherwise.
-   */
-  fastWithheldByPlan: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * Whether no subscription or API key of the account's pays for this
    * model's provider, so a Start on it is refused until one is connected in

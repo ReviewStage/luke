@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
@@ -33,7 +35,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * called by the name the window already holds for the place: the task's
  * title for a bare task link, the agent's, the page's, the item's, the
  * member's; by its kind where the window holds none; and by the words it
- * was labelled with where it was. A press opens the place in the window.
+ * was labeled with where it was. A press opens the place in the window.
  * Nothing is read for a name. Synthetic workspace, task, and people.
  */
 
@@ -119,7 +121,12 @@ const STATE: AppStateSnapshot = (() => {
         },
       ],
       activeTaskId: TASK_ID,
-      pages: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }],
+    },
+    [LIVE_READ.PAGES]: {
+      [PAGE_OWNER.TASK]: {
+        [TASK_ID]: { rows: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }] },
+      },
+      [PAGE_OWNER.AGENT]: {},
     },
     inbox: {
       ...snapshot.inbox,
@@ -143,21 +150,20 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn as a transcript draws them, in a window holding `STATE`, every place a chip opened kept. */
+/** The words drawn as a transcript draws them, in a window holding `state`, every place a chip opened kept. */
 async function drawn(
   text: string,
   opened: LinkPlace[],
-  reads: (request: AnyAct) => FakeActAnswer | undefined = () => undefined,
+  state: AppStateSnapshot = STATE,
 ): Promise<HTMLElement> {
   fakeActs({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(STATE),
+    requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
-        reads(request) ??
-          (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-            : { status: FAKE_ANSWER.DONE, value: undefined }),
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
+          : { status: FAKE_ANSWER.DONE, value: undefined },
       ),
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -229,7 +235,7 @@ test("a bare link to a place the window knows is called by its name, the task's 
   );
 });
 
-test("a place the window holds no name for is called by its kind, or by its label where it was labelled, and a labelled place it holds a name for by that name now", async () => {
+test("a place the window holds no name for is called by its kind, or by its label where it was labeled, and a labeled place it holds a name for by that name now", async () => {
   const container = await drawn(
     [
       `${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`,
@@ -266,7 +272,7 @@ test("a press on a place's chip opens the place in the window", async () => {
   ]);
 });
 
-/** An archived agent as the service reads it, on the task given or none, on the model given. */
+/** An archived agent as the task list carries it, on the task given or none, on the model given. */
 function archivedAgent(id: string, planId: string | null, model: string) {
   return {
     id,
@@ -281,31 +287,28 @@ function archivedAgent(id: string, planId: string | null, model: string) {
   };
 }
 
-test("an archived agent's chip, which no list the window holds names, wears the harness read for it by its own id, an older link under its task as one under none", async () => {
+test("an archived agent's chip, which no task's row names, wears the harness the task list carries for it, an older link under its task as one under none", async () => {
   const onTask = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
   const onNone = "6f5e4d3c-2b1a-4f0e-9d8c-7b6a5f4e3d2c";
-  const models = new Map([
-    [onTask, { planId: TASK_ID, model: "openai/gpt-6.1-sol" }],
-    [onNone, { planId: null, model: "anthropic/claude-opus-5.5" }],
-  ]);
   const container = await drawn(
     `${HOME}/plan/${TASK_ID}/agent/${onTask} and ${HOME}/agent/${onNone}`,
     [],
-    (request) => {
-      const read = request.kind === ACT_KIND.AGENTS_PAGE ? request.payload.agentId : "";
-      const found = models.get(read);
-      if (found === undefined) return undefined;
-      return {
-        status: FAKE_ANSWER.DONE,
-        value: {
-          agent: {
-            ...archivedAgent(read, found.planId, found.model),
+    {
+      ...STATE,
+      tasks: {
+        ...STATE.tasks,
+        taskAgents: [archivedAgent(onTask, TASK_ID, "openai/gpt-6.1-sol")],
+        tasklessAgents: [
+          ...(STATE.tasks.tasklessAgents ?? []),
+          {
+            ...archivedAgent(onNone, null, "anthropic/claude-opus-5.5"),
             automationId: null,
             workspaceId: ACME.id,
             repository: "acme/relay",
+            activityAt: AT,
           },
-        },
-      };
+        ],
+      },
     },
   );
 

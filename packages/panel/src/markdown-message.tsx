@@ -59,7 +59,7 @@ export interface MarkdownEdit {
   marks?: readonly MarkdownMark[] | undefined;
 }
 
-/** The element and class each kind of change mark is drawn as, so it reads as a change without its colour. */
+/** The element and class each kind of change mark is drawn as, so it reads as a change without its color. */
 const MARK_DRAWN = {
   [MARKDOWN_MARK.INSERTED]: { tagName: "ins", className: "markdown-inserted" },
   [MARKDOWN_MARK.DELETED]: { tagName: "del", className: "markdown-deleted" },

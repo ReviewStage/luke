@@ -89,7 +89,8 @@ export function useSetupGate(
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
-  const finishedOnAccount = useAppSlice(APP_SETTINGS_VIEW)?.setupFinished === true;
+  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const finishedOnAccount = settings?.setupFinished === true;
   // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
   const finished =
     finishedHere ||
@@ -112,6 +113,7 @@ export function useSetupGate(
     id: accountId,
     fresh,
     finished,
+    accountRead: settings?.accountRead === true,
     started: accountId !== undefined && places[accountId] !== undefined,
     personalOnly: workspaces.every((workspace) => workspace.personal === true),
     agent,
@@ -268,7 +270,7 @@ export function SetupSteps({
       <AuthPage
         mark={<ProductMark />}
         title="Connect an agent"
-        description="Agents run on your own Claude or Codex plan."
+        description="Run agents on your ChatGPT or Claude plan, or an API key."
         foot={foot(agent, true)}
       >
         <AgentAuthSection signedIn onKeys={IGNORE_KEYS} onConnected={onConnected} />
