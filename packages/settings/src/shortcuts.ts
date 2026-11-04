@@ -226,6 +226,8 @@ export const SHORTCUT_KEY = {
     editsText: true,
   },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
+  // A bare , and . are a video player's own frame steps; no app command holds the period.
+  PERIOD: { accelerator: ".", glyph: ".", key: ".", code: "Period" },
   // ⇧/, the key `?` is typed on, is Files changed's own sheet of its keys, read by its place.
   SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash", placed: true },
   // A bare ; and ⇧; are Files changed's own fold keys, stage-cli's, read by their place.

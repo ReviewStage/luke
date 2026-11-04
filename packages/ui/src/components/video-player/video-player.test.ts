@@ -7,9 +7,11 @@ import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
 
 /**
  * video-player.test.ts -- while focus is in a video's player, Space or K
- * plays and pauses it and the arrows seek five seconds within its length,
- * none of them reaching the place around it, whose arrows may walk files; a
- * button's own Space is left to the button. In the viewer it starts at
+ * plays and pauses it, the arrows seek five seconds within its length, and
+ * comma and period, like the bar's frame buttons, pause it and step one
+ * frame of the length its header states, none of them reaching the place
+ * around it, whose arrows may walk files; a button's own Space is left to
+ * the button. In the viewer it starts at
  * once, unless motion is held still. The browser's media element is
  * the boundary, so a stand-in plays, pauses, and seeks as one does, telling
  * its events, and the player is read by what its bar shows.
@@ -30,11 +32,18 @@ const DURATION_FAST = "--ui-duration-fast";
 /** A WebM's bytes as a picture read answers them; the stand-in element never decodes them. */
 const WEBM_URL = "data:video/webm;base64,GkXfow==";
 
+/**
+ * A WebM header stating its frames a tenth of a second long: the EBML magic,
+ * a DefaultDuration of 100,000,000 nanoseconds in four bytes
+ * (`23 E3 83 84 05 F5 E1 00`), and a Cluster's id, where the header ends.
+ */
+const TENTH_FRAME_URL = "data:video/webm;base64,GkXfoyPjg4QF9eEAH0O2dQ==";
+
 /** How long the stand-in runs, in seconds. */
 const LENGTH_S = 20;
 
-/** Makes the page's video a stand-in that plays, pauses, and seeks as a browser's does, telling its events. */
-function standInMedia(video: HTMLVideoElement): void {
+/** Makes the page's video a stand-in that plays, pauses, and seeks as a browser's does, telling its events; answers where it stands. */
+function standInMedia(video: HTMLVideoElement): () => number {
   let paused = true;
   let at = 0;
   Object.defineProperties(video, {
@@ -62,10 +71,11 @@ function standInMedia(video: HTMLVideoElement): void {
     },
   });
   act(() => video.dispatchEvent(new Event("loadedmetadata")));
+  return () => at;
 }
 
 /** Draws a player inside a box that records every key reaching it, its video a stand-in. */
-function mountPlayer(onExpand?: () => void) {
+function mountPlayer(onExpand?: () => void, dataUrl = WEBM_URL) {
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:recording");
   vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined);
   const reached: string[] = [];
@@ -80,7 +90,7 @@ function mountPlayer(onExpand?: () => void) {
         "div",
         { onKeyDown: (event: React.KeyboardEvent) => reached.push(event.key) },
         createElement(VideoPlayer, {
-          dataUrl: WEBM_URL,
+          dataUrl,
           label: "Inviting a member",
           place: VIDEO_PLAYER_PLACE.INLINE,
           onExpand,
@@ -90,7 +100,7 @@ function mountPlayer(onExpand?: () => void) {
   );
   const video = container.querySelector("video");
   if (video === null) throw new Error("the player draws its video");
-  standInMedia(video);
+  const playhead = standInMedia(video);
   const frame = video.parentElement;
   if (frame === null) throw new Error("the video stands in a frame");
   const press = (key: string, on: HTMLElement = frame, repeat = false) =>
@@ -104,7 +114,12 @@ function mountPlayer(onExpand?: () => void) {
       .querySelector('button[aria-label="Play"], button[aria-label="Pause"]')
       ?.getAttribute("aria-label");
   const seekAt = () => container.querySelector<HTMLInputElement>('input[aria-label="Seek"]')?.value;
-  return { container, press, toggleLabel, seekAt, reached };
+  const pressButton = (label: string) => {
+    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    if (button === null) throw new Error(`the bar has a ${label}`);
+    act(() => button.click());
+  };
+  return { container, press, pressButton, toggleLabel, seekAt, playhead, reached };
 }
 
 test("Space and K play and pause the video while focus is in its player, and neither reaches the place around it", () => {
@@ -155,6 +170,28 @@ test("a held Space or K plays or pauses once, while a held arrow goes on seeking
   press("ArrowRight");
   press("ArrowRight", undefined, true);
   expect(seekAt()).toBe("10");
+});
+
+test("comma and period, like the frame buttons, pause the video and step one frame of the length its header states", () => {
+  const { press, pressButton, toggleLabel, playhead, reached } = mountPlayer(
+    undefined,
+    TENTH_FRAME_URL,
+  );
+  press("k");
+  press(".");
+  // Each step lands in the middle of its frame: the second frame, a tenth long, spans 0.1 to 0.2.
+  expect(toggleLabel()).toBe("Play");
+  expect(playhead()).toBeCloseTo(0.15);
+  press(".", undefined, true);
+  expect(playhead()).toBeCloseTo(0.25);
+  press(",");
+  expect(playhead()).toBeCloseTo(0.15);
+  pressButton("Previous frame");
+  pressButton("Previous frame");
+  expect(playhead()).toBeCloseTo(0.05);
+  pressButton("Next frame");
+  expect(playhead()).toBeCloseTo(0.15);
+  expect(reached).toEqual([]);
 });
 
 /** Draws a player in the viewer, as the file viewer an Expand opens does, and answers its video. */

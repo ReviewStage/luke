@@ -1,17 +1,20 @@
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
 import { playheadText } from "@repo/features/time-format";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { SHORTCUT_KEY, type ShortcutChord } from "@repo/settings/shortcuts";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import {
   ExitFullScreenIcon,
   ExpandIcon,
   FullScreenIcon,
+  NextFrameIcon,
   PauseIcon,
   PlayIcon,
+  PreviousFrameIcon,
 } from "../../face/glyphs.js";
 import { motionHeld } from "../../motion-timing.js";
 import { notePictureOrigin } from "../../picture-expand.js";
-import { BUTTON_VARIANT, IconButton } from "../button/button.js";
+import { BUTTON_SIZE, BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
 import { SLIDER_LENGTH, Slider } from "../slider/slider.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -21,12 +24,21 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * The player is our own rather than the browser's: a bar along the
  * video's foot of the same icon buttons, glyphs, and slider the window draws
- * everywhere, with play and pause, how far it has run of how long, a
- * scrubber, Expand where the place has a viewer to open, and Full screen. A
- * press on the video itself plays or pauses it, and while focus is in the
- * player, Space or K does too and the left and right arrows seek five
- * seconds, kept from the place around it, such as the viewer whose arrows
- * walk its files; a button's own Space presses the button. The bar stands while the
+ * everywhere, with play and pause, a frame back and a frame on, how far it
+ * has run of how long, a scrubber, its speed, Expand where the place has a
+ * viewer to open, and Full screen. A press on the video itself plays or
+ * pauses it, and while focus is in the player its keys are the ones video
+ * sites share: Space or K plays or pauses, the left and right arrows seek
+ * five seconds, comma and period step a frame back or on, pausing first,
+ * Home and End go to the start and the end, and < and > slow it or speed
+ * it, all kept from the place around it, such as the viewer whose arrows
+ * walk its files; a button's own Space presses the button.
+ *
+ * A frame step lands in the middle of the frame it goes to, never on its
+ * edge, so a time a hair off either way still shows that frame, and the
+ * scrubber moves a frame at a time. How long a frame stands is read from
+ * the WebM's header (`frameSecondsOf`), which every recorder of an agent's
+ * states, at a constant rate. The bar stands while the
  * video is paused and, with a pointer, fades while it plays until the
  * pointer or the keyboard is in it; on a touch screen it always stands. Full
  * screen fills the screen with the frame, the bar with it, and Escape or its
@@ -61,7 +73,10 @@ const VIDEO_LABEL = {
   PLAYER: "Video player",
   PLAY: "Play",
   PAUSE: "Pause",
+  PREVIOUS_FRAME: "Previous frame",
+  NEXT_FRAME: "Next frame",
   SEEK: "Seek",
+  SPEED: "Playback speed",
   EXPAND: "Expand",
   FULL_SCREEN: "Full screen",
   EXIT_FULL_SCREEN: "Exit full screen",
@@ -70,11 +85,35 @@ const VIDEO_LABEL = {
 /** The milliseconds in a second, for the player's playhead in the one clock a recording is told in. */
 const MS_PER_SECOND = 1_000;
 
-/** How finely the scrubber moves, in seconds. */
-const SEEK_STEP_S = 0.1;
+/** How long a frame stands, in seconds, where a video's header states no length: a thirtieth, a screen recorder's usual rate. */
+const FALLBACK_FRAME_S = 1 / 30;
+
+/** The nanoseconds in a second, the unit a WebM states a frame's length in. */
+const NS_PER_SECOND = 1_000_000_000;
+
+/** The shortest and longest frame a header is believed about, in seconds; past them it is read as no length at all. */
+const FRAME_S_BOUNDS = { MIN: 0.001, MAX: 1 } as const;
+
+/**
+ * The EBML ids a frame's length is read between: a track's DefaultDuration,
+ * and the first Cluster, where the header ends and the frames begin.
+ */
+const WEBM_ID = {
+  DEFAULT_DURATION: [0x23, 0xe3, 0x83],
+  CLUSTER: [0x1f, 0x43, 0xb6, 0x75],
+} as const;
+
+/** How much of a `data:` URL's base64 holds a WebM's header, read for its frame length: twelve kilobytes, a whole number of base64's four-character groups. */
+const HEADER_BASE64_CHARS = 16_384;
 
 /** How far an arrow key seeks, in seconds. */
 const ARROW_SEEK_S = 5;
+
+/** The speeds the player plays at, slowest first; the bar's speed button walks them round, and < and > step along them. */
+const SPEEDS: readonly number[] = [0.25, 0.5, 1, 1.5, 2];
+
+/** The speed a video starts at. */
+const NORMAL_SPEED = 1;
 
 /** The keys that play or pause the player while focus is in it. */
 const TOGGLE_KEYS: ReadonlySet<string> = new Set([" ", "k", "K"]);
@@ -84,6 +123,27 @@ const SEEK_KEYS: ReadonlyMap<string, number> = new Map([
   ["ArrowLeft", -ARROW_SEEK_S],
   ["ArrowRight", ARROW_SEEK_S],
 ]);
+
+/** Which way each key steps a frame while focus is in the player: comma back, period on, as on the video sites. */
+const FRAME_KEYS: ReadonlyMap<string, number> = new Map([
+  [SHORTCUT_KEY.COMMA.key, -1],
+  [SHORTCUT_KEY.PERIOD.key, 1],
+]);
+
+/** Which way each key steps the speed while focus is in the player: < slower, > faster. */
+const SPEED_KEYS: ReadonlyMap<string, number> = new Map([
+  ["<", -1],
+  [">", 1],
+]);
+
+/** Where Home and End send the video: its start, or its end. */
+const END_KEYS = { START: "Home", END: "End" } as const;
+
+/** The keys the frame buttons name in their hints. */
+const FRAME_CHORD = {
+  PREVIOUS: { key: SHORTCUT_KEY.COMMA, plain: true },
+  NEXT: { key: SHORTCUT_KEY.PERIOD, plain: true },
+} as const satisfies Record<string, ShortcutChord>;
 
 /** Where a video plays: in place of a picture, or in the file viewer. */
 export const VIDEO_PLAYER_PLACE = {
@@ -104,6 +164,7 @@ interface Playback {
   readonly playing: boolean;
   readonly at: number;
   readonly duration: number;
+  readonly speed: number;
 }
 
 /** The media type a `data:` URL names, as the picture reads spell one. */
@@ -136,6 +197,38 @@ export function useBlobUrl(dataUrl: string): string | undefined {
     return () => URL.revokeObjectURL(made);
   }, [dataUrl]);
   return url;
+}
+
+/** Whether the bytes of `head` at `at` are the EBML id `id`. */
+function idAt(head: string, at: number, id: readonly number[]): boolean {
+  return id.every((byte, offset) => head.charCodeAt(at + offset) === byte);
+}
+
+/**
+ * How long one frame of a WebM stands, in seconds, as its header states it
+ * (a track's DefaultDuration, in nanoseconds), or a thirtieth of a second
+ * where it states none. Note that the recorders behind an agent's
+ * recordings (ffmpeg behind its browser's `record`, Playwright's screencast)
+ * state one, at a constant rate, where a MediaRecorder states none; and that
+ * the header alone is read, up to the first Cluster, so no frame's bytes are
+ * taken for the id. The length's size is a one-byte EBML number, the only
+ * one a muxer writes for a field of at most eight bytes.
+ */
+function frameSecondsOf(dataUrl: string): number {
+  const start = dataUrl.indexOf(",") + 1;
+  const head = atob(dataUrl.slice(start, start + HEADER_BASE64_CHARS));
+  for (let at = 0; at < head.length && !idAt(head, at, WEBM_ID.CLUSTER); at += 1) {
+    if (!idAt(head, at, WEBM_ID.DEFAULT_DURATION)) continue;
+    const marker = head.charCodeAt(at + WEBM_ID.DEFAULT_DURATION.length);
+    const size = marker & 0x7f;
+    const from = at + WEBM_ID.DEFAULT_DURATION.length + 1;
+    if ((marker & 0x80) === 0 || size === 0 || size > 8 || from + size > head.length) continue;
+    let ns = 0;
+    for (let byte = 0; byte < size; byte += 1) ns = ns * 256 + head.charCodeAt(from + byte);
+    const seconds = ns / NS_PER_SECOND;
+    if (seconds >= FRAME_S_BOUNDS.MIN && seconds <= FRAME_S_BOUNDS.MAX) return seconds;
+  }
+  return FALLBACK_FRAME_S;
 }
 
 /**
@@ -177,21 +270,78 @@ function toggleOf(video: HTMLVideoElement | null): void {
   else video.pause();
 }
 
+/** Where a video ends, in seconds, or where it stands while its length is not yet known. */
+function endOf(video: HTMLVideoElement): number {
+  return Number.isFinite(video.duration) ? video.duration : video.currentTime;
+}
+
 /**
- * Answers a key pressed while focus is in the player: plays or pauses, or
- * seeks, and keeps the key from the place around it. Note that Space on one
- * of the bar's buttons is left to the button, which it presses.
+ * Pauses a video and steps it `by` frames of `frame` seconds, back or on,
+ * to the middle of the frame it lands on, within its first and last.
  */
-function playerKey(event: React.KeyboardEvent<HTMLElement>, video: HTMLVideoElement | null): void {
+function stepFrame(video: HTMLVideoElement, frame: number, by: number): void {
+  video.pause();
+  const end = endOf(video);
+  const last = Math.max(0, Math.ceil(end / frame) - 1);
+  const shown = Math.floor(video.currentTime / frame);
+  const next = Math.min(last, Math.max(0, shown + by));
+  video.currentTime = Math.min(end, (next + 0.5) * frame);
+}
+
+/** The speed `by` steps along from `speed`, held at the slowest and the fastest. */
+function speedBy(speed: number, by: number): number {
+  const at = SPEEDS.indexOf(speed);
+  const from = at === -1 ? SPEEDS.indexOf(NORMAL_SPEED) : at;
+  return SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, from + by))] ?? NORMAL_SPEED;
+}
+
+/** The speed after `speed` as the speed button walks them, back to the slowest after the fastest. */
+function nextSpeed(speed: number): number {
+  return SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? NORMAL_SPEED;
+}
+
+/**
+ * Sets a video's speed, its default too, because loading its address again
+ * puts a video back at its default.
+ */
+function setSpeed(video: HTMLVideoElement | null, speed: number): void {
+  if (video === null) return;
+  video.defaultPlaybackRate = speed;
+  video.playbackRate = speed;
+}
+
+/** A speed as the bar spells it: "0.25×", "1×". */
+function speedText(speed: number): string {
+  return `${String(speed)}×`;
+}
+
+/**
+ * Answers a key pressed while focus is in the player: plays or pauses,
+ * seeks, steps a frame, goes to an end, or changes the speed, and keeps the
+ * key from the place around it. Note that Space on one of the bar's buttons
+ * is left to the button, which it presses.
+ */
+function playerKey(
+  event: React.KeyboardEvent<HTMLElement>,
+  video: HTMLVideoElement | null,
+  frame: number,
+): void {
   if (video === null || event.metaKey || event.ctrlKey || event.altKey) return;
   const onButton = event.target instanceof HTMLButtonElement;
   const seek = SEEK_KEYS.get(event.key);
+  const step = FRAME_KEYS.get(event.key);
+  const speed = SPEED_KEYS.get(event.key);
   if (TOGGLE_KEYS.has(event.key) && !(onButton && event.key === " ")) {
-    // A held key plays or pauses once, not again with each repeat; a held arrow goes on seeking.
+    // A held key plays or pauses once, not again with each repeat; a held arrow or frame key goes on.
     if (!event.repeat) toggleOf(video);
   } else if (seek !== undefined) {
-    const end = Number.isFinite(video.duration) ? video.duration : video.currentTime;
-    video.currentTime = Math.min(end, Math.max(0, video.currentTime + seek));
+    video.currentTime = Math.min(endOf(video), Math.max(0, video.currentTime + seek));
+  } else if (step !== undefined) {
+    stepFrame(video, frame, step);
+  } else if (event.key === END_KEYS.START || event.key === END_KEYS.END) {
+    video.currentTime = event.key === END_KEYS.START ? 0 : endOf(video);
+  } else if (speed !== undefined) {
+    setSpeed(video, speedBy(video.playbackRate, speed));
   } else {
     return;
   }
@@ -199,19 +349,43 @@ function playerKey(event: React.KeyboardEvent<HTMLElement>, video: HTMLVideoElem
   event.stopPropagation();
 }
 
-/** One of the bar's buttons, its name its hint. */
+/** One of the bar's buttons, its name its hint, with the key that reaches it where it has one. */
 function BarButton({
   label,
   icon,
+  chord,
   onPress,
 }: {
   label: string;
   icon: React.ReactNode;
+  chord?: ShortcutChord | undefined;
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} chord={chord}>
       <IconButton icon={icon} label={label} variant={BUTTON_VARIANT.MEDIA} onClick={onPress} />
+    </Tooltip>
+  );
+}
+
+/** The bar's speed button, its words the speed it plays at, which a press walks round. */
+function SpeedButton({
+  speed,
+  onPress,
+}: {
+  speed: number;
+  onPress: () => void;
+}): React.JSX.Element {
+  return (
+    <Tooltip label={VIDEO_LABEL.SPEED}>
+      <Button
+        label={`${VIDEO_LABEL.SPEED}: ${speedText(speed)}`}
+        variant={BUTTON_VARIANT.MEDIA}
+        size={BUTTON_SIZE.COMPACT}
+        onClick={onPress}
+      >
+        {speedText(speed)}
+      </Button>
     </Tooltip>
   );
 }
@@ -247,19 +421,26 @@ const VIDEO =
 /** The player as its place holds it: hugging the video at most its column's width, and in the viewer no taller than the card. */
 const PLAYER = "ui-video-player relative block w-fit max-w-full";
 
-/** The bar along a video's foot: play or pause, how far of how long, the scrubber, Expand, and Full screen. */
+/** The bar along a video's foot: play or pause, a frame back and on, how far of how long, the scrubber, the speed, Expand, and Full screen. */
 function VideoBar({
   playback,
+  frame,
   full,
   onToggle,
+  onStep,
   onSeek,
+  onSpeed,
   onExpand,
   onFullScreen,
 }: {
   playback: Playback;
+  /** How long a frame stands, in seconds, which the scrubber moves by. */
+  frame: number;
   full: boolean;
   onToggle: () => void;
+  onStep: (by: number) => void;
   onSeek: (at: number) => void;
+  onSpeed: () => void;
   onExpand: (() => void) | undefined;
   onFullScreen: () => void;
 }): React.JSX.Element {
@@ -271,16 +452,29 @@ function VideoBar({
         icon={playback.playing ? <PauseIcon /> : <PlayIcon />}
         onPress={onToggle}
       />
+      <BarButton
+        label={VIDEO_LABEL.PREVIOUS_FRAME}
+        icon={<PreviousFrameIcon />}
+        chord={FRAME_CHORD.PREVIOUS}
+        onPress={() => onStep(-1)}
+      />
+      <BarButton
+        label={VIDEO_LABEL.NEXT_FRAME}
+        icon={<NextFrameIcon />}
+        chord={FRAME_CHORD.NEXT}
+        onPress={() => onStep(1)}
+      />
       <span className="ui-video-player-time flex-none text-caption tabular-nums">{time}</span>
       <Slider
         label={VIDEO_LABEL.SEEK}
         value={playback.at}
         max={playback.duration}
-        step={SEEK_STEP_S}
+        step={frame}
         length={SLIDER_LENGTH.FILL}
         valueText={time}
         onChange={onSeek}
       />
+      <SpeedButton speed={playback.speed} onPress={onSpeed} />
       {onExpand === undefined || full ? null : (
         <BarButton label={VIDEO_LABEL.EXPAND} icon={<ExpandIcon />} onPress={onExpand} />
       )}
@@ -315,7 +509,13 @@ export function VideoPlayer({
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLSpanElement>(null);
   const [full, toggleFullScreen] = useFullScreen(frame);
-  const [playback, setPlayback] = useState<Playback>({ playing: false, at: 0, duration: 0 });
+  const [playback, setPlayback] = useState<Playback>({
+    playing: false,
+    at: 0,
+    duration: 0,
+    speed: NORMAL_SPEED,
+  });
+  const frameSeconds = useMemo(() => frameSecondsOf(dataUrl), [dataUrl]);
   // The video's own pixels once its size is read, which the viewer fits it by.
   const [natural, setNatural] = useState<VideoSize>();
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
@@ -324,7 +524,12 @@ export function VideoPlayer({
   const read = (shown: HTMLVideoElement) => {
     const duration = Number.isFinite(shown.duration) ? shown.duration : 0;
     // Note that the time is held within the length, because the seek that reads a length stands past it a moment.
-    setPlayback({ playing: !shown.paused, at: Math.min(shown.currentTime, duration), duration });
+    setPlayback({
+      playing: !shown.paused,
+      at: Math.min(shown.currentTime, duration),
+      duration,
+      speed: shown.playbackRate,
+    });
   };
   const expand =
     onExpand === undefined
@@ -353,7 +558,7 @@ export function VideoPlayer({
       aria-label={VIDEO_LABEL.PLAYER}
       // Note that the player hears a key before the control it lands on, because the scrubber's
       // slider steps on an arrow itself and stands down only for a key already taken.
-      onKeyDownCapture={(event) => playerKey(event, video.current)}
+      onKeyDownCapture={(event) => playerKey(event, video.current, frameSeconds)}
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
@@ -390,13 +595,19 @@ export function VideoPlayer({
           onPlay={(event) => read(event.currentTarget)}
           onPause={(event) => read(event.currentTarget)}
           onEnded={(event) => read(event.currentTarget)}
+          onRateChange={(event) => read(event.currentTarget)}
         />
       )}
       <VideoBar
         playback={playback}
+        frame={frameSeconds}
         full={full}
         onToggle={() => toggleOf(video.current)}
+        onStep={(by) => {
+          if (video.current !== null) stepFrame(video.current, frameSeconds, by);
+        }}
         onSeek={seek}
+        onSpeed={() => setSpeed(video.current, nextSpeed(playback.speed))}
         onExpand={expand}
         onFullScreen={toggleFullScreen}
       />
