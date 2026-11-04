@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./account-picture": "./src/account-picture.js",
+    "./account-preferences-live": "./src/account-preferences-live.js",
     "./account-wire": "./src/account-wire.js",
     "./admin-account-wire": "./src/admin-account-wire.js",
     "./admin-answer-wire": "./src/admin-answer-wire.js",

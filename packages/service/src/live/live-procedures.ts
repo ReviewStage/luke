@@ -145,6 +145,13 @@
  * (`integrationStatusesLive`), so a sign-in finished in the browser reaches
  * an open view with no focus. GitHub's standing is
  * `/api/account/integrations/github`'s, read beside it.
+ *
+ * `GET /api/live/account-preferences` answers the account's preferences row
+ * as one statement, its default agent, chapters model, and Slack
+ * notifications as stored, none for an account that stored nothing, woken
+ * by a write to any of them or to another column a view reads
+ * (`accountPreferencesLive`), so a default chosen on another device reaches
+ * an open window within one coalesce window.
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
@@ -192,6 +199,7 @@ import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { SlackBot } from "../slack/slack-bot.js";
 import {
+  accountPreferencesLive,
   agentBrowserTabsLive,
   agentInboxLive,
   agentOriginLive,
@@ -1042,6 +1050,10 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         offered,
         multiple: offered.filter((provider) => connect[provider].multipleAccounts),
       };
+    }),
+    accountPreferences: signedIn.accountPreferences.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      return yield* liveQueryParts(accountPreferencesLive, { userId: context.userId }, input);
     }),
   };
 }

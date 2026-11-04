@@ -47,6 +47,7 @@ import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
+import { accountPreference } from "../schemas/preferences.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { runnerLine } from "../schemas/runner-line.js";
@@ -274,6 +275,24 @@ export const agentPinSync = defineSyncTable(agentPin, {
  */
 export const macCommandSync = defineSyncTable(macCommand, {
   topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/**
+ * The account's preferences row, on the account's topic, which the
+ * account's read of its default agent, chapters model, and Slack
+ * notifications is woken on. Note that where the account last chose to run
+ * a task is ignored, because a Start with Runs on, an enroll, and a
+ * register each rewrite it and only an agent's start reads it, and so is
+ * the row's own instant, which every settings push moves whether or not a
+ * column a view reads changed.
+ */
+export const accountPreferenceSync = defineSyncTable(accountPreference, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: accountPreference.userId }],
+  ignore: [
+    accountPreference.runsOnMachine,
+    accountPreference.runsOnDeviceId,
+    accountPreference.updatedAt,
+  ],
 });
 
 /**
@@ -681,6 +700,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   taskPinSync,
   agentPinSync,
   macCommandSync,
+  accountPreferenceSync,
   integrationConnectionSync,
   runnerLineSync,
   agentQueueSync,

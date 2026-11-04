@@ -2,6 +2,7 @@ import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,
+  MODEL_CATALOG_TTL,
   MODEL_PROVIDER,
   MODEL_SPEED,
   MODEL_SPEED_SUFFIX,
@@ -51,9 +52,6 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  */
 
 const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
-
-/** How long one instance keeps a read catalog before asking again. */
-const MODEL_CATALOG_TTL = Duration.hours(1);
 
 /** Every tag a model must carry to be offered. */
 const REQUIRED_TAGS: readonly string[] = ["tool-use", "reasoning"];
