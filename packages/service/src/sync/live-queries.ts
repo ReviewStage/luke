@@ -18,6 +18,7 @@ import {
   workspacesLiveStatements,
 } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
+import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
@@ -75,6 +76,7 @@ import {
 } from "../automations/automation-live.js";
 import {
   accountInboxLiveStatements,
+  accountItemsDeltaStatements,
   accountItemsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
@@ -319,6 +321,14 @@ function instantParam(param: string): Date {
  * as for the account's inbox: either shows at the hold's end. The settled
  * items it carries are those changed since `settledSince`, which its
  * procedure binds from the clock, since a live statement reads none.
+ *
+ * A reader past a sync id is answered the items that moved alone, each
+ * whole (`accountItemsDeltaStatements`), taking the moved rows its
+ * workspaces' topics reach, since a task, an agent, or a member names
+ * those rather than the account; a message or a file names only its item's
+ * task and agent, so its rows are taken whatever they name. An item that
+ * leaves by the clock, past thirty days settled, logs nothing, and the
+ * reader drops it itself.
  */
 export const inboxItemsLive = defineLiveQuery({
   name: LIVE_READ.INBOX_ITEMS,
@@ -328,6 +338,17 @@ export const inboxItemsLive = defineLiveQuery({
   statements: ({ userId, since, settledSince }) =>
     accountItemsLiveStatements(userId, instantParam(since), instantParam(settledSince)),
   mode: LIVE_MODE.SNAPSHOT,
+  delta: {
+    whole: ITEM_GATES,
+    anyTopic: [inboxMessageSync, attachmentSync],
+    reach: ({ userId }) => readerAndWorkspaceTopics(userId),
+    own: {
+      stamps: { table: inboxItemSync, key: inboxItem.id },
+      items: { table: inboxItemSync, key: inboxItem.id },
+    },
+    statements: ({ userId, settledSince }, moved) =>
+      accountItemsDeltaStatements(userId, instantParam(settledSince), moved),
+  },
 });
 
 /** One agent's inbox, as any member of its workspace reads it, woken as a task's is, on the agent's topic. */
