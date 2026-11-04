@@ -157,8 +157,6 @@ import { reachedAgentById } from "../agents/agent-reach.js";
 import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
 import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
-import { accountIntegrationConnect } from "../integrations/integration-connect.js";
-import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { heldUntil } from "../http/held-read.js";
 import {
   HOSTED_REFUSAL,
@@ -167,6 +165,8 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { accountIntegrationConnect } from "../integrations/integration-connect.js";
+import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentBrowserTabsLive,

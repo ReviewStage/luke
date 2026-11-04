@@ -298,9 +298,7 @@ export const liveContract = {
     .input(livePullRequestChaptersSchema)
     .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
   integrationStatuses: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }),
-    )
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
 };

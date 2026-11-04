@@ -1327,14 +1327,12 @@ it.layer(getTestDB())("the account's integrations' live read", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/integration-statuses" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(
-          answered.body,
-        );
+        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(
           integrationLiveRowsOf(answer.queries.connections.rows ?? [])
             .map((row) => [row.connection, row.label, row.status])
-            .toSorted(([a = ""], [b = ""]) => a.localeCompare(b)),
+            .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
           [
             [LINEAR, "Acme", INTEGRATION_STATUS.CONNECTED],
             [NOTION, null, INTEGRATION_STATUS.PENDING],

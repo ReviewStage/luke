@@ -185,7 +185,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
- * inbox; one task's pages, or one agent's on no task, which the open task's
+ * inbox; where the account's integrations stand, by the account, which every
+ * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
  * page, the panel beside an Inbox item, an agent's page, and a page's card
  * or frame each hold; one agent's pull request's chapters, by the number its
  * Pull request tab's own read of it found; one task's cloud Browser tabs,
@@ -225,6 +226,13 @@ const HOST_READS = {
     path: (key: InboxHolderKey) => [key.kind, key.id],
     hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
     retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
+  }),
+  [LIVE_READ.INTEGRATIONS]: hostRead(LIVE_READ.INTEGRATIONS, {
+    slice: APP_SLICE.INTEGRATIONS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the integrations of whoever is signed in, so the hold and its Try again name no account.
+    hold: () => askAct(ACT_KIND.INTEGRATIONS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.INTEGRATIONS_RETRY),
   }),
   [LIVE_READ.INTEGRATION_TOOLS]: hostRead(LIVE_READ.INTEGRATION_TOOLS, {
     slice: APP_SLICE.INTEGRATION_TOOLS,

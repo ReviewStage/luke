@@ -21,7 +21,7 @@ import {
 const { GITHUB, GRANOLA, LINEAR, NOTION } = INTEGRATION_PROVIDER;
 
 /** One row as the statement delivers it. */
-function row(connection: string, provider: IntegrationProvider, status: string, label?: string) {
+function row(connection: string, provider: string, status: string, label?: string) {
   return { id: `id-${connection}`, connection, provider, label: label ?? null, status };
 }
 
@@ -55,7 +55,12 @@ it.each<{
     drawn: { [NOTION]: INTEGRATION_STATUS.EXPIRED },
     accounts: [
       { provider: NOTION, connection: NOTION, status: INTEGRATION_STATUS.EXPIRED },
-      { provider: NOTION, connection: "notion-2", label: "Home", status: INTEGRATION_STATUS.PENDING },
+      {
+        provider: NOTION,
+        connection: "notion-2",
+        label: "Home",
+        status: INTEGRATION_STATUS.PENDING,
+      },
     ],
     addable: undefined,
   },

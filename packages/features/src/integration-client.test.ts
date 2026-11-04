@@ -21,42 +21,44 @@ const client = new HostedIntegrationsClient({
   }),
 });
 
-it.effect("a call about one account names it in the query, and a Connect that adds one says so", () =>
-  Effect.gen(function* () {
-    const api = fakeCloudApi({
-      "POST /api/account/integrations/notion/connect": {
-        answer: () => ({ url: "https://vercel.com/connect/authorize/r", connection: "notion-3" }),
-      },
-      "POST /api/account/integrations/notion/rename": {
-        answer: (request) => ({
-          account: {
-            provider: "notion",
-            connection: request.searchParams.get("connection") ?? "",
-            label: JSON.parse(request.body ?? "{}").label,
+it.effect(
+  "a call about one account names it in the query, and a Connect that adds one says so",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/account/integrations/notion/connect": {
+          answer: () => ({ url: "https://vercel.com/connect/authorize/r", connection: "notion-3" }),
+        },
+        "POST /api/account/integrations/notion/rename": {
+          answer: (request) => ({
+            account: {
+              provider: "notion",
+              connection: request.searchParams.get("connection") ?? "",
+              label: JSON.parse(request.body ?? "{}").label,
 
-            status: "connected",
-          },
-        }),
-      },
-    });
+              status: "connected",
+            },
+          }),
+        },
+      });
 
-    const added = yield* Effect.provide(
-      client.connect(INTEGRATION_PROVIDER.NOTION, { add: true }),
-      api.layer,
-    );
-    assert.deepEqual(added, {
-      url: "https://vercel.com/connect/authorize/r",
-      connection: "notion-3",
-    });
-    const renamed = yield* Effect.provide(
-      client.rename(INTEGRATION_PROVIDER.NOTION, "notion-2", "Home"),
-      api.layer,
-    );
-    assert.ok("account" in renamed);
-    assert.equal(renamed.account.label, "Home");
-    assert.deepEqual(
-      api.requests().map((request) => request.search),
-      ["?add=true", "?connection=notion-2"],
-    );
-  }),
+      const added = yield* Effect.provide(
+        client.connect(INTEGRATION_PROVIDER.NOTION, { add: true }),
+        api.layer,
+      );
+      assert.deepEqual(added, {
+        url: "https://vercel.com/connect/authorize/r",
+        connection: "notion-3",
+      });
+      const renamed = yield* Effect.provide(
+        client.rename(INTEGRATION_PROVIDER.NOTION, "notion-2", "Home"),
+        api.layer,
+      );
+      assert.ok("account" in renamed);
+      assert.equal(renamed.account.label, "Home");
+      assert.deepEqual(
+        api.requests().map((request) => request.search),
+        ["?add=true", "?connection=notion-2"],
+      );
+    }),
 );

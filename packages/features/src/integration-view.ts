@@ -5,7 +5,6 @@ import {
   integrationConnectionNameSchema,
   integrationProviderSchema,
   integrationStatusAnswerSchema,
-  integrationStatusesAnswerSchema,
   integrationToolsAnswerSchema,
 } from "./integration-wire.js";
 
@@ -57,14 +56,6 @@ export const integrationRenameParamsSchema = EffectSchema.Struct({
 });
 
 export type IntegrationRenameParams = typeof integrationRenameParamsSchema.Type;
-
-/** Where every provider's connection stands, as the window hears it. */
-export const integrationStatusesViewSchema = EffectSchema.Union([
-  integrationStatusesAnswerSchema,
-  failed,
-]);
-
-export type IntegrationStatusesView = typeof integrationStatusesViewSchema.Type;
 
 /** Where one provider's connection stands once a Disconnect ended it, as the window hears it. */
 export const integrationStatusViewSchema = EffectSchema.Union([

@@ -4,7 +4,6 @@ import {
   type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationProviderParams,
-  type IntegrationStatusesView,
   type IntegrationStatusView,
   integrationProviderParamsSchema,
   integrationRenameParamsSchema,
@@ -21,59 +20,83 @@ import {
   type GatewayMethodTable,
   readParams,
 } from "@repo/gateway";
-import { Effect, FiberMap, Option, type Scope } from "effect";
+import { Effect, FiberHandle, FiberMap, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { type AppIntegrationTools, NO_KEYS_HELD } from "./app-state.js";
+import { type AppIntegrations, type AppIntegrationTools, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type HeldIntegrations, heldIntegrations } from "./integrations-follow.js";
 import type { RunMode } from "./run-mode.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
- * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or canceled, a connection ended, an account named.
+ * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, held, a sign-in begun or canceled, a connection ended, an account named.
  *
- * Nothing is held here. A Connect asks the service to begin a sign-in to
- * one provider and opens the address it answered in the browser through the
- * native node, here, so the address, which begins a grant for the account,
- * never reaches a window or a report; the window hears only whether the
- * browser was sent. It learns how the sign-in settled by reading where the
- * integrations stand again, which it does when it is shown and when the
- * developer comes back from the browser. Each server's tools are fetched for
- * the windows that hold them (`held-fetch.ts`), by the server's name, asked
- * as a window first holds them, again as a window comes forward, which is
- * how the developer comes back from mending a connection in the browser,
- * and on Try again, and told as `INTEGRATION_TOOLS_CHANGED` events to the
- * app state every window draws. Behind a closed account gate, or on a run
- * that sends nothing, every ask answers unanswered.
+ * Where the integrations stand is held for the windows that draw one
+ * (`integrations-follow.ts`), under the account signed in, followed on the
+ * service's live read with GitHub's standing asked beside it, and told as
+ * `INTEGRATIONS_CHANGED` events to the app state every window draws. A
+ * Connect asks the service to begin a sign-in to one provider and opens the
+ * address it answered in the browser through the native node, here, so the
+ * address, which begins a grant for the account, never reaches a window or
+ * a report; the window hears only whether the browser was sent, and the
+ * held read draws how the sign-in settled once the service's callback, or
+ * the host's own settling while it stands pending, writes it. Each server's
+ * tools are fetched for the windows that hold them (`held-fetch.ts`), by the
+ * server's name, asked as a window first holds them, again as a window comes
+ * forward, which is how the developer comes back from mending a connection
+ * in the browser, and on Try again, and told as `INTEGRATION_TOOLS_CHANGED`
+ * events. Behind a closed account gate, or on a run that sends nothing,
+ * every ask answers unanswered.
  */
 
 /** The service's side of the integrations, as this concern asks it. */
 export type IntegrationsClient = Pick<
   HostedIntegrationsClient,
-  "statuses" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
+  "statusesLive" | "settle" | "github" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
 >;
 
 export interface IntegrationsDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
+  /** The account signed in now, by its id, which the held integrations are followed under; none where nobody is. */
+  accountId: () => string | undefined;
   client: IntegrationsClient;
   /** Hands an address to the operating system; answers whether it took it. */
   openExternal: (url: string) => Effect.Effect<boolean>;
-  /** The windows coming forward, on which every server's tools a window holds are asked again. */
+  /** The windows coming forward, on which every server's tools a window holds, and GitHub's standing, are asked again. */
   focus: WindowFocus;
 }
 
 export interface IntegrationsComposer extends Composer {
-  /** Every server's tools a window holds followed anew, as the account gate opening asks. */
+  /** Every server's tools a window holds followed anew, and the windows' hold on where the integrations stand taken anew under the account signed in, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
-  /** Every server's tools let go, as a sign-out lets them go. */
+  /** Every server's tools and the held integrations let go, as a sign-out lets them go; the windows' holds stand. */
   readonly reset: Effect.Effect<void>;
+  /** GitHub's standing asked again, as a GitHub connect or disconnect that answered asks. */
+  readonly githubMoved: Effect.Effect<void>;
 }
 
 const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
+
+/** A call of the service asked behind the gate, or unanswered where the gate stands closed. */
+type Asked = <Answer>(
+  call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+) => Effect.Effect<Answer | typeof UNANSWERED>;
+
+/** What the composer holds for the windows: where the integrations stand and each server's tools, and the windows' holds on them. */
+interface Held {
+  readonly integrations: HeldIntegrations;
+  /** The windows' hold on where the integrations stand, one fiber standing until let go, under the account signed in as it was taken. */
+  readonly integrationsHold: FiberHandle.FiberHandle<void>;
+  /** Each server's tools, by its name. */
+  readonly tools: HeldFetch<string, IntegrationToolsAnswer>;
+  /** The windows' hold on each server's tools, one fiber standing until let go. */
+  readonly toolHolds: FiberMap.FiberMap<string>;
+}
 
 /** The account a server's name stands for, as the service is asked it: its provider, and the account where the name is not the provider's own; none for a name this build cannot read. */
 function serverOf(
@@ -94,20 +117,28 @@ export function composeIntegrations(
 ): Effect.Effect<IntegrationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const { kernel, account, client } = dependencies;
+    const { kernel, account, client, focus } = dependencies;
     const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
     /** The service asked behind the gate, over the host's own HTTP client. */
-    const asked = <Answer>(
-      call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-    ): Effect.Effect<Answer | typeof UNANSWERED> =>
+    const asked: Asked = (call) =>
       gate()
         ? Effect.provideService(call, HttpClient.HttpClient, http)
         : Effect.succeed(UNANSWERED);
+    const integrations = yield* heldIntegrations({
+      seal: (userId, poll, after) => asked(client.statusesLive(userId, poll, after)),
+      // Note that each ask is made afresh, behind the gate as it stands when it is asked.
+      github: Effect.suspend(() => asked(client.github())),
+      settle: Effect.suspend(() => Effect.asVoid(asked(client.settle()))),
+      gate,
+      focus,
+      tell: (held: AppIntegrations) =>
+        kernel.emit(GATEWAY_EVENT.INTEGRATIONS_CHANGED, carried(held)),
+    });
     const tools = yield* heldFetch<typeof LIVE_READ.INTEGRATION_TOOLS, string>({
       empty: NO_KEYS_HELD,
       path: (server) => [server],
       gate,
-      focus: dependencies.focus,
+      focus,
       fetch: (server) => {
         const target = serverOf(server);
         if (target === undefined) return Effect.succeed(Option.none());
@@ -119,20 +150,20 @@ export function composeIntegrations(
       tell: (held: AppIntegrationTools) =>
         kernel.emit(GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED, carried(held)),
     });
-    return composed(dependencies, asked, tools, yield* FiberMap.make<string>());
+    return composed(dependencies, asked, {
+      integrations,
+      integrationsHold: yield* FiberHandle.make<void>(),
+      tools,
+      toolHolds: yield* FiberMap.make<string>(),
+    });
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything but a server's tools, while a window holds them. */
+/** The composer's one table, built from its seams; nothing here starts anything but what a window holds. */
 function composed(
   dependencies: IntegrationsDependencies,
-  asked: <Answer>(
-    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ) => Effect.Effect<Answer | typeof UNANSWERED>,
-  /** Each server's tools, by its name. */
-  tools: HeldFetch<string, IntegrationToolsAnswer>,
-  /** The windows' hold on each server's tools, one fiber standing until let go. */
-  toolHolds: FiberMap.FiberMap<string>,
+  asked: Asked,
+  { integrations, integrationsHold, tools, toolHolds }: Held,
 ): IntegrationsComposer {
   const { client, openExternal } = dependencies;
 
@@ -145,6 +176,19 @@ function composed(
       params,
       "the ask names a provider this build knows",
     );
+
+  /** Whether any window holds where the integrations stand, so the gate opening holds them anew under whoever signed in. */
+  let holding = false;
+  /** The windows' hold taken under the account signed in now, in place of any taken before; none while nobody is. */
+  const holdIntegrations = Effect.suspend(() => {
+    const userId = dependencies.accountId();
+    return userId === undefined
+      ? FiberHandle.clear(integrationsHold)
+      : FiberHandle.run(
+          integrationsHold,
+          Effect.scoped(Effect.andThen(integrations.hold(userId), Effect.never)),
+        );
+  });
 
   /** A sign-in begun and its address opened; the window hears whether it was, and the account it signs in, and nothing of the address. */
   const connect = ({
@@ -163,8 +207,25 @@ function composed(
     });
 
   const methods: HostMethodTable = {
-    [GATEWAY_METHOD.INTEGRATIONS_STATUS]: () =>
-      Effect.map(asked(client.statuses()), (answer) => carried<IntegrationStatusesView>(answer)),
+    // Where the integrations stand is held for the windows while any draws one, under the account signed in, and told only on the app state (`INTEGRATIONS_CHANGED`).
+    [GATEWAY_METHOD.INTEGRATIONS_FOLLOW]: () =>
+      Effect.gen(function* () {
+        holding = true;
+        yield* holdIntegrations;
+        return {};
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW]: () =>
+      Effect.gen(function* () {
+        holding = false;
+        yield* FiberHandle.clear(integrationsHold);
+        return {};
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_RETRY]: () =>
+      Effect.gen(function* () {
+        const userId = dependencies.accountId();
+        if (userId !== undefined) yield* integrations.retry(userId);
+        return {};
+      }),
     [GATEWAY_METHOD.INTEGRATIONS_CONNECT]: (params) =>
       Effect.gen(function* () {
         const target = yield* targetOf(params);
@@ -219,5 +280,15 @@ function composed(
       }),
   };
 
-  return { methods, lifetime: Effect.void, open: tools.open, reset: tools.end };
+  return {
+    methods,
+    lifetime: Effect.void,
+    // Note that where the integrations stand is held anew under whoever signed in, in place of the hold before, rather than followed again under the account it was held for.
+    open: Effect.gen(function* () {
+      yield* tools.open;
+      if (holding) yield* holdIntegrations;
+    }),
+    reset: Effect.andThen(tools.end, integrations.end),
+    githubMoved: integrations.githubMoved,
+  };
 }

@@ -15,7 +15,6 @@ import {
   SettingsRowStateLine,
   SettingsSection,
 } from "@repo/ui";
-import { useEffect } from "react";
 import { useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 
@@ -38,10 +37,6 @@ const TOOLS: readonly IntegrationProvider[] = [
 export function ToolRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
-  const { read } = statuses;
-  useEffect(() => {
-    void read();
-  }, [read]);
   return (
     <SettingsSection>
       {TOOLS.map((provider) => {

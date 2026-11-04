@@ -51,7 +51,12 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdIntegrationTools, stateWith } from "../testing/app-state.js";
+import {
+  handHostReads,
+  holdIntegrations,
+  holdIntegrationTools,
+  stateWith,
+} from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -241,36 +246,29 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
   }
   return Promise.resolve(
-    request.kind === ACT_KIND.INTEGRATIONS_STATUS
-      ? {
-          status: FAKE_ANSWER.DONE,
-          value: {
-            integrations: LINEAR_CONNECTED,
-          },
-        }
-      : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-        ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-        : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+    request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+      ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
+      : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+        ? {
+            status: FAKE_ANSWER.DONE,
+            value: {
+              agents: workspaceAnswer(request.payload),
+            },
+          }
+        : request.kind === ACT_KIND.TASKS_TREE
           ? {
               status: FAKE_ANSWER.DONE,
               value: {
-                agents: workspaceAnswer(request.payload),
+                folder: {
+                  path: "",
+                  repository: standing,
+                  branch: "main",
+                  entries: TREES.get(standing) ?? [],
+                  truncated: false,
+                },
               },
             }
-          : request.kind === ACT_KIND.TASKS_TREE
-            ? {
-                status: FAKE_ANSWER.DONE,
-                value: {
-                  folder: {
-                    path: "",
-                    repository: standing,
-                    branch: "main",
-                    entries: TREES.get(standing) ?? [],
-                    truncated: false,
-                  },
-                },
-              }
-            : { status: FAKE_ANSWER.UNKNOWN_ACT },
+          : { status: FAKE_ANSWER.UNKNOWN_ACT },
   );
 }
 
@@ -285,6 +283,7 @@ beforeEach(() => {
   fakeActs({ act: answer });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: LISTED_TOOLS }));
+  holdIntegrations(() => ({ rows: { integrations: LINEAR_CONNECTED } }));
 });
 
 afterEach(() => {

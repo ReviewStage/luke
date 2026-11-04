@@ -8,10 +8,10 @@ import {
   type IntegrationAccount,
   type IntegrationProvider,
   type IntegrationStatus,
-  type integrationStatusesAnswerSchema,
-  integrationConnectionOf,
   integrationConnectionNameSchema,
+  integrationConnectionOf,
   integrationProviderSchema,
+  type integrationStatusesAnswerSchema,
 } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 
@@ -58,7 +58,7 @@ const rowStatusSchema = EffectSchema.Literals([
 ]);
 
 /** One integration row as the statement delivers it, by its id. */
-export const integrationLiveRowSchema = EffectSchema.Struct({
+const integrationLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   connection: integrationConnectionNameSchema,
   provider: integrationProviderSchema,
