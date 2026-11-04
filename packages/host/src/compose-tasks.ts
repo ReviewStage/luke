@@ -992,19 +992,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
     const userId = dependencies.accountId();
     return followTaskList({
-      live: (poll, after) =>
+      live: (sync) =>
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
-          : Effect.map(served(client.listLive(userId, poll, after)), (sealed) =>
+          : Effect.map(served(client.listLive(userId, sync)), (sealed) =>
               sealed.ok
                 ? sealed.answer
                 : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
             ),
       // Note that an answer's read standing rides the list it draws, so a window is told both at once.
-      take: (rows) =>
+      take: (rows, standing) =>
         Effect.suspend(() => {
           view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
-          return taskList.collections.answer(rows);
+          return taskList.collections.answer(rows, standing);
         }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),

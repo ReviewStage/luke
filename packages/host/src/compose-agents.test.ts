@@ -5,6 +5,7 @@ import {
   AGENT_CALL_FAILURE,
   type DevicePresenceAnswerView,
   INBOX_SCOPE_KIND,
+  type MemoriesAnswerView,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import {
@@ -257,6 +258,7 @@ function fakeService() {
     scope: polledLive(SCOPE_PARTS),
     account: polledLive(ACCOUNT_PARTS),
     items: polledLive(ITEMS_PARTS),
+    memories: polledLive(MEMORIES_PARTS),
     origin: polledLive(["origin"]),
   };
   // Each page read at once, in turn; the last stands once the others are read.
@@ -274,6 +276,10 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
+  /** What a forget answers, once its gate lets it; the memories left, with no transaction, from the start. */
+  let forgetAnswer: MemoriesAnswerView = { memories: [] };
+  /** What a forget waits on before the service answers it; nothing from the start. */
+  let forgetGate: Effect.Effect<void> = Effect.void;
   /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
   let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
     failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -542,16 +548,21 @@ function fakeService() {
         asked.push("remove-token");
         return { token: null };
       }),
-    readMemories: (reading) =>
-      Effect.sync(() => {
-        asked.push(`memories:${reading.workspaceId}`);
-        return { memories: [MEMORY] };
+    workspaceMemoriesLive: (workspaceId, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<AgentClient["workspaceMemoriesLive"]> => {
+        if (poll !== true) asked.push(`memories-live:${workspaceId}`);
+        return poll === true ? live.memories.poll(after) : Effect.succeed(live.memories.first());
       }),
     forgetMemory: (forget) =>
-      Effect.sync(() => {
-        asked.push(`forget:${forget.workspaceId}:${forget.id}`);
-        return { memories: [] };
-      }),
+      Effect.andThen(
+        Effect.sync(() => {
+          asked.push(`forget:${forget.workspaceId}:${forget.id}`);
+        }),
+        Effect.andThen(
+          Effect.suspend(() => forgetGate),
+          Effect.sync(() => forgetAnswer),
+        ),
+      ),
     transcribeDictation: (clip) =>
       Effect.sync(() => {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
@@ -748,6 +759,11 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** What each forget answers from now on, and what it waits on before it does. */
+    answerForgets: (answer: MemoriesAnswerView, gate: Effect.Effect<void> = Effect.void) => {
+      forgetAnswer = answer;
+      forgetGate = gate;
+    },
     /** How long ago the account's devices beat, as the service answers from now on. */
     answerPresence: (next: DevicePresenceAnswerView) => {
       presence = Effect.succeed(next);
@@ -789,6 +805,7 @@ const TRANSCRIPT_PARTS = [
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
 const ITEMS_PARTS = ["stamps", "items", "messages", "files"] as const;
+const MEMORIES_PARTS = ["memories"] as const;
 
 /** The account's items' read as the service answers it, before it is read by sync id. */
 type ItemsAnswer = Exclude<
@@ -937,6 +954,7 @@ function subject(
       askedAsTold,
       asked: service.asked,
       startCommits: service.startCommits,
+      answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
       hangPresence: service.hangPresence,
       sealTranscript: service.sealTranscript,
@@ -966,6 +984,11 @@ function subject(
       providerKeys: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the memories the host holds for the windows, whole, in order. */
+      memories: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.MEMORIES_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
@@ -3185,36 +3208,109 @@ it.effect(
     }),
 );
 
+/** A second memory of the workspace, kept after `MEMORY`. */
+const OTHER_MEMORY: MemorySummary = {
+  id: "9e2b3c4d-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+  text: "Tests run before every push.",
+  keptBy: { userId: "user-1", name: "Dean" },
+  forgettable: true,
+  createdAt: 3,
+  updatedAt: 4,
+};
+
+/** A memory as the workspace's live read delivers it. */
+function memoryRow(memory: MemorySummary) {
+  return {
+    id: memory.id,
+    text: memory.text,
+    keeperId: memory.keptBy?.userId ?? null,
+    keeperName: memory.keptBy?.name ?? null,
+    forgettable: memory.forgettable,
+    createdAt: memory.createdAt,
+    updatedAt: memory.updatedAt,
+  };
+}
+
+/** The ids of the workspace's memories as the host last told them; none where it told none. */
+function memoryIdsOf(told: WireValue | undefined): readonly string[] | undefined {
+  const read = isRecord(told) ? told[WORKSPACE_ID] : undefined;
+  const rows = isRecord(read) ? read.rows : undefined;
+  return Array.isArray(rows)
+    ? rows.flatMap((row) => (isRecord(row) && typeof row.id === "string" ? [row.id] : []))
+    : undefined;
+}
+
 it.effect(
-  "a workspace's memories are read and one is forgotten, each one ask of the service naming the workspace; a read naming no workspace or a forget naming no memory id is refused before it, and a closed gate answers unanswered",
+  "a forget draws its memory gone before the service answers and keeps it gone through an answer from before it until the read carries its transaction, and a refused forget puts back the memory it drew gone",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, live, answerForgets } = harness;
+      const shown = () => memoryIdsOf(harness.memories().at(-1));
+      yield* call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      // The read is woken by a write once, so it hands a wait for the next.
+      live.memories.set({ memories: [memoryRow(OTHER_MEMORY), memoryRow(MEMORY)] }, ["9100"]);
+      yield* nextPoll;
+      assert.deepEqual(shown(), [OTHER_MEMORY.id, MEMORY.id]);
+
+      const answering = yield* Deferred.make<void>();
+      answerForgets({ memories: [OTHER_MEMORY], txid: "9200" }, Deferred.await(answering));
+      const forgetting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: MEMORY.id }),
+      );
+      yield* settled;
+      assert.equal(forgetting.pollUnsafe(), undefined, "no answer while the service is asked");
+      assert.deepEqual(shown(), [OTHER_MEMORY.id], "gone before the service answers");
+
+      yield* Deferred.succeed(answering, undefined);
+      assert.deepEqual(yield* Fiber.join(forgetting), { memories: [OTHER_MEMORY], txid: "9200" });
+      // The read answers once more from before the forget, which still stands over it.
+      live.memories.set({ memories: [memoryRow(OTHER_MEMORY), memoryRow(MEMORY)] });
+      yield* nextPoll;
+      assert.deepEqual(shown(), [OTHER_MEMORY.id]);
+      live.memories.set({ memories: [memoryRow(OTHER_MEMORY)] }, ["9200"]);
+      yield* nextPoll;
+      assert.deepEqual(shown(), [OTHER_MEMORY.id]);
+
+      const refusing = yield* Deferred.make<void>();
+      answerForgets({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
+      const refused = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: OTHER_MEMORY.id }),
+      );
+      yield* settled;
+      assert.deepEqual(shown(), []);
+      yield* Deferred.succeed(refusing, undefined);
+      assert.deepEqual(yield* Fiber.join(refused), { failure: AGENT_CALL_FAILURE.NOT_PERMITTED });
+      yield* settled;
+      assert.deepEqual(shown(), [OTHER_MEMORY.id], "put back once the service refused it");
+    }),
+);
+
+it.effect(
+  "a forget naming no memory id, or a hold naming no workspace, is refused before the service is asked, and a closed gate answers a forget unanswered",
   () =>
     Effect.gen(function* () {
       const { call, asked } = yield* subject();
       const signedOut = yield* subject({ signedIn: false });
 
-      const read = yield* call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: WORKSPACE_ID });
-      const forgotten = yield* call(GATEWAY_METHOD.MEMORIES_FORGET, {
-        workspaceId: WORKSPACE_ID,
-        id: MEMORY.id,
-      });
       const refused = [
         yield* Effect.flip(
           call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
         ),
-        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_READ, {})),
+        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {})),
       ];
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_READ, {
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_FORGET, {
         workspaceId: WORKSPACE_ID,
+        id: MEMORY.id,
       });
 
-      assert.deepEqual(read, { memories: [MEMORY] });
-      assert.deepEqual(forgotten, { memories: [] });
       assert.deepEqual(
         refused.map((refusal) => refusal._tag),
         ["InvalidParamsRefusal", "InvalidParamsRefusal"],
       );
       assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
-      assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
+      assert.deepEqual(asked, []);
       assert.deepEqual(signedOut.asked, []);
     }),
 );

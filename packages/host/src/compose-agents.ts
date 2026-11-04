@@ -76,8 +76,7 @@ import {
   type HostsAnswerView,
   hostIdParamsSchema,
   INBOX_SCOPE_KIND,
-  type MemoriesAnswerView,
-  memoriesReadParamsSchema,
+  memoriesFollowParamsSchema,
   memoryForgetParamsSchema,
   type ProviderKeysAnswerView,
   providerKeyForAgentsParamsSchema,
@@ -155,6 +154,7 @@ import {
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
+  type AppMemories,
   type AppProviderKeyList,
   type AppProviderKeys,
   type AppWorkspaceTools,
@@ -186,6 +186,7 @@ import {
   keptOfAgent,
 } from "./kept-content.js";
 import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
+import { heldMemories, memoryForget } from "./memory-follow.js";
 import { heldAgentOrigins } from "./origin-follow.js";
 import {
   type PullRequestListing,
@@ -219,7 +220,10 @@ import type { WindowFocus } from "./window-focus.js";
  * events to the app state every window draws, and the reads the host
  * fetches for the windows that hold them (`held-fetch.ts`): when the
  * account's devices last beat, asked every `MAC_PRESENCE.POLL_MS` while
- * held, and an agent's own tools, each told the same way. The window holds the agents it draws and the cursor it reads
+ * held, and an agent's own tools, each told the same way; and each
+ * workspace's memories Settings › Memory holds, followed live into the
+ * sync engine's pool (`memory-follow.ts`) and told as `MEMORIES_CHANGED`,
+ * a forget drawn gone over them the moment it is asked. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. The transcript read is held open here while
@@ -296,7 +300,7 @@ export type AgentClient = Pick<
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
-  | "readMemories"
+  | "workspaceMemoriesLive"
   | "forgetMemory"
   | "transcribeDictation"
   | "answerInbox"
@@ -485,8 +489,18 @@ export function composeAgents(
         userId,
         tellItems,
       );
+    const memories = yield* heldMemories({
+      seal: (workspaceId, userId, poll, after) =>
+        asked(client.workspaceMemoriesLive(workspaceId, userId, poll, after)),
+      accountId: dependencies.accountId,
+      gate,
+      pool: dependencies.pool,
+      tell: (held: AppMemories) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.MEMORIES_CHANGED, carried(held)),
+    });
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const chapterHolds = yield* FiberMap.make<ChaptersKey>();
+    const memoryHolds = yield* FiberMap.make<string>();
     const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
@@ -511,6 +525,7 @@ export function composeAgents(
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
       { chapters, holds: chapterHolds },
+      { memories, holds: memoryHolds },
       { origins, holds: originHolds },
       fetched,
       parts,
@@ -550,6 +565,12 @@ interface SessionReads {
 interface ChapterFollows {
   readonly chapters: HeldSlice<ChaptersKey>;
   readonly holds: FiberMap.FiberMap<ChaptersKey>;
+}
+
+/** The held lifetime over every workspace's memories the windows hold, and the windows' holds, one fiber per workspace held. */
+interface MemoryFollows {
+  readonly memories: HeldSlice<string>;
+  readonly holds: FiberMap.FiberMap<string>;
 }
 
 /** The held lifetime over every agent's origin the windows hold, and the windows' holds, one fiber per agent held. */
@@ -678,6 +699,8 @@ function composed(
   { reads: sessionReads, followItems }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
+  /** The workspaces' memories Settings › Memory holds. */
+  { memories, holds: memoryHolds }: MemoryFollows,
   /** The agents' origins the windows hold. */
   { origins, holds: originHolds }: OriginFollows,
   { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
@@ -995,26 +1018,52 @@ function composed(
         );
         return yield* keysWritten(yield* asked(client.saveProviderKey(save)));
       }),
-    [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
+    // A workspace's memories are held for the windows while Settings › Memory shows them, and told only on the app state (`MEMORIES_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.MEMORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const reading = yield* readParams(
-          memoriesReadParamsSchema,
+        const { workspaceId } = yield* readParams(
+          memoriesFollowParamsSchema,
           params,
-          "a read names a workspace",
+          "following memories names a workspace",
         );
-        const answer = yield* asked(client.readMemories(reading));
-        return carried<MemoriesAnswerView>(answer);
+        yield* FiberMap.run(
+          memoryHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(memories.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
       }),
-    [GATEWAY_METHOD.MEMORIES_FORGET]: (params) =>
+    [GATEWAY_METHOD.MEMORIES_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const forget = yield* readParams(
+        const { workspaceId } = yield* readParams(
+          memoriesFollowParamsSchema,
+          params,
+          "letting memories go names a workspace",
+        );
+        yield* FiberMap.remove(memoryHolds, workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.MEMORIES_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* readParams(
+          memoriesFollowParamsSchema,
+          params,
+          "reading memories again names a workspace",
+        );
+        yield* memories.retry(workspaceId);
+        return {};
+      }),
+    [GATEWAY_METHOD.MEMORIES_FORGET]: declaredMethod(
+      dependencies.pool,
+      memoryForget((forget) => asked(client.forgetMemory(forget))),
+      (params: WireRecord) =>
+        readParams(
           memoryForgetParamsSchema,
           params,
           "a forget names a workspace and a memory's id",
-        );
-        const answer = yield* asked(client.forgetMemory(forget));
-        return carried<MemoriesAnswerView>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the words, because they are the developer's voice.
@@ -1659,6 +1708,7 @@ function composed(
     yield* FiberMap.clear(followed);
     yield* holders.end;
     yield* chapters.end;
+    yield* memories.end;
     yield* origins.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
@@ -1678,6 +1728,7 @@ function composed(
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
     yield* chapters.open;
+    yield* memories.open;
     yield* origins.open;
     yield* presenceHold.open;
     yield* keysHold.open;

@@ -246,17 +246,17 @@ export const githubTokenSaveParamsSchema = githubTokenSaveRequestSchema;
 
 export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
-/** A workspace's memories, as the window hears them read or one forgotten: the memories as they stand, or why there are none. */
+/** A workspace's memories, as the window hears one forgotten: the memories as they stand, or why there are none. */
 export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
 
 export type MemoriesAnswerView = typeof memoriesAnswerViewSchema.Type;
 
-/** Reading a workspace's memories, as the window asks it: the workspace Settings shows. */
-export const memoriesReadParamsSchema = EffectSchema.Struct({
+/** Holding a workspace's memories, or reading them again, as the window asks it: the workspace Settings shows. */
+export const memoriesFollowParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
 });
 
-export type MemoriesReadParams = typeof memoriesReadParamsSchema.Type;
+export type MemoriesFollowParams = typeof memoriesFollowParamsSchema.Type;
 
 /** Forgetting a memory, as the window asks it: its workspace and the memory's id. */
 export const memoryForgetParamsSchema = EffectSchema.Struct({
