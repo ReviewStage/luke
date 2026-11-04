@@ -36,12 +36,7 @@ import {
   adminMetricsWindow,
 } from "@repo/features/admin-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
-import {
-  DEVICE_ARCH,
-  DEVICE_PLATFORM,
-  DEVICE_SETUP,
-  HOST_UPDATE,
-} from "@repo/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
@@ -64,6 +59,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
   type AppGitHubTokens,
+  type AppHosts,
   type AppInstalledSkills,
   type AppIntegrations,
   type AppIntegrationTools,
@@ -634,75 +630,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
-  [ACT_KIND.HOSTS_LIST]: () => ({
-    hosts: [
-      {
-        id: FIXTURE_HOST.ONLINE,
-        name: "fra-01",
-        seenAt: NOW,
-        version: "0.1.0",
-        upgradeNeeded: false,
-      },
-      {
-        id: FIXTURE_HOST.MAC,
-        name: "studio-mini",
-        platform: DEVICE_PLATFORM.DARWIN,
-        seenAt: NOW,
-        version: "0.1.0",
-        upgradeNeeded: false,
-        setup: DEVICE_SETUP.PREPARING,
-      },
-      {
-        id: FIXTURE_HOST.SETUP_FAILED,
-        name: "hel-01",
-        seenAt: NOW,
-        version: "0.1.0",
-        upgradeNeeded: false,
-        setup: DEVICE_SETUP.FAILED,
-        setupFailure: "Claude Code could not be installed: no space left on device",
-      },
-      {
-        id: FIXTURE_HOST.OLD,
-        name: "sgp-01",
-        seenAt: NOW,
-        version: "0.0.9",
-        upgradeNeeded: true,
-      },
-      {
-        id: FIXTURE_HOST.UPDATE_WAITING,
-        name: "ams-01",
-        seenAt: NOW,
-        version: "0.2.1",
-        upgradeNeeded: false,
-        update: HOST_UPDATE.WAITING,
-      },
-      {
-        id: FIXTURE_HOST.UPDATING,
-        name: "ord-01",
-        seenAt: NOW,
-        version: "0.2.1",
-        upgradeNeeded: false,
-        update: HOST_UPDATE.UPDATING,
-      },
-      {
-        id: FIXTURE_HOST.UPDATE_FAILED,
-        name: "nrt-01",
-        seenAt: NOW,
-        version: "0.2.0",
-        upgradeNeeded: false,
-        update: HOST_UPDATE.FAILED,
-        updateFailure: "the download did not match its checksum",
-      },
-      {
-        id: FIXTURE_HOST.OFFLINE,
-        name: "sfo-02",
-        seenAt: NOW - 3 * HOUR,
-        version: "0.1.0",
-        upgradeNeeded: false,
-      },
-    ],
-    installScriptUrl: STAGED_INSTALL_SCRIPT,
-  }),
   // A box waiting on its code, as a pairing's link opened over Settings › Hosts reads it.
   [ACT_KIND.HOSTS_PAIRING_READ]: () => ({
     name: "fra-02",
@@ -829,6 +756,25 @@ const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
   ]),
 );
 
+/** The account's staged hosts, as the host holds them for Settings › Hosts: a Mac, a box on each update phase, and one gone quiet. */
+const STAGED_HOSTS: AppHosts = {
+  [ACCOUNT_ID]: {
+    rows: {
+      hosts: [
+        { id: FIXTURE_HOST.ONLINE, name: "fra-01" },
+        { id: FIXTURE_HOST.MAC, name: "studio-mini", platform: DEVICE_PLATFORM.DARWIN },
+        { id: FIXTURE_HOST.SETUP_FAILED, name: "hel-01" },
+        { id: FIXTURE_HOST.OLD, name: "sgp-01" },
+        { id: FIXTURE_HOST.UPDATE_WAITING, name: "ams-01", update: HOST_UPDATE.WAITING },
+        { id: FIXTURE_HOST.UPDATING, name: "ord-01", update: HOST_UPDATE.UPDATING },
+        { id: FIXTURE_HOST.UPDATE_FAILED, name: "nrt-01", update: HOST_UPDATE.FAILED },
+        { id: FIXTURE_HOST.OFFLINE, name: "sfo-02" },
+      ],
+      installScriptUrl: STAGED_INSTALL_SCRIPT,
+    },
+  },
+};
+
 /** The account's staged GitHub token, as the host holds it: a made-up hint, never a token. */
 const STAGED_GITHUB_TOKEN: AppGitHubTokens = {
   [ACCOUNT_ID]: {
@@ -913,6 +859,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.HOSTS]: STAGED_HOSTS,
     [LIVE_READ.INSTALLED_SKILLS]: STAGED_SKILLS,
     [LIVE_READ.INTEGRATIONS]: STAGED_INTEGRATIONS,
     [LIVE_READ.WORKSPACE_INVITATIONS]: HELD_INVITATIONS,

@@ -254,8 +254,18 @@ export const GATEWAY_METHOD = {
   AGENTS_DEFAULT_READ: "agents.defaultRead",
   /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
-  /** The account's hosts, as Settings lists them, read from the service now. */
-  HOSTS_LIST: "hosts.list",
+  /**
+   * The account's hosts, held for a window from now until it is let go,
+   * followed on the service's live read into the sync engine's pool, and a
+   * while after among the reads let go lately. What it holds is heard as
+   * `HOSTS_CHANGED` events, on the app state every window draws, never
+   * answered.
+   */
+  HOSTS_FOLLOW: "hosts.follow",
+  /** The account's hosts let go by the window that held them. */
+  HOSTS_UNFOLLOW: "hosts.unfollow",
+  /** The account's held hosts read again at once, as Try again asks. */
+  HOSTS_RETRY: "hosts.retry",
   /**
    * When the account's own devices last beat, held for a window from now
    * until it is let go, asked of the service at once and again every
@@ -756,6 +766,8 @@ export const GATEWAY_EVENT = {
   INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
+  /** The account's hosts the host holds for the windows, whole, as its read of them stands, each time it moves. */
+  HOSTS_CHANGED: "hosts.changed",
   /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
   THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

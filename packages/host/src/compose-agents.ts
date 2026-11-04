@@ -71,8 +71,6 @@ import {
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
-  type HostDoneAnswerView,
-  type HostsAnswerView,
   hostIdParamsSchema,
   INBOX_SCOPE_KIND,
   memoriesFollowParamsSchema,
@@ -162,6 +160,7 @@ import {
   type AppGitHubTokens,
   type AppHolderInboxes,
   type AppHostRead,
+  type AppHosts,
   type AppInboxItems,
   type AppMemories,
   type AppProviderKeyList,
@@ -176,6 +175,7 @@ import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
+import { heldHosts, hostRemove } from "./hosts-follow.js";
 import {
   type AccountWideReads,
   accountWideReads,
@@ -267,7 +267,7 @@ export type AgentClient = Pick<
   | "models"
   | "readDefault"
   | "writeDefault"
-  | "hosts"
+  | "hostsLive"
   | "devicePresence"
   | "removeHost"
   | "readHostPairing"
@@ -515,6 +515,15 @@ export function composeAgents(
       tell: (held: AppMemories) =>
         dependencies.kernel.emit(GATEWAY_EVENT.MEMORIES_CHANGED, carried(held)),
     });
+    const hosts = yield* heldHosts({
+      seal: (userId, poll, after) => asked(client.hostsLive(userId, poll, after)),
+      accountId: dependencies.accountId,
+      gate,
+      pool: dependencies.pool,
+      tell: (held: AppHosts) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.HOSTS_CHANGED, carried(held)),
+    });
+    const hostsHold = yield* accountHeld(hosts, dependencies.accountId);
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const chapterHolds = yield* FiberMap.make<ChaptersKey>();
     const memoryHolds = yield* FiberMap.make<string>();
@@ -546,6 +555,7 @@ export function composeAgents(
       { chapters, holds: chapterHolds },
       { memories, holds: memoryHolds },
       { origins, holds: originHolds },
+      { hosts, hold: hostsHold },
       fetched,
       parts,
     );
@@ -596,6 +606,12 @@ interface MemoryFollows {
 interface OriginFollows {
   readonly origins: HeldSlice<string>;
   readonly holds: FiberMap.FiberMap<string>;
+}
+
+/** The account's hosts the windows hold, and the windows' one hold on them under the account signed in. */
+interface HostsFollows {
+  readonly hosts: HeldSlice<string>;
+  readonly hold: AccountHeld;
 }
 
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
@@ -743,6 +759,8 @@ function composed(
   { memories, holds: memoryHolds }: MemoryFollows,
   /** The agents' origins the windows hold. */
   { origins, holds: originHolds }: OriginFollows,
+  /** The account's hosts Settings › Hosts holds. */
+  { hosts, hold: hostsHold }: HostsFollows,
   { presence, presenceHold, tools, toolsHolds, keys, keysHold, token, tokenHold }: FetchedReads,
   /** The parts of the pull requests the windows' Pull request tabs hold. */
   parts: PullRequestParts,
@@ -1046,8 +1064,14 @@ function composed(
         const answer = yield* asked(client.writeDefault(choice));
         return carried<AgentDefaultAnswer>(answer);
       }),
-    [GATEWAY_METHOD.HOSTS_LIST]: () =>
-      Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
+    // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in, and told only on the app state (`HOSTS_CHANGED`); a removal is drawn gone over them the moment it is asked.
+    [GATEWAY_METHOD.HOSTS_FOLLOW]: () => Effect.as(hostsHold.follow, {}),
+    [GATEWAY_METHOD.HOSTS_UNFOLLOW]: () => Effect.as(hostsHold.unfollow, {}),
+    [GATEWAY_METHOD.HOSTS_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : hosts.retry(userId), {});
+      }),
     // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
     [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
     [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () => Effect.as(presenceHold.unfollow, {}),
@@ -1057,11 +1081,15 @@ function composed(
         yield* presence.wake(() => true);
         return {};
       }),
-    [GATEWAY_METHOD.HOSTS_REMOVE]: (params) =>
-      Effect.gen(function* () {
-        const { id } = yield* readParams(hostIdParamsSchema, params, "a remove names a host");
-        return carried<HostDoneAnswerView>(yield* asked(client.removeHost(id)));
-      }),
+    [GATEWAY_METHOD.HOSTS_REMOVE]: declaredMethod(
+      dependencies.pool,
+      hostRemove((id) => asked(client.removeHost(id))),
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(hostIdParamsSchema, params, "a remove names a host"),
+          (read) => read.id,
+        ),
+    ),
     [GATEWAY_METHOD.HOSTS_PAIRING_READ]: (params) =>
       Effect.gen(function* () {
         const { code } = yield* readParams(hostPairingParamsSchema, params, "a read names a code");
@@ -1772,6 +1800,7 @@ function composed(
     yield* chapters.end;
     yield* memories.end;
     yield* origins.end;
+    yield* hosts.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
@@ -1794,6 +1823,7 @@ function composed(
     yield* memories.open;
     yield* origins.open;
     yield* presenceHold.open;
+    yield* hostsHold.open;
     yield* keysHold.open;
     yield* tokenHold.open;
     yield* tools.open;

@@ -63,7 +63,6 @@ async function opened(): Promise<string[]> {
       createElement(HostConnectDialog, {
         code: CODE,
         onClose: () => told.push("closed"),
-        onConnected: () => told.push("connected"),
       }),
     ),
   );
@@ -95,7 +94,7 @@ test("Connect approves the code the link named, once the box it names is shown, 
   await settle();
 
   assert.deepEqual(approved, [{ code: CODE }]);
-  assert.deepEqual(told, ["connected", "closed"]);
+  assert.deepEqual(told, ["closed"]);
 });
 
 test("a code no pairing has, or one held after too many such codes, says so and to run the command again", async () => {

@@ -1,6 +1,9 @@
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import { DEVICE_STANDING } from "@repo/features/agent-wire";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
-import { HOST_UNINSTALL_COMMAND, type Host, hostInstallCommand } from "@repo/features/host-wire";
+import type { HostLine } from "@repo/features/host-live";
+import { HOST_UNINSTALL_COMMAND, hostInstallCommand } from "@repo/features/host-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
@@ -16,6 +19,7 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
+  type DialogConfirm,
   ErrorState,
   GAP,
   PlusIcon,
@@ -36,11 +40,10 @@ import {
   TrashIcon,
   useAnnounce,
   useConfirmDialog,
-  useMinute,
   useSecond,
 } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
@@ -54,6 +57,8 @@ import {
   type ThisMac,
   useThisMac,
 } from "../machine-name.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -80,25 +85,24 @@ import { MenuRow } from "./menu-row.js";
  * browser tab has no This Mac, so it draws neither, and with no host says
  * what one is above Add hosts.
  *
+ * The list is the host's (`LIVE_READ.HOSTS`): followed live while the page
+ * stands and a while after, so a host joining, leaving, renamed, or moving
+ * through an update draws as the service carries it, with no read of the
+ * page's own, and a removal draws the host gone the moment it is asked.
+ *
  * Add hosts shows the install command, public and the same for every
  * member, which pairs a box with a code the member approves, and waits.
- * While it stands the list is read every few seconds, and the dialog names
- * each host the list holds that it did not hold as the dialog opened. A
- * host so named is approved, since the service lists no box before its
- * approve, so the dialog never names one that is not. A pairing's link opened in this window stands its
- * dialog over the page, Add hosts among it (`host-connect-dialog.tsx`), and
- * once Connect makes the host the list is read again over the rows
- * standing, so an open Add hosts names it and moves on by itself. The page
+ * While it stands, the dialog names each host the list holds that it did
+ * not hold as the dialog opened. A host so named is approved, since the
+ * service lists no box before its approve, so the dialog never names one
+ * that is not. A pairing's link opened in this window stands its dialog
+ * over the page, Add hosts among it (`host-connect-dialog.tsx`), and once
+ * Connect makes the host the list carries it, so an open Add hosts names it
+ * and moves on by itself. The page
  * stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
-
-/** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
-const MINUTE_MS = 60_000;
-
-/** How often the list is read while a host is updating, or Add hosts waits for one, as often as This Mac is read. */
-const WATCHED_READ_EVERY_MS = 5_000;
 
 /**
  * A size containment: the command does not wrap, so without it its width
@@ -136,7 +140,7 @@ const REFUSED: ActionResult = {
 };
 
 /** A host as the list of machines names it (`machineName`). */
-function machineOf(host: Host): ListedMachine {
+function machineOf(host: HostLine): ListedMachine {
   return { deviceId: host.id, name: host.name, machineId: host.machineId, model: host.model };
 }
 
@@ -147,7 +151,7 @@ function machineOf(host: Host): ListedMachine {
  * tinted; and none while its standing cannot be told.
  */
 function standingOf(
-  host: Host,
+  host: HostLine,
   book: PresenceBook,
 ): { readonly words: string; readonly state: SettingsRowState } | undefined {
   if (host.update === HOST_UPDATE.UPDATING) {
@@ -168,7 +172,7 @@ function standingOf(
  * inside the dot's line, because words after it sit off the dot's baseline,
  * and a tinted one tints its standing alone.
  */
-function StandingLine({ host, book }: { host: Host; book: PresenceBook }): React.JSX.Element {
+function StandingLine({ host, book }: { host: HostLine; book: PresenceBook }): React.JSX.Element {
   // Note that a service older than platforms listed only Linux servers.
   const kind = DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX];
   const standing = standingOf(host, book);
@@ -200,61 +204,79 @@ function HostRow({
   label,
   book,
   onRemove,
+  locked,
   kept,
 }: {
-  host: Host;
+  host: HostLine;
   /** What the list calls the machine (`machineName`). */
   label: string;
   book: PresenceBook;
-  onRemove: (id: string) => Promise<ActionResult>;
+  /** Asks the section's Remove question of this machine. */
+  onRemove: () => void;
+  /** Whether a removal is out, which every Remove waits out. */
+  locked: boolean;
   /** Whether the machine is This Mac as the app keeps its host. */
   kept: boolean;
 }): React.JSX.Element {
-  const removing = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
-    () => onRemove(host.id),
-    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
-  );
   return (
-    <>
-      <MenuRow
-        thing={label}
-        actions={
-          kept
-            ? []
-            : [
-                {
-                  label: "Remove",
-                  icon: <TrashIcon />,
-                  danger: true,
-                  disabled: removing.busy,
-                  onSelect: removing.ask,
-                },
-              ]
+    <MenuRow
+      thing={label}
+      actions={
+        kept
+          ? []
+          : [
+              {
+                label: "Remove",
+                icon: <TrashIcon />,
+                danger: true,
+                disabled: locked,
+                onSelect: onRemove,
+              },
+            ]
+      }
+      row={{ label, description: <StandingLine host={host} book={book} /> }}
+    />
+  );
+}
+
+/** The machine Remove was asked of, by the account it was asked under, and what the list called it then. */
+interface RemoveAsked {
+  readonly accountId: string | undefined;
+  readonly host: HostLine;
+  readonly label: string;
+}
+
+/** Remove's question over the machine it was asked of, with the command that takes the host off the machine itself. */
+function RemoveHostDialog({
+  asked,
+  confirm,
+}: {
+  asked: RemoveAsked | undefined;
+  confirm: DialogConfirm;
+}): React.JSX.Element {
+  return (
+    <ConfirmDialog
+      open
+      confirm={confirm}
+      question={{
+        title: `Remove ${asked?.label ?? ""}?`,
+        body: REMOVED,
+        verb: "Remove",
+        running: "Removing",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
+      }}
+    >
+      <CodeCard
+        title={
+          asked?.host.platform === DEVICE_PLATFORM.DARWIN
+            ? UNINSTALL_TITLE.MAC
+            : UNINSTALL_TITLE.SERVER
         }
-        row={{ label, description: <StandingLine host={host} book={book} /> }}
+        titleIs={CODE_CARD_TITLE.WORDS}
+        code={HOST_UNINSTALL_COMMAND}
+        copy={copyThroughShell}
       />
-      <ConfirmDialog
-        open
-        confirm={removing}
-        question={{
-          title: `Remove ${label}?`,
-          body: REMOVED,
-          verb: "Remove",
-          running: "Removing",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
-      >
-        <CodeCard
-          title={
-            host.platform === DEVICE_PLATFORM.DARWIN ? UNINSTALL_TITLE.MAC : UNINSTALL_TITLE.SERVER
-          }
-          titleIs={CODE_CARD_TITLE.WORDS}
-          code={HOST_UNINSTALL_COMMAND}
-          copy={copyThroughShell}
-        />
-      </ConfirmDialog>
-    </>
+    </ConfirmDialog>
   );
 }
 
@@ -274,7 +296,7 @@ function AddHostsDialog({
 }: {
   /** The ids of the account's hosts as the dialog opened, which it never names as joined. */
   known: ReadonlySet<string>;
-  hosts: readonly Host[];
+  hosts: readonly HostLine[];
   thisMac: ThisMac;
   installScriptUrl: string;
   onClose: () => void;
@@ -325,100 +347,50 @@ function AddHostsDialog({
   );
 }
 
-/** The Hosts page's one group, untitled under the page's own title: the member's machines, read when the page opens, or why they cannot be drawn, and Add hosts under them. */
+/** The Hosts page's one group, untitled under the page's own title: the member's machines as the host holds them, or why they cannot be drawn, and Add hosts under them. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const { act } = useAct();
-  const now = useSecond();
-  const minute = Math.floor(useMinute() / MINUTE_MS);
-  const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
-  // Note that the list is read once a minute for the hosts that join or leave, while each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
+  // Note that the clock only redraws the rows as a beat ages, since each standing is read off the book's own monotonic clock.
+  useSecond();
+  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const read = useHostRead(LIVE_READ.HOSTS, signedIn ? accountId : undefined);
+  const hosts = read.rows?.hosts;
+  const installScriptUrl = read.rows?.installScriptUrl;
+  // Note that each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
   const book = useDevicePresence(signedIn);
-  const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
-  const [readFailed, setReadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  // The ids of the account's hosts as Add hosts opened, while its dialog stands.
-  const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
+  // The ids of the account's hosts as Add hosts opened, by the account it opened for, while its dialog stands.
+  const [adding, setAdding] = useState<
+    { readonly accountId: string | undefined; readonly known: ReadonlySet<string> } | undefined
+  >(undefined);
+  // Note that Add hosts does not outlive the account it opened for, since every host of the next would read as joined.
+  if (adding !== undefined && adding.accountId !== accountId) setAdding(undefined);
   const thisMac = useThisMac();
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
   useEffect(() => closeConnect, [closeConnect]);
 
-  // The page opening reads the hosts the service holds now, which a server may just have joined.
-  useEffect(() => {
-    if (!signedIn) return;
-    let live = true;
-    setHosts(undefined);
-    setReadFailed(false);
-    setAdding(undefined);
-    act(ACT_KIND.HOSTS_LIST).then(
-      (answer) => {
-        if (!live) return;
-        if ("failure" in answer) {
-          setReadFailed(true);
-          return;
-        }
-        setHosts(answer.hosts);
-        setInstallScriptUrl(answer.installScriptUrl);
-      },
-      () => {
-        if (live) setReadFailed(true);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, signedIn, attempt]);
-
-  // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
-  // Note that while a host is updating, or Add hosts waits for one, the list is read every few seconds instead, so a host reads approved or updated about as soon as This Mac would.
-  const changing = hosts?.some((host) => host.update === HOST_UPDATE.UPDATING) ?? false;
-  const watched = changing || adding !== undefined;
-  const period = watched ? Math.floor(now / WATCHED_READ_EVERY_MS) : minute;
-  // A read after the page's first lands over the list standing, so no skeleton covers the rows the member is reading.
-  const relist = useCallback(
-    (live: () => boolean) =>
-      act(ACT_KIND.HOSTS_LIST).then(
-        (answer) => {
-          if (!live() || "failure" in answer) return;
-          setHosts((standing) => (standing === undefined ? standing : answer.hosts));
-        },
-        () => undefined,
-      ),
-    [act],
-  );
-  const mountMinute = useRef(minute);
-  useEffect(() => {
-    // The mount's own read is the effect above, so the minute it began in stands as it is.
-    if (!signedIn || (!watched && period === mountMinute.current)) return;
-    let live = true;
-    relist(() => live);
-    return () => {
-      live = false;
-    };
-  }, [signedIn, watched, period, relist]);
-
   // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
   const add = useCallback(() => {
-    if (hosts !== undefined) setAdding(new Set(hosts.map((host) => host.id)));
-  }, [hosts]);
+    if (hosts !== undefined) setAdding({ accountId, known: new Set(hosts.map((host) => host.id)) });
+  }, [hosts, accountId]);
+  const closeAdd = useCallback(() => setAdding(undefined), []);
 
-  // Note that closing Add hosts reads the list once more, so a host approved since the dialog's last read is drawn now rather than at the next minute.
-  const closeAdd = useCallback(() => {
-    setAdding(undefined);
-    relist(() => true);
-  }, [relist]);
-
-  const remove = useCallback(
-    (id: string): Promise<ActionResult> =>
-      act(ACT_KIND.HOSTS_REMOVE, { id })
-        .catch(() => undefined)
-        .then((answer) => {
-          if (answer === undefined || "failure" in answer) return REFUSED;
-          setHosts((standing) => standing?.filter((host) => host.id !== id));
-          return ACCEPTED;
-        }),
-    [act],
+  // Note that Remove asks over the section rather than its row, because the host draws a removal gone on the list the moment it is asked, so the row is gone before a refusal comes back to be said.
+  const [asked, setAsked] = useState<RemoveAsked | undefined>(undefined);
+  const removing = useConfirmDialog(
+    { subject: asked !== undefined && asked.accountId === accountId, surfaceOpen: true },
+    () =>
+      asked === undefined
+        ? Promise.resolve(REFUSED)
+        : act(ACT_KIND.HOSTS_REMOVE, { id: asked.host.id })
+            .catch(() => undefined)
+            .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
+    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
   );
+  const askRemove = (host: HostLine, label: string) => {
+    setAsked({ accountId, host, label });
+    removing.ask();
+  };
 
   const listed = hosts?.map(machineOf) ?? [];
   // Note that This Mac stands first, with no Remove, only where the app keeps its host.
@@ -451,23 +423,24 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
                 }
               />
             ) : null}
-            {ordered.map((host) => (
-              <HostRow
-                key={host.id}
-                host={host}
-                label={machineName(machineOf(host), listed, thisMac)}
-                book={book}
-                onRemove={remove}
-                kept={host === listedMac}
-              />
-            ))}
+            {ordered.map((host) => {
+              const label = machineName(machineOf(host), listed, thisMac);
+              return (
+                <HostRow
+                  key={host.id}
+                  host={host}
+                  label={label}
+                  book={book}
+                  onRemove={() => askRemove(host, label)}
+                  locked={removing.busy}
+                  kept={host === listedMac}
+                />
+              );
+            })}
           </>
-        ) : readFailed ? (
+        ) : read.status === HOST_READ_STATUS.FAILED ? (
           <SettingsLine>
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
-              onRetry={() => setAttempt((count) => count + 1)}
-            >
+            <ErrorState failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)} onRetry={read.retry}>
               {readFailedWords("your hosts")}
             </ErrorState>
           </SettingsLine>
@@ -487,9 +460,10 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           </Button>
         </div>
       ) : null}
+      <RemoveHostDialog asked={asked} confirm={removing} />
       {adding === undefined || !loaded ? null : (
         <AddHostsDialog
-          known={adding}
+          known={adding.known}
           hosts={hosts}
           thisMac={thisMac}
           installScriptUrl={installScriptUrl}
@@ -498,12 +472,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
       )}
       {/* Note that a pairing's dialog comes after Add hosts, so it stands over it where both are open. */}
       {connecting === undefined || !signedIn ? null : (
-        <HostConnectDialog
-          key={connecting}
-          code={connecting}
-          onClose={closeConnect}
-          onConnected={() => relist(() => true)}
-        />
+        <HostConnectDialog key={connecting} code={connecting} onClose={closeConnect} />
       )}
     </>
   );

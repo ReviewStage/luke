@@ -118,11 +118,16 @@ export const AGENT_ACT_KIND = {
   AGENTS_DEFAULT_READ: "agents.defaultRead",
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
-   * The account's hosts as Settings › Hosts reads and changes
-   * them: listed, the beats of the account's devices held, and one removed; and a box's pairing, by the code its link
-   * named, read, approved, or denied.
+   * The account's hosts as Settings › Hosts reads and changes them: held
+   * for the window while it holds the stream open and a while after, read
+   * again at once as Try again asks, the beats of the account's devices
+   * held, and one removed; and a box's pairing, by the code its link named,
+   * read, approved, or denied. The hold's stream carries nothing: what it
+   * holds reaches the panel on app state (`LIVE_READ.HOSTS`), where a
+   * removal is drawn gone the moment it is asked.
    */
-  HOSTS_LIST: "hosts.list",
+  HOSTS_FOLLOW: "hosts.follow",
+  HOSTS_RETRY: "hosts.retry",
   /**
    * When the account's own devices last beat, held for the window while it
    * holds the stream open and a while after among those let go lately, asked
@@ -712,9 +717,10 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * a Terminal tab's or a live view's stream, whose bytes never reach app
  * state; `TASKS_REFRESH` is a WRITE, the task list's Try again, because the
  * host follows the list from the account gate opening and only a press asks
- * it again; and `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
+ * it again; `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
- * whenever it is shown and nothing keeps it.
+ * whenever it is shown and nothing keeps it; and `HOSTS_PAIRING_READ` is a
+ * FETCH, read once as a pairing's link opens, and again on its Retry.
  */
 export const PORT_ACT_USE = {
   ACCOUNT_BEGIN_SIGN_IN: ACT_USE.WRITE,
@@ -742,11 +748,12 @@ export const PORT_ACT_USE = {
   AGENTS_MODELS: ACT_USE.READ,
   AGENTS_DEFAULT_READ: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
-  HOSTS_LIST: ACT_USE.READ,
+  HOSTS_FOLLOW: ACT_USE.READ,
+  HOSTS_RETRY: ACT_USE.READ,
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
   HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
-  HOSTS_PAIRING_READ: ACT_USE.READ,
+  HOSTS_PAIRING_READ: ACT_USE.FETCH,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
   HOSTS_PAIRING_DENY: ACT_USE.WRITE,
   AGENTS_LIST: ACT_USE.READ,

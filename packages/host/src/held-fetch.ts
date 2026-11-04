@@ -198,13 +198,14 @@ export interface AccountHeld {
 }
 
 /**
- * The windows' hold on `read`, keyed by the account `accountId` names, taken
- * under the account signed in as they take it and taken anew, in place of
- * the one before, each time the gate opens, so whoever signs in next is the
- * one read rather than the account it was held for.
+ * The windows' hold on `read`, a fetched read or any held one, keyed by
+ * the account `accountId` names, taken under the account signed in as they
+ * take it and taken anew, in place of the one before, each time the gate
+ * opens, so whoever signs in next is the one read rather than the account it
+ * was held for.
  */
-export function accountHeld<Rows>(
-  read: HeldFetch<string, Rows>,
+export function accountHeld(
+  read: Pick<HeldFetch<string, unknown>, "hold">,
   accountId: () => string | undefined,
 ): Effect.Effect<AccountHeld, never, Scope.Scope> {
   return Effect.gen(function* () {
