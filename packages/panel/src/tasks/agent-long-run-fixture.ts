@@ -373,7 +373,7 @@ export function longRunHold(): AsyncIteratorClass<never, void> {
   let closed = false;
   return new AsyncIteratorClass<never, void>(
     async () => {
-      // Note that a hold counts among those open once it is read, so one handed out and never read writes nothing on and stops no other.
+      // Note that a hold joins those open on its first read, so a hold never read neither advances the run nor blocks another.
       if (!closed) holds.add(hold);
       while (!closed) {
         await rendererPause(LONG_RUN.STEP_MS);
