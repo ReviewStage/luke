@@ -658,8 +658,14 @@ export function fixtureActAnswer(
 /** Main's held plans with the fixture's task's plan held, one object for each of main's. */
 const STAGED_PLANS = new WeakMap<AppPlanDocuments, AppPlanDocuments>();
 
-/** Main's document with the fixture's task's plan held as the window's read of it holds one (`LIVE_READ.PLAN_DOCUMENT`), so the task opens on its plan. */
+/**
+ * Main's document with the fixture's task's plan held as the window's read
+ * of it holds one (`LIVE_READ.PLAN_DOCUMENT`), under the profiles that open
+ * the task (`fixtureTasksView`), so it opens on its plan; the very document
+ * under any other.
+ */
 function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
+  if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
   const held = state[LIVE_READ.PLAN_DOCUMENT];
   let staged = STAGED_PLANS.get(held);
   if (staged === undefined) {
