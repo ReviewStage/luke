@@ -283,14 +283,16 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
 }
 
 /**
- * The nearest element around the list, within its drop scope, that scrolls
- * it up and down: the sidebar's column. None where nothing does, as on the
- * Board, whose columns scroll their own cards and whose page scrolls
+ * The nearest element around the list's own drop zone, or the list where it
+ * stands in none, within its drop scope, that scrolls it up and down: the
+ * sidebar's column. None where nothing does, as on the Board, whose columns
+ * are each a zone scrolling its own cards inside it and whose page scrolls
  * it sideways, neither of which a card carried to another column should
  * run. A column whose rows fit is never run along, having nowhere to go.
  */
 function scrollerOf(list: HTMLElement, scope: Element | null): HTMLElement | undefined {
-  for (let each = list.parentElement; each !== null && each !== scope; each = each.parentElement) {
+  const home = list.closest(`[${DROP_ZONE}]`) ?? list;
+  for (let each = home.parentElement; each !== null && each !== scope; each = each.parentElement) {
     const { overflowY } = getComputedStyle(each);
     if (overflowY === "auto" || overflowY === "scroll") return each;
   }

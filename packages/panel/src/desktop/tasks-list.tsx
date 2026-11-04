@@ -1103,7 +1103,7 @@ export function TasksList({
       <SelectionRegion
         id={regionId}
         selection={{ selected, onChange: selection.onChange }}
-        order={order}
+        order={[order]}
         bringIn={runs.bringIn}
       >
         <ListMotion root={list} change={laidOut}>
