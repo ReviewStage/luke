@@ -17,6 +17,7 @@ import {
   installedSkillListAnswerSchema,
   installedSkillPreviewFileSchema,
   installedSkillPreviewSchema,
+  installedSkillRemovedAnswerSchema,
   installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
 } from "@repo/features/installed-skill-route-wire";
@@ -1254,10 +1255,12 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         const removing = (userId: string, id: string) =>
           ask(installedSkillPath(id), userId, { method: "DELETE" });
         assert.equal((yield* removing(peer, notes.id)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
-        assert.deepEqual(yield* removing(admin, notes.id), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { id: notes.id },
-        });
+        const removed = readAnswer(
+          installedSkillRemovedAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* removing(admin, notes.id),
+        );
+        assert.equal(removed.id, notes.id);
         assert.deepEqual(yield* seenBy(peer), [{ name: "team-style", manageable: false }]);
         assert.equal(
           (yield* ask(installedSkillPath("not-a-uuid"), owner, { method: "DELETE" })).status,

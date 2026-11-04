@@ -93,6 +93,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onHolderInboxesChanged((held) => {
         state.update({ [LIVE_READ.HOLDER_INBOX]: held });
       }),
+      gateway.host.onInstalledSkillsChanged((held) => {
+        state.update({ [LIVE_READ.INSTALLED_SKILLS]: held });
+      }),
       gateway.host.onIntegrationsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATIONS]: held });
       }),

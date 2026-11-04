@@ -262,13 +262,18 @@ export const CHAPTERS_ACT_KIND = {
 } as const;
 
 /**
- * Settings' Skills: the skills the account sees in a workspace listed, a
- * pasted `skills add` command or skill text previewed, one of its skills'
- * `SKILL.md` read, and installed for the account or its workspace, and one toggled, checked for an update,
- * updated, or removed.
+ * Settings' Skills: the skills the account sees in a workspace held for the
+ * window while it holds the stream open, a pasted `skills add` command or
+ * skill text previewed, one of its skills' `SKILL.md` read, and installed
+ * for the account or its workspace, and one toggled, checked for an
+ * update, updated, shared, or removed. The hold's stream carries nothing:
+ * what it holds reaches the panel on app state (`LIVE_READ.INSTALLED_SKILLS`),
+ * and each write is drawn there as it is asked or answered.
  */
 export const INSTALLED_SKILL_ACT_KIND = {
-  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_FOLLOW: "installedSkills.follow",
+  /** A workspace's held skills, which the panel reads on app state, asked again at once, as Try again asks. */
+  INSTALLED_SKILLS_RETRY: "installedSkills.retry",
   INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
@@ -795,7 +800,8 @@ export const PORT_ACT_USE = {
   CHAPTERS_MODEL_READ: ACT_USE.READ,
   CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
-  INSTALLED_SKILLS_LIST: ACT_USE.READ,
+  INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
+  INSTALLED_SKILLS_RETRY: ACT_USE.READ,
   INSTALLED_SKILLS_READ: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW_FILE: ACT_USE.FETCH,

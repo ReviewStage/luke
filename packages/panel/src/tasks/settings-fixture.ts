@@ -63,6 +63,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
+  type AppInstalledSkills,
   type AppIntegrations,
   type AppIntegrationTools,
   type AppMcpClients,
@@ -749,7 +750,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     acmeSlackBot = { ...acmeSlackBot, channels };
     return acmeSlackBot;
   },
-  [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
   [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: ({ skillId: id }) => ({
@@ -841,6 +841,9 @@ const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
 /** The staged workspace's memories, as the host holds them for Settings › Memory; one object across deliveries. */
 const STAGED_MEMORIES: AppMemories = { [WORKSPACE.ACME]: { rows: MEMORIES } };
 
+/** The staged workspace's skills and the account's own, as the host holds them for Settings › Skills; one object across deliveries. */
+const STAGED_SKILLS: AppInstalledSkills = { [WORKSPACE.ACME]: { rows: skills(WORKSPACE.ACME) } };
+
 /** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
 let stagedBeats: AppDevicePresences | undefined;
 
@@ -872,7 +875,7 @@ const STAGED_INTEGRATIONS: AppIntegrations = {
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
  * staged hosts beating, and its integrations, credentials, servers' tools,
- * and the staged workspace's memories held. The members are held under
+ * and the staged workspace's memories and skills held. The members are held under
  * every profile rather than only the signed-in ones, because ⌘K's People, a
  * task's assignee and creator faces, and the person page read them wherever
  * the window stands. Each slice laid over is one object across deliveries,
@@ -887,6 +890,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.INSTALLED_SKILLS]: STAGED_SKILLS,
     [LIVE_READ.INTEGRATIONS]: STAGED_INTEGRATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,

@@ -61,7 +61,6 @@ const READS: readonly Read[] = [
   read(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACME),
   read(ACT_KIND.WORKSPACE_SENTRY_READ, ACME),
   read(ACT_KIND.WORKSPACE_SLACK_BOT_READ, ACME),
-  read(ACT_KIND.INSTALLED_SKILLS_LIST, ACME),
   read(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, {
     ...ACME,
     skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001",
@@ -139,16 +138,19 @@ test("an Automations profile holds three automations in the listed workspace, on
 });
 
 test("every skill the Skills profile lists reads whole when viewed", () => {
-  const listed = answered(RUN_PROFILE.SETTINGS_SKILLS, ACT_KIND.INSTALLED_SKILLS_LIST, ACME);
-  assert.ok("skills" in listed);
-  const unread = listed.skills.filter((skill) => {
+  const { run } = stateWith({}, {});
+  const staged = fixtureAppState(
+    stateWith({}, { run: { ...run, profile: RUN_PROFILE.SETTINGS_SKILLS } }),
+  );
+  const listed = staged[LIVE_READ.INSTALLED_SKILLS][ACME.workspaceId]?.rows ?? [];
+  const unread = listed.filter((skill) => {
     const content = answered(RUN_PROFILE.SETTINGS_SKILLS, ACT_KIND.INSTALLED_SKILLS_READ, {
       skillId: skill.id,
     });
     return !("skillFile" in content) || !content.skillFile.includes(skill.name);
   });
 
-  assert.ok(listed.skills.length > 0);
+  assert.ok(listed.length > 0);
   assert.deepEqual(unread, []);
 });
 

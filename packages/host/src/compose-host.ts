@@ -259,6 +259,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         }),
       }),
     );
+    const installedSkills = yield* served(
+      composeInstalledSkills({
+        kernel,
+        account,
+        accountId,
+        pool,
+        client: new HostedInstalledSkillClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
+      }),
+    );
     const macCommands = platform.has(HOST_PLATFORM_CONCERN.MAC_COMMANDS)
       ? yield* served(
           composeMacCommands({
@@ -351,6 +363,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* agents.open;
         yield* automations.open;
         yield* integrations.open;
+        yield* installedSkills.open;
       }
       yield* settings.emitSettings();
     });
@@ -362,6 +375,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* agents.reset;
       yield* integrations.reset;
       yield* automations.reset;
+      yield* installedSkills.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* settings.emitSettings();
@@ -376,16 +390,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
-    const installedSkills = yield* served(
-      composeInstalledSkills({
-        kernel,
-        account,
-        client: new HostedInstalledSkillClient({
-          serviceBaseUrl: kernel.hostedServiceBaseUrl,
-          credential: account.credential,
-        }),
-      }),
-    );
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
