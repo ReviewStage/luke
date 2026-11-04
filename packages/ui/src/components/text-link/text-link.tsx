@@ -192,7 +192,7 @@ export function TextLink({
   /** Whether it opens in a new tab. */
   newTab?: boolean;
   /** A mark drawn before its words, inside the link, such as the brand of the site it opens. */
-  lead?: ReactNode | undefined;
+  lead?: React.JSX.Element | undefined;
   /** Called as the press leaves, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   children: ReactNode;
